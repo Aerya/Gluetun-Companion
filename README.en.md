@@ -33,8 +33,11 @@ It is primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_
 
 - **Automatic benchmarking** every X hours — download, upload and latency per server,
   through the Gluetun HTTP proxy (port 8887), no shared Docker network required
-- **Automatic switching** to the fastest server (`docker compose up --force-recreate`),
-  based on a weighted score (65% current measurement + 35% historical)
+- **Multi-stream download** — N concurrent TCP connections per endpoint (configurable,
+  default: 4) to saturate the VPN tunnel the same way a download manager would
+- **Automatic switching** to the fastest server (`docker compose up -d`),
+  based on a weighted score (65% current measurement + 35% historical);
+  dependent services (`network_mode: service:gluetun`) are restarted automatically by Compose
 - **5 filter types**: SERVER\_NAMES, SERVER\_COUNTRIES, SERVER\_REGIONS,
   SERVER\_CITIES, SERVER\_HOSTNAMES
 - **TCP warm-up** to avoid slow-start bias
@@ -135,7 +138,7 @@ Benchmark cycle (every X hours)
   └─ For each enabled server:
        1. Write docker-compose.override.yml
           → target variable = "<server>", all others cleared
-       2. docker compose up -d --force-recreate <container>
+       2. docker compose up -d
        3. Wait for VPN via HTTP proxy polling (configurable timeout)
        4. Optional TCP warm-up (2s drained, not counted)
        5. Download from N endpoints (Cloudflare, Hetzner, Fast.com, OVH, Tele2)
@@ -163,6 +166,9 @@ Benchmark cycle (every X hours)
 | `COMPOSE_DIR` | `/compose` | Path (inside the container) to the Gluetun compose directory |
 | `COMPOSE_PROJECT` | *(auto-detected)* | Gluetun compose project name |
 | `DATA_DIR` | `/data` | SQLite database directory |
+
+> Benchmark parameters (parallel streams, duration, warm-up, etc.) are configured
+> directly in the UI → **Settings**.
 
 ---
 

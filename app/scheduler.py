@@ -52,6 +52,7 @@ def _test_one_server(
     lat_samples: int,
     do_upload: bool,
     warmup: float,
+    dl_streams: int,
 ) -> dict:
     """
     Full test cycle for one server: switch → wait → probe IPs → DL → UL → LAT.
@@ -78,7 +79,7 @@ def _test_one_server(
 
     dl_median, dl_detail = test_download(
         proxy_host, proxy_port,
-        duration=dl_duration, samples=dl_samples, warmup=warmup,
+        duration=dl_duration, samples=dl_samples, warmup=warmup, streams=dl_streams,
         proxy_user=proxy_user, proxy_password=proxy_pass,
     )
     lat_median, lat_detail = test_latency(
@@ -154,6 +155,7 @@ def _test_server_with_retry(
     lat_samples: int,
     do_upload: bool,
     warmup: float,
+    dl_streams: int,
     max_retries: int,
     timeout_secs: int,
 ) -> dict | None:
@@ -169,7 +171,7 @@ def _test_server_with_retry(
                     _test_one_server,
                     server_name, filter_type, container, compose_dir, project,
                     proxy_host, proxy_port, proxy_user, proxy_pass,
-                    wait_secs, dl_duration, dl_samples, lat_samples, do_upload, warmup,
+                    wait_secs, dl_duration, dl_samples, lat_samples, do_upload, warmup, dl_streams,
                 )
                 return future.result(timeout=timeout_secs)
         except FuturesTimeout:
@@ -227,6 +229,7 @@ def _do_benchmark(app):
         auto_exclude   = int(get_setting('auto_exclude_failures', '5'))
         do_upload      = get_setting('speedtest_upload', '1') == '1'
         warmup         = 2.0 if get_setting('speedtest_warmup', '1') == '1' else 0.0
+        dl_streams     = int(get_setting('speedtest_streams', '4'))
 
         with get_db() as db:
             servers = db.execute(
@@ -248,7 +251,7 @@ def _do_benchmark(app):
                 container, compose_dir, project,
                 proxy_host, proxy_port, proxy_user, proxy_pass,
                 wait_secs, dl_duration, dl_samples, lat_samples,
-                do_upload, warmup, max_retries, timeout_secs,
+                do_upload, warmup, dl_streams, max_retries, timeout_secs,
             )
             if result:
                 results.append(result)
@@ -350,13 +353,14 @@ def _do_single_server(app, server_name: str, filter_type: str):
         auto_exclude = int(get_setting('auto_exclude_failures', '5'))
         do_upload    = get_setting('speedtest_upload', '1') == '1'
         warmup       = 2.0 if get_setting('speedtest_warmup', '1') == '1' else 0.0
+        dl_streams   = int(get_setting('speedtest_streams', '4'))
 
         result = _test_server_with_retry(
             server_name, filter_type,
             container, compose_dir, project,
             proxy_host, proxy_port, proxy_user, proxy_pass,
             wait_secs, dl_duration, dl_samples, lat_samples,
-            do_upload, warmup, max_retries, timeout_secs,
+            do_upload, warmup, dl_streams, max_retries, timeout_secs,
         )
         if result:
             _update_consecutive_failures(server_name, success=True, threshold=auto_exclude)

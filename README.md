@@ -36,8 +36,11 @@ documentée ici :
 
 - **Benchmark automatique** toutes les X heures — download, upload et latence par serveur,
   via le proxy HTTP Gluetun (port 8887), sans réseau Docker partagé
-- **Bascule automatique** vers le meilleur serveur (`docker compose up --force-recreate`),
-  basée sur un score pondéré (65 % mesure actuelle + 35 % historique)
+- **Téléchargement multi-flux** — N connexions TCP simultanées par endpoint (configurable,
+  défaut : 4) pour saturer le tunnel VPN comme un gestionnaire de téléchargement
+- **Bascule automatique** vers le meilleur serveur (`docker compose up -d`),
+  basée sur un score pondéré (65 % mesure actuelle + 35 % historique) ;
+  les services dépendants (`network_mode: service:gluetun`) sont relancés automatiquement
 - **5 types de filtre** : SERVER\_NAMES, SERVER\_COUNTRIES, SERVER\_REGIONS,
   SERVER\_CITIES, SERVER\_HOSTNAMES
 - **Warm-up TCP** configurable pour éviter le biais slow-start
@@ -138,7 +141,7 @@ Cycle de benchmark (toutes les X heures)
   └─ Pour chaque serveur activé :
        1. Écriture de docker-compose.override.yml
           → variable cible = "<serveur>", toutes les autres vidées
-       2. docker compose up -d --force-recreate <container>
+       2. docker compose up -d
        3. Attente connexion VPN via poll proxy HTTP (timeout configurable)
        4. Warm-up TCP optionnel (2 s drainés, non comptés)
        5. Download depuis N endpoints (Cloudflare, Hetzner, Fast.com, OVH, Tele2)
@@ -166,6 +169,9 @@ Cycle de benchmark (toutes les X heures)
 | `COMPOSE_DIR` | `/compose` | Chemin (dans le container) du dossier compose Gluetun |
 | `COMPOSE_PROJECT` | *(auto-détecté)* | Nom du projet compose Gluetun |
 | `DATA_DIR` | `/data` | Dossier de la base SQLite |
+
+> Les paramètres de benchmark (flux parallèles, durée, warm-up, etc.) se configurent
+> directement dans l'UI → **Paramètres**.
 
 ---
 

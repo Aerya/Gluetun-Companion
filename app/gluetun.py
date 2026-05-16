@@ -154,10 +154,15 @@ def switch_server(
     # Use provided project name, or auto-detect from container labels
     project = compose_project or _detect_compose_project(container_name)
 
+    # Do NOT pass --force-recreate or a specific service name.
+    # Compose compares desired state (main file + override) with running containers:
+    # - gluetun gets recreated because its env changed
+    # - services using network_mode: service:gluetun are automatically restarted
+    #   by Compose because their dependency (gluetun's container ID) changed.
     cmd = ['docker', 'compose']
     if project:
         cmd += ['-p', project]
-    cmd += ['up', '-d', '--force-recreate', container_name]
+    cmd += ['up', '-d']
 
     try:
         result = subprocess.run(
@@ -226,7 +231,7 @@ def get_public_ips(
     ipv4: str | None = None
     ipv6: str | None = None
     for url, kind in [
-        ('https://ipv4.cloudflare.com/cdn-cgi/trace', 'v4'),
+        ('https://www.cloudflare.com/cdn-cgi/trace',  'v4'),
         ('https://ipv6.cloudflare.com/cdn-cgi/trace', 'v6'),
     ]:
         try:

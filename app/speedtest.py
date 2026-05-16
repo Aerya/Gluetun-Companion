@@ -191,20 +191,24 @@ def _stream_upload(
 ) -> float:
     """
     POST random data to `url` through proxy for `duration` seconds.
-    Speed is computed from bytes yielded by the generator / generator runtime,
-    which reflects actual network throughput (back-pressure from socket buffers).
-    Returns speed in Mbps. Raises if insufficient data sent.
+
+    elapsed is measured from first byte generated to server response received,
+    NOT from generator start to generator end. This avoids over-estimation caused
+    by local socket buffering (companion→proxy loopback is near-infinite speed;
+    the real bottleneck is the VPN tunnel, whose back-pressure only appears once
+    OS buffers fill up, which can take hundreds of ms at gigabit loopback speeds).
+
+    Measuring until the server acknowledges receipt gives an accurate end-to-end
+    throughput at the cost of one RTT overhead (~1–2% error at typical VPN latency).
     """
-    state: dict = {'sent': 0, 't0': None, 't1': None}
+    sent = [0]
+    t0 = [None]
 
     def _gen():
-        state['t0'] = time.perf_counter()
-        while state['sent'] < cap_bytes:
-            if (time.perf_counter() - state['t0']) >= duration:
-                break
+        t0[0] = time.perf_counter()
+        while sent[0] < cap_bytes and (time.perf_counter() - t0[0]) < duration:
             yield _UPLOAD_CHUNK
-            state['sent'] += len(_UPLOAD_CHUNK)
-        state['t1'] = time.perf_counter()
+            sent[0] += len(_UPLOAD_CHUNK)
 
     try:
         requests.post(
@@ -220,13 +224,55 @@ def _stream_upload(
     except requests.exceptions.ChunkedEncodingError:
         pass
 
-    if state['t0'] is None or state['t1'] is None:
+    if t0[0] is None:
         raise RuntimeError('Upload stream never started')
-    elapsed = state['t1'] - state['t0']
-    sent = state['sent']
-    if sent < min_bytes or elapsed < 0.5:
-        raise RuntimeError(f'Insufficient upload: {sent / 1024:.0f} KB in {elapsed:.1f}s')
-    return round((sent * 8) / (elapsed * 1_000_000), 2)
+    # elapsed = generator start → server response (end-to-end, not generator exit)
+    elapsed = time.perf_counter() - t0[0]
+    total_sent = sent[0]
+    if total_sent < min_bytes or elapsed < 0.5:
+        raise RuntimeError(f'Insufficient upload: {total_sent / 1024:.0f} KB in {elapsed:.1f}s')
+    return round((total_sent * 8) / (elapsed * 1_000_000), 2)
+
+
+def _parallel_stream_speed(
+    url: str,
+    px: dict,
+    duration: float,
+    cap_bytes: int,
+    streams: int,
+    min_bytes: int = 512 * 1024,
+    warmup: float = 0.0,
+) -> float:
+    """
+    Launch `streams` concurrent downloads from `url` and sum their individual speeds.
+    Each worker measures its own bytes/elapsed independently; total = Σ Mbps.
+    This saturates the VPN tunnel the same way a multi-connection download manager would.
+    """
+    speeds: list[float | None] = [None] * streams
+    errors: list[str] = []
+
+    def _worker(idx: int):
+        try:
+            speeds[idx] = _stream_speed(
+                url, px,
+                duration=duration,
+                cap_bytes=cap_bytes,
+                min_bytes=min_bytes,
+                warmup=warmup,
+            )
+        except Exception as exc:
+            errors.append(str(exc))
+
+    threads = [threading.Thread(target=_worker, args=(i,), daemon=True) for i in range(streams)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=duration + max(warmup, 0) + 20)
+
+    good = [s for s in speeds if s is not None]
+    if not good:
+        raise RuntimeError('All parallel streams failed: ' + '; '.join(errors))
+    return round(sum(good), 2)
 
 
 def _ttfb(url: str, px: dict) -> float:
@@ -248,12 +294,15 @@ def test_download(
     duration: float = 8.0,
     samples: int = 3,
     warmup: float = 0.0,
+    streams: int = 1,
     proxy_user: str | None = None,
     proxy_password: str | None = None,
 ) -> tuple[float, list[dict]]:
     """
     Test download speed through the proxy against `samples` diverse endpoints.
     Each endpoint is streamed for up to `duration` seconds (after `warmup` drain).
+    With streams > 1, multiple concurrent TCP connections are opened per endpoint
+    so the VPN tunnel is saturated the same way a download manager would.
     Returns (median_mbps, [{'endpoint', 'mbps', 'error'}, ...]).
     Raises RuntimeError if no endpoint succeeded.
     """
@@ -272,10 +321,16 @@ def test_download(
                 url = url_tpl.format(size=_CF_SIZE)
             else:
                 url = url_tpl
-            mbps = _stream_speed(url, px, duration=duration, cap_bytes=cap, warmup=warmup)
+            if streams > 1:
+                mbps = _parallel_stream_speed(
+                    url, px, duration=duration, cap_bytes=cap,
+                    streams=streams, warmup=warmup,
+                )
+            else:
+                mbps = _stream_speed(url, px, duration=duration, cap_bytes=cap, warmup=warmup)
             speeds.append(mbps)
             results.append({'endpoint': label, 'mbps': mbps, 'error': None})
-            logger.debug('  DL %s → %.1f Mbps', label, mbps)
+            logger.debug('  DL %s ×%d → %.1f Mbps', label, streams, mbps)
         except Exception as exc:
             results.append({'endpoint': label, 'mbps': None, 'error': str(exc)})
             logger.debug('  DL %s → error: %s', label, exc)

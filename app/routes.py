@@ -406,6 +406,7 @@ def settings():
             set_setting('auto_exclude_failures',   request.form.get('auto_exclude_failures', '5'))
             set_setting('speedtest_upload',        '1' if request.form.get('speedtest_upload') else '0')
             set_setting('speedtest_warmup',        '1' if request.form.get('speedtest_warmup') else '0')
+            set_setting('speedtest_streams',       request.form.get('speedtest_streams', '4'))
             set_setting('db_retention_days',       request.form.get('db_retention_days', '30'))
             reschedule(float(request.form.get('interval', '6')))
             flash('Paramètres enregistrés.', 'success')
@@ -440,6 +441,7 @@ def settings():
         'auto_exclude_failures': get_setting('auto_exclude_failures', '5'),
         'speedtest_upload':      get_setting('speedtest_upload', '1'),
         'speedtest_warmup':      get_setting('speedtest_warmup', '1'),
+        'speedtest_streams':     get_setting('speedtest_streams', '4'),
         'db_retention_days':     get_setting('db_retention_days', '30'),
     }
     return render_template('settings.html', cfg=cfg, next_run=get_next_run())
