@@ -215,6 +215,34 @@ def get_public_ip(
     return None
 
 
+def get_public_ips(
+    proxy_host: str,
+    proxy_port: int,
+    proxy_user: str | None = None,
+    proxy_password: str | None = None,
+) -> tuple[str | None, str | None]:
+    """Return (ipv4, ipv6) by probing Cloudflare's protocol-specific endpoints."""
+    px = _proxies(proxy_host, proxy_port, proxy_user, proxy_password)
+    ipv4: str | None = None
+    ipv6: str | None = None
+    for url, kind in [
+        ('https://ipv4.cloudflare.com/cdn-cgi/trace', 'v4'),
+        ('https://ipv6.cloudflare.com/cdn-cgi/trace', 'v6'),
+    ]:
+        try:
+            resp = requests.get(url, proxies=px, timeout=10)
+            for line in resp.text.splitlines():
+                if line.startswith('ip='):
+                    if kind == 'v4':
+                        ipv4 = line[3:].strip()
+                    else:
+                        ipv6 = line[3:].strip()
+                    break
+        except Exception:
+            pass
+    return ipv4, ipv6
+
+
 def wait_for_vpn(
     proxy_host: str,
     proxy_port: int,

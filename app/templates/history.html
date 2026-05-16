@@ -56,7 +56,11 @@
             {% else %}—{% endif %}
           </td>
           <td>{{ ('%.0f ms'|format(t.latency_ms)) if t.latency_ms else '—' }}</td>
-          <td><small class="text-muted">{{ t.public_ip or '—' }}</small></td>
+          <td>
+            <small class="text-muted font-monospace">{{ t.public_ip or '—' }}
+            {% if t.public_ipv6 %}<br><span style="font-size:.7rem">{{ t.public_ipv6 }}</span>{% endif %}
+            </small>
+          </td>
           <td>
             {% if t.success %}
               <span class="badge bg-success">OK</span>

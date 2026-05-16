@@ -25,6 +25,7 @@
         <tr>
           <th>Valeur</th>
           <th>Type</th>
+          <th>IP publique</th>
           <th>Avg DL</th>
           <th>Max DL</th>
           <th>Latence</th>
@@ -44,6 +45,11 @@
           </td>
           <td>
             <small class="text-muted font-monospace">{{ filter_vars.get(s.filter_type, s.filter_type) }}</small>
+          </td>
+          <td>
+            <small class="text-muted font-monospace">{{ s.last_ipv4 or '—' }}
+            {% if s.last_ipv6 %}<br><span style="font-size:.7rem">{{ s.last_ipv6 }}</span>{% endif %}
+            </small>
           </td>
           <td>
             {% if s.avg_dl %}
@@ -95,7 +101,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="8" class="text-center text-muted py-5">
+          <td colspan="9" class="text-center text-muted py-5">
             <i class="bi bi-hdd-network" style="font-size:2rem;opacity:.3"></i><br>
             Aucun serveur configuré.<br>
             <small>Ajoutez des noms de serveurs AirVPN (ex : <code>Chamukuy</code>, <code>Elgafar</code>…)</small>

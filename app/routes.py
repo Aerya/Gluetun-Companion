@@ -136,7 +136,11 @@ def servers():
                 ROUND(MAX(CASE WHEN st.success=1 THEN st.download_mbps END), 1) AS max_dl,
                 MAX(st.tested_at)                                                AS last_tested,
                 COUNT(st.id)                                                     AS total_tests,
-                SUM(CASE WHEN st.success=1 THEN 1 ELSE 0 END)                   AS ok_tests
+                SUM(CASE WHEN st.success=1 THEN 1 ELSE 0 END)                   AS ok_tests,
+                (SELECT public_ip   FROM speed_tests
+                 WHERE server_name=s.name AND success=1 ORDER BY tested_at DESC LIMIT 1) AS last_ipv4,
+                (SELECT public_ipv6 FROM speed_tests
+                 WHERE server_name=s.name AND success=1 ORDER BY tested_at DESC LIMIT 1) AS last_ipv6
             FROM servers s
             LEFT JOIN speed_tests st ON st.server_name = s.name
             GROUP BY s.id

@@ -9,7 +9,7 @@
     <table class="table table-hover mb-0">
       <thead>
         <tr>
-          <th>De</th><th></th><th>Vers</th><th>Raison</th><th>Statut</th><th>Date</th>
+          <th>De</th><th></th><th>Vers</th><th>IP après bascule</th><th>Raison</th><th>Statut</th><th>Date</th>
         </tr>
       </thead>
       <tbody>
@@ -19,9 +19,17 @@
           <td class="text-muted"><i class="bi bi-arrow-right"></i></td>
           <td><code class="text-success">{{ s.to_server }}</code></td>
           <td>
+            {% if s.to_ipv4 or s.to_ipv6 %}
+              <small class="text-muted font-monospace">
+                {{ s.to_ipv4 or '' }}
+                {% if s.to_ipv6 %}<br><span style="font-size:.7rem">{{ s.to_ipv6 }}</span>{% endif %}
+              </small>
+            {% else %}—{% endif %}
+          </td>
+          <td>
             {% if s.reason == 'auto_best' %}
               <span class="badge" style="background:#1f6feb">
-                <i class="bi bi-stars"></i> Auto (meilleur)
+                Auto (meilleur)
               </span>
             {% elif s.reason == 'manual' %}
               <span class="badge bg-warning text-dark">
@@ -42,7 +50,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" class="text-center text-muted py-5">
+          <td colspan="7" class="text-center text-muted py-5">
             <i class="bi bi-arrow-left-right" style="font-size:2rem;opacity:.3"></i><br>
             Aucune bascule enregistrée.
           </td>

@@ -21,7 +21,7 @@ def run_benchmark(app):
 
 def _do_benchmark(app):
     from .database import get_db, get_setting, set_setting
-    from .gluetun import FILTER_VARS, switch_server, wait_for_vpn, get_public_ip, get_current_filters, format_filters
+    from .gluetun import FILTER_VARS, switch_server, wait_for_vpn, get_public_ips, get_current_filters, format_filters
     from .speedtest import test_download, test_latency
 
     # Mark as running
@@ -71,7 +71,7 @@ def _do_benchmark(app):
                 continue
 
             try:
-                public_ip = get_public_ip(proxy_host, proxy_port, proxy_user, proxy_pass)
+                public_ip, public_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
 
                 dl_median, dl_detail = test_download(
                     proxy_host, proxy_port,
@@ -106,6 +106,7 @@ def _do_benchmark(app):
                     download_mbps=dl_median,
                     latency_ms=lat_median,
                     public_ip=public_ip,
+                    public_ipv6=public_ipv6,
                 )
                 results.append({'server': server_name, 'filter_type': filter_type, 'dl': dl_median, 'lat': lat_median})
 
@@ -121,15 +122,20 @@ def _do_benchmark(app):
             from_label = format_filters(get_current_filters(container))
             if best_label != from_label:
                 ok, err = switch_server(best['server'], best['filter_type'], container, compose_dir, project)
+                if ok:
+                    wait_for_vpn(proxy_host, proxy_port, timeout=wait_secs, proxy_user=proxy_user, proxy_password=proxy_pass)
+                    to_ipv4, to_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
+                    logger.info('Switched to best: %s  (%s / %s)', best_label, to_ipv4, to_ipv6)
+                else:
+                    to_ipv4 = to_ipv6 = None
                 _record_switch(
                     from_server=from_label,
                     to_server=best_label,
                     reason='auto_best',
                     success=ok,
+                    to_ipv4=to_ipv4,
+                    to_ipv6=to_ipv6,
                 )
-                if ok:
-                    wait_for_vpn(proxy_host, proxy_port, timeout=wait_secs, proxy_user=proxy_user, proxy_password=proxy_pass)
-                    logger.info('Switched to best: %s', best_label)
             else:
                 logger.info('Already on best: %s', best_label)
 
@@ -145,15 +151,16 @@ def _record_test(
     download_mbps: float | None = None,
     latency_ms: float | None = None,
     public_ip: str | None = None,
+    public_ipv6: str | None = None,
     error: str | None = None,
 ):
     from .database import get_db
     with get_db() as db:
         db.execute(
             '''INSERT INTO speed_tests
-               (server_name, download_mbps, latency_ms, public_ip, success, error_msg)
-               VALUES (?, ?, ?, ?, ?, ?)''',
-            (server_name, download_mbps, latency_ms, public_ip, int(success), error),
+               (server_name, download_mbps, latency_ms, public_ip, public_ipv6, success, error_msg)
+               VALUES (?, ?, ?, ?, ?, ?, ?)''',
+            (server_name, download_mbps, latency_ms, public_ip, public_ipv6, int(success), error),
         )
 
 
@@ -162,13 +169,15 @@ def _record_switch(
     to_server: str,
     reason: str,
     success: bool,
+    to_ipv4: str | None = None,
+    to_ipv6: str | None = None,
 ):
     from .database import get_db
     with get_db() as db:
         db.execute(
-            '''INSERT INTO switches (from_server, to_server, reason, success)
-               VALUES (?, ?, ?, ?)''',
-            (from_server, to_server, reason, int(success)),
+            '''INSERT INTO switches (from_server, to_server, reason, success, to_ipv4, to_ipv6)
+               VALUES (?, ?, ?, ?, ?, ?)''',
+            (from_server, to_server, reason, int(success), to_ipv4, to_ipv6),
         )
 
 

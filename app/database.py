@@ -57,11 +57,17 @@ def init_db(db_path: str):
                 ('speedtest_samples',        '3'),
                 ('speedtest_duration',       '8');
         ''')
-        # Migration: add filter_type to existing tables that predate this column
-        try:
-            db.execute("ALTER TABLE servers ADD COLUMN filter_type TEXT NOT NULL DEFAULT 'name'")
-        except Exception:
-            pass  # column already exists
+        # Migrations for columns added after initial schema
+        for stmt in [
+            "ALTER TABLE servers ADD COLUMN filter_type TEXT NOT NULL DEFAULT 'name'",
+            "ALTER TABLE speed_tests ADD COLUMN public_ipv6 TEXT",
+            "ALTER TABLE switches ADD COLUMN to_ipv4 TEXT",
+            "ALTER TABLE switches ADD COLUMN to_ipv6 TEXT",
+        ]:
+            try:
+                db.execute(stmt)
+            except Exception:
+                pass
 
 
 @contextmanager
