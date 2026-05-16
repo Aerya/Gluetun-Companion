@@ -186,6 +186,32 @@ def switch_server(
 
 
 # ---------------------------------------------------------------------------
+# Dependent-container restart
+# ---------------------------------------------------------------------------
+
+def restart_network_dependents(container_name: str) -> list[str]:
+    """
+    Find and restart every container whose NetworkMode is
+    'container:<container_name>' (i.e. network_mode: service:<container_name>
+    in Compose).  Called after the VPN is confirmed up so the dependents
+    re-attach to the live network namespace.
+    Returns the list of restarted container names.
+    """
+    restarted: list[str] = []
+    try:
+        client = docker.from_env()
+        target = f'container:{container_name}'
+        for c in client.containers.list():
+            if c.attrs['HostConfig'].get('NetworkMode') == target:
+                logger.info('Restarting network dependent: %s', c.name)
+                c.restart(timeout=10)
+                restarted.append(c.name)
+    except Exception as exc:
+        logger.warning('restart_network_dependents: %s', exc)
+    return restarted
+
+
+# ---------------------------------------------------------------------------
 # Proxy-based VPN status / IP helpers
 # ---------------------------------------------------------------------------
 

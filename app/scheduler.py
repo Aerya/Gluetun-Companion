@@ -58,7 +58,7 @@ def _test_one_server(
     Full test cycle for one server: switch → wait → probe IPs → DL → UL → LAT.
     Returns a result dict on success, raises on failure.
     """
-    from .gluetun import FILTER_VARS, switch_server, wait_for_vpn, get_public_ips
+    from .gluetun import FILTER_VARS, switch_server, wait_for_vpn, get_public_ips, restart_network_dependents
     from .speedtest import test_download, test_latency, test_upload
 
     label = f"{FILTER_VARS.get(filter_type, 'SERVER_NAMES')}={server_name}"
@@ -74,6 +74,11 @@ def _test_one_server(
     )
     if not connected:
         raise RuntimeError(f'VPN connection timeout after {connect_secs:.0f}s')
+
+    # VPN is up — restart services that lost their network namespace
+    restarted = restart_network_dependents(container)
+    if restarted:
+        logger.info('Restarted network dependents: %s', ', '.join(restarted))
 
     public_ip, public_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
 
@@ -204,6 +209,7 @@ def _do_benchmark(app):
     from .gluetun import (
         FILTER_VARS, switch_server, wait_for_vpn,
         get_public_ips, get_current_filters, format_filters,
+        restart_network_dependents,
     )
 
     set_setting('benchmark_running', '1')
@@ -283,6 +289,9 @@ def _do_benchmark(app):
                         proxy_host, proxy_port, timeout=wait_secs,
                         proxy_user=proxy_user, proxy_password=proxy_pass,
                     )
+                    restarted = restart_network_dependents(container)
+                    if restarted:
+                        logger.info('Restarted network dependents: %s', ', '.join(restarted))
                     to_ipv4, to_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
                     logger.info(
                         'Switched to best: %s  (%s / %s)  connect %.0fs',
