@@ -12,13 +12,11 @@ def init_db(db_path: str):
     with get_db() as db:
         db.executescript('''
             CREATE TABLE IF NOT EXISTS servers (
-                id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                name    TEXT    UNIQUE NOT NULL,
-                country TEXT,
-                city    TEXT,
-                region  TEXT,
-                enabled INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT    UNIQUE NOT NULL,
+                filter_type TEXT    NOT NULL DEFAULT 'name',
+                enabled     INTEGER NOT NULL DEFAULT 1,
+                created_at  TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS speed_tests (
@@ -59,6 +57,11 @@ def init_db(db_path: str):
                 ('speedtest_samples',        '3'),
                 ('speedtest_duration',       '8');
         ''')
+        # Migration: add filter_type to existing tables that predate this column
+        try:
+            db.execute("ALTER TABLE servers ADD COLUMN filter_type TEXT NOT NULL DEFAULT 'name'")
+        except Exception:
+            pass  # column already exists
 
 
 @contextmanager

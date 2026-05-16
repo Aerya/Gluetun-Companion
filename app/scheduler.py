@@ -21,7 +21,7 @@ def run_benchmark(app):
 
 def _do_benchmark(app):
     from .database import get_db, get_setting, set_setting
-    from .gluetun import switch_server, wait_for_vpn, get_public_ip, get_current_server
+    from .gluetun import FILTER_VARS, switch_server, wait_for_vpn, get_public_ip, get_current_filters, format_filters
     from .speedtest import test_download, test_latency
 
     # Mark as running
@@ -34,7 +34,6 @@ def _do_benchmark(app):
         project     = app.config.get('COMPOSE_PROJECT', '')
         proxy_host  = app.config['GLUETUN_HOST']
         proxy_port  = app.config['GLUETUN_PROXY_PORT']
-        api_port    = app.config['GLUETUN_API_PORT']
 
         wait_secs    = int(get_setting('connection_wait_seconds', '45'))
         auto_sw      = get_setting('auto_switch', '1') == '1'
@@ -45,12 +44,9 @@ def _do_benchmark(app):
         lat_samples  = min(dl_samples, 3)
 
         with get_db() as db:
-            servers = [
-                r['name']
-                for r in db.execute(
-                    'SELECT name FROM servers WHERE enabled = 1 ORDER BY name'
-                ).fetchall()
-            ]
+            servers = db.execute(
+                'SELECT name, filter_type FROM servers WHERE enabled = 1 ORDER BY name'
+            ).fetchall()
 
         if not servers:
             logger.info('No enabled servers — skipping benchmark')
@@ -58,21 +54,24 @@ def _do_benchmark(app):
 
         results: list[dict] = []
 
-        for server_name in servers:
-            logger.info('Testing server: %s', server_name)
+        for row in servers:
+            server_name = row['name']
+            filter_type = row['filter_type']
+            label = f"{FILTER_VARS.get(filter_type, 'SERVER_NAMES')}={server_name}"
+            logger.info('Testing: %s', label)
 
-            ok, err = switch_server(server_name, container, compose_dir, project)
+            ok, err = switch_server(server_name, filter_type, container, compose_dir, project)
             if not ok:
                 _record_test(server_name, success=False, error=f'Switch failed: {err}')
                 continue
 
-            connected = wait_for_vpn(proxy_host, api_port, timeout=wait_secs)
+            connected = wait_for_vpn(proxy_host, proxy_port, timeout=wait_secs, proxy_user=proxy_user, proxy_password=proxy_pass)
             if not connected:
                 _record_test(server_name, success=False, error='VPN connection timeout')
                 continue
 
             try:
-                public_ip = get_public_ip(proxy_host, api_port)
+                public_ip = get_public_ip(proxy_host, proxy_port, proxy_user, proxy_pass)
 
                 dl_median, dl_detail = test_download(
                     proxy_host, proxy_port,
@@ -108,7 +107,7 @@ def _do_benchmark(app):
                     latency_ms=lat_median,
                     public_ip=public_ip,
                 )
-                results.append({'server': server_name, 'dl': dl_median, 'lat': lat_median})
+                results.append({'server': server_name, 'filter_type': filter_type, 'dl': dl_median, 'lat': lat_median})
 
             except Exception as exc:
                 _record_test(server_name, success=False, error=str(exc))
@@ -116,22 +115,23 @@ def _do_benchmark(app):
 
         if auto_sw and results:
             best = max(results, key=lambda r: r['dl'])
-            logger.info('Best server: %s (%.1f Mbps)', best['server'], best['dl'])
+            best_label = f"{FILTER_VARS.get(best['filter_type'], 'SERVER_NAMES')}={best['server']}"
+            logger.info('Best: %s (%.1f Mbps)', best_label, best['dl'])
 
-            current = get_current_server(container)
-            if best['server'] != current:
-                ok, err = switch_server(best['server'], container, compose_dir, project)
+            from_label = format_filters(get_current_filters(container))
+            if best_label != from_label:
+                ok, err = switch_server(best['server'], best['filter_type'], container, compose_dir, project)
                 _record_switch(
-                    from_server=current,
-                    to_server=best['server'],
+                    from_server=from_label,
+                    to_server=best_label,
                     reason='auto_best',
                     success=ok,
                 )
                 if ok:
-                    wait_for_vpn(proxy_host, api_port, timeout=wait_secs)
-                    logger.info('Switched to best server: %s', best['server'])
+                    wait_for_vpn(proxy_host, proxy_port, timeout=wait_secs, proxy_user=proxy_user, proxy_password=proxy_pass)
+                    logger.info('Switched to best: %s', best_label)
             else:
-                logger.info('Already on best server: %s', best['server'])
+                logger.info('Already on best: %s', best_label)
 
     finally:
         set_setting('benchmark_running', '0')

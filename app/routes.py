@@ -7,7 +7,11 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .database import get_db, get_setting, set_setting
-from .gluetun import get_current_server, get_public_ip, get_vpn_status, switch_server
+from .gluetun import (
+    FILTER_VARS, FILTER_LABELS,
+    get_current_filters, format_filters,
+    get_public_ip, get_vpn_status, switch_server,
+)
 from .scheduler import get_next_run, reschedule, trigger_now
 
 bp = Blueprint('main', __name__)
@@ -68,13 +72,16 @@ def logout():
 @login_required
 def dashboard():
     cfg = current_app.config
-    host, api_port, container = (
-        cfg['GLUETUN_HOST'], cfg['GLUETUN_API_PORT'], cfg['GLUETUN_CONTAINER']
-    )
+    proxy_host = cfg['GLUETUN_HOST']
+    proxy_port = cfg['GLUETUN_PROXY_PORT']
+    container  = cfg['GLUETUN_CONTAINER']
+    px_user    = get_setting('proxy_username') or None
+    px_pass    = get_setting('proxy_password') or None
 
-    vpn_status     = get_vpn_status(host, api_port)
-    public_ip      = get_public_ip(host, api_port) if vpn_status == 'running' else None
-    current_server = get_current_server(container)
+    vpn_status      = get_vpn_status(proxy_host, proxy_port, px_user, px_pass)
+    public_ip       = get_public_ip(proxy_host, proxy_port, px_user, px_pass) if vpn_status == 'running' else None
+    current_filters = get_current_filters(container)
+    current_server  = format_filters(current_filters)
     benchmark_running = get_setting('benchmark_running', '0') == '1'
 
     with get_db() as db:
@@ -123,7 +130,7 @@ def servers():
     with get_db() as db:
         rows = db.execute('''
             SELECT
-                s.id, s.name, s.country, s.city, s.region, s.enabled, s.created_at,
+                s.id, s.name, s.filter_type, s.enabled, s.created_at,
                 ROUND(AVG(CASE WHEN st.success=1 THEN st.download_mbps END), 1) AS avg_dl,
                 ROUND(AVG(CASE WHEN st.success=1 THEN st.latency_ms   END), 0) AS avg_lat,
                 ROUND(MAX(CASE WHEN st.success=1 THEN st.download_mbps END), 1) AS max_dl,
@@ -135,32 +142,66 @@ def servers():
             GROUP BY s.id
             ORDER BY avg_dl DESC NULLS LAST, s.name
         ''').fetchall()
-    return render_template('servers.html', servers=rows)
+    return render_template('servers.html', servers=rows, filter_labels=FILTER_LABELS, filter_vars=FILTER_VARS)
+
+
+@bp.route('/servers/import', methods=['POST'])
+@login_required
+def import_servers():
+    """Read all Gluetun filter env vars from the container and bulk-insert each value."""
+    container_name = current_app.config['GLUETUN_CONTAINER']
+    filters = get_current_filters(container_name)
+
+    if not filters:
+        flash('Aucune variable de filtre trouvée dans le container Gluetun (SERVER_NAMES, SERVER_COUNTRIES…).', 'danger')
+        return redirect(url_for('main.servers'))
+
+    added = 0
+    imported: list[str] = []
+    with get_db() as db:
+        for filter_type, values_str in filters.items():
+            for value in values_str.split(','):
+                value = value.strip()
+                if not value:
+                    continue
+                cur = db.execute(
+                    'INSERT OR IGNORE INTO servers (name, filter_type) VALUES (?, ?)',
+                    (value, filter_type),
+                )
+                if cur.rowcount:
+                    added += 1
+                    imported.append(f'{FILTER_VARS[filter_type]}={value}')
+
+    if added:
+        flash(f'{added} entrée(s) importée(s) : {", ".join(imported)}.', 'success')
+    else:
+        flash('Ces entrées sont déjà dans la liste.', 'info')
+    return redirect(url_for('main.servers'))
 
 
 @bp.route('/servers/add', methods=['POST'])
 @login_required
 def add_server():
-    name    = request.form.get('name', '').strip()
-    country = request.form.get('country', '').strip()
-    city    = request.form.get('city', '').strip()
-    region  = request.form.get('region', '').strip()
+    name        = request.form.get('name', '').strip()
+    filter_type = request.form.get('filter_type', 'name').strip()
 
     if not name:
-        flash('Le nom du serveur est requis.', 'warning')
+        flash('La valeur est requise.', 'warning')
         return redirect(url_for('main.servers'))
+    if filter_type not in FILTER_VARS:
+        filter_type = 'name'
 
     with get_db() as db:
         try:
             db.execute(
-                'INSERT OR IGNORE INTO servers (name, country, city, region) VALUES (?, ?, ?, ?)',
-                (name, country or None, city or None, region or None),
+                'INSERT OR IGNORE INTO servers (name, filter_type) VALUES (?, ?)',
+                (name, filter_type),
             )
         except Exception as exc:
             flash(str(exc), 'danger')
             return redirect(url_for('main.servers'))
 
-    flash(f'Serveur « {name} » ajouté.', 'success')
+    flash(f'Ajouté : {FILTER_VARS[filter_type]}={name}.', 'success')
     return redirect(url_for('main.servers'))
 
 
@@ -184,26 +225,34 @@ def delete_server(server_id):
     return redirect(url_for('main.servers'))
 
 
-@bp.route('/servers/switch/<path:server_name>', methods=['POST'])
+@bp.route('/servers/switch/<int:server_id>', methods=['POST'])
 @login_required
-def manual_switch(server_name):
+def manual_switch(server_id):
     cfg = current_app.config
-    current = get_current_server(cfg['GLUETUN_CONTAINER'])
+    with get_db() as db:
+        row = db.execute('SELECT name, filter_type FROM servers WHERE id=?', (server_id,)).fetchone()
+    if not row:
+        flash('Serveur introuvable.', 'danger')
+        return redirect(url_for('main.servers'))
+
+    from_label = format_filters(get_current_filters(cfg['GLUETUN_CONTAINER']))
     ok, err = switch_server(
-        server_name,
+        row['name'],
+        row['filter_type'],
         cfg['GLUETUN_CONTAINER'],
         cfg['COMPOSE_DIR'],
         cfg.get('COMPOSE_PROJECT', ''),
     )
+    to_label = f"{FILTER_VARS[row['filter_type']]}={row['name']}"
     with get_db() as db:
         db.execute(
             'INSERT INTO switches (from_server, to_server, reason, success) VALUES (?, ?, ?, ?)',
-            (current, server_name, 'manual', int(ok)),
+            (from_label, to_label, 'manual', int(ok)),
         )
     if ok:
-        flash(f'Basculé vers {server_name}.', 'success')
+        flash(f'Basculé vers {to_label}.', 'success')
     else:
-        flash(f'Échec du basculement : {err}', 'danger')
+        flash(f'Échec : {err}', 'danger')
     return redirect(url_for('main.servers'))
 
 
@@ -316,11 +365,13 @@ def api_trigger():
 @bp.route('/api/status')
 @login_required
 def api_status():
-    cfg = current_app.config
+    cfg      = current_app.config
+    px_user  = get_setting('proxy_username') or None
+    px_pass  = get_setting('proxy_password') or None
     return jsonify({
-        'vpn_status':         get_vpn_status(cfg['GLUETUN_HOST'], cfg['GLUETUN_API_PORT']),
-        'public_ip':          get_public_ip(cfg['GLUETUN_HOST'], cfg['GLUETUN_API_PORT']),
-        'current_server':     get_current_server(cfg['GLUETUN_CONTAINER']),
-        'benchmark_running':  get_setting('benchmark_running', '0') == '1',
-        'next_run':           str(get_next_run()) if get_next_run() else None,
+        'vpn_status':        get_vpn_status(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
+        'public_ip':         get_public_ip(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
+        'current_server':    format_filters(get_current_filters(cfg['GLUETUN_CONTAINER'])),
+        'benchmark_running': get_setting('benchmark_running', '0') == '1',
+        'next_run':          str(get_next_run()) if get_next_run() else None,
     })

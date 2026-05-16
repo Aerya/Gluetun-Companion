@@ -4,10 +4,18 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h5 class="mb-0"><i class="bi bi-hdd-network"></i> Serveurs configurés</h5>
-  <button class="btn btn-success btn-sm fw-semibold"
-          data-bs-toggle="modal" data-bs-target="#addModal">
-    <i class="bi bi-plus-lg"></i> Ajouter
-  </button>
+  <div class="d-flex gap-2">
+    <form method="post" action="{{ url_for('main.import_servers') }}">
+      <button class="btn btn-outline-info btn-sm fw-semibold"
+              title="Lit SERVER_NAMES depuis le container Gluetun et importe chaque serveur">
+        <i class="bi bi-download"></i> Importer depuis Gluetun
+      </button>
+    </form>
+    <button class="btn btn-success btn-sm fw-semibold"
+            data-bs-toggle="modal" data-bs-target="#addModal">
+      <i class="bi bi-plus-lg"></i> Ajouter
+    </button>
+  </div>
 </div>
 
 <div class="card">
@@ -15,8 +23,8 @@
     <table class="table table-hover mb-0">
       <thead>
         <tr>
-          <th>Nom</th>
-          <th>Pays / Ville</th>
+          <th>Valeur</th>
+          <th>Type</th>
           <th>Avg DL</th>
           <th>Max DL</th>
           <th>Latence</th>
@@ -35,10 +43,7 @@
             {% endif %}
           </td>
           <td>
-            <small class="text-muted">
-              {{ s.country or '' }}{% if s.city %} · {{ s.city }}{% endif %}
-              {% if s.region %} · {{ s.region }}{% endif %}
-            </small>
+            <small class="text-muted font-monospace">{{ filter_vars.get(s.filter_type, s.filter_type) }}</small>
           </td>
           <td>
             {% if s.avg_dl %}
@@ -61,10 +66,10 @@
           <td class="text-end">
             {# Switch #}
             <form method="post"
-                  action="{{ url_for('main.manual_switch', server_name=s.name) }}"
+                  action="{{ url_for('main.manual_switch', server_id=s.id) }}"
                   class="d-inline"
-                  onsubmit="return confirm('Basculer Gluetun vers {{ s.name }} maintenant ?')">
-              <button class="btn btn-success btn-sm" title="Basculer vers ce serveur maintenant">
+                  onsubmit="return confirm('Basculer Gluetun vers {{ filter_vars.get(s.filter_type) }}={{ s.name }} maintenant ?')">
+              <button class="btn btn-success btn-sm" title="Basculer maintenant">
                 <i class="bi bi-arrow-right-circle-fill"></i>
               </button>
             </form>
@@ -113,27 +118,21 @@
       <form method="post" action="{{ url_for('main.add_server') }}">
         <div class="modal-body">
           <div class="mb-3">
-            <label class="form-label fw-semibold">Nom du serveur <span class="text-danger">*</span></label>
-            <input type="text" name="name" class="form-control"
-                   placeholder="ex : Chamukuy" required autofocus>
-            <div class="form-text text-muted">
-              Correspond à <code>SERVER_NAMES</code> dans Gluetun/AirVPN.
-              <a href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/airvpn.md"
-                 target="_blank" class="text-info">Liste des serveurs AirVPN</a>
-            </div>
+            <label class="form-label fw-semibold">Type de filtre <span class="text-danger">*</span></label>
+            <select name="filter_type" class="form-select" id="filterTypeSelect" onchange="updatePlaceholder()">
+              {% for key, label in filter_labels.items() %}
+              <option value="{{ key }}">{{ filter_vars[key] }} — {{ label }}</option>
+              {% endfor %}
+            </select>
           </div>
-          <div class="row g-2">
-            <div class="col">
-              <label class="form-label small text-muted">Pays</label>
-              <input type="text" name="country" class="form-control" placeholder="ex : France">
-            </div>
-            <div class="col">
-              <label class="form-label small text-muted">Ville</label>
-              <input type="text" name="city" class="form-control" placeholder="ex : Paris">
-            </div>
-            <div class="col">
-              <label class="form-label small text-muted">Région</label>
-              <input type="text" name="region" class="form-control" placeholder="optionnel">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Valeur <span class="text-danger">*</span></label>
+            <input type="text" name="name" id="filterValueInput" class="form-control"
+                   placeholder="ex : Chamukuy" required autofocus>
+            <div class="form-text text-muted" id="filterHint">
+              Valeur exacte telle qu'attendue par Gluetun pour cette variable.
+              <a href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/airvpn.md"
+                 target="_blank" class="text-info">Référence AirVPN</a>
             </div>
           </div>
         </div>
@@ -147,4 +146,20 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const placeholders = {
+  name:     'ex : Chamukuy',
+  country:  'ex : France',
+  region:   'ex : Europe',
+  city:     'ex : Paris',
+  hostname: 'ex : ch3.vpn.airdns.org',
+};
+function updatePlaceholder() {
+  const type = document.getElementById('filterTypeSelect').value;
+  document.getElementById('filterValueInput').placeholder = placeholders[type] || '';
+}
+</script>
 {% endblock %}
