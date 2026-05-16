@@ -255,6 +255,55 @@
       </form>
     </div>
 
+    <div class="card p-4 mb-4">
+      <h6 class="fw-bold mb-3" style="color:#5865F2">
+        <i class="bi bi-bell-fill"></i> Notifications de bascule
+      </h6>
+      <form method="post">
+        <input type="hidden" name="action" value="save">
+
+        <div class="mb-3">
+          <label class="form-label">
+            <i class="bi bi-discord"></i> Webhook Discord
+          </label>
+          <input type="url" name="discord_webhook_url" class="form-control"
+                 value="{{ cfg.discord_webhook_url }}"
+                 placeholder="https://discord.com/api/webhooks/…">
+          <div class="form-text text-muted">
+            Laissez vide pour désactiver. Un embed coloré est envoyé à chaque bascule
+            (vert = amélioration, rouge = régression de débit).
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">
+            <i class="bi bi-send-fill"></i> URL(s) Apprise
+            <span class="text-muted small">(une par ligne)</span>
+          </label>
+          <textarea name="apprise_urls" class="form-control font-monospace"
+                    rows="3" placeholder="tgram://token/chatid
+ntfy://mytopic
+gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
+          <div class="form-text text-muted">
+            Compatible avec 80+ services : Telegram, ntfy, Gotify, Slack, Pushover…
+            Voir <a href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noreferrer noopener">apprise/wiki</a>
+            pour la liste complète des URLs.
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-sm fw-semibold" style="background:#5865F2;color:#fff">
+          <i class="bi bi-save"></i> Enregistrer
+        </button>
+        {% if cfg.discord_webhook_url or cfg.apprise_urls %}
+        <span class="ms-2 badge bg-success">
+          <i class="bi bi-check2-circle"></i> Notifications actives
+        </span>
+        {% else %}
+        <span class="ms-2 badge bg-secondary">Notifications désactivées</span>
+        {% endif %}
+      </form>
+    </div>
+
     <div class="card p-4">
       <h6 class="fw-bold mb-2">
         <i class="bi bi-info-circle text-info"></i> Configuration Docker requise

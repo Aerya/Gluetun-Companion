@@ -47,6 +47,8 @@ It is primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_
   switches page with Mbps gain and connection time
 - **CSV export** of the full history
 - **On-demand test** of a single server from the UI without waiting for the next cycle
+- **Notifications** on every switch — Discord webhook (rich embed) and/or
+  [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
 - **Automatic purge** of SQLite history with configurable retention (in days)
 - **`/healthz` endpoint** unauthenticated, for Docker healthchecks
 - **Structured JSON logs** optional via `LOG_JSON=1` (Loki/Grafana compatible)
@@ -150,6 +152,7 @@ Benchmark cycle (every X hours)
       10. Auto-disable after N consecutive failures
   └─ Weighted score per server (65% current + 35% exponential history)
   └─ Switch to best server if different from current
+  └─ Discord / Apprise notification (if configured)
   └─ Cycle record (total duration, servers tested, best server)
 ```
 
@@ -185,6 +188,7 @@ gluetun-companion/
     ├── database.py        # SQLite WAL + migrations
     ├── gluetun.py         # Docker control + VPN proxy
     ├── speedtest.py       # download / upload / latency via proxy
+    ├── notify.py          # Discord + Apprise notifications
     ├── scheduler.py       # APScheduler + full cycle + single-server test
     ├── routes.py          # Flask routes + JSON API + CSV export
     └── templates/

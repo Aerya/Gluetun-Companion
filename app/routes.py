@@ -277,6 +277,19 @@ def manual_switch(server_id):
             (from_label, to_label, 'manual', int(ok)),
         )
     if ok:
+        from .notify import send_switch_notification
+        send_switch_notification(
+            from_server=from_label,
+            to_server=to_label,
+            from_mbps=None,
+            to_mbps=None,
+            connect_secs=None,
+            to_ipv4=None,
+            to_ipv6=None,
+            reason='manual',
+            discord_url=get_setting('discord_webhook_url') or None,
+            apprise_urls=get_setting('apprise_urls') or None,
+        )
         flash(f'Basculé vers {to_label}.', 'success')
     else:
         flash(f'Échec : {err}', 'danger')
@@ -408,6 +421,8 @@ def settings():
             set_setting('speedtest_warmup',        '1' if request.form.get('speedtest_warmup') else '0')
             set_setting('speedtest_streams',       request.form.get('speedtest_streams', '4'))
             set_setting('db_retention_days',       request.form.get('db_retention_days', '30'))
+            set_setting('discord_webhook_url',     request.form.get('discord_webhook_url', '').strip())
+            set_setting('apprise_urls',            request.form.get('apprise_urls', '').strip())
             reschedule(float(request.form.get('interval', '6')))
             flash('Paramètres enregistrés.', 'success')
 
@@ -443,6 +458,8 @@ def settings():
         'speedtest_warmup':      get_setting('speedtest_warmup', '1'),
         'speedtest_streams':     get_setting('speedtest_streams', '4'),
         'db_retention_days':     get_setting('db_retention_days', '30'),
+        'discord_webhook_url':   get_setting('discord_webhook_url', ''),
+        'apprise_urls':          get_setting('apprise_urls', ''),
     }
     return render_template('settings.html', cfg=cfg, next_run=get_next_run())
 

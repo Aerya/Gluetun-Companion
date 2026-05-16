@@ -71,6 +71,31 @@
     ::-webkit-scrollbar-thumb { background: var(--bs-border-color); border-radius: 3px; }
 
     @keyframes vpnBlink { 50% { opacity: 0; } }
+
+    /* ── Footer ── */
+    .site-footer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .9rem;
+      padding: 1.2rem 1rem;
+      margin-top: 2rem;
+      border-top: 1px solid var(--bs-border-color);
+      font-size: .85rem;
+      color: var(--bs-secondary-color);
+    }
+    .site-footer img {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      object-fit: cover;
+      vertical-align: middle;
+    }
+    .site-footer a {
+      color: var(--bs-secondary-color);
+      text-decoration: none;
+    }
+    .site-footer a:hover { color: var(--bs-body-color); }
   </style>
 </head>
 <body>
@@ -180,5 +205,14 @@ function toggleTheme() {
 })();
 </script>
 {% block scripts %}{% endblock %}
+
+<footer class="site-footer">
+  <span>Aerya</span>
+  <img src="{{ url_for('static', filename='avatar.webp') }}" alt="Avatar Aerya">
+  <a href="https://github.com/Aerya/Gluetun-Companion" target="_blank" rel="noreferrer noopener">GitHub</a>
+  <a href="https://upandclear.org" target="_blank" rel="noreferrer noopener">Blog</a>
+  <a href="https://ko-fi.com/upandclear" target="_blank" rel="noreferrer noopener">Ko-fi</a>
+  <span>❤️</span>
+</footer>
 </body>
 </html>

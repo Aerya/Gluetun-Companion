@@ -50,6 +50,8 @@ documentée ici :
   page bascules avec gain Mbps et temps de connexion
 - **Export CSV** de l'historique complet
 - **Test unitaire** d'un serveur depuis l'UI sans attendre le prochain cycle
+- **Notifications** à chaque bascule — webhook Discord (embed coloré) et/ou
+  [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
 - **Purge automatique** de l'historique SQLite configurable (rétention en jours)
 - **Endpoint `/healthz`** non authentifié pour les healthchecks Docker
 - **Logs JSON structurés** optionnels via `LOG_JSON=1` (compatibles Loki/Grafana)
@@ -153,6 +155,7 @@ Cycle de benchmark (toutes les X heures)
       10. Auto-désactivation si N échecs consécutifs
   └─ Score pondéré par serveur (65 % cycle actuel + 35 % historique exponentiel)
   └─ Bascule vers le meilleur si différent du serveur actuel
+  └─ Notification Discord / Apprise (si configurée)
   └─ Enregistrement cycle (durée totale, serveurs testés, meilleur serveur)
 ```
 
@@ -188,6 +191,7 @@ gluetun-companion/
     ├── database.py        # SQLite WAL + migrations
     ├── gluetun.py         # contrôle Docker + proxy VPN
     ├── speedtest.py       # download / upload / latence via proxy
+    ├── notify.py          # notifications Discord + Apprise
     ├── scheduler.py       # APScheduler + cycle complet + test unitaire
     ├── routes.py          # routes Flask + API JSON + export CSV
     └── templates/

@@ -78,7 +78,9 @@ def init_db(db_path: str):
                 ('speedtest_upload',         '1'),
                 ('speedtest_warmup',         '1'),
                 ('speedtest_streams',        '4'),
-                ('db_retention_days',        '30');
+                ('db_retention_days',        '30'),
+                ('discord_webhook_url',      ''),
+                ('apprise_urls',             '');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [

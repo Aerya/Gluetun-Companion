@@ -302,6 +302,20 @@ def _do_benchmark(app):
                     to_ipv4=to_ipv4,
                     to_ipv6=to_ipv6,
                 )
+                if ok:
+                    from .notify import send_switch_notification
+                    send_switch_notification(
+                        from_server=from_label,
+                        to_server=best_label,
+                        from_mbps=from_mbps,
+                        to_mbps=best['dl'],
+                        connect_secs=connect_secs,
+                        to_ipv4=to_ipv4,
+                        to_ipv6=to_ipv6,
+                        reason='auto_best',
+                        discord_url=get_setting('discord_webhook_url') or None,
+                        apprise_urls=get_setting('apprise_urls') or None,
+                    )
             else:
                 logger.info('Already on best: %s', best_label)
 
