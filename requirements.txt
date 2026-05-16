@@ -3,3 +3,4 @@ APScheduler==3.10.4
 docker==7.1.0
 requests==2.32.3
 Werkzeug==3.0.4
+gunicorn==22.0.0

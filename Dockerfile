@@ -20,4 +20,4 @@ COPY . .
 VOLUME ["/data"]
 EXPOSE 8765
 
-CMD ["python", "run.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8765", "--workers", "1", "--threads", "4", "--timeout", "120", "run:app"]
