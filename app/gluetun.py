@@ -72,6 +72,22 @@ def _container_env(container_name: str) -> dict[str, str]:
     return env
 
 
+def _detect_compose_project(container_name: str) -> str:
+    """
+    Read the compose project name from the container's Docker labels.
+    Docker Compose sets com.docker.compose.project on every managed container.
+    """
+    try:
+        container = docker.from_env().containers.get(container_name)
+        project = container.labels.get('com.docker.compose.project', '')
+        if project:
+            logger.debug('Detected compose project: %s', project)
+        return project
+    except Exception as exc:
+        logger.warning('_detect_compose_project: %s', exc)
+        return ''
+
+
 # ---------------------------------------------------------------------------
 # Docker / container helpers
 # ---------------------------------------------------------------------------
@@ -135,9 +151,12 @@ def switch_server(
     except OSError as exc:
         return False, f'Cannot write override file: {exc}'
 
+    # Use provided project name, or auto-detect from container labels
+    project = compose_project or _detect_compose_project(container_name)
+
     cmd = ['docker', 'compose']
-    if compose_project:
-        cmd += ['-p', compose_project]
+    if project:
+        cmd += ['-p', project]
     cmd += ['up', '-d', '--force-recreate', container_name]
 
     try:
