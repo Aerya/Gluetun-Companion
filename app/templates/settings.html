@@ -1,0 +1,208 @@
+{% extends 'base.html' %}
+{% block title %}Paramètres – Gluetun Companion{% endblock %}
+
+{% block content %}
+<h5 class="mb-3"><i class="bi bi-gear"></i> Paramètres</h5>
+
+<div class="row g-4">
+
+  {# ── Benchmark settings ──────────────────────────────────────────────── #}
+  <div class="col-lg-6">
+    <div class="card p-4 h-100">
+      <h6 class="fw-bold mb-3 text-success">
+        <i class="bi bi-speedometer2"></i> Planification &amp; Benchmark
+      </h6>
+      <form method="post">
+        <input type="hidden" name="action" value="save">
+
+        <div class="mb-3">
+          <label class="form-label">Intervalle entre les cycles de test</label>
+          <div class="input-group">
+            <input type="number" name="interval" class="form-control"
+                   value="{{ cfg.interval }}" min="1" max="168" step="0.5">
+            <span class="input-group-text bg-dark text-muted border-secondary">heures</span>
+          </div>
+          {% if next_run %}
+          <div class="form-text text-muted">
+            Prochain test prévu : <strong>{{ next_run.strftime('%d/%m/%Y à %H:%M:%S') }}</strong>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Durée de streaming par endpoint</label>
+          <div class="input-group">
+            <input type="number" name="speedtest_duration" class="form-control"
+                   value="{{ cfg.speedtest_duration }}" min="3" max="30" step="1">
+            <span class="input-group-text bg-dark text-muted border-secondary">secondes</span>
+          </div>
+          <div class="form-text text-muted">
+            Durée pendant laquelle on streame depuis chaque endpoint pour mesurer le débit.
+            8 s est un bon compromis précision / rapidité.
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Nombre d'endpoints à tester
+            <span class="text-muted">(médiane retenue)</span>
+          </label>
+          <div class="input-group" style="max-width:160px">
+            <input type="number" name="speedtest_samples" class="form-control"
+                   value="{{ cfg.speedtest_samples }}" min="1" max="5" step="1">
+            <span class="input-group-text bg-dark text-muted border-secondary">/ 5</span>
+          </div>
+          <div class="form-text text-muted mt-1">
+            Endpoints disponibles (dans l'ordre de test) :
+          </div>
+          <table class="table table-sm mt-1" style="font-size:.78rem">
+            <thead><tr><th>#</th><th>Nom</th><th>Réseau</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>Cloudflare</td><td>CDN mondial (paramétrique)</td></tr>
+              <tr><td>2</td><td>Hetzner-DE</td><td>Datacenter Falkenstein, Allemagne</td></tr>
+              <tr><td>3</td><td>Hetzner-FI</td><td>Datacenter Helsinki, Finlande</td></tr>
+              <tr><td>4</td><td>OVH-FR</td><td>ISP/cloud, France</td></tr>
+              <tr><td>5</td><td>Tele2</td><td>Opérateur télécom, Suède</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Délai d'attente connexion VPN</label>
+          <div class="input-group">
+            <input type="number" name="wait_secs" class="form-control"
+                   value="{{ cfg.wait_secs }}" min="10" max="180">
+            <span class="input-group-text bg-dark text-muted border-secondary">secondes</span>
+          </div>
+          <div class="form-text text-muted">
+            Temps accordé à Gluetun pour se reconnecter après chaque bascule.
+          </div>
+        </div>
+
+        <div class="mb-4 form-check form-switch">
+          <input type="checkbox" name="auto_switch" class="form-check-input"
+                 id="auto_switch" {{ 'checked' if cfg.auto_sw == '1' }}>
+          <label class="form-check-label" for="auto_switch">
+            Basculer automatiquement vers le <strong>meilleur serveur</strong> après chaque cycle
+          </label>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-success fw-semibold">
+            <i class="bi bi-save"></i> Enregistrer
+          </button>
+          <button type="button" class="btn btn-outline-success" onclick="triggerNow()">
+            <i class="bi bi-play-fill"></i> Lancer un test maintenant
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# ── Credentials ─────────────────────────────────────────────────────── #}
+  <div class="col-lg-6">
+    <div class="card p-4 mb-4">
+      <h6 class="fw-bold mb-3 text-warning">
+        <i class="bi bi-person-lock"></i> Identifiants Web UI
+      </h6>
+      <form method="post">
+        <input type="hidden" name="action" value="credentials">
+
+        <div class="mb-3">
+          <label class="form-label">Nom d'utilisateur</label>
+          <input type="text" name="username" class="form-control"
+                 value="{{ cfg.username }}" autocomplete="username">
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label">Nouveau mot de passe</label>
+          <input type="password" name="password" class="form-control"
+                 placeholder="Laisser vide pour ne pas changer"
+                 autocomplete="new-password">
+        </div>
+
+        <button type="submit" class="btn btn-warning fw-semibold text-dark">
+          <i class="bi bi-shield-lock"></i> Mettre à jour
+        </button>
+      </form>
+    </div>
+
+    <div class="card p-4 mb-4">
+      <h6 class="fw-bold mb-1">
+        <i class="bi bi-key text-info"></i> Authentification proxy HTTP
+      </h6>
+      <p class="text-muted small mb-3">
+        Si le proxy Gluetun est configuré avec <code>HTTPPROXY_USER</code> /
+        <code>HTTPPROXY_PASSWORD</code>, renseignez-les ici. Laissez vide si le proxy
+        est ouvert (votre config actuelle a <code>HTTPPROXY_USER: ""</code>).
+      </p>
+      <form method="post">
+        <input type="hidden" name="action" value="proxy_credentials">
+
+        <div class="row g-2 mb-3">
+          <div class="col">
+            <label class="form-label small text-muted">Utilisateur proxy</label>
+            <input type="text" name="proxy_username" class="form-control"
+                   value="{{ cfg.proxy_username }}"
+                   placeholder="Laisser vide = pas d'auth"
+                   autocomplete="off">
+          </div>
+          <div class="col">
+            <label class="form-label small text-muted">Mot de passe proxy</label>
+            <input type="password" name="proxy_password" class="form-control"
+                   value="{{ cfg.proxy_password }}"
+                   placeholder="Laisser vide = pas d'auth"
+                   autocomplete="off">
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-info fw-semibold text-dark">
+          <i class="bi bi-save"></i> Enregistrer
+        </button>
+        {% if cfg.proxy_username %}
+        <span class="ms-2 badge bg-success">
+          <i class="bi bi-check2-circle"></i> Auth proxy active : {{ cfg.proxy_username }}
+        </span>
+        {% else %}
+        <span class="ms-2 badge bg-secondary">Proxy sans auth</span>
+        {% endif %}
+      </form>
+    </div>
+
+    <div class="card p-4">
+      <h6 class="fw-bold mb-2">
+        <i class="bi bi-info-circle text-info"></i> Configuration Docker requise
+      </h6>
+      <p class="text-muted small mb-2">
+        Pour que le companion puisse contrôler Gluetun, vérifiez que votre
+        <code>docker-compose.yml</code> du companion contient :
+      </p>
+      <pre style="font-size:.78rem">volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+  - /chemin/vers/compose/gluetun:/compose
+
+environment:
+  GLUETUN_CONTAINER: gluetun-airvpn
+  COMPOSE_DIR: /compose
+  COMPOSE_PROJECT: nom_du_projet</pre>
+      <p class="text-muted small">
+        Le companion écrira un <code>docker-compose.override.yml</code> dans ce dossier
+        pour changer <code>SERVER_NAMES</code> et relancera le service avec
+        <code>docker compose up -d --force-recreate</code>.
+      </p>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function triggerNow() {
+  fetch('{{ url_for("main.api_trigger") }}', { method: 'POST' })
+    .then(r => {
+      if (r.status === 409) { alert('Un benchmark est déjà en cours.'); return; }
+      alert('Benchmark lancé en arrière-plan !');
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+{% block title %}Historique – Gluetun Companion{% endblock %}
+
+{% block content %}
+<h5 class="mb-3"><i class="bi bi-graph-up"></i> Historique des tests de vitesse</h5>
+
+{% if per_server %}
+<div class="row g-3 mb-4">
+  {# Mini stat cards per server #}
+  {% for s in per_server[:6] %}
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="card p-3 h-100">
+      <div class="text-muted" style="font-size:.7rem;text-transform:uppercase">{{ s.server_name }}</div>
+      {% set cls = 'speed-good' if s.avg_dl > 50 else ('speed-ok' if s.avg_dl > 15 else 'speed-bad') %}
+      <div class="fw-bold {{ cls }}" style="font-size:1.25rem">{{ s.avg_dl }} Mbps</div>
+      <div class="text-muted" style="font-size:.75rem">moy. · {{ s.cnt }} tests</div>
+      <div class="text-muted" style="font-size:.7rem">
+        ↓ {{ s.min_dl }} &nbsp;↑ {{ s.max_dl }} Mbps
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card mb-4 p-3">
+  <div class="fw-semibold mb-2">
+    <i class="bi bi-bar-chart-fill text-success"></i> Comparaison des serveurs
+  </div>
+  <canvas id="chartAvg" height="70"></canvas>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header py-2 d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-table"></i> Tous les tests</span>
+    <small class="text-muted">{{ tests|length }} entrées</small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0" style="font-size:.875rem">
+      <thead>
+        <tr>
+          <th>Serveur</th><th>Download</th><th>Latence</th>
+          <th>IP publique</th><th>Statut</th><th>Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tests %}
+        <tr>
+          <td><code>{{ t.server_name }}</code></td>
+          <td>
+            {% if t.download_mbps %}
+              {% set cls = 'speed-good' if t.download_mbps > 50 else ('speed-ok' if t.download_mbps > 15 else 'speed-bad') %}
+              <span class="fw-semibold {{ cls }}">{{ '%.1f'|format(t.download_mbps) }} Mbps</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ ('%.0f ms'|format(t.latency_ms)) if t.latency_ms else '—' }}</td>
+          <td><small class="text-muted">{{ t.public_ip or '—' }}</small></td>
+          <td>
+            {% if t.success %}
+              <span class="badge bg-success">OK</span>
+            {% else %}
+              <span class="badge bg-danger"
+                    data-bs-toggle="tooltip"
+                    title="{{ t.error_msg or 'Erreur inconnue' }}">Échec</span>
+            {% endif %}
+          </td>
+          <td><small class="text-muted">{{ t.tested_at[:16] }}</small></td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="text-center text-muted py-4">Aucun test enregistré.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if per_server %}
+<script>
+const labels   = [{% for s in per_server %}'{{ s.server_name }}',{% endfor %}];
+const avgData  = [{% for s in per_server %}{{ s.avg_dl or 0 }},{% endfor %}];
+const maxData  = [{% for s in per_server %}{{ s.max_dl or 0 }},{% endfor %}];
+
+new Chart(document.getElementById('chartAvg'), {
+  type: 'bar',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: 'Download moyen (Mbps)',
+        data: avgData,
+        backgroundColor: 'rgba(63,185,80,.65)',
+        borderColor: '#3fb950',
+        borderWidth: 1,
+        borderRadius: 4,
+      },
+      {
+        label: 'Download max (Mbps)',
+        data: maxData,
+        backgroundColor: 'rgba(88,166,255,.3)',
+        borderColor: '#58a6ff',
+        borderWidth: 1,
+        borderRadius: 4,
+        type: 'bar',
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    scales: {
+      y: { beginAtZero: true, grid: { color: '#30363d' }, ticks: { color: '#8b949e' } },
+      x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' } }
+    },
+    plugins: { legend: { labels: { color: '#c9d1d9' } } }
+  }
+});
+</script>
+{% endif %}
+<script>
+document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+</script>
+{% endblock %}

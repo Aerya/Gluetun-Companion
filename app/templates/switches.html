@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Bascules – Gluetun Companion{% endblock %}
+
+{% block content %}
+<h5 class="mb-3"><i class="bi bi-arrow-left-right"></i> Historique des bascules de serveur</h5>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>De</th><th></th><th>Vers</th><th>Raison</th><th>Statut</th><th>Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in switches %}
+        <tr>
+          <td><code class="text-muted">{{ s.from_server or '—' }}</code></td>
+          <td class="text-muted"><i class="bi bi-arrow-right"></i></td>
+          <td><code class="text-success">{{ s.to_server }}</code></td>
+          <td>
+            {% if s.reason == 'auto_best' %}
+              <span class="badge" style="background:#1f6feb">
+                <i class="bi bi-stars"></i> Auto (meilleur)
+              </span>
+            {% elif s.reason == 'manual' %}
+              <span class="badge bg-warning text-dark">
+                <i class="bi bi-hand-index"></i> Manuel
+              </span>
+            {% else %}
+              <span class="badge bg-secondary">{{ s.reason }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if s.success %}
+              <span class="badge bg-success"><i class="bi bi-check2"></i> Succès</span>
+            {% else %}
+              <span class="badge bg-danger"><i class="bi bi-x"></i> Échec</span>
+            {% endif %}
+          </td>
+          <td><small class="text-muted">{{ s.switched_at[:16] }}</small></td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="text-center text-muted py-5">
+            <i class="bi bi-arrow-left-right" style="font-size:2rem;opacity:.3"></i><br>
+            Aucune bascule enregistrée.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

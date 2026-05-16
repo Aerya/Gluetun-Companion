@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Gluetun Companion{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <style>
+    :root {
+      --bg-base:   #0d1117;
+      --bg-card:   #161b22;
+      --border:    #30363d;
+      --text:      #c9d1d9;
+      --muted:     #8b949e;
+      --green:     #3fb950;
+      --yellow:    #d29922;
+      --red:       #f85149;
+      --blue:      #58a6ff;
+    }
+    body           { background: var(--bg-base); color: var(--text); min-height: 100vh; }
+    .navbar        { background: var(--bg-card) !important; border-bottom: 1px solid var(--border); }
+    .navbar-brand  { font-weight: 700; letter-spacing: .5px; }
+    .nav-link      { color: var(--muted) !important; }
+    .nav-link:hover, .nav-link.active { color: var(--text) !important; }
+    .card          { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; }
+    .table         { color: var(--text); --bs-table-bg: transparent; }
+    .table thead th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; border-color: var(--border); }
+    .table td, .table th { border-color: var(--border); }
+    .table-hover tbody tr:hover { background: rgba(255,255,255,.03); }
+    .form-control, .form-select {
+      background: #0d1117; color: var(--text);
+      border-color: var(--border);
+    }
+    .form-control:focus, .form-select:focus {
+      background: #0d1117; color: var(--text);
+      border-color: var(--blue); box-shadow: 0 0 0 .2rem rgba(88,166,255,.15);
+    }
+    .badge-server  { font-family: 'Consolas', monospace; font-size: .85em; }
+    .dot           { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+    .dot-running   { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot-stopped   { background: var(--red); }
+    .dot-unknown   { background: var(--muted); }
+    .stat-card     { padding: 1.1rem 1.4rem; }
+    .stat-label    { font-size: .75rem; text-transform: uppercase; color: var(--muted); letter-spacing: .5px; }
+    .stat-value    { font-size: 1.5rem; font-weight: 700; line-height: 1.2; margin-top: .25rem; }
+    .speed-good    { color: var(--green); }
+    .speed-ok      { color: var(--yellow); }
+    .speed-bad     { color: var(--red); }
+    code           { color: #79c0ff; background: rgba(88,166,255,.08); padding: .1em .35em; border-radius: 4px; }
+    pre            { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: .75rem 1rem; color: var(--text); }
+    .modal-content { background: var(--bg-card); border: 1px solid var(--border); }
+    .modal-header, .modal-footer { border-color: var(--border); }
+    .btn-close-white { filter: invert(1); }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="{{ url_for('main.dashboard') }}">
+      <i class="bi bi-shield-lock-fill text-success"></i> Gluetun Companion
+    </a>
+    <button class="navbar-toggler border-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="nav">
+      <ul class="navbar-nav me-auto gap-1">
+        {% set nav = [
+          ('main.dashboard', 'bi-speedometer2', 'Dashboard'),
+          ('main.servers',   'bi-hdd-network',  'Serveurs'),
+          ('main.history',   'bi-graph-up',     'Historique'),
+          ('main.switches',  'bi-arrow-left-right', 'Bascules'),
+          ('main.settings',  'bi-gear',         'Paramètres'),
+        ] %}
+        {% for endpoint, icon, label in nav %}
+        <li class="nav-item">
+          <a class="nav-link {{ 'active' if request.endpoint == endpoint }}"
+             href="{{ url_for(endpoint) }}">
+            <i class="bi {{ icon }}"></i> {{ label }}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      <ul class="navbar-nav">
+        <li class="nav-item">
+          <a class="nav-link text-danger" href="{{ url_for('main.logout') }}">
+            <i class="bi bi-box-arrow-right"></i> Déconnexion
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid py-4 px-4">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+    <div class="alert alert-{{ cat }} alert-dismissible fade show py-2">
+      {{ msg }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

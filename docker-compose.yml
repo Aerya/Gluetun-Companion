@@ -1,0 +1,34 @@
+services:
+  gluetun-companion:
+    build: .
+    container_name: gluetun-companion
+    restart: always
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount the directory containing your gluetun docker-compose.yml
+      # The companion will write a docker-compose.override.yml here to switch servers
+      - /path/to/your/gluetun/compose/dir:/compose   # <-- CHANGE THIS
+    environment:
+      SECRET_KEY: "replace-with-a-long-random-string"
+      DATA_DIR: /data
+      # Hostname of the gluetun container (accessible via Docker network)
+      GLUETUN_HOST: gluetun-airvpn
+      GLUETUN_PROXY_PORT: "8887"
+      # Gluetun control API port (default 8000, internal network only)
+      GLUETUN_API_PORT: "8000"
+      # Name of the gluetun container to control
+      GLUETUN_CONTAINER: gluetun-airvpn
+      # Path inside this container where the gluetun compose dir is mounted
+      COMPOSE_DIR: /compose
+      # Compose project name (usually the folder name, check with: docker compose ls)
+      COMPOSE_PROJECT: your_project_name   # <-- CHANGE THIS
+    networks:
+      - vpn_net   # <-- Must be the same network as gluetun
+
+networks:
+  vpn_net:
+    external: true
+    name: your_gluetun_network_name   # <-- CHANGE THIS (check with: docker network ls)

@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+{% block title %}Serveurs – Gluetun Companion{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0"><i class="bi bi-hdd-network"></i> Serveurs configurés</h5>
+  <button class="btn btn-success btn-sm fw-semibold"
+          data-bs-toggle="modal" data-bs-target="#addModal">
+    <i class="bi bi-plus-lg"></i> Ajouter
+  </button>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>Nom</th>
+          <th>Pays / Ville</th>
+          <th>Avg DL</th>
+          <th>Max DL</th>
+          <th>Latence</th>
+          <th>Tests</th>
+          <th>Dernier test</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in servers %}
+        <tr class="{{ '' if s.enabled else 'opacity-50' }}">
+          <td>
+            <code>{{ s.name }}</code>
+            {% if not s.enabled %}
+            <span class="badge bg-secondary ms-1" style="font-size:.7rem">OFF</span>
+            {% endif %}
+          </td>
+          <td>
+            <small class="text-muted">
+              {{ s.country or '' }}{% if s.city %} · {{ s.city }}{% endif %}
+              {% if s.region %} · {{ s.region }}{% endif %}
+            </small>
+          </td>
+          <td>
+            {% if s.avg_dl %}
+              {% set cls = 'speed-good' if s.avg_dl > 50 else ('speed-ok' if s.avg_dl > 15 else 'speed-bad') %}
+              <span class="fw-bold {{ cls }}">{{ s.avg_dl }} Mbps</span>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td>
+            <small>{{ (s.max_dl|string + ' Mbps') if s.max_dl else '—' }}</small>
+          </td>
+          <td>
+            <small>{{ (s.avg_lat|int|string + ' ms') if s.avg_lat else '—' }}</small>
+          </td>
+          <td>
+            <small class="text-muted">{{ s.ok_tests }}/{{ s.total_tests }}</small>
+          </td>
+          <td>
+            <small class="text-muted">{{ s.last_tested[:16] if s.last_tested else 'Jamais' }}</small>
+          </td>
+          <td class="text-end">
+            {# Switch #}
+            <form method="post"
+                  action="{{ url_for('main.manual_switch', server_name=s.name) }}"
+                  class="d-inline"
+                  onsubmit="return confirm('Basculer Gluetun vers {{ s.name }} maintenant ?')">
+              <button class="btn btn-success btn-sm" title="Basculer vers ce serveur maintenant">
+                <i class="bi bi-arrow-right-circle-fill"></i>
+              </button>
+            </form>
+            {# Toggle enable #}
+            <form method="post"
+                  action="{{ url_for('main.toggle_server', server_id=s.id) }}"
+                  class="d-inline">
+              <button class="btn btn-outline-secondary btn-sm"
+                      title="{{ 'Activer' if not s.enabled else 'Désactiver' }}">
+                <i class="bi bi-toggle-{{ 'off' if not s.enabled else 'on text-success' }}"></i>
+              </button>
+            </form>
+            {# Delete #}
+            <form method="post"
+                  action="{{ url_for('main.delete_server', server_id=s.id) }}"
+                  class="d-inline"
+                  onsubmit="return confirm('Supprimer « {{ s.name }} » ?')">
+              <button class="btn btn-outline-danger btn-sm" title="Supprimer">
+                <i class="bi bi-trash3"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="text-center text-muted py-5">
+            <i class="bi bi-hdd-network" style="font-size:2rem;opacity:.3"></i><br>
+            Aucun serveur configuré.<br>
+            <small>Ajoutez des noms de serveurs AirVPN (ex : <code>Chamukuy</code>, <code>Elgafar</code>…)</small>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Add server modal ──────────────────────────────────────────────────── #}
+<div class="modal fade" id="addModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Ajouter un serveur</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{{ url_for('main.add_server') }}">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Nom du serveur <span class="text-danger">*</span></label>
+            <input type="text" name="name" class="form-control"
+                   placeholder="ex : Chamukuy" required autofocus>
+            <div class="form-text text-muted">
+              Correspond à <code>SERVER_NAMES</code> dans Gluetun/AirVPN.
+              <a href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/airvpn.md"
+                 target="_blank" class="text-info">Liste des serveurs AirVPN</a>
+            </div>
+          </div>
+          <div class="row g-2">
+            <div class="col">
+              <label class="form-label small text-muted">Pays</label>
+              <input type="text" name="country" class="form-control" placeholder="ex : France">
+            </div>
+            <div class="col">
+              <label class="form-label small text-muted">Ville</label>
+              <input type="text" name="city" class="form-control" placeholder="ex : Paris">
+            </div>
+            <div class="col">
+              <label class="form-label small text-muted">Région</label>
+              <input type="text" name="region" class="form-control" placeholder="optionnel">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-success fw-semibold">
+            <i class="bi bi-plus-lg"></i> Ajouter
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
