@@ -276,3 +276,14 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el =>
 );
 </script>
 {% endblock %}
+
+{% block footer %}
+<footer class="site-footer">
+  <span>Aerya</span>
+  <img src="{{ url_for('static', filename='avatar.webp') }}" alt="Avatar Aerya">
+  <a href="https://github.com/Aerya/Gluetun-Companion" target="_blank" rel="noreferrer noopener">GitHub</a>
+  <a href="https://upandclear.org" target="_blank" rel="noreferrer noopener">Blog</a>
+  <a href="https://ko-fi.com/upandclear" target="_blank" rel="noreferrer noopener">Ko-fi</a>
+  <span>❤️</span>
+</footer>
+{% endblock %}
