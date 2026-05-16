@@ -69,7 +69,10 @@
     <span class="fw-semibold"><i class="bi bi-bar-chart-fill text-success"></i> Vitesse moyenne par serveur</span>
     <small class="text-muted">basé sur tous les tests réussis</small>
   </div>
-  <canvas id="chartServers" height="70"></canvas>
+  {# height = 42px per bar, min 120px #}
+  <div style="position:relative; height:{{ [server_stats|length * 42, 120]|max }}px">
+    <canvas id="chartServers"></canvas>
+  </div>
 </div>
 {% endif %}
 
@@ -162,22 +165,41 @@ new Chart(document.getElementById('chartServers'), {
   data: {
     labels: [{% for s in server_stats %}'{{ s.server_name }}',{% endfor %}],
     datasets: [{
-      label: 'Download moyen (Mbps)',
+      label: 'Mbps (moy.)',
       data: [{% for s in server_stats %}{{ s.avg_dl or 0 }},{% endfor %}],
-      backgroundColor: 'rgba(63,185,80,.65)',
+      backgroundColor: 'rgba(63,185,80,.7)',
       borderColor: '#3fb950',
       borderWidth: 1,
       borderRadius: 4,
+      maxBarThickness: 32,
     }]
   },
   options: {
+    indexAxis: 'y',
     responsive: true,
+    maintainAspectRatio: false,
     scales: {
-      y: { beginAtZero: true, grid: { color: '#30363d' }, ticks: { color: '#8b949e' } },
-      x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' } }
+      x: {
+        beginAtZero: true,
+        grid: { color: 'rgba(48,54,61,.8)' },
+        ticks: {
+          color: '#8b949e',
+          callback: v => v + ' Mbps',
+          maxTicksLimit: 6,
+        },
+      },
+      y: {
+        grid: { display: false },
+        ticks: { color: '#c9d1d9', font: { size: 12 } },
+      },
     },
-    plugins: { legend: { labels: { color: '#c9d1d9' } } }
-  }
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: { label: ctx => ' ' + ctx.parsed.x.toFixed(1) + ' Mbps' },
+      },
+    },
+  },
 });
 {% endif %}
 

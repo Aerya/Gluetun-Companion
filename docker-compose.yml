@@ -13,7 +13,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       SECRET_KEY: replace-with-a-long-random-string
-      DATA_DIR: /compose
+      DATA_DIR: /data
       GLUETUN_HOST: host.docker.internal
       GLUETUN_PROXY_PORT: "8887"
       GLUETUN_CONTAINER: gluetun-airvpn

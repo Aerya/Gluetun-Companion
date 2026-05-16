@@ -16,6 +16,8 @@ congested or geographically biased node doesn't skew the result.
 """
 
 import logging
+import re
+import threading
 import time
 from statistics import median
 from urllib.parse import quote
@@ -34,7 +36,7 @@ logger = logging.getLogger(__name__)
 DOWNLOAD_ENDPOINTS: list[tuple[str, str]] = [
     ('Cloudflare',  'https://speed.cloudflare.com/__down?bytes={size}'),
     ('Hetzner-DE',  'https://fsn1-speed.hetzner.com/100MB.bin'),
-    ('Hetzner-FI',  'https://hel1-speed.hetzner.com/100MB.bin'),
+    ('Fast.com',    'fastcom://'),
     ('OVH-FR',      'https://proof.ovh.net/files/100Mb.dat'),
     ('Tele2',       'https://speedtest.tele2.net/100MB.zip'),
 ]
@@ -66,6 +68,56 @@ def _proxies(
         creds = ''
     proxy = f'http://{creds}{host}:{port}'
     return {'http': proxy, 'https': proxy}
+
+
+# ---------------------------------------------------------------------------
+# Fast.com dynamic URL resolution
+# ---------------------------------------------------------------------------
+
+_FASTCOM_FALLBACK_TOKEN = 'YXNkZmFzZGxmbnNkYWZoYXNkZmhrYWxm'
+_fastcom_cache: dict = {'token': None, 'ts': 0.0}
+_fastcom_lock  = threading.Lock()
+_FASTCOM_TTL   = 3600  # seconds
+
+
+def _get_fastcom_token(px: dict) -> str:
+    with _fastcom_lock:
+        now = time.time()
+        if _fastcom_cache['token'] and now - _fastcom_cache['ts'] < _FASTCOM_TTL:
+            return _fastcom_cache['token']
+        try:
+            hdrs = {'User-Agent': 'Mozilla/5.0 (compatible; gluetun-companion/1.0)'}
+            home = requests.get('https://fast.com/', proxies=px, timeout=10, headers=hdrs)
+            m = re.search(r'/app-[a-f0-9]+\.js', home.text)
+            if not m:
+                raise ValueError('JS bundle not found')
+            js = requests.get('https://fast.com' + m.group(0), proxies=px, timeout=10, headers=hdrs)
+            tm = re.search(r'token:"([A-Za-z0-9+/=]{20,})"', js.text)
+            if not tm:
+                raise ValueError('token not found in JS')
+            token = tm.group(1)
+            _fastcom_cache['token'] = token
+            _fastcom_cache['ts'] = now
+            logger.debug('Fast.com token refreshed: %s…', token[:8])
+            return token
+        except Exception as exc:
+            logger.warning('Fast.com token fetch failed (%s) — using fallback', exc)
+            return _FASTCOM_FALLBACK_TOKEN
+
+
+def _resolve_fastcom_url(px: dict) -> str:
+    token = _get_fastcom_token(px)
+    api = (
+        f'https://api.fast.com/netflix/speedtest/v2'
+        f'?https=true&token={token}&urlCount=1'
+    )
+    resp = requests.get(api, proxies=px, timeout=10,
+                        headers={'User-Agent': 'Mozilla/5.0 (compatible; gluetun-companion/1.0)'})
+    resp.raise_for_status()
+    targets = resp.json().get('targets') or []
+    if not targets:
+        raise RuntimeError('Fast.com API returned no targets')
+    return targets[0]['url']
 
 
 # ---------------------------------------------------------------------------
@@ -147,8 +199,13 @@ def test_download(
     speeds: list[float] = []
 
     for label, url_tpl in endpoints:
-        url = url_tpl.format(size=_CF_SIZE) if '{size}' in url_tpl else url_tpl
         try:
+            if url_tpl == 'fastcom://':
+                url = _resolve_fastcom_url(px)
+            elif '{size}' in url_tpl:
+                url = url_tpl.format(size=_CF_SIZE)
+            else:
+                url = url_tpl
             mbps = _stream_speed(url, px, duration=duration, cap_bytes=cap)
             speeds.append(mbps)
             results.append({'endpoint': label, 'mbps': mbps, 'error': None})
