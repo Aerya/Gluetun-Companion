@@ -78,11 +78,58 @@
           </div>
         </div>
 
+        <div class="mb-3">
+          <label class="form-label">Réessais par serveur en cas d'échec</label>
+          <div class="input-group" style="max-width:160px">
+            <input type="number" name="speedtest_retries" class="form-control"
+                   value="{{ cfg.speedtest_retries }}" min="0" max="5" step="1">
+            <span class="input-group-text bg-dark text-muted border-secondary">retries</span>
+          </div>
+          <div class="form-text text-muted">0 = pas de retry. Un timeout n'est jamais retryé.</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Timeout global par serveur</label>
+          <div class="input-group" style="max-width:160px">
+            <input type="number" name="server_timeout_secs" class="form-control"
+                   value="{{ cfg.server_timeout_secs }}" min="60" max="900" step="30">
+            <span class="input-group-text bg-dark text-muted border-secondary">s</span>
+          </div>
+          <div class="form-text text-muted">Si un serveur dépasse cette durée, il est sauté.</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Auto-désactiver après N échecs consécutifs</label>
+          <div class="input-group" style="max-width:160px">
+            <input type="number" name="auto_exclude_failures" class="form-control"
+                   value="{{ cfg.auto_exclude_failures }}" min="0" max="20" step="1">
+            <span class="input-group-text bg-dark text-muted border-secondary">échecs</span>
+          </div>
+          <div class="form-text text-muted">0 = désactivé. Le serveur peut être réactivé manuellement.</div>
+        </div>
+
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="speedtest_upload" class="form-check-input"
+                 id="speedtest_upload" {{ 'checked' if cfg.speedtest_upload == '1' }}>
+          <label class="form-check-label" for="speedtest_upload">
+            Tester l'<strong>upload</strong> (via Cloudflare __up)
+          </label>
+        </div>
+
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="speedtest_warmup" class="form-check-input"
+                 id="speedtest_warmup" {{ 'checked' if cfg.speedtest_warmup == '1' }}>
+          <label class="form-check-label" for="speedtest_warmup">
+            Warm-up 2 s avant chaque mesure <span class="text-muted">(évite le biais TCP slow-start)</span>
+          </label>
+        </div>
+
         <div class="mb-4 form-check form-switch">
           <input type="checkbox" name="auto_switch" class="form-check-input"
                  id="auto_switch" {{ 'checked' if cfg.auto_sw == '1' }}>
           <label class="form-check-label" for="auto_switch">
             Basculer automatiquement vers le <strong>meilleur serveur</strong> après chaque cycle
+            <span class="text-muted">(score pondéré : 65% mesure actuelle + 35% historique)</span>
           </label>
         </div>
 

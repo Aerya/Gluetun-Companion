@@ -3,19 +3,22 @@ Speed testing through a Gluetun HTTP proxy.
 
 Strategy
 --------
-Download: timed streaming (not fixed-size).  We stream from each endpoint for
-at most `duration` seconds or `cap_bytes` bytes, whichever comes first.  Speed
-is computed on the actual bytes received / actual elapsed time, so the result
-is accurate at any connection speed without wasting time on slow servers or
-running out of file on fast ones.
+Download: timed streaming with optional warm-up. We optionally drain `warmup`
+seconds before starting the clock so TCP slow-start and proxy handshake don't
+skew the first sample. Then we stream for `duration` seconds or `cap_bytes`
+bytes, whichever comes first. Speed = actual bytes received / actual elapsed.
+
+Upload: POST random data to Cloudflare's __up endpoint via the proxy. We
+generate data on-the-fly and stop after `duration` seconds; speed is computed
+from bytes yielded / elapsed measured inside the generator.
 
 Latency: TTFB (TCP connect + TLS + first-byte) via a tiny HTTP GET.
 
-Multiple diverse endpoints are tested; the median is returned so that one
-congested or geographically biased node doesn't skew the result.
+Multiple diverse endpoints → median returned, so one outlier doesn't dominate.
 """
 
 import logging
+import os
 import re
 import threading
 import time
@@ -27,18 +30,19 @@ import requests
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Endpoint catalogue
+# Endpoint catalogues
 # ---------------------------------------------------------------------------
 
-# (label, url)
-# For Cloudflare: {size} is replaced with byte count.
-# For fixed files: large enough that the time-cap kicks in before EOF.
 DOWNLOAD_ENDPOINTS: list[tuple[str, str]] = [
     ('Cloudflare',  'https://speed.cloudflare.com/__down?bytes={size}'),
     ('Hetzner-DE',  'https://fsn1-speed.hetzner.com/100MB.bin'),
     ('Fast.com',    'fastcom://'),
     ('OVH-FR',      'https://proof.ovh.net/files/100Mb.dat'),
     ('Tele2',       'https://speedtest.tele2.net/100MB.zip'),
+]
+
+UPLOAD_ENDPOINTS: list[tuple[str, str]] = [
+    ('Cloudflare', 'https://speed.cloudflare.com/__up'),
 ]
 
 LATENCY_ENDPOINTS: list[tuple[str, str]] = [
@@ -48,8 +52,11 @@ LATENCY_ENDPOINTS: list[tuple[str, str]] = [
     ('OVH-FR',     'https://proof.ovh.net/files/1Mb.dat'),
 ]
 
-# How many bytes to request from Cloudflare (large enough to not run out)
-_CF_SIZE = 200 * 1024 * 1024   # 200 MB virtual stream
+# Cloudflare: request enough bytes to survive warmup + measurement at high speeds
+_CF_SIZE = 400 * 1024 * 1024   # 400 MB virtual stream
+
+# Pre-generated random chunk for upload (64 KB)
+_UPLOAD_CHUNK = os.urandom(65_536)
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +84,7 @@ def _proxies(
 _FASTCOM_FALLBACK_TOKEN = 'YXNkZmFzZGxmbnNkYWZoYXNkZmhrYWxm'
 _fastcom_cache: dict = {'token': None, 'ts': 0.0}
 _fastcom_lock  = threading.Lock()
-_FASTCOM_TTL   = 3600  # seconds
+_FASTCOM_TTL   = 3600
 
 
 def _get_fastcom_token(px: dict) -> str:
@@ -129,31 +136,45 @@ def _stream_speed(
     px: dict,
     duration: float,
     cap_bytes: int,
-    min_bytes: int = 512 * 1024,   # 512 KB minimum for a valid sample
+    min_bytes: int = 512 * 1024,
+    warmup: float = 0.0,
 ) -> float:
     """
-    Stream from `url` through proxy `px` for at most `duration` seconds or
-    `cap_bytes` bytes.  Returns speed in Mbps.  Raises if not enough data.
+    Stream from `url` through proxy `px`.
+    Optional `warmup` seconds are drained first (not counted) so TCP slow-start
+    and proxy overhead don't bias the measurement.
+    Returns speed in Mbps. Raises if insufficient data received.
     """
     received = 0
-    start = time.perf_counter()
+    conn_start = time.perf_counter()
+    # If no warmup, measurement starts immediately
+    meas_start: float | None = conn_start if warmup <= 0 else None
+
     try:
         resp = requests.get(
             url,
             proxies=px,
             stream=True,
-            timeout=duration + 15,
+            timeout=duration + max(warmup, 0) + 15,
             headers={'User-Agent': 'gluetun-companion/1.0'},
         )
         resp.raise_for_status()
         for chunk in resp.iter_content(chunk_size=131_072):
+            now = time.perf_counter()
+            if meas_start is None:
+                # Still in warmup phase
+                if (now - conn_start) >= warmup:
+                    meas_start = now
+                continue   # don't count warmup bytes
             received += len(chunk)
-            if received >= cap_bytes or (time.perf_counter() - start) >= duration:
+            if received >= cap_bytes or (now - meas_start) >= duration:
                 break
     except requests.exceptions.ChunkedEncodingError:
-        pass   # server closed stream — still count what we got
+        pass   # server closed early — still count what we got
 
-    elapsed = time.perf_counter() - start
+    if meas_start is None:
+        raise RuntimeError('Warmup phase not completed (server too slow?)')
+    elapsed = time.perf_counter() - meas_start
     if received < min_bytes or elapsed < 0.5:
         raise RuntimeError(
             f'Insufficient data: {received / 1024:.0f} KB in {elapsed:.1f}s'
@@ -161,11 +182,57 @@ def _stream_speed(
     return round((received * 8) / (elapsed * 1_000_000), 2)
 
 
+def _stream_upload(
+    url: str,
+    px: dict,
+    duration: float,
+    cap_bytes: int,
+    min_bytes: int = 512 * 1024,
+) -> float:
+    """
+    POST random data to `url` through proxy for `duration` seconds.
+    Speed is computed from bytes yielded by the generator / generator runtime,
+    which reflects actual network throughput (back-pressure from socket buffers).
+    Returns speed in Mbps. Raises if insufficient data sent.
+    """
+    state: dict = {'sent': 0, 't0': None, 't1': None}
+
+    def _gen():
+        state['t0'] = time.perf_counter()
+        while state['sent'] < cap_bytes:
+            if (time.perf_counter() - state['t0']) >= duration:
+                break
+            yield _UPLOAD_CHUNK
+            state['sent'] += len(_UPLOAD_CHUNK)
+        state['t1'] = time.perf_counter()
+
+    try:
+        requests.post(
+            url,
+            data=_gen(),
+            proxies=px,
+            timeout=duration + 15,
+            headers={
+                'Content-Type': 'application/octet-stream',
+                'User-Agent': 'gluetun-companion/1.0',
+            },
+        )
+    except requests.exceptions.ChunkedEncodingError:
+        pass
+
+    if state['t0'] is None or state['t1'] is None:
+        raise RuntimeError('Upload stream never started')
+    elapsed = state['t1'] - state['t0']
+    sent = state['sent']
+    if sent < min_bytes or elapsed < 0.5:
+        raise RuntimeError(f'Insufficient upload: {sent / 1024:.0f} KB in {elapsed:.1f}s')
+    return round((sent * 8) / (elapsed * 1_000_000), 2)
+
+
 def _ttfb(url: str, px: dict) -> float:
     """Return TTFB in ms (TCP+TLS+first-byte) through proxy. Raises on failure."""
     start = time.perf_counter()
     resp = requests.get(url, proxies=px, stream=True, timeout=15)
-    # consume first byte only
     next(resp.iter_content(chunk_size=1), None)
     resp.close()
     return round((time.perf_counter() - start) * 1000, 1)
@@ -180,18 +247,17 @@ def test_download(
     proxy_port: int,
     duration: float = 8.0,
     samples: int = 3,
+    warmup: float = 0.0,
     proxy_user: str | None = None,
     proxy_password: str | None = None,
 ) -> tuple[float, list[dict]]:
     """
     Test download speed through the proxy against `samples` diverse endpoints.
-
-    Each endpoint is streamed for up to `duration` seconds.
-    Returns (median_mbps, [{'endpoint': str, 'mbps': float|None, 'error': str|None}, ...]).
+    Each endpoint is streamed for up to `duration` seconds (after `warmup` drain).
+    Returns (median_mbps, [{'endpoint', 'mbps', 'error'}, ...]).
     Raises RuntimeError if no endpoint succeeded.
     """
     px = _proxies(proxy_host, proxy_port, proxy_user, proxy_password)
-    # cap at 150 MB so fast servers don't transfer absurd amounts
     cap = 150 * 1024 * 1024
 
     endpoints = DOWNLOAD_ENDPOINTS[:samples]
@@ -206,7 +272,7 @@ def test_download(
                 url = url_tpl.format(size=_CF_SIZE)
             else:
                 url = url_tpl
-            mbps = _stream_speed(url, px, duration=duration, cap_bytes=cap)
+            mbps = _stream_speed(url, px, duration=duration, cap_bytes=cap, warmup=warmup)
             speeds.append(mbps)
             results.append({'endpoint': label, 'mbps': mbps, 'error': None})
             logger.debug('  DL %s → %.1f Mbps', label, mbps)
@@ -221,6 +287,41 @@ def test_download(
     return round(median(speeds), 2), results
 
 
+def test_upload(
+    proxy_host: str,
+    proxy_port: int,
+    duration: float = 8.0,
+    proxy_user: str | None = None,
+    proxy_password: str | None = None,
+) -> tuple[float, list[dict]]:
+    """
+    Test upload speed through the proxy (Cloudflare __up endpoint).
+    Returns (mbps, [{'endpoint', 'mbps', 'error'}, ...]).
+    Raises RuntimeError if no endpoint succeeded.
+    """
+    px = _proxies(proxy_host, proxy_port, proxy_user, proxy_password)
+    cap = 150 * 1024 * 1024
+
+    results: list[dict] = []
+    speeds: list[float] = []
+
+    for label, url in UPLOAD_ENDPOINTS:
+        try:
+            mbps = _stream_upload(url, px, duration=duration, cap_bytes=cap)
+            speeds.append(mbps)
+            results.append({'endpoint': label, 'mbps': mbps, 'error': None})
+            logger.debug('  UL %s → %.1f Mbps', label, mbps)
+        except Exception as exc:
+            results.append({'endpoint': label, 'mbps': None, 'error': str(exc)})
+            logger.debug('  UL %s → error: %s', label, exc)
+
+    if not speeds:
+        raise RuntimeError('Upload failed: ' +
+                           '; '.join(r['error'] or '' for r in results))
+
+    return round(median(speeds), 2), results
+
+
 def test_latency(
     proxy_host: str,
     proxy_port: int,
@@ -230,8 +331,7 @@ def test_latency(
 ) -> tuple[float, list[dict]]:
     """
     Measure TTFB latency through the proxy against `samples` diverse endpoints.
-
-    Returns (median_ms, [{'endpoint': str, 'ms': float|None, 'error': str|None}, ...]).
+    Returns (median_ms, [{'endpoint', 'ms', 'error'}, ...]).
     Raises RuntimeError if no endpoint succeeded.
     """
     px = _proxies(proxy_host, proxy_port, proxy_user, proxy_password)

@@ -12,31 +12,48 @@ def init_db(db_path: str):
     with get_db() as db:
         db.executescript('''
             CREATE TABLE IF NOT EXISTS servers (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                name        TEXT    UNIQUE NOT NULL,
-                filter_type TEXT    NOT NULL DEFAULT 'name',
-                enabled     INTEGER NOT NULL DEFAULT 1,
-                created_at  TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                name                 TEXT    UNIQUE NOT NULL,
+                filter_type          TEXT    NOT NULL DEFAULT 'name',
+                enabled              INTEGER NOT NULL DEFAULT 1,
+                consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                created_at           TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS speed_tests (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                server_name   TEXT    NOT NULL,
+                server_name   TEXT NOT NULL,
                 download_mbps REAL,
+                upload_mbps   REAL,
                 latency_ms    REAL,
                 public_ip     TEXT,
+                public_ipv6   TEXT,
                 success       INTEGER NOT NULL DEFAULT 0,
                 error_msg     TEXT,
-                tested_at     TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                tested_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS switches (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                from_server TEXT,
-                to_server   TEXT    NOT NULL,
-                reason      TEXT,
-                success     INTEGER NOT NULL DEFAULT 0,
-                switched_at TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_server  TEXT,
+                to_server    TEXT NOT NULL,
+                reason       TEXT,
+                success      INTEGER NOT NULL DEFAULT 0,
+                connect_secs REAL,
+                from_mbps    REAL,
+                to_mbps      REAL,
+                to_ipv4      TEXT,
+                to_ipv6      TEXT,
+                switched_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS benchmark_cycles (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                started_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                finished_at    TEXT,
+                duration_secs  REAL,
+                servers_tested INTEGER,
+                best_server    TEXT
             );
 
             CREATE TABLE IF NOT EXISTS settings (
@@ -49,18 +66,27 @@ def init_db(db_path: str):
                 ('admin_username',           'admin'),
                 ('admin_password_hash',      ''),
                 ('auto_switch',              '1'),
-                ('test_file_size_mb',        '10'),
                 ('connection_wait_seconds',  '45'),
                 ('benchmark_running',        '0'),
                 ('proxy_username',           ''),
                 ('proxy_password',           ''),
                 ('speedtest_samples',        '3'),
-                ('speedtest_duration',       '8');
+                ('speedtest_duration',       '8'),
+                ('speedtest_retries',        '2'),
+                ('server_timeout_secs',      '300'),
+                ('auto_exclude_failures',    '5'),
+                ('speedtest_upload',         '1'),
+                ('speedtest_warmup',         '1');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [
             "ALTER TABLE servers ADD COLUMN filter_type TEXT NOT NULL DEFAULT 'name'",
+            "ALTER TABLE servers ADD COLUMN consecutive_failures INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE speed_tests ADD COLUMN upload_mbps REAL",
             "ALTER TABLE speed_tests ADD COLUMN public_ipv6 TEXT",
+            "ALTER TABLE switches ADD COLUMN connect_secs REAL",
+            "ALTER TABLE switches ADD COLUMN from_mbps REAL",
+            "ALTER TABLE switches ADD COLUMN to_mbps REAL",
             "ALTER TABLE switches ADD COLUMN to_ipv4 TEXT",
             "ALTER TABLE switches ADD COLUMN to_ipv6 TEXT",
         ]:

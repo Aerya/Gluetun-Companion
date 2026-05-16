@@ -1,7 +1,9 @@
+import csv
+import io
 from functools import wraps
 
 from flask import (
-    Blueprint, current_app, flash, jsonify,
+    Blueprint, Response, current_app, flash, jsonify,
     redirect, render_template, request, session, url_for,
 )
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -12,9 +14,11 @@ from .gluetun import (
     get_current_filters, format_filters,
     get_public_ip, get_vpn_status, switch_server,
 )
-from .scheduler import get_next_run, reschedule, trigger_now
+from .scheduler import get_next_run, reschedule, trigger_now, trigger_single_server
 
 bp = Blueprint('main', __name__)
+
+_HISTORY_PER_PAGE = 50
 
 
 def login_required(f):
@@ -40,7 +44,6 @@ def login():
         stored_hash = get_setting('admin_password_hash', '')
 
         if not stored_hash:
-            # First-run: create account with whatever credentials were entered
             set_setting('admin_username', username)
             set_setting('admin_password_hash', generate_password_hash(password))
             session['logged_in'] = True
@@ -78,10 +81,10 @@ def dashboard():
     px_user    = get_setting('proxy_username') or None
     px_pass    = get_setting('proxy_password') or None
 
-    vpn_status      = get_vpn_status(proxy_host, proxy_port, px_user, px_pass)
-    public_ip       = get_public_ip(proxy_host, proxy_port, px_user, px_pass) if vpn_status == 'running' else None
-    current_filters = get_current_filters(container)
-    current_server  = format_filters(current_filters)
+    vpn_status        = get_vpn_status(proxy_host, proxy_port, px_user, px_pass)
+    public_ip         = get_public_ip(proxy_host, proxy_port, px_user, px_pass) if vpn_status == 'running' else None
+    current_filters   = get_current_filters(container)
+    current_server    = format_filters(current_filters)
     benchmark_running = get_setting('benchmark_running', '0') == '1'
 
     with get_db() as db:
@@ -94,8 +97,6 @@ def dashboard():
         server_count = db.execute(
             'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'
         ).fetchone()['n']
-
-        # Per-server best download for quick dashboard chart
         server_stats = db.execute('''
             SELECT server_name,
                    ROUND(AVG(download_mbps), 1) AS avg_dl,
@@ -105,6 +106,28 @@ def dashboard():
             ORDER BY avg_dl DESC
             LIMIT 12
         ''').fetchall()
+        last_cycle = db.execute(
+            'SELECT * FROM benchmark_cycles ORDER BY id DESC LIMIT 1'
+        ).fetchone()
+
+        # Sparkline for active server (last 20 successful tests, chronological)
+        sparkline_labels: list[str] = []
+        sparkline_dl: list[float] = []
+        sparkline_ul: list[float | None] = []
+        sparkline_server: str | None = None
+        if current_filters:
+            sname = next(iter(current_filters.values())).split(',')[0].strip()
+            sparkline_server = sname
+            spark_rows = db.execute('''
+                SELECT tested_at, download_mbps, upload_mbps
+                FROM speed_tests WHERE server_name=? AND success=1
+                ORDER BY tested_at DESC LIMIT 20
+            ''', (sname,)).fetchall()
+            # reverse to chronological order
+            for r in reversed(spark_rows):
+                sparkline_labels.append(r['tested_at'][5:16])
+                sparkline_dl.append(r['download_mbps'] or 0)
+                sparkline_ul.append(r['upload_mbps'])
 
     return render_template(
         'dashboard.html',
@@ -117,6 +140,11 @@ def dashboard():
         server_stats=server_stats,
         next_run=get_next_run(),
         benchmark_running=benchmark_running,
+        last_cycle=last_cycle,
+        sparkline_server=sparkline_server,
+        sparkline_labels=sparkline_labels,
+        sparkline_dl=sparkline_dl,
+        sparkline_ul=sparkline_ul,
     )
 
 
@@ -130,9 +158,11 @@ def servers():
     with get_db() as db:
         rows = db.execute('''
             SELECT
-                s.id, s.name, s.filter_type, s.enabled, s.created_at,
+                s.id, s.name, s.filter_type, s.enabled,
+                s.consecutive_failures, s.created_at,
                 ROUND(AVG(CASE WHEN st.success=1 THEN st.download_mbps END), 1) AS avg_dl,
-                ROUND(AVG(CASE WHEN st.success=1 THEN st.latency_ms   END), 0) AS avg_lat,
+                ROUND(AVG(CASE WHEN st.success=1 THEN st.upload_mbps   END), 1) AS avg_ul,
+                ROUND(AVG(CASE WHEN st.success=1 THEN st.latency_ms    END), 0) AS avg_lat,
                 ROUND(MAX(CASE WHEN st.success=1 THEN st.download_mbps END), 1) AS max_dl,
                 MAX(st.tested_at)                                                AS last_tested,
                 COUNT(st.id)                                                     AS total_tests,
@@ -152,12 +182,11 @@ def servers():
 @bp.route('/servers/import', methods=['POST'])
 @login_required
 def import_servers():
-    """Read all Gluetun filter env vars from the container and bulk-insert each value."""
     container_name = current_app.config['GLUETUN_CONTAINER']
     filters = get_current_filters(container_name)
 
     if not filters:
-        flash('Aucune variable de filtre trouvée dans le container Gluetun (SERVER_NAMES, SERVER_COUNTRIES…).', 'danger')
+        flash('Aucune variable de filtre trouvée dans le container Gluetun.', 'danger')
         return redirect(url_for('main.servers'))
 
     added = 0
@@ -213,10 +242,7 @@ def add_server():
 @login_required
 def toggle_server(server_id):
     with get_db() as db:
-        db.execute(
-            'UPDATE servers SET enabled = 1 - enabled WHERE id = ?',
-            (server_id,),
-        )
+        db.execute('UPDATE servers SET enabled = 1 - enabled WHERE id = ?', (server_id,))
     return redirect(url_for('main.servers'))
 
 
@@ -241,11 +267,8 @@ def manual_switch(server_id):
 
     from_label = format_filters(get_current_filters(cfg['GLUETUN_CONTAINER']))
     ok, err = switch_server(
-        row['name'],
-        row['filter_type'],
-        cfg['GLUETUN_CONTAINER'],
-        cfg['COMPOSE_DIR'],
-        cfg.get('COMPOSE_PROJECT', ''),
+        row['name'], row['filter_type'],
+        cfg['GLUETUN_CONTAINER'], cfg['COMPOSE_DIR'], cfg.get('COMPOSE_PROJECT', ''),
     )
     to_label = f"{FILTER_VARS[row['filter_type']]}={row['name']}"
     with get_db() as db:
@@ -260,6 +283,30 @@ def manual_switch(server_id):
     return redirect(url_for('main.servers'))
 
 
+@bp.route('/servers/test/<int:server_id>', methods=['POST'])
+@login_required
+def test_server_now(server_id):
+    if get_setting('benchmark_running', '0') == '1':
+        flash('Un benchmark est déjà en cours.', 'warning')
+        return redirect(url_for('main.servers'))
+
+    with get_db() as db:
+        row = db.execute('SELECT name, filter_type FROM servers WHERE id=?', (server_id,)).fetchone()
+    if not row:
+        flash('Serveur introuvable.', 'danger')
+        return redirect(url_for('main.servers'))
+
+    trigger_single_server(
+        current_app._get_current_object(), row['name'], row['filter_type']
+    )
+    flash(
+        f'Test lancé pour {row["name"]} en arrière-plan — '
+        f'le résultat apparaîtra dans l\'historique dans quelques minutes.',
+        'info',
+    )
+    return redirect(url_for('main.servers'))
+
+
 # ---------------------------------------------------------------------------
 # History
 # ---------------------------------------------------------------------------
@@ -267,21 +314,61 @@ def manual_switch(server_id):
 @bp.route('/history')
 @login_required
 def history():
+    page = max(1, request.args.get('page', 1, type=int))
+    offset = (page - 1) * _HISTORY_PER_PAGE
+
     with get_db() as db:
+        total = db.execute('SELECT COUNT(*) AS n FROM speed_tests').fetchone()['n']
         tests = db.execute(
-            'SELECT * FROM speed_tests ORDER BY tested_at DESC LIMIT 300'
+            'SELECT * FROM speed_tests ORDER BY tested_at DESC LIMIT ? OFFSET ?',
+            (_HISTORY_PER_PAGE, offset),
         ).fetchall()
         per_server = db.execute('''
             SELECT server_name,
                    ROUND(AVG(download_mbps), 1) AS avg_dl,
                    ROUND(MIN(download_mbps), 1) AS min_dl,
                    ROUND(MAX(download_mbps), 1) AS max_dl,
+                   ROUND(AVG(upload_mbps),   1) AS avg_ul,
                    COUNT(*) AS cnt
             FROM speed_tests WHERE success = 1
             GROUP BY server_name
             ORDER BY avg_dl DESC
         ''').fetchall()
-    return render_template('history.html', tests=tests, per_server=per_server)
+
+    pages = max(1, (total + _HISTORY_PER_PAGE - 1) // _HISTORY_PER_PAGE)
+    return render_template(
+        'history.html',
+        tests=tests, per_server=per_server,
+        page=page, pages=pages, total=total,
+    )
+
+
+@bp.route('/history/export.csv')
+@login_required
+def history_export():
+    with get_db() as db:
+        rows = db.execute(
+            'SELECT * FROM speed_tests ORDER BY tested_at DESC'
+        ).fetchall()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        'id', 'server_name', 'download_mbps', 'upload_mbps', 'latency_ms',
+        'public_ip', 'public_ipv6', 'success', 'error_msg', 'tested_at',
+    ])
+    for r in rows:
+        writer.writerow([
+            r['id'], r['server_name'], r['download_mbps'], r['upload_mbps'],
+            r['latency_ms'], r['public_ip'], r['public_ipv6'],
+            r['success'], r['error_msg'], r['tested_at'],
+        ])
+
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=speedtest_history.csv'},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -309,18 +396,17 @@ def settings():
         action = request.form.get('action')
 
         if action == 'save':
-            interval  = request.form.get('interval', '6')
-            auto_sw   = '1' if request.form.get('auto_switch') else '0'
-            wait_secs = request.form.get('wait_secs', '45')
-            samples   = request.form.get('speedtest_samples', '3')
-            duration  = request.form.get('speedtest_duration', '8')
-
-            set_setting('test_interval_hours', interval)
-            set_setting('auto_switch', auto_sw)
-            set_setting('connection_wait_seconds', wait_secs)
-            set_setting('speedtest_samples', samples)
-            set_setting('speedtest_duration', duration)
-            reschedule(float(interval))
+            set_setting('test_interval_hours',     request.form.get('interval', '6'))
+            set_setting('auto_switch',             '1' if request.form.get('auto_switch') else '0')
+            set_setting('connection_wait_seconds', request.form.get('wait_secs', '45'))
+            set_setting('speedtest_samples',       request.form.get('speedtest_samples', '3'))
+            set_setting('speedtest_duration',      request.form.get('speedtest_duration', '8'))
+            set_setting('speedtest_retries',       request.form.get('speedtest_retries', '2'))
+            set_setting('server_timeout_secs',     request.form.get('server_timeout_secs', '300'))
+            set_setting('auto_exclude_failures',   request.form.get('auto_exclude_failures', '5'))
+            set_setting('speedtest_upload',        '1' if request.form.get('speedtest_upload') else '0')
+            set_setting('speedtest_warmup',        '1' if request.form.get('speedtest_warmup') else '0')
+            reschedule(float(request.form.get('interval', '6')))
             flash('Paramètres enregistrés.', 'success')
 
         elif action == 'credentials':
@@ -340,15 +426,19 @@ def settings():
         return redirect(url_for('main.settings'))
 
     cfg = {
-        'interval':       get_setting('test_interval_hours', '6'),
-        'auto_sw':        get_setting('auto_switch', '1'),
-        'size_mb':        get_setting('test_file_size_mb', '10'),
-        'wait_secs':      get_setting('connection_wait_seconds', '45'),
-        'username':          get_setting('admin_username', 'admin'),
-        'proxy_username':    get_setting('proxy_username', ''),
-        'proxy_password':    get_setting('proxy_password', ''),
-        'speedtest_samples': get_setting('speedtest_samples', '3'),
-        'speedtest_duration':get_setting('speedtest_duration', '8'),
+        'interval':              get_setting('test_interval_hours', '6'),
+        'auto_sw':               get_setting('auto_switch', '1'),
+        'wait_secs':             get_setting('connection_wait_seconds', '45'),
+        'username':              get_setting('admin_username', 'admin'),
+        'proxy_username':        get_setting('proxy_username', ''),
+        'proxy_password':        get_setting('proxy_password', ''),
+        'speedtest_samples':     get_setting('speedtest_samples', '3'),
+        'speedtest_duration':    get_setting('speedtest_duration', '8'),
+        'speedtest_retries':     get_setting('speedtest_retries', '2'),
+        'server_timeout_secs':   get_setting('server_timeout_secs', '300'),
+        'auto_exclude_failures': get_setting('auto_exclude_failures', '5'),
+        'speedtest_upload':      get_setting('speedtest_upload', '1'),
+        'speedtest_warmup':      get_setting('speedtest_warmup', '1'),
     }
     return render_template('settings.html', cfg=cfg, next_run=get_next_run())
 
@@ -369,9 +459,9 @@ def api_trigger():
 @bp.route('/api/status')
 @login_required
 def api_status():
-    cfg      = current_app.config
-    px_user  = get_setting('proxy_username') or None
-    px_pass  = get_setting('proxy_password') or None
+    cfg     = current_app.config
+    px_user = get_setting('proxy_username') or None
+    px_pass = get_setting('proxy_password') or None
     return jsonify({
         'vpn_status':        get_vpn_status(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
         'public_ip':         get_public_ip(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),

@@ -249,15 +249,20 @@ def wait_for_vpn(
     timeout: int = 60,
     proxy_user: str | None = None,
     proxy_password: str | None = None,
-) -> bool:
+) -> tuple[bool, float]:
+    """
+    Wait until the VPN proxy is responsive or timeout expires.
+    Returns (success, elapsed_seconds) where elapsed includes the initial sleep.
+    """
+    start = time.time()
     time.sleep(4)
-    deadline = time.time() + timeout
+    deadline = start + timeout
     while time.time() < deadline:
         try:
             resp = _probe(proxy_host, proxy_port, proxy_user, proxy_password)
             if resp.status_code == 200:
-                return True
+                return True, round(time.time() - start, 1)
         except Exception:
             pass
         time.sleep(3)
-    return False
+    return False, round(time.time() - start, 1)

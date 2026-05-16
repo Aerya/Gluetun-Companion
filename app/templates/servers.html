@@ -27,6 +27,7 @@
           <th>Type</th>
           <th>IP publique</th>
           <th>Avg DL</th>
+          <th>Avg UL</th>
           <th>Max DL</th>
           <th>Latence</th>
           <th>Tests</th>
@@ -58,6 +59,11 @@
             {% else %}<span class="text-muted">—</span>{% endif %}
           </td>
           <td>
+            {% if s.avg_ul %}
+              <span class="text-info">{{ s.avg_ul }} Mbps</span>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td>
             <small>{{ (s.max_dl|string + ' Mbps') if s.max_dl else '—' }}</small>
           </td>
           <td>
@@ -70,6 +76,15 @@
             <small class="text-muted">{{ s.last_tested[:16] if s.last_tested else 'Jamais' }}</small>
           </td>
           <td class="text-end">
+            {# Test now #}
+            <form method="post"
+                  action="{{ url_for('main.test_server_now', server_id=s.id) }}"
+                  class="d-inline"
+                  onsubmit="return confirm('Tester {{ s.name }} maintenant ? Gluetun va basculer sur ce serveur.')">
+              <button class="btn btn-outline-info btn-sm" title="Tester maintenant">
+                <i class="bi bi-speedometer2"></i>
+              </button>
+            </form>
             {# Switch #}
             <form method="post"
                   action="{{ url_for('main.manual_switch', server_id=s.id) }}"
@@ -101,7 +116,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="9" class="text-center text-muted py-5">
+          <td colspan="10" class="text-center text-muted py-5">
             <i class="bi bi-hdd-network" style="font-size:2rem;opacity:.3"></i><br>
             Aucun serveur configuré.<br>
             <small>Ajoutez des noms de serveurs AirVPN (ex : <code>Chamukuy</code>, <code>Elgafar</code>…)</small>

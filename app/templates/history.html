@@ -34,14 +34,18 @@
 
 <div class="card">
   <div class="card-header py-2 d-flex justify-content-between align-items-center">
-    <span><i class="bi bi-table"></i> Tous les tests</span>
-    <small class="text-muted">{{ tests|length }} entrées</small>
+    <span><i class="bi bi-table"></i> Tous les tests
+      <small class="text-muted ms-2">{{ total }} entrées</small>
+    </span>
+    <a href="{{ url_for('main.history_export') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-download"></i> Export CSV
+    </a>
   </div>
   <div class="table-responsive">
     <table class="table table-hover mb-0" style="font-size:.875rem">
       <thead>
         <tr>
-          <th>Serveur</th><th>Download</th><th>Latence</th>
+          <th>Serveur</th><th>Download</th><th>Upload</th><th>Latence</th>
           <th>IP publique</th><th>Statut</th><th>Date</th>
         </tr>
       </thead>
@@ -53,6 +57,11 @@
             {% if t.download_mbps %}
               {% set cls = 'speed-good' if t.download_mbps > 50 else ('speed-ok' if t.download_mbps > 15 else 'speed-bad') %}
               <span class="fw-semibold {{ cls }}">{{ '%.1f'|format(t.download_mbps) }} Mbps</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if t.upload_mbps %}
+              <span class="text-info">{{ '%.1f'|format(t.upload_mbps) }} Mbps</span>
             {% else %}—{% endif %}
           </td>
           <td>{{ ('%.0f ms'|format(t.latency_ms)) if t.latency_ms else '—' }}</td>
@@ -74,13 +83,34 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" class="text-center text-muted py-4">Aucun test enregistré.</td>
+          <td colspan="7" class="text-center text-muted py-4">Aucun test enregistré.</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+{% if pages > 1 %}
+<nav class="mt-3 d-flex justify-content-center">
+  <ul class="pagination pagination-sm mb-0">
+    <li class="page-item {{ 'disabled' if page == 1 }}">
+      <a class="page-link" href="{{ url_for('main.history', page=page-1) }}">‹</a>
+    </li>
+    {% for p in range(1, pages+1) %}
+      {% if p == page or p == 1 or p == pages or (p >= page-2 and p <= page+2) %}
+        <li class="page-item {{ 'active' if p == page }}">
+          <a class="page-link" href="{{ url_for('main.history', page=p) }}">{{ p }}</a>
+        </li>
+      {% elif p == page-3 or p == page+3 %}
+        <li class="page-item disabled"><span class="page-link">…</span></li>
+      {% endif %}
+    {% endfor %}
+    <li class="page-item {{ 'disabled' if page == pages }}">
+      <a class="page-link" href="{{ url_for('main.history', page=page+1) }}">›</a>
+    </li>
+  </ul>
+</nav>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

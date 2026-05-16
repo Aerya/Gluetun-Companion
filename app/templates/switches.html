@@ -9,7 +9,7 @@
     <table class="table table-hover mb-0">
       <thead>
         <tr>
-          <th>De</th><th></th><th>Vers</th><th>IP après bascule</th><th>Raison</th><th>Statut</th><th>Date</th>
+          <th>De</th><th></th><th>Vers</th><th>IP après bascule</th><th>Gain débit</th><th>Connexion</th><th>Raison</th><th>Statut</th><th>Date</th>
         </tr>
       </thead>
       <tbody>
@@ -24,6 +24,20 @@
                 {{ s.to_ipv4 or '' }}
                 {% if s.to_ipv6 %}<br><span style="font-size:.7rem">{{ s.to_ipv6 }}</span>{% endif %}
               </small>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if s.from_mbps and s.to_mbps %}
+              {% set delta = s.to_mbps - s.from_mbps %}
+              <span class="fw-semibold {{ 'text-success' if delta >= 0 else 'text-danger' }}">
+                {{ '%+.1f'|format(delta) }} Mbps
+              </span>
+              <br><small class="text-muted">{{ '%.1f'|format(s.from_mbps) }} → {{ '%.1f'|format(s.to_mbps) }}</small>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if s.connect_secs %}
+              <small class="text-muted">{{ s.connect_secs | int }} s</small>
             {% else %}—{% endif %}
           </td>
           <td>
@@ -50,7 +64,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" class="text-center text-muted py-5">
+          <td colspan="9" class="text-center text-muted py-5">
             <i class="bi bi-arrow-left-right" style="font-size:2rem;opacity:.3"></i><br>
             Aucune bascule enregistrée.
           </td>
