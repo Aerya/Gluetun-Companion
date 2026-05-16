@@ -1,79 +1,127 @@
 # Gluetun Companion
 
-Benchmark automatique des serveurs AirVPN via Gluetun, avec bascule automatique vers le meilleur serveur et Web UI.
+Benchmark automatique des serveurs VPN via [Gluetun](https://github.com/qdm12/gluetun),
+bascule automatique vers le meilleur serveur, et Web UI complète.
+
+> **Merci à [qdm12](https://github.com/qdm12/gluetun)** pour Gluetun, sans lequel ce projet n'existerait pas.
+
+---
+
+## Compatibilité
+
+Gluetun Companion fonctionne en théorie avec **tous les fournisseurs VPN compatibles Gluetun**
+dès lors qu'au moins une de ces variables de filtre est utilisée dans votre configuration :
+
+| Variable Gluetun | Description |
+|---|---|
+| `SERVER_NAMES` | Nom du serveur |
+| `SERVER_COUNTRIES` | Pays |
+| `SERVER_REGIONS` | Région |
+| `SERVER_CITIES` | Ville |
+| `SERVER_HOSTNAMES` | Hostname du serveur |
+
+Le companion est **indépendant de la technologie de tunnel** utilisée : il fonctionne
+identiquement avec OpenVPN, WireGuard ou toute autre tech supportée par votre fournisseur.
+
+Il est conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=483746)**
+*(lien affilié — merci si vous passez par là !)*, dont la liste des variables de filtre est
+documentée ici :
+[gluetun-wiki — AirVPN optional environment variables](https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/airvpn.md#optional-environment-variables)
+
+---
 
 ## Fonctionnalités
 
-- Test de vitesse (download + latence) de chaque serveur via le proxy HTTP Gluetun
-- Planification automatique toutes les X heures
-- Bascule automatique vers le serveur le plus rapide (`docker compose up --force-recreate`)
-- Web UI dark theme avec auth, historique, graphiques
-- Base de données SQLite — aucune dépendance externe
+- **Benchmark automatique** toutes les X heures — download, upload et latence par serveur,
+  via le proxy HTTP Gluetun (port 8887), sans réseau Docker partagé
+- **Bascule automatique** vers le meilleur serveur (`docker compose up --force-recreate`),
+  basée sur un score pondéré (65 % mesure actuelle + 35 % historique)
+- **5 types de filtre** : SERVER\_NAMES, SERVER\_COUNTRIES, SERVER\_REGIONS,
+  SERVER\_CITIES, SERVER\_HOSTNAMES
+- **Warm-up TCP** configurable pour éviter le biais slow-start
+- **Retry** configurable par serveur + timeout global par serveur
+- **Auto-désactivation** d'un serveur après N échecs consécutifs
+- **Web UI** dark/light — auth, dashboard avec sparkline, historique paginé, graphiques,
+  page bascules avec gain Mbps et temps de connexion
+- **Export CSV** de l'historique complet
+- **Test unitaire** d'un serveur depuis l'UI sans attendre le prochain cycle
+- **Base de données SQLite** (WAL) — aucune dépendance externe
 
 ---
 
 ## Mise en route
 
-### 1. Préparer le dossier compose de Gluetun
+### 1. Exposer le proxy HTTP Gluetun sur l'hôte
 
-Le companion doit pouvoir écrire un `docker-compose.override.yml` dans le dossier
-qui contient votre `docker-compose.yml` Gluetun, et relancer le service.
+Le companion n'utilise **pas** l'API Gluetun (port 8000) ni un réseau Docker partagé.
+Il passe exclusivement par le **proxy HTTP** Gluetun, accessible via `host.docker.internal`.
 
-> **Important :** votre service Gluetun doit avoir pour **nom de service**
-> la même valeur que `GLUETUN_CONTAINER` (par défaut `gluetun-airvpn`).
-
-### 2. Exposer le port de l'API de contrôle Gluetun (réseau interne)
-
-Le companion accède à l'API Gluetun sur le port **8000** (interne au réseau Docker).
-Vous n'avez **pas besoin** de l'exposer sur l'hôte, les deux containers doivent
-juste être sur le même réseau Docker.
-
-Ajoutez `8000` à `FIREWALL_INPUT_PORTS` dans votre Gluetun si ce n'est pas déjà fait :
+Dans votre compose Gluetun, exposez le proxy HTTP sur l'hôte :
 
 ```yaml
-# dans votre docker-compose gluetun existant
+# dans votre docker-compose.yml Gluetun existant
+ports:
+  - 8887:8888   # ou le port que vous avez configuré
+
 environment:
-  FIREWALL_INPUT_PORTS: 936,8989,7878,5076,8081,9696,8887,19975,8000
+  HTTPPROXY: "on"
+  HTTPPROXY_LOG: "off"
+  # HTTPPROXY_USER: ""       # optionnel — à reporter dans les paramètres de l'UI
+  # HTTPPROXY_PASSWORD: ""
 ```
+
+### 2. Monter le dossier compose de Gluetun
+
+Le companion doit pouvoir écrire un `docker-compose.override.yml` dans le dossier
+qui contient votre `docker-compose.yml` Gluetun, puis relancer le service.
 
 ### 3. Configurer le companion
 
-Éditez `docker-compose.yml` et remplacez les trois valeurs marquées `# <-- CHANGE THIS` :
-
 ```yaml
-volumes:
-  - /chemin/absolu/vers/votre/dossier/gluetun:/compose   # dossier du compose Gluetun
+services:
+  gluetun-companion:
+    image: ghcr.io/aerya/gluetun-companion:latest
+    container_name: gluetun-companion
+    restart: always
+    ports:
+      - 8765:8765
+    volumes:
+      - /home/aerya/docker/gluetun-companion:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /chemin/vers/dossier/compose/gluetun:/compose   # <-- adapter
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      SECRET_KEY: remplacer-par-une-chaine-aleatoire-longue
+      DATA_DIR: /data
+      GLUETUN_HOST: host.docker.internal
+      GLUETUN_PROXY_PORT: "8887"          # port du proxy HTTP Gluetun exposé sur l'hôte
+      GLUETUN_CONTAINER: gluetun-airvpn   # nom exact du service dans le compose Gluetun
+      COMPOSE_DIR: /compose
 
-environment:
-  COMPOSE_PROJECT: nom_du_projet   # `docker compose ls` pour trouver le nom
-  # ex : si votre dossier s'appelle "vpn" → projet = "vpn"
-
-networks:
-  vpn_net:
-    name: nom_du_reseau_gluetun    # `docker network ls` pour trouver le nom
+networks: {}
 ```
+
+> **Note :** `COMPOSE_PROJECT` est optionnel. S'il est absent, le companion le détecte
+> automatiquement depuis le label `com.docker.compose.project` du container Gluetun.
 
 ### 4. Lancer
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 Ouvrir : **http://localhost:8765**
 
-Première connexion → entrez le compte que vous souhaitez créer (il sera enregistré automatiquement).
+Première connexion → entrez le compte que vous souhaitez créer (enregistré automatiquement).
 
----
+### 5. Importer les serveurs
 
-## Ajouter des serveurs à tester
+**Serveurs** → **Importer depuis Gluetun** : le companion lit les variables
+`SERVER_NAMES`, `SERVER_COUNTRIES`, etc. directement depuis le container en cours
+et importe chaque valeur avec son type de filtre.
 
-Dans la Web UI → **Serveurs** → **Ajouter**.
-
-Entrez le nom exact du serveur AirVPN tel qu'utilisé dans `SERVER_NAMES`
-(ex : `Chamukuy`, `Elgafar`, `Dalim`, `Menkent`).
-
-La liste complète des serveurs AirVPN est disponible ici :
-https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/airvpn.md
+Vous pouvez aussi ajouter des serveurs manuellement depuis le même écran.
 
 ---
 
@@ -82,21 +130,22 @@ https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/airvpn.md
 ```
 Cycle de benchmark (toutes les X heures)
   └─ Pour chaque serveur activé :
-       1. Écriture de docker-compose.override.yml  →  SERVER_NAMES: "<serveur>"
-       2. docker compose up -d --force-recreate gluetun-airvpn
-       3. Attente connexion VPN  (poll GET /v1/openvpn/status)
-       4. Download 10 Mo via proxy :8887  →  calcul Mbps
-       5. Mesure latence TTFB via proxy
-       6. Enregistrement SQLite
-  └─ Sélection du meilleur serveur (download max)
-  └─ Bascule finale si différent du serveur actuel
+       1. Écriture de docker-compose.override.yml
+          → variable cible = "<serveur>", toutes les autres vidées
+       2. docker compose up -d --force-recreate <container>
+       3. Attente connexion VPN via poll proxy HTTP (timeout configurable)
+       4. Warm-up TCP optionnel (2 s drainés, non comptés)
+       5. Download depuis N endpoints (Cloudflare, Hetzner, Fast.com, OVH, Tele2)
+          → médiane des Mbps mesurés
+       6. Upload vers Cloudflare __up → Mbps
+       7. Latence TTFB depuis N endpoints → médiane ms
+       8. Enregistrement SQLite (DL, UL, latence, IPv4, IPv6)
+       9. Retry automatique si échec (configurable), timeout global par serveur
+      10. Auto-désactivation si N échecs consécutifs
+  └─ Score pondéré par serveur (65 % cycle actuel + 35 % historique exponentiel)
+  └─ Bascule vers le meilleur si différent du serveur actuel
+  └─ Enregistrement cycle (durée totale, serveurs testés, meilleur serveur)
 ```
-
-### Test de vitesse
-
-Le test se fait en téléchargeant un fichier de taille configurable depuis
-`speed.cloudflare.com` **via le proxy HTTP Gluetun** (port 8887).
-Cela mesure la vitesse réelle du tunnel VPN, pas la vitesse de l'hôte.
 
 ---
 
@@ -105,12 +154,11 @@ Cela mesure la vitesse réelle du tunnel VPN, pas la vitesse de l'hôte.
 | Variable | Défaut | Description |
 |---|---|---|
 | `SECRET_KEY` | *(requis)* | Clé Flask pour les sessions |
-| `GLUETUN_HOST` | `gluetun-airvpn` | Nom du container Gluetun sur le réseau Docker |
+| `GLUETUN_HOST` | `host.docker.internal` | Hôte du proxy HTTP Gluetun |
 | `GLUETUN_PROXY_PORT` | `8887` | Port du proxy HTTP Gluetun |
-| `GLUETUN_API_PORT` | `8000` | Port de l'API de contrôle Gluetun |
-| `GLUETUN_CONTAINER` | `gluetun-airvpn` | Nom du service dans le compose Gluetun |
+| `GLUETUN_CONTAINER` | `gluetun-airvpn` | Nom du container Gluetun (pour Docker SDK) |
 | `COMPOSE_DIR` | `/compose` | Chemin (dans le container) du dossier compose Gluetun |
-| `COMPOSE_PROJECT` | *(vide)* | Nom du projet compose Gluetun (`docker compose ls`) |
+| `COMPOSE_PROJECT` | *(auto-détecté)* | Nom du projet compose Gluetun |
 | `DATA_DIR` | `/data` | Dossier de la base SQLite |
 
 ---
@@ -125,28 +173,27 @@ gluetun-companion/
 ├── run.py
 └── app/
     ├── __init__.py        # factory Flask
-    ├── database.py        # SQLite (WAL)
-    ├── gluetun.py         # contrôle Docker + API Gluetun
-    ├── speedtest.py       # test download/latence via proxy
-    ├── scheduler.py       # APScheduler + cycle de benchmark
-    ├── routes.py          # toutes les routes Flask + API JSON
+    ├── database.py        # SQLite WAL + migrations
+    ├── gluetun.py         # contrôle Docker + proxy VPN
+    ├── speedtest.py       # download / upload / latence via proxy
+    ├── scheduler.py       # APScheduler + cycle complet + test unitaire
+    ├── routes.py          # routes Flask + API JSON + export CSV
     └── templates/
-        ├── base.html
+        ├── base.html      # layout, dark/light toggle, badge VPN down
         ├── login.html
-        ├── dashboard.html
-        ├── servers.html
-        ├── history.html
-        ├── switches.html
-        └── settings.html
+        ├── dashboard.html # sparkline serveur actif, durée cycle
+        ├── servers.html   # import, test unitaire, auto-exclude
+        ├── history.html   # pagination, export CSV, upload
+        ├── switches.html  # gain Mbps, temps de connexion
+        └── settings.html  # tous les paramètres
 ```
 
 ---
 
 ## Notes
 
-- Le benchmark **interrompt brièvement** tous les services qui passent par Gluetun
+- Le benchmark **interrompt brièvement** les services qui transitent par Gluetun
   (qBittorrent, Sonarr, Radarr…) le temps de tester chaque serveur.
-  Planifiez les tests pendant les heures creuses.
-- Le fichier `docker-compose.override.yml` est géré automatiquement.
-  Ne le modifiez pas manuellement.
-- Inspiré de [gluetun-switcher](https://github.com/fuzzzor/gluetun-switcher).
+  Planifiez les cycles pendant les heures creuses ou augmentez l'intervalle.
+- Le fichier `docker-compose.override.yml` est géré automatiquement — ne le modifiez pas.
+- L'IPv6 est affiché si votre fournisseur VPN le supporte (AirVPN le supporte).
