@@ -47,6 +47,9 @@ documentée ici :
   page bascules avec gain Mbps et temps de connexion
 - **Export CSV** de l'historique complet
 - **Test unitaire** d'un serveur depuis l'UI sans attendre le prochain cycle
+- **Purge automatique** de l'historique SQLite configurable (rétention en jours)
+- **Endpoint `/healthz`** non authentifié pour les healthchecks Docker
+- **Logs JSON structurés** optionnels via `LOG_JSON=1` (compatibles Loki/Grafana)
 - **Base de données SQLite** (WAL) — aucune dépendance externe
 
 ---
@@ -90,11 +93,12 @@ services:
     volumes:
       - /home/aerya/docker/gluetun-companion:/data
       - /var/run/docker.sock:/var/run/docker.sock
-      - /chemin/vers/dossier/compose/gluetun:/compose   # <-- adapter
+      - /home/aerya/docker/dockge-enhanced/stacks/airvpn:/compose  # <-- adapter
+      # Dans cet exemple j'utilise Dockge ([-Enhanced](https://github.com/Aerya/Dockge-Enhanced))
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      SECRET_KEY: remplacer-par-une-chaine-aleatoire-longue
+      SECRET_KEY: remplacer-par-une-chaine-aleatoire-longue   # openssl rand -hex 32
       DATA_DIR: /data
       GLUETUN_HOST: host.docker.internal
       GLUETUN_PROXY_PORT: "8887"          # port du proxy HTTP Gluetun exposé sur l'hôte

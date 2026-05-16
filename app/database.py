@@ -76,7 +76,8 @@ def init_db(db_path: str):
                 ('server_timeout_secs',      '300'),
                 ('auto_exclude_failures',    '5'),
                 ('speedtest_upload',         '1'),
-                ('speedtest_warmup',         '1');
+                ('speedtest_warmup',         '1'),
+                ('db_retention_days',        '30');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [

@@ -44,6 +44,9 @@ It is primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_
   switches page with Mbps gain and connection time
 - **CSV export** of the full history
 - **On-demand test** of a single server from the UI without waiting for the next cycle
+- **Automatic purge** of SQLite history with configurable retention (in days)
+- **`/healthz` endpoint** unauthenticated, for Docker healthchecks
+- **Structured JSON logs** optional via `LOG_JSON=1` (Loki/Grafana compatible)
 - **SQLite database** (WAL) — no external dependencies
 
 ---
@@ -87,11 +90,12 @@ services:
     volumes:
       - /home/user/docker/gluetun-companion:/data
       - /var/run/docker.sock:/var/run/docker.sock
-      - /path/to/gluetun/compose/dir:/compose   # <-- adapt this
+      - /home/aerya/docker/dockge-enhanced/stacks/airvpn:/compose   # <-- adapt this
+      # In this example I use Dockge ([-Enhanced](https://github.com/Aerya/Dockge-Enhanced))
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      SECRET_KEY: replace-with-a-long-random-string
+      SECRET_KEY: replace-with-a-long-random-string   # openssl rand -hex 32
       DATA_DIR: /data
       GLUETUN_HOST: host.docker.internal
       GLUETUN_PROXY_PORT: "8887"          # Gluetun HTTP proxy port exposed on the host

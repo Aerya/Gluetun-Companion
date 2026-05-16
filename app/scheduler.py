@@ -445,6 +445,22 @@ def _update_consecutive_failures(server_name: str, success: bool, threshold: int
 # Scheduler lifecycle
 # ---------------------------------------------------------------------------
 
+def purge_old_tests(app):
+    """Delete speed_tests older than db_retention_days. 0 = disabled."""
+    from .database import get_db, get_setting
+    with app.app_context():
+        days = int(get_setting('db_retention_days', '30'))
+    if days <= 0:
+        return
+    with get_db() as db:
+        deleted = db.execute(
+            "DELETE FROM speed_tests WHERE tested_at < datetime('now', ? || ' days')",
+            (f'-{days}',),
+        ).rowcount
+    if deleted:
+        logger.info('DB purge: removed %d speed_tests older than %d days', deleted, days)
+
+
 def start_scheduler(app):
     global _scheduler
     from .database import get_setting
@@ -460,6 +476,14 @@ def start_scheduler(app):
         id='benchmark',
         replace_existing=True,
         misfire_grace_time=300,
+    )
+    _scheduler.add_job(
+        purge_old_tests,
+        trigger=IntervalTrigger(hours=24),
+        args=[app],
+        id='db_purge',
+        replace_existing=True,
+        misfire_grace_time=3600,
     )
     _scheduler.start()
     logger.info('Scheduler started — benchmark every %.1f hours', hours)
