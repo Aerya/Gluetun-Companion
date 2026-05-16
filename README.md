@@ -1,5 +1,7 @@
 # Gluetun Companion
 
+> 🇬🇧 [English version](README.en.md)
+
 Benchmark automatique des serveurs VPN via [Gluetun](https://github.com/qdm12/gluetun),
 bascule automatique vers le meilleur serveur, et Web UI complète.
 
