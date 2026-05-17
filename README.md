@@ -107,12 +107,13 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      SECRET_KEY: remplacer-par-une-chaine-aleatoire-longue   # openssl rand -hex 32
-      DATA_DIR: /data
-      GLUETUN_HOST: host.docker.internal
-      GLUETUN_PROXY_PORT: "8887"          # port du proxy HTTP Gluetun exposé sur l'hôte
-      GLUETUN_CONTAINER: gluetun-airvpn   # nom exact du service dans le compose Gluetun
-      COMPOSE_DIR: /compose
+      - TZ=Europe/Paris
+      - SECRET_KEY=remplacer-par-une-chaine-aleatoire-longue   # openssl rand -hex 32
+      - DATA_DIR=/data
+      - GLUETUN_HOST=host.docker.internal
+      - GLUETUN_PROXY_PORT=8887          # port du proxy HTTP Gluetun exposé sur l'hôte
+      - GLUETUN_CONTAINER=gluetun-airvpn   # nom exact du service dans le compose Gluetun
+      - COMPOSE_DIR=/compose
 
 networks: {}
 ```
@@ -196,14 +197,15 @@ Le **mode Sidecar** est une alternative optionnelle :
 
 ```
 Pour chaque serveur à tester
+  └─ Pull ghcr.io/aerya/gluetun-companion-sidecar:latest  (toujours la dernière version)
   └─ gluetun-companion-test    ← copie de votre Gluetun (même image + variables d'env)
                                   configurée avec la valeur SERVER_* cible
   └─ gluetun-companion-sidecar ← network_mode: container:gluetun-companion-test
                                   mesure via iperf3 directement dans le tunnel VPN
+  └─ Stop + suppression des deux containers et de l'image sidecar du disque
 
 Une fois tous les serveurs testés
   └─ Bascule du vrai Gluetun vers le meilleur serveur (un seul redémarrage)
-  └─ Les deux containers de test sont supprimés automatiquement
 ```
 
 **Avantages par rapport au mode proxy :**

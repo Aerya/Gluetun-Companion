@@ -103,12 +103,13 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      SECRET_KEY: replace-with-a-long-random-string   # openssl rand -hex 32
-      DATA_DIR: /data
-      GLUETUN_HOST: host.docker.internal
-      GLUETUN_PROXY_PORT: "8887"          # Gluetun HTTP proxy port exposed on the host
-      GLUETUN_CONTAINER: gluetun-airvpn   # exact service name in the Gluetun compose
-      COMPOSE_DIR: /compose
+      - TZ=Europe/Paris
+      - SECRET_KEY=replace-with-a-long-random-string   # openssl rand -hex 32
+      - DATA_DIR=/data
+      - GLUETUN_HOST=host.docker.internal
+      - GLUETUN_PROXY_PORT=8887          # Gluetun HTTP proxy port exposed on the host
+      - GLUETUN_CONTAINER=gluetun-airvpn   # exact service name in the Gluetun compose
+      - COMPOSE_DIR=/compose
 
 networks: {}
 ```
@@ -191,14 +192,15 @@ forces your real Gluetun to restart for every server tested.
 
 ```
 For each server under test
+  └─ Pull ghcr.io/aerya/gluetun-companion-sidecar:latest  (always latest version)
   └─ gluetun-companion-test   ← clone of your Gluetun (same image + env vars)
                                  configured with the target SERVER_* value
   └─ gluetun-companion-sidecar← network_mode: container:gluetun-companion-test
                                  measures via iperf3 directly inside the VPN tunnel
+  └─ Stop + remove both containers and delete the sidecar image from disk
 
 After all servers are tested
   └─ Switch real Gluetun to the best server (one single restart)
-  └─ Both test containers are removed automatically
 ```
 
 **Advantages over the proxy mode:**

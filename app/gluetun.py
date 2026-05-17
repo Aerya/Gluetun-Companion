@@ -352,10 +352,16 @@ def create_test_gluetun(
 
 def create_speed_sidecar(sidecar_image: str) -> tuple[bool, str | None]:
     """
-    Create the speed-test sidecar container in the test Gluetun network namespace.
+    Pull the latest sidecar image, then create the container in the test Gluetun
+    network namespace. Pulling every time ensures we always run the latest version.
     """
     try:
         client = docker.from_env()
+
+        logger.info('Pulling sidecar image: %s', sidecar_image)
+        client.images.pull(sidecar_image)
+        logger.info('Sidecar image up to date: %s', sidecar_image)
+
         _remove_container(client, _SIDECAR_NAME)
 
         client.containers.run(
@@ -431,11 +437,17 @@ def run_sidecar_test(
     return resp.json()
 
 
-def cleanup_test_containers() -> None:
-    """Stop and remove the test Gluetun and sidecar containers."""
+def cleanup_test_containers(sidecar_image: str | None = None) -> None:
+    """Stop and remove the test Gluetun and sidecar containers, then delete the sidecar image."""
     client = docker.from_env()
     for name in [_SIDECAR_NAME, _TEST_GLUETUN_NAME]:
         _remove_container(client, name)
+    if sidecar_image:
+        try:
+            client.images.remove(sidecar_image, force=True)
+            logger.info('Sidecar image removed: %s', sidecar_image)
+        except Exception as exc:
+            logger.debug('Could not remove sidecar image: %s', exc)
     logger.info('Test containers cleaned up')
 
 

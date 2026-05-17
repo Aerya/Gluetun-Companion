@@ -236,7 +236,7 @@ def _test_one_server_sidecar(
         }
 
     finally:
-        cleanup_test_containers()
+        cleanup_test_containers(sidecar_image)
 
 
 def _test_server_with_retry(
