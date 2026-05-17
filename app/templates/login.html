@@ -13,6 +13,7 @@
     .form-control { background: #0d1117; color: #c9d1d9; border-color: #30363d; }
     .form-control:focus { background: #0d1117; color: #c9d1d9; border-color: #58a6ff;
                           box-shadow: 0 0 0 .2rem rgba(88,166,255,.15); }
+    .form-label   { color: #8b949e; }
   </style>
 </head>
 <body>
@@ -42,9 +43,11 @@
       <i class="bi bi-box-arrow-in-right"></i> Connexion
     </button>
   </form>
-  <p class="text-muted text-center mt-3" style="font-size:.75rem">
+  {% if first_login %}
+  <p class="text-center mt-3" style="font-size:.75rem;color:#8b949e">
     Première connexion : entrez les identifiants souhaités — le compte sera créé automatiquement.
   </p>
+  {% endif %}
 </div>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 </body>

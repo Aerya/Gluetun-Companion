@@ -58,7 +58,8 @@ def login():
 
         flash('Identifiants incorrects.', 'danger')
 
-    return render_template('login.html')
+    first_login = not bool(get_setting('admin_password_hash', ''))
+    return render_template('login.html', first_login=first_login)
 
 
 @bp.route('/logout')
