@@ -80,7 +80,10 @@ def init_db(db_path: str):
                 ('speedtest_streams',        '4'),
                 ('db_retention_days',        '30'),
                 ('discord_webhook_url',      ''),
-                ('apprise_urls',             '');
+                ('apprise_urls',             ''),
+                ('sidecar_mode',             '0'),
+                ('sidecar_image',            'ghcr.io/aerya/gluetun-companion-sidecar:latest'),
+                ('sidecar_port',             '8766');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [

@@ -206,6 +206,18 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'flash_notifications_saved':'Notifications enregistrées.',
         'flash_credentials_saved':  'Identifiants mis à jour.',
         'flash_proxy_saved':        'Identifiants proxy enregistrés.',
+        'flash_sidecar_saved':      'Configuration sidecar enregistrée.',
+
+        # ── Sidecar ──
+        'set_sidecar_title':        'Mode Sidecar (iperf3 direct)',
+        'set_sidecar_warning':      '<strong>⚠ Connexion simultanée :</strong> le mode sidecar crée un container Gluetun supplémentaire pour chaque test. Cela compte comme une connexion VPN supplémentaire auprès de votre fournisseur. Si celui-ci limite le nombre de connexions simultanées (ex. AirVPN : 3–5 selon l\'abonnement), cette option consomme un slot de plus pendant toute la durée du benchmark. Planifiez en conséquence.',
+        'set_sidecar_mode_label':   'Activer le mode sidecar',
+        'set_sidecar_mode_sub':     '— iperf3 via tunnel direct, sans perturber votre Gluetun principal',
+        'set_sidecar_image_label':  'Image sidecar',
+        'set_sidecar_port_label':   'Port API sidecar',
+        'set_sidecar_how_title':    'Comment ça fonctionne',
+        'set_sidecar_how_body':     'En mode sidecar, le companion crée un container <code>gluetun-companion-test</code> (copie du vrai Gluetun, configuré sur le serveur à tester) et y attache <code>gluetun-companion-sidecar</code> (<code>network_mode: container:gluetun-companion-test</code>). Le sidecar mesure le débit via <strong>iperf3</strong> directement dans le tunnel VPN — pas de proxy HTTP. Votre Gluetun principal n\'est <strong>pas</strong> redémarré pendant les tests, uniquement lors de la bascule finale vers le meilleur serveur.',
+        'set_sidecar_compose_hint': 'Aucun volume Docker supplémentaire n\'est nécessaire. Le companion doit avoir accès au socket Docker (<code>/var/run/docker.sock</code>) et à <code>host.docker.internal</code> — ce qui est déjà le cas dans la configuration standard.',
 
         # ── Notifications (notify.py) ──
         'notif_title':              '🔄 Bascule VPN',
@@ -431,6 +443,18 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'flash_notifications_saved':'Notifications saved.',
         'flash_credentials_saved':  'Credentials updated.',
         'flash_proxy_saved':        'Proxy credentials saved.',
+        'flash_sidecar_saved':      'Sidecar configuration saved.',
+
+        # ── Sidecar ──
+        'set_sidecar_title':        'Sidecar Mode (direct iperf3)',
+        'set_sidecar_warning':      '<strong>⚠ Simultaneous connection:</strong> sidecar mode creates an extra Gluetun container for each server test. This counts as one additional VPN connection at your provider. If your provider limits simultaneous connections (e.g. AirVPN: 3–5 depending on plan), this option uses one extra slot for the entire benchmark duration. Plan accordingly.',
+        'set_sidecar_mode_label':   'Enable sidecar mode',
+        'set_sidecar_mode_sub':     '— iperf3 through direct VPN tunnel, without disrupting your main Gluetun',
+        'set_sidecar_image_label':  'Sidecar image',
+        'set_sidecar_port_label':   'Sidecar API port',
+        'set_sidecar_how_title':    'How it works',
+        'set_sidecar_how_body':     'In sidecar mode, the companion creates a <code>gluetun-companion-test</code> container (a clone of the real Gluetun, configured for the server under test) and attaches <code>gluetun-companion-sidecar</code> to it (<code>network_mode: container:gluetun-companion-test</code>). The sidecar measures speed via <strong>iperf3</strong> directly inside the VPN tunnel — no HTTP proxy. Your main Gluetun is <strong>not</strong> restarted during testing, only when finally switching to the best server.',
+        'set_sidecar_compose_hint': 'No extra Docker volumes are needed. The companion must have access to the Docker socket (<code>/var/run/docker.sock</code>) and <code>host.docker.internal</code> — both already required by the standard configuration.',
 
         # ── Notifications (notify.py) ──
         'notif_title':              '🔄 VPN Switch',

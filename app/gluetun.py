@@ -274,6 +274,152 @@ def get_public_ips(
     return ipv4, ipv6
 
 
+# ---------------------------------------------------------------------------
+# Sidecar container management
+# ---------------------------------------------------------------------------
+
+_TEST_GLUETUN_NAME  = 'gluetun-companion-test'
+_SIDECAR_NAME       = 'gluetun-companion-sidecar'
+
+
+def _remove_container(client, name: str) -> None:
+    """Stop and remove a container by name, ignoring NotFound."""
+    try:
+        c = client.containers.get(name)
+        try:
+            c.stop(timeout=10)
+        except Exception:
+            pass
+        c.remove(force=True)
+    except docker.errors.NotFound:
+        pass
+    except Exception as exc:
+        logger.warning('_remove_container %s: %s', name, exc)
+
+
+def create_test_gluetun(
+    real_container_name: str,
+    filter_type: str,
+    filter_value: str,
+    sidecar_port: int = 8766,
+) -> tuple[bool, str | None]:
+    """
+    Clone the real Gluetun container config, override the SERVER_* filter
+    for the target server, and start a new test container.
+    The sidecar port is published on the host so the companion can reach the
+    sidecar API via host.docker.internal:<sidecar_port>.
+    """
+    try:
+        client = docker.from_env()
+        real   = client.containers.get(real_container_name)
+        attrs  = real.attrs
+
+        # Build env dict from real container, override filter vars
+        env: dict[str, str] = {}
+        for var in attrs['Config'].get('Env') or []:
+            if '=' in var:
+                k, v = var.split('=', 1)
+                env[k] = v
+        for label, var in FILTER_VARS.items():
+            env[var] = ''
+        env[FILTER_VARS.get(filter_type, 'SERVER_NAMES')] = filter_value
+
+        image    = attrs['Config']['Image']
+        cap_add  = attrs['HostConfig'].get('CapAdd') or []
+        sysctls  = attrs['HostConfig'].get('Sysctls') or {}
+        devices  = attrs['HostConfig'].get('Devices') or []
+
+        _remove_container(client, _TEST_GLUETUN_NAME)
+
+        client.containers.run(
+            image=image,
+            name=_TEST_GLUETUN_NAME,
+            environment=env,
+            cap_add=cap_add,
+            sysctls=sysctls,
+            devices=devices,
+            ports={f'{sidecar_port}/tcp': sidecar_port},
+            detach=True,
+            remove=False,
+        )
+        logger.info('Test Gluetun container started: %s → %s=%s',
+                    _TEST_GLUETUN_NAME, FILTER_VARS.get(filter_type, 'SERVER_NAMES'), filter_value)
+        return True, None
+    except Exception as exc:
+        return False, str(exc)
+
+
+def create_speed_sidecar(sidecar_image: str) -> tuple[bool, str | None]:
+    """
+    Create the speed-test sidecar container in the test Gluetun network namespace.
+    """
+    try:
+        client = docker.from_env()
+        _remove_container(client, _SIDECAR_NAME)
+
+        client.containers.run(
+            image=sidecar_image,
+            name=_SIDECAR_NAME,
+            network_mode=f'container:{_TEST_GLUETUN_NAME}',
+            detach=True,
+            remove=False,
+        )
+        logger.info('Speed sidecar started: %s (network via %s)', _SIDECAR_NAME, _TEST_GLUETUN_NAME)
+        return True, None
+    except Exception as exc:
+        return False, str(exc)
+
+
+def wait_for_sidecar(
+    host: str,
+    port: int,
+    timeout: int = 90,
+) -> tuple[bool, float]:
+    """
+    Poll the sidecar /health endpoint until VPN is up or timeout expires.
+    Returns (success, elapsed_seconds).
+    """
+    url   = f'http://{host}:{port}/health'
+    start = time.time()
+    # Give sidecar a moment to boot
+    time.sleep(5)
+    deadline = start + timeout
+    while time.time() < deadline:
+        try:
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 200 and resp.json().get('vpn'):
+                return True, round(time.time() - start, 1)
+        except Exception:
+            pass
+        time.sleep(3)
+    return False, round(time.time() - start, 1)
+
+
+def run_sidecar_test(
+    host: str,
+    port: int,
+    duration: int = 8,
+    streams: int = 4,
+) -> dict:
+    """
+    Call the sidecar /test endpoint and return the result dict.
+    Raises RuntimeError if the call fails.
+    """
+    url  = f'http://{host}:{port}/test'
+    timeout = duration * 2 + 60  # generous timeout
+    resp = requests.post(url, params={'duration': duration, 'streams': streams}, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def cleanup_test_containers() -> None:
+    """Stop and remove the test Gluetun and sidecar containers."""
+    client = docker.from_env()
+    for name in [_SIDECAR_NAME, _TEST_GLUETUN_NAME]:
+        _remove_container(client, name)
+    logger.info('Test containers cleaned up')
+
+
 def wait_for_vpn(
     proxy_host: str,
     proxy_port: int,

@@ -47,6 +47,10 @@ It is primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_
   switches page with Mbps gain and connection time
 - **CSV export** of the full history
 - **On-demand test** of a single server from the UI without waiting for the next cycle
+- **Sidecar mode** (optional) — a `gluetun-companion-test` container clones the real Gluetun
+  config for each server; a `gluetun-companion-sidecar` container measures speed via **iperf3**
+  directly inside the VPN tunnel (no HTTP proxy). Your main Gluetun is never restarted during
+  testing — only once at the end to switch to the winner
 - **Notifications** on every switch — Discord webhook (rich embed) and/or
   [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
 - **Automatic purge** of SQLite history with configurable retention (in days)
@@ -174,6 +178,43 @@ Benchmark cycle (every X hours)
 
 > Benchmark parameters (parallel streams, duration, warm-up, etc.) are configured
 > directly in the UI → **Settings**.
+
+---
+
+## Sidecar mode
+
+By default Gluetun Companion measures speed through Gluetun's **HTTP proxy** (port 8887).
+This is simple and requires no extra containers, but introduces proxy overhead and
+forces your real Gluetun to restart for every server tested.
+
+**Sidecar mode** is an optional alternative:
+
+```
+For each server under test
+  └─ gluetun-companion-test   ← clone of your Gluetun (same image + env vars)
+                                 configured with the target SERVER_* value
+  └─ gluetun-companion-sidecar← network_mode: container:gluetun-companion-test
+                                 measures via iperf3 directly inside the VPN tunnel
+
+After all servers are tested
+  └─ Switch real Gluetun to the best server (one single restart)
+  └─ Both test containers are removed automatically
+```
+
+**Advantages over the proxy mode:**
+- Your real Gluetun (and all services depending on it) is never interrupted during benchmarking
+- iperf3 measures raw TCP throughput without HTTP proxy overhead — more accurate on fast VPNs
+- Falls back to direct HTTP download/upload if no public iperf3 server is reachable
+
+**Enable:** Settings → Sidecar Mode → toggle on.
+
+> ⚠ **Simultaneous connection warning** — valid for ALL VPN providers
+>
+> Sidecar mode adds **one extra concurrent VPN connection** for the entire duration of the
+> benchmark (the test Gluetun container). If your provider limits simultaneous connections
+> (AirVPN: 3–5 depending on plan; most other providers: similar), this consumes one extra slot.
+> Make sure you have a free connection slot before enabling sidecar mode.
+> This warning applies to **all providers compatible with Gluetun**, not just AirVPN.
 
 ---
 

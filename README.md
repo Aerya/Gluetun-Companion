@@ -50,6 +50,11 @@ documentée ici :
   page bascules avec gain Mbps et temps de connexion
 - **Export CSV** de l'historique complet
 - **Test unitaire** d'un serveur depuis l'UI sans attendre le prochain cycle
+- **Mode Sidecar** (optionnel) — un container `gluetun-companion-test` clone la config
+  réelle de Gluetun pour chaque serveur ; `gluetun-companion-sidecar` mesure le débit via
+  **iperf3** directement dans le tunnel VPN (sans proxy HTTP). Votre Gluetun principal
+  n'est jamais relancé pendant les tests — seulement une fois à la fin pour basculer vers
+  le meilleur serveur
 - **Notifications** à chaque bascule — webhook Discord (embed coloré) et/ou
   [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
 - **Purge automatique** de l'historique SQLite configurable (rétention en jours)
@@ -178,6 +183,45 @@ Cycle de benchmark (toutes les X heures)
 
 > Les paramètres de benchmark (flux parallèles, durée, warm-up, etc.) se configurent
 > directement dans l'UI → **Paramètres**.
+
+---
+
+## Mode Sidecar
+
+Par défaut, Gluetun Companion mesure le débit via le **proxy HTTP** de Gluetun (port 8887).
+C'est simple et ne nécessite aucun container supplémentaire, mais introduit une surcharge
+proxy et force votre vrai Gluetun à redémarrer pour chaque serveur testé.
+
+Le **mode Sidecar** est une alternative optionnelle :
+
+```
+Pour chaque serveur à tester
+  └─ gluetun-companion-test    ← copie de votre Gluetun (même image + variables d'env)
+                                  configurée avec la valeur SERVER_* cible
+  └─ gluetun-companion-sidecar ← network_mode: container:gluetun-companion-test
+                                  mesure via iperf3 directement dans le tunnel VPN
+
+Une fois tous les serveurs testés
+  └─ Bascule du vrai Gluetun vers le meilleur serveur (un seul redémarrage)
+  └─ Les deux containers de test sont supprimés automatiquement
+```
+
+**Avantages par rapport au mode proxy :**
+- Votre vrai Gluetun (et tous les services qui en dépendent) n'est jamais interrompu pendant le benchmark
+- iperf3 mesure le débit TCP brut sans surcharge proxy HTTP — plus précis sur les VPN rapides
+- Bascule automatiquement sur du HTTP direct si aucun serveur iperf3 public n'est joignable
+
+**Activation :** Paramètres → Mode Sidecar → activer.
+
+> ⚠ **Connexion simultanée — valable pour tous les fournisseurs VPN**
+>
+> Le mode Sidecar ajoute **une connexion VPN simultanée supplémentaire** pendant toute la
+> durée du benchmark (le container Gluetun de test). Si votre fournisseur limite le nombre
+> de connexions simultanées (AirVPN : 3–5 selon l'abonnement ; la plupart des autres
+> fournisseurs : idem), cette option consomme un slot de plus.
+> Assurez-vous d'avoir un slot libre avant d'activer le mode sidecar.
+> Cet avertissement s'applique à **tous les fournisseurs compatibles avec Gluetun**,
+> pas uniquement AirVPN.
 
 ---
 

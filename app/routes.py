@@ -454,6 +454,13 @@ def settings():
             set_setting('proxy_password', request.form.get('proxy_password', ''))
             flash_t('flash_proxy_saved', 'success')
 
+        elif action == 'sidecar':
+            set_setting('sidecar_mode',  '1' if request.form.get('sidecar_mode') else '0')
+            set_setting('sidecar_image', request.form.get('sidecar_image', '').strip()
+                        or 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
+            set_setting('sidecar_port',  request.form.get('sidecar_port', '8766').strip() or '8766')
+            flash_t('flash_sidecar_saved', 'success')
+
         return redirect(url_for('main.settings'))
 
     cfg = {
@@ -474,6 +481,9 @@ def settings():
         'db_retention_days':     get_setting('db_retention_days', '30'),
         'discord_webhook_url':   get_setting('discord_webhook_url', ''),
         'apprise_urls':          get_setting('apprise_urls', ''),
+        'sidecar_mode':          get_setting('sidecar_mode', '0'),
+        'sidecar_image':         get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest'),
+        'sidecar_port':          get_setting('sidecar_port', '8766'),
     }
     return render_template('settings.html', cfg=cfg, next_run=get_next_run())
 
