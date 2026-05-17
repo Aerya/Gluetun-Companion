@@ -109,9 +109,6 @@ services:
 networks: {}
 ```
 
-> **Note:** `COMPOSE_PROJECT` is optional. If omitted, the companion auto-detects it
-> from the `com.docker.compose.project` label on the running Gluetun container.
-
 > **Running the companion in the same stack as Gluetun?**
 > You can drop `extra_hosts` and use the service name as the host:
 > `GLUETUN_HOST: gluetun` (or whatever your Gluetun service is named).
@@ -173,7 +170,6 @@ Benchmark cycle (every X hours)
 | `GLUETUN_PROXY_PORT` | `8887` | Gluetun HTTP proxy port |
 | `GLUETUN_CONTAINER` | `gluetun-airvpn` | Gluetun container name (for Docker SDK) |
 | `COMPOSE_DIR` | `/compose` | Path (inside the container) to the Gluetun compose directory |
-| `COMPOSE_PROJECT` | *(auto-detected)* | Gluetun compose project name |
 | `DATA_DIR` | `/data` | SQLite database directory |
 
 > Benchmark parameters (parallel streams, duration, warm-up, etc.) are configured
