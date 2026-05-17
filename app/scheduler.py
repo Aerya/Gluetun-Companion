@@ -50,7 +50,6 @@ def _test_one_server(
     dl_duration: float,
     dl_samples: int,
     lat_samples: int,
-    do_upload: bool,
     warmup: float,
     dl_streams: int,
 ) -> dict:
@@ -95,19 +94,18 @@ def _test_one_server(
     )
 
     ul_median: float | None = None
-    if do_upload:
-        try:
-            ul_median, ul_detail = test_upload(
-                proxy_host, proxy_port, duration=dl_duration, streams=dl_streams,
-                proxy_user=proxy_user, proxy_password=proxy_pass,
-            )
-            ul_parts = '  '.join(
-                f"{r['endpoint']}:{r['mbps']:.1f}" if r['mbps'] else f"{r['endpoint']}:ERR"
-                for r in ul_detail
-            )
-            logger.info('    UL  [%s]', ul_parts)
-        except Exception as exc:
-            logger.warning('  Upload test failed for %s: %s', server_name, exc)
+    try:
+        ul_median, ul_detail = test_upload(
+            proxy_host, proxy_port, duration=dl_duration, streams=dl_streams,
+            proxy_user=proxy_user, proxy_password=proxy_pass,
+        )
+        ul_parts = '  '.join(
+            f"{r['endpoint']}:{r['mbps']:.1f}" if r['mbps'] else f"{r['endpoint']}:ERR"
+            for r in ul_detail
+        )
+        logger.info('    UL  [%s]', ul_parts)
+    except Exception as exc:
+        logger.warning('  Upload test failed for %s: %s', server_name, exc)
 
     dl_parts = '  '.join(
         f"{r['endpoint']}:{r['mbps']:.1f}" if r['mbps'] else f"{r['endpoint']}:ERR"
@@ -156,6 +154,7 @@ def _test_one_server_sidecar(
     wait_secs: int,
     dl_duration: float,
     dl_streams: int,
+    sidecar_method: str = 'auto',
 ) -> dict:
     """
     Full sidecar test cycle for one server:
@@ -199,7 +198,8 @@ def _test_one_server_sidecar(
 
         # Step 4 — run speed test
         data = run_sidecar_test(sidecar_host, sidecar_port,
-                                duration=int(dl_duration), streams=dl_streams)
+                                duration=int(dl_duration), streams=dl_streams,
+                                method=sidecar_method)
 
         dl_median  = data.get('download_mbps') or 0.0
         ul_median  = data.get('upload_mbps')
@@ -254,7 +254,6 @@ def _test_server_with_retry(
     dl_duration: float,
     dl_samples: int,
     lat_samples: int,
-    do_upload: bool,
     warmup: float,
     dl_streams: int,
     max_retries: int,
@@ -272,7 +271,7 @@ def _test_server_with_retry(
                     _test_one_server,
                     server_name, filter_type, container, compose_dir, project,
                     proxy_host, proxy_port, proxy_user, proxy_pass,
-                    wait_secs, dl_duration, dl_samples, lat_samples, do_upload, warmup, dl_streams,
+                    wait_secs, dl_duration, dl_samples, lat_samples, warmup, dl_streams,
                 )
                 return future.result(timeout=timeout_secs)
         except FuturesTimeout:
@@ -303,6 +302,7 @@ def _test_server_sidecar_with_retry(
     dl_streams: int,
     max_retries: int,
     timeout_secs: int,
+    sidecar_method: str = 'auto',
 ) -> dict | None:
     last_err = 'Unknown error'
     for attempt in range(max_retries + 1):
@@ -312,7 +312,7 @@ def _test_server_sidecar_with_retry(
                     _test_one_server_sidecar,
                     server_name, filter_type,
                     real_container, sidecar_image, sidecar_host, sidecar_port,
-                    wait_secs, dl_duration, dl_streams,
+                    wait_secs, dl_duration, dl_streams, sidecar_method,
                 )
                 return future.result(timeout=timeout_secs)
         except FuturesTimeout:
@@ -369,12 +369,12 @@ def _do_benchmark(app):
         max_retries    = int(get_setting('speedtest_retries', '2'))
         timeout_secs   = int(get_setting('server_timeout_secs', '300'))
         auto_exclude   = int(get_setting('auto_exclude_failures', '5'))
-        do_upload      = get_setting('speedtest_upload', '1') == '1'
         warmup         = 2.0 if get_setting('speedtest_warmup', '1') == '1' else 0.0
         dl_streams     = int(get_setting('speedtest_streams', '4'))
-        sidecar_mode   = get_setting('sidecar_mode', '0') == '1'
+        sidecar_mode   = get_setting('sidecar_mode', '1') == '1'
         sidecar_image  = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
         sidecar_port   = int(get_setting('sidecar_port', '8766'))
+        sidecar_method = get_setting('sidecar_speedtest_method', 'auto')
 
         with get_db() as db:
             servers = db.execute(
@@ -396,6 +396,7 @@ def _do_benchmark(app):
                     row['name'], row['filter_type'],
                     container, sidecar_image, proxy_host, sidecar_port,
                     wait_secs, dl_duration, dl_streams, max_retries, timeout_secs,
+                    sidecar_method,
                 )
             else:
                 result = _test_server_with_retry(
@@ -403,7 +404,7 @@ def _do_benchmark(app):
                     container, compose_dir, project,
                     proxy_host, proxy_port, proxy_user, proxy_pass,
                     wait_secs, dl_duration, dl_samples, lat_samples,
-                    do_upload, warmup, dl_streams, max_retries, timeout_secs,
+                    warmup, dl_streams, max_retries, timeout_secs,
                 )
             if result:
                 results.append(result)
@@ -521,19 +522,20 @@ def _do_single_server(app, server_name: str, filter_type: str):
         lat_samples  = min(dl_samples, 3)
         max_retries  = int(get_setting('speedtest_retries', '2'))
         timeout_secs = int(get_setting('server_timeout_secs', '300'))
-        auto_exclude = int(get_setting('auto_exclude_failures', '5'))
-        do_upload     = get_setting('speedtest_upload', '1') == '1'
-        warmup        = 2.0 if get_setting('speedtest_warmup', '1') == '1' else 0.0
-        dl_streams    = int(get_setting('speedtest_streams', '4'))
-        sidecar_mode  = get_setting('sidecar_mode', '0') == '1'
-        sidecar_image = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
-        sidecar_port  = int(get_setting('sidecar_port', '8766'))
+        auto_exclude   = int(get_setting('auto_exclude_failures', '5'))
+        warmup         = 2.0 if get_setting('speedtest_warmup', '1') == '1' else 0.0
+        dl_streams     = int(get_setting('speedtest_streams', '4'))
+        sidecar_mode   = get_setting('sidecar_mode', '1') == '1'
+        sidecar_image  = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
+        sidecar_port   = int(get_setting('sidecar_port', '8766'))
+        sidecar_method = get_setting('sidecar_speedtest_method', 'auto')
 
         if sidecar_mode:
             result = _test_server_sidecar_with_retry(
                 server_name, filter_type,
                 container, sidecar_image, proxy_host, sidecar_port,
                 wait_secs, dl_duration, dl_streams, max_retries, timeout_secs,
+                sidecar_method,
             )
         else:
             result = _test_server_with_retry(
@@ -541,7 +543,7 @@ def _do_single_server(app, server_name: str, filter_type: str):
                 container, compose_dir, project,
                 proxy_host, proxy_port, proxy_user, proxy_pass,
                 wait_secs, dl_duration, dl_samples, lat_samples,
-                do_upload, warmup, dl_streams, max_retries, timeout_secs,
+                warmup, dl_streams, max_retries, timeout_secs,
             )
         if result:
             _update_consecutive_failures(server_name, success=True, threshold=auto_exclude)

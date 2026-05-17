@@ -425,6 +425,7 @@ def run_sidecar_test(
     port: int,
     duration: int = 8,
     streams: int = 4,
+    method: str = 'auto',
 ) -> dict:
     """
     Call the sidecar /test endpoint and return the result dict.
@@ -432,7 +433,11 @@ def run_sidecar_test(
     """
     url  = f'http://{host}:{port}/test'
     timeout = duration * 2 + 60  # generous timeout
-    resp = requests.post(url, params={'duration': duration, 'streams': streams}, timeout=timeout)
+    resp = requests.post(
+        url,
+        params={'duration': duration, 'streams': streams, 'method': method},
+        timeout=timeout,
+    )
     resp.raise_for_status()
     return resp.json()
 

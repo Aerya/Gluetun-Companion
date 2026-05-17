@@ -8,18 +8,20 @@ no HTTP proxy involved.
 API
 ---
 GET  /health           → {"vpn": true, "ip": "x.x.x.x"}  (503 if VPN not up)
-POST /test?duration=8&streams=4
+POST /test?duration=8&streams=4&method=auto
                        → {"download_mbps":…, "upload_mbps":…, "latency_ms":…,
-                           "method":"iperf3|http", "ip":…}
+                           "method":"iperf3|librespeed", "ip":…}
+
+method values:
+  auto        — try iperf3 first, fall back to librespeed if all iperf3 servers fail
+  iperf3      — iperf3 only (error 503 if all servers unreachable)
+  librespeed  — librespeed-cli only
 """
 
 import json
 import logging
-import os
 import subprocess
 import time
-import threading
-from statistics import median
 
 import requests
 from flask import Flask, jsonify, request
@@ -32,22 +34,13 @@ _PROBE_URL = 'https://www.cloudflare.com/cdn-cgi/trace'
 
 # Public iperf3 servers tried in order — first one that responds wins
 _IPERF3_SERVERS: list[tuple[str, int]] = [
-    ('bouygues.iperf.fr',    5209),
-    ('ping.online.net',      5209),
-    ('speedtest.wtnet.de',   5200),
-    ('iperf.he.net',         5201),
+    ('bouygues.iperf.fr',      5209),
+    ('ping.online.net',        5209),
+    ('speedtest.wtnet.de',     5200),
+    ('iperf.he.net',           5201),
     ('speedtest.uztelecom.uz', 5200),
 ]
 
-# HTTP direct-download endpoints (used when iperf3 fails)
-_DL_ENDPOINTS: list[tuple[str, str]] = [
-    ('Cloudflare', 'https://speed.cloudflare.com/__down?bytes=209715200'),
-    ('Hetzner-DE', 'https://fsn1-speed.hetzner.com/100MB.bin'),
-    ('OVH-FR',     'https://proof.ovh.net/files/100Mb.dat'),
-]
-_UL_ENDPOINT = 'https://speed.cloudflare.com/__up'
-
-_UPLOAD_CHUNK = os.urandom(65_536)
 
 # ---------------------------------------------------------------------------
 # Health
@@ -76,24 +69,42 @@ def health():
 def test():
     duration = max(4, min(60, int(request.args.get('duration', 8))))
     streams  = max(1, min(16, int(request.args.get('streams', 4))))
+    method   = request.args.get('method', 'auto')
 
     result: dict = {}
 
-    dl_mbps, ul_mbps, iperf_server = _try_iperf3(duration, streams)
-    if dl_mbps is not None:
-        result['method']       = 'iperf3'
-        result['iperf_server'] = iperf_server
+    if method == 'iperf3':
+        dl_mbps, ul_mbps, iperf_server = _try_iperf3(duration, streams)
+        if dl_mbps is None:
+            return jsonify({'error': 'iperf3 failed — all servers unreachable'}), 503
+        result['method']        = 'iperf3'
+        result['iperf_server']  = iperf_server
         result['download_mbps'] = dl_mbps
         result['upload_mbps']   = ul_mbps
-        logger.info('iperf3 %s → DL %.1f  UL %s Mbps',
-                    iperf_server, dl_mbps,
-                    f'{ul_mbps:.1f}' if ul_mbps else '—')
-    else:
-        logger.info('iperf3 unavailable — falling back to HTTP')
-        dl_mbps, ul_mbps = _http_test(duration, streams)
-        result['method']       = 'http'
+
+    elif method == 'librespeed':
+        dl_mbps, ul_mbps = _librespeed_run(duration)
+        if dl_mbps is None:
+            return jsonify({'error': 'librespeed failed'}), 503
+        result['method']        = 'librespeed'
         result['download_mbps'] = dl_mbps
         result['upload_mbps']   = ul_mbps
+
+    else:  # auto
+        dl_mbps, ul_mbps, iperf_server = _try_iperf3(duration, streams)
+        if dl_mbps is not None:
+            result['method']        = 'iperf3'
+            result['iperf_server']  = iperf_server
+            result['download_mbps'] = dl_mbps
+            result['upload_mbps']   = ul_mbps
+        else:
+            logger.info('iperf3 unavailable — falling back to librespeed')
+            dl_mbps, ul_mbps = _librespeed_run(duration)
+            if dl_mbps is None:
+                return jsonify({'error': 'both iperf3 and librespeed failed'}), 503
+            result['method']        = 'librespeed'
+            result['download_mbps'] = dl_mbps
+            result['upload_mbps']   = ul_mbps
 
     result['latency_ms'] = _measure_latency()
 
@@ -109,14 +120,14 @@ def test():
 
 
 # ---------------------------------------------------------------------------
-# iperf3 helpers
+# iperf3
 # ---------------------------------------------------------------------------
 
 def _iperf3_run(host: str, port: int, duration: int, streams: int, reverse: bool) -> dict:
     cmd = [
         'iperf3', '-c', host, '-p', str(port),
         '-t', str(duration), '-P', str(streams),
-        '--connect-timeout', '5000',   # 5 s max to establish connection
+        '--connect-timeout', '5000',
         '-J',
     ]
     if reverse:
@@ -131,15 +142,16 @@ def _iperf3_run(host: str, port: int, duration: int, streams: int, reverse: bool
 def _try_iperf3(duration: int, streams: int) -> tuple[float | None, float | None, str | None]:
     for host, port in _IPERF3_SERVERS:
         try:
-            # Download (server→client, reverse mode)
             dl_data = _iperf3_run(host, port, duration, streams, reverse=True)
             dl_bps  = dl_data['end']['sum_received']['bits_per_second']
 
-            # Upload (client→server)
             ul_data = _iperf3_run(host, port, duration, streams, reverse=False)
             ul_bps  = ul_data['end']['sum_sent']['bits_per_second']
 
-            return round(dl_bps / 1e6, 2), round(ul_bps / 1e6, 2), host
+            dl = round(dl_bps / 1e6, 2)
+            ul = round(ul_bps / 1e6, 2)
+            logger.info('iperf3 %s → DL %.1f  UL %.1f Mbps', host, dl, ul)
+            return dl, ul, host
 
         except Exception as exc:
             logger.warning('iperf3 %s:%d failed: %s', host, port, exc)
@@ -149,111 +161,31 @@ def _try_iperf3(duration: int, streams: int) -> tuple[float | None, float | None
 
 
 # ---------------------------------------------------------------------------
-# HTTP fallback helpers
+# librespeed
 # ---------------------------------------------------------------------------
 
-def _stream_dl(url: str, duration: float, cap: int = 150 * 1024 * 1024) -> float:
-    received = 0
-    start = time.perf_counter()
-    resp = requests.get(url, stream=True, timeout=duration + 15,
-                        headers={'User-Agent': 'gluetun-companion-sidecar/1.0'})
-    resp.raise_for_status()
-    for chunk in resp.iter_content(chunk_size=131_072):
-        received += len(chunk)
-        if received >= cap or (time.perf_counter() - start) >= duration:
-            break
-    elapsed = time.perf_counter() - start
-    if received < 512 * 1024 or elapsed < 0.5:
-        raise RuntimeError(f'Insufficient data: {received // 1024} KB in {elapsed:.1f}s')
-    return round((received * 8) / (elapsed * 1e6), 2)
-
-
-def _parallel_dl(url: str, duration: float, streams: int) -> float:
-    speeds: list[float | None] = [None] * streams
-    errors: list[str] = []
-
-    def _worker(idx: int):
-        try:
-            speeds[idx] = _stream_dl(url, duration)
-        except Exception as exc:
-            errors.append(str(exc))
-
-    threads = [threading.Thread(target=_worker, args=(i,), daemon=True) for i in range(streams)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(timeout=duration + 20)
-    good = [s for s in speeds if s is not None]
-    if not good:
-        raise RuntimeError('All streams failed: ' + ' | '.join(set(errors)))
-    return round(sum(good), 2)
-
-
-def _stream_ul(url: str, duration: float, cap: int = 150 * 1024 * 1024) -> float:
-    sent = [0]
-    t0   = [None]
-
-    def _gen():
-        t0[0] = time.perf_counter()
-        while sent[0] < cap and (time.perf_counter() - t0[0]) < duration:
-            yield _UPLOAD_CHUNK
-            sent[0] += len(_UPLOAD_CHUNK)
-
+def _librespeed_run(duration: int) -> tuple[float | None, float | None]:
     try:
-        requests.post(url, data=_gen(), timeout=duration + 15,
-                      headers={'Content-Type': 'application/octet-stream',
-                               'User-Agent': 'gluetun-companion-sidecar/1.0'})
-    except requests.exceptions.ChunkedEncodingError:
-        pass
-
-    if t0[0] is None:
-        raise RuntimeError('Upload stream never started')
-    elapsed = time.perf_counter() - t0[0]
-    if sent[0] < 512 * 1024 or elapsed < 0.5:
-        raise RuntimeError(f'Insufficient upload: {sent[0] // 1024} KB')
-    return round((sent[0] * 8) / (elapsed * 1e6), 2)
-
-
-def _parallel_ul(url: str, duration: float, streams: int) -> float:
-    speeds: list[float | None] = [None] * streams
-    errors: list[str] = []
-
-    def _worker(idx: int):
-        try:
-            speeds[idx] = _stream_ul(url, duration)
-        except Exception as exc:
-            errors.append(str(exc))
-
-    threads = [threading.Thread(target=_worker, args=(i,), daemon=True) for i in range(streams)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(timeout=duration + 20)
-    good = [s for s in speeds if s is not None]
-    if not good:
-        raise RuntimeError('All streams failed: ' + ' | '.join(set(errors)))
-    return round(sum(good), 2)
-
-
-def _http_test(duration: float, streams: int) -> tuple[float, float | None]:
-    dl_speeds: list[float] = []
-    for label, url in _DL_ENDPOINTS:
-        try:
-            mbps = _parallel_dl(url, duration, streams)
-            dl_speeds.append(mbps)
-            logger.info('HTTP DL %s ×%d → %.1f Mbps', label, streams, mbps)
-        except Exception as exc:
-            logger.warning('HTTP DL %s failed: %s', label, exc)
-
-    ul_mbps: float | None = None
-    try:
-        ul_mbps = _parallel_ul(_UL_ENDPOINT, duration, streams)
-        logger.info('HTTP UL ×%d → %.1f Mbps', streams, ul_mbps)
+        cmd = [
+            'librespeed-cli',
+            '--json',
+            '--no-icmp',
+            '--telemetry-level', 'disabled',
+            '--duration', str(duration),
+        ]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=duration + 60)
+        if r.returncode != 0:
+            raise RuntimeError(f'librespeed-cli exit {r.returncode}: {(r.stderr or "")[:120]}')
+        data = json.loads(r.stdout)
+        if isinstance(data, list):
+            data = data[0]
+        dl = round(float(data.get('download', 0)), 2)
+        ul = round(float(data.get('upload', 0)), 2)
+        logger.info('librespeed → DL %.1f  UL %.1f Mbps', dl, ul)
+        return dl or None, ul or None
     except Exception as exc:
-        logger.warning('HTTP UL failed: %s', exc)
-
-    dl = round(median(dl_speeds), 2) if dl_speeds else 0.0
-    return dl, ul_mbps
+        logger.warning('librespeed failed: %s', exc)
+        return None, None
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +209,7 @@ def _measure_latency() -> float:
             values.append((time.perf_counter() - t0) * 1000)
         except Exception:
             pass
+    from statistics import median
     return round(median(values), 1) if values else 0.0
 
 

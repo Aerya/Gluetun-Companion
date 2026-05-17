@@ -114,14 +114,6 @@
         </div>
 
         <div class="mb-2 form-check form-switch">
-          <input type="checkbox" name="speedtest_upload" class="form-check-input"
-                 id="speedtest_upload" {{ 'checked' if cfg.speedtest_upload == '1' }}>
-          <label class="form-check-label" for="speedtest_upload">
-            {{ t.set_upload_label | safe }}
-          </label>
-        </div>
-
-        <div class="mb-2 form-check form-switch">
           <input type="checkbox" name="speedtest_warmup" class="form-check-input"
                  id="speedtest_warmup" {{ 'checked' if cfg.speedtest_warmup == '1' }}>
           <label class="form-check-label" for="speedtest_warmup">
@@ -299,6 +291,17 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
             <span class="text-muted fw-normal">{{ t.set_sidecar_mode_sub }}</span>
           </label>
         </div>
+
+        {% if cfg.sidecar_mode == '1' %}
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">{{ t.set_sidecar_method_label }}</label>
+          <select name="sidecar_speedtest_method" class="form-select form-select-sm" style="max-width:280px">
+            <option value="auto"         {{ 'selected' if cfg.sidecar_speedtest_method == 'auto' }}>{{ t.set_sidecar_method_auto }}</option>
+            <option value="iperf3"       {{ 'selected' if cfg.sidecar_speedtest_method == 'iperf3' }}>{{ t.set_sidecar_method_iperf3 }}</option>
+            <option value="librespeed"   {{ 'selected' if cfg.sidecar_speedtest_method == 'librespeed' }}>{{ t.set_sidecar_method_librespeed }}</option>
+          </select>
+        </div>
+        {% endif %}
 
         <div class="d-flex align-items-center gap-2 mb-3">
           <button type="submit" class="btn btn-warning fw-semibold text-dark btn-sm">

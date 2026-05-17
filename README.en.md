@@ -31,26 +31,26 @@ It is primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_
 
 ## Features
 
-- **Automatic benchmarking** every X hours — download, upload and latency per server,
-  through the Gluetun HTTP proxy (port 8887), no shared Docker network required
-- **Multi-stream download** — N concurrent TCP connections per endpoint (configurable,
-  default: 4) to saturate the VPN tunnel the same way a download manager would
+- **Automatic benchmarking** every X hours — download, upload and latency per server
+- **Sidecar mode** (default) — a `gluetun-companion-test` container clones the real Gluetun
+  config for each server; a `gluetun-companion-sidecar` container measures speed via
+  **iperf3** or **librespeed** directly inside the VPN tunnel. Your main Gluetun is never
+  restarted during testing — only once at the end to switch to the winner
+- **HTTP proxy mode** (optional, if sidecar is disabled) — measures speed through the
+  Gluetun HTTP proxy (port 8887), no extra containers, but briefly interrupts dependent
+  services on each server switch
+- **Multi-stream download** — N concurrent TCP connections (configurable, default: 4)
 - **Automatic switching** to the fastest server (`docker compose up -d`),
   based on a weighted score (65% current measurement + 35% historical);
-  dependent services (`network_mode: service:gluetun`) are restarted automatically by Compose
+  dependent services (`network_mode: service:gluetun`) are restarted automatically
 - **5 filter types**: SERVER\_NAMES, SERVER\_COUNTRIES, SERVER\_REGIONS,
   SERVER\_CITIES, SERVER\_HOSTNAMES
-- **TCP warm-up** to avoid slow-start bias
 - Configurable **retry** per server + global timeout per server
 - **Auto-disable** a server after N consecutive failures
 - **Web UI** dark/light, **FR/EN** — auth, dashboard with sparkline, paginated history, charts,
   switches page with Mbps gain and connection time
 - **CSV export** of the full history
 - **On-demand test** of a single server from the UI without waiting for the next cycle
-- **Sidecar mode** (optional) — a `gluetun-companion-test` container clones the real Gluetun
-  config for each server; a `gluetun-companion-sidecar` container measures speed via **iperf3**
-  directly inside the VPN tunnel (no HTTP proxy). Your main Gluetun is never restarted during
-  testing — only once at the end to switch to the winner
 - **Notifications** on every switch — Discord webhook (rich embed) and/or
   [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
 - **Automatic purge** of SQLite history with configurable retention (in days)
@@ -143,25 +143,45 @@ You can also add servers manually from the same page.
 
 ## How it works
 
+**Sidecar mode (default)**
+
+```
+Benchmark cycle (every X hours)
+  └─ For each enabled server:
+       1. Pull ghcr.io/aerya/gluetun-companion-sidecar:latest
+       2. Start gluetun-companion-test
+          (clone of your Gluetun, configured for the target server)
+       3. Start gluetun-companion-sidecar
+          (network_mode: container:gluetun-companion-test)
+       4. Wait for VPN via /health polling (configurable timeout)
+       5. Speed test via iperf3 or librespeed inside the VPN tunnel
+          → DL, UL, latency recorded
+       6. Stop + remove both containers and delete the sidecar image
+       → Auto-retry on failure, global timeout per server
+       → Auto-disable after N consecutive failures
+  └─ Weighted score per server (65% current + 35% exponential history)
+  └─ Switch real Gluetun to best server (single restart)
+  └─ Discord / Apprise notification (if configured)
+  └─ Cycle record (total duration, servers tested, best server)
+```
+
+**HTTP proxy mode (optional, if sidecar is disabled)**
+
 ```
 Benchmark cycle (every X hours)
   └─ For each enabled server:
        1. Write docker-compose.override.yml
           → target variable = "<server>", all others cleared
-       2. docker compose up -d
+       2. docker compose up -d  ← real Gluetun restarts
        3. Wait for VPN via HTTP proxy polling (configurable timeout)
        4. Optional TCP warm-up (2s drained, not counted)
        5. Download from N endpoints (Cloudflare, Hetzner, Fast.com, OVH, Tele2)
           → median Mbps
        6. Upload to Cloudflare __up → Mbps
        7. Latency TTFB from N endpoints → median ms
-       8. SQLite record (DL, UL, latency, IPv4, IPv6)
-       9. Auto-retry on failure (configurable), global timeout per server
-      10. Auto-disable after N consecutive failures
-  └─ Weighted score per server (65% current + 35% exponential history)
-  └─ Switch to best server if different from current
-  └─ Discord / Apprise notification (if configured)
-  └─ Cycle record (total duration, servers tested, best server)
+       8. SQLite record
+       → Dependent services are briefly interrupted on each switch
+  └─ Weighted score → switch → notification → cycle record
 ```
 
 ---
@@ -184,11 +204,8 @@ Benchmark cycle (every X hours)
 
 ## Sidecar mode
 
-By default Gluetun Companion measures speed through Gluetun's **HTTP proxy** (port 8887).
-This is simple and requires no extra containers, but introduces proxy overhead and
-forces your real Gluetun to restart for every server tested.
-
-**Sidecar mode** is an optional alternative:
+**Sidecar mode is enabled by default.** It is more accurate and less disruptive than proxy
+mode: your real Gluetun is never restarted during testing.
 
 ```
 For each server under test
@@ -196,37 +213,41 @@ For each server under test
   └─ gluetun-companion-test   ← clone of your Gluetun (same image + env vars)
                                  configured with the target SERVER_* value
   └─ gluetun-companion-sidecar← network_mode: container:gluetun-companion-test
-                                 measures via iperf3 directly inside the VPN tunnel
+                                 measures via iperf3 or librespeed inside the VPN tunnel
   └─ Stop + remove both containers and delete the sidecar image from disk
 
 After all servers are tested
   └─ Switch real Gluetun to the best server (one single restart)
 ```
 
-**Advantages over the proxy mode:**
-- Your real Gluetun (and all services depending on it) is never interrupted during benchmarking
-- iperf3 measures raw TCP throughput without HTTP proxy overhead — more accurate on fast VPNs
-- Falls back to direct HTTP download/upload if no public iperf3 server is reachable
+**Test engine (configurable in Settings → Sidecar Mode):**
+- **Auto** (default) — iperf3 first, librespeed as fallback if all iperf3 servers are unreachable
+- **iperf3 only** — error if all iperf3 servers fail
+- **librespeed only** — librespeed-cli, public librespeed.org servers (HTTP, rarely blocked)
 
-**Enable:** Settings → Sidecar Mode → toggle on.
+**Advantages over proxy mode:**
+- Your real Gluetun (and all services depending on it) is never interrupted during benchmarking
+- Measures raw TCP throughput without HTTP proxy overhead — more accurate on fast VPNs
+
+**Proxy mode (optional):** Settings → Sidecar Mode → toggle off.
+Useful if you do not have access to the Docker socket.
 
 > ⚠ **Simultaneous connection warning** — valid for ALL VPN providers
 >
 > Sidecar mode adds **one extra concurrent VPN connection** for the entire duration of the
 > benchmark (the test Gluetun container). If your provider limits simultaneous connections
 > (AirVPN: 3–5 depending on plan; most other providers: similar), this consumes one extra slot.
-> Make sure you have a free connection slot before enabling sidecar mode.
+> Make sure you have a free connection slot.
 > This warning applies to **all providers compatible with Gluetun**, not just AirVPN.
 
 ---
 
 ## Notes
 
-- **In proxy mode (default):** the benchmark **briefly interrupts** services routing through
-  Gluetun (qBittorrent, Sonarr, Radarr…) while testing each server, because the real Gluetun
-  restarts on every switch. Schedule cycles during off-peak hours or increase the interval.
-  In **sidecar mode**, your main Gluetun is never restarted during testing — dependent services
-  are not interrupted.
+- **In sidecar mode (default):** your main Gluetun is never restarted during testing —
+  dependent services (qBittorrent, Sonarr, Radarr…) are not interrupted.
+  **In proxy mode (optional):** the benchmark briefly interrupts these services while testing
+  each server. Schedule cycles during off-peak hours or increase the interval.
 - **Frequency and server count**: each server test triggers a VPN reconnection.
   Testing 10 servers every 2 hours means 120 reconnections per day.
   Most providers (including AirVPN) limit *simultaneous* connections rather than

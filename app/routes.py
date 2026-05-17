@@ -459,7 +459,6 @@ def settings():
             set_setting('speedtest_retries',       request.form.get('speedtest_retries', '2'))
             set_setting('server_timeout_secs',     request.form.get('server_timeout_secs', '300'))
             set_setting('auto_exclude_failures',   request.form.get('auto_exclude_failures', '5'))
-            set_setting('speedtest_upload',        '1' if request.form.get('speedtest_upload') else '0')
             set_setting('speedtest_warmup',        '1' if request.form.get('speedtest_warmup') else '0')
             set_setting('speedtest_streams',       request.form.get('speedtest_streams', '4'))
             reschedule(float(request.form.get('interval', '6')))
@@ -489,10 +488,11 @@ def settings():
             flash_t('flash_proxy_saved', 'success')
 
         elif action == 'sidecar':
-            set_setting('sidecar_mode',  '1' if request.form.get('sidecar_mode') else '0')
-            set_setting('sidecar_image', request.form.get('sidecar_image', '').strip()
-                        or 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
-            set_setting('sidecar_port',  request.form.get('sidecar_port', '8766').strip() or '8766')
+            set_setting('sidecar_mode',             '1' if request.form.get('sidecar_mode') else '0')
+            set_setting('sidecar_image',            request.form.get('sidecar_image', '').strip()
+                                                    or 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
+            set_setting('sidecar_port',             request.form.get('sidecar_port', '8766').strip() or '8766')
+            set_setting('sidecar_speedtest_method', request.form.get('sidecar_speedtest_method', 'auto'))
             flash_t('flash_sidecar_saved', 'success')
 
         return redirect(url_for('main.settings'))
@@ -509,15 +509,15 @@ def settings():
         'speedtest_retries':     get_setting('speedtest_retries', '2'),
         'server_timeout_secs':   get_setting('server_timeout_secs', '300'),
         'auto_exclude_failures': get_setting('auto_exclude_failures', '5'),
-        'speedtest_upload':      get_setting('speedtest_upload', '1'),
         'speedtest_warmup':      get_setting('speedtest_warmup', '1'),
         'speedtest_streams':     get_setting('speedtest_streams', '4'),
         'db_retention_days':     get_setting('db_retention_days', '30'),
         'discord_webhook_url':   get_setting('discord_webhook_url', ''),
         'apprise_urls':          get_setting('apprise_urls', ''),
-        'sidecar_mode':          get_setting('sidecar_mode', '0'),
-        'sidecar_image':         get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest'),
-        'sidecar_port':          get_setting('sidecar_port', '8766'),
+        'sidecar_mode':             get_setting('sidecar_mode', '1'),
+        'sidecar_image':            get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest'),
+        'sidecar_port':             get_setting('sidecar_port', '8766'),
+        'sidecar_speedtest_method': get_setting('sidecar_speedtest_method', 'auto'),
     }
     return render_template('settings.html', cfg=cfg, next_run=get_next_run())
 

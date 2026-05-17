@@ -76,15 +76,15 @@ def init_db(db_path: str):
                 ('speedtest_retries',        '2'),
                 ('server_timeout_secs',      '300'),
                 ('auto_exclude_failures',    '5'),
-                ('speedtest_upload',         '1'),
                 ('speedtest_warmup',         '1'),
                 ('speedtest_streams',        '4'),
                 ('db_retention_days',        '30'),
                 ('discord_webhook_url',      ''),
                 ('apprise_urls',             ''),
-                ('sidecar_mode',             '0'),
+                ('sidecar_mode',             '1'),
                 ('sidecar_image',            'ghcr.io/aerya/gluetun-companion-sidecar:latest'),
-                ('sidecar_port',             '8766');
+                ('sidecar_port',             '8766'),
+                ('sidecar_speedtest_method', 'auto');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [
