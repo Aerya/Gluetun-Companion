@@ -98,8 +98,7 @@ services:
     volumes:
       - /home/aerya/docker/gluetun-companion:/data
       - /var/run/docker.sock:/var/run/docker.sock
-      - /home/aerya/docker/dockge-enhanced/stacks/airvpn:/compose  # <-- adapter
-      # Dans cet exemple j'utilise Dockge ([-Enhanced](https://github.com/Aerya/Dockge-Enhanced))
+      - /home/aerya/docker/dockge-enhanced/stacks/airvpn:/compose   # <-- adapter
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -115,6 +114,14 @@ networks: {}
 
 > **Note :** `COMPOSE_PROJECT` est optionnel. S'il est absent, le companion le détecte
 > automatiquement depuis le label `com.docker.compose.project` du container Gluetun.
+
+> **Companion dans la même stack que Gluetun ?**
+> Si vous placez le companion dans le même `docker-compose.yml` que Gluetun,
+> vous pouvez supprimer `extra_hosts` et utiliser le nom de service comme hôte :
+> `GLUETUN_HOST: gluetun` (ou le nom de votre service Gluetun).
+> **Attention :** dans cette configuration, si Compose décide de recréer le companion
+> (mise à jour d'image par exemple), il s'arrêtera en pleine exécution d'un benchmark.
+> La configuration en stack séparée est recommandée.
 
 ### 4. Lancer
 
@@ -175,34 +182,6 @@ Cycle de benchmark (toutes les X heures)
 
 > Les paramètres de benchmark (flux parallèles, durée, warm-up, etc.) se configurent
 > directement dans l'UI → **Paramètres**.
-
----
-
-## Structure du projet
-
-```
-gluetun-companion/
-├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
-├── run.py
-└── app/
-    ├── __init__.py        # factory Flask
-    ├── database.py        # SQLite WAL + migrations
-    ├── gluetun.py         # contrôle Docker + proxy VPN
-    ├── speedtest.py       # download / upload / latence via proxy
-    ├── notify.py          # notifications Discord + Apprise
-    ├── scheduler.py       # APScheduler + cycle complet + test unitaire
-    ├── routes.py          # routes Flask + API JSON + export CSV
-    └── templates/
-        ├── base.html      # layout, dark/light toggle, badge VPN down
-        ├── login.html
-        ├── dashboard.html # sparkline serveur actif, durée cycle
-        ├── servers.html   # import, test unitaire, auto-exclude
-        ├── history.html   # pagination, export CSV, upload
-        ├── switches.html  # gain Mbps, temps de connexion
-        └── settings.html  # tous les paramètres
-```
 
 ---
 

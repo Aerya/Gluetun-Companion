@@ -96,7 +96,6 @@ services:
       - /home/user/docker/gluetun-companion:/data
       - /var/run/docker.sock:/var/run/docker.sock
       - /home/aerya/docker/dockge-enhanced/stacks/airvpn:/compose   # <-- adapt this
-      # In this example I use Dockge ([-Enhanced](https://github.com/Aerya/Dockge-Enhanced))
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -112,6 +111,13 @@ networks: {}
 
 > **Note:** `COMPOSE_PROJECT` is optional. If omitted, the companion auto-detects it
 > from the `com.docker.compose.project` label on the running Gluetun container.
+
+> **Running the companion in the same stack as Gluetun?**
+> You can drop `extra_hosts` and use the service name as the host:
+> `GLUETUN_HOST: gluetun` (or whatever your Gluetun service is named).
+> **Caution:** in this setup, if Compose decides to recreate the companion
+> (e.g. on an image update), it will stop mid-benchmark.
+> A separate stack is recommended.
 
 ### 4. Start
 
@@ -172,34 +178,6 @@ Benchmark cycle (every X hours)
 
 > Benchmark parameters (parallel streams, duration, warm-up, etc.) are configured
 > directly in the UI → **Settings**.
-
----
-
-## Project structure
-
-```
-gluetun-companion/
-├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
-├── run.py
-└── app/
-    ├── __init__.py        # Flask factory
-    ├── database.py        # SQLite WAL + migrations
-    ├── gluetun.py         # Docker control + VPN proxy
-    ├── speedtest.py       # download / upload / latency via proxy
-    ├── notify.py          # Discord + Apprise notifications
-    ├── scheduler.py       # APScheduler + full cycle + single-server test
-    ├── routes.py          # Flask routes + JSON API + CSV export
-    └── templates/
-        ├── base.html      # layout, dark/light toggle, VPN down badge
-        ├── login.html
-        ├── dashboard.html # active server sparkline, cycle duration
-        ├── servers.html   # import, on-demand test, auto-exclude
-        ├── history.html   # pagination, CSV export, upload
-        ├── switches.html  # Mbps gain, connection time
-        └── settings.html  # all parameters
-```
 
 ---
 
