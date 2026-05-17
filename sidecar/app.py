@@ -116,11 +116,12 @@ def _iperf3_run(host: str, port: int, duration: int, streams: int, reverse: bool
     cmd = [
         'iperf3', '-c', host, '-p', str(port),
         '-t', str(duration), '-P', str(streams),
+        '--connect-timeout', '5000',   # 5 s max to establish connection
         '-J',
     ]
     if reverse:
         cmd.append('-R')
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=duration + 30)
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=duration + 10)
     if r.returncode != 0:
         stderr = (r.stderr or '').strip()
         raise RuntimeError(f'iperf3 exit {r.returncode}: {stderr[:120]}')
@@ -169,12 +170,13 @@ def _stream_dl(url: str, duration: float, cap: int = 150 * 1024 * 1024) -> float
 
 def _parallel_dl(url: str, duration: float, streams: int) -> float:
     speeds: list[float | None] = [None] * streams
+    errors: list[str] = []
 
     def _worker(idx: int):
         try:
             speeds[idx] = _stream_dl(url, duration)
-        except Exception:
-            pass
+        except Exception as exc:
+            errors.append(str(exc))
 
     threads = [threading.Thread(target=_worker, args=(i,), daemon=True) for i in range(streams)]
     for t in threads:
@@ -183,7 +185,7 @@ def _parallel_dl(url: str, duration: float, streams: int) -> float:
         t.join(timeout=duration + 20)
     good = [s for s in speeds if s is not None]
     if not good:
-        raise RuntimeError('All parallel download streams failed')
+        raise RuntimeError('All streams failed: ' + ' | '.join(set(errors)))
     return round(sum(good), 2)
 
 
@@ -214,12 +216,13 @@ def _stream_ul(url: str, duration: float, cap: int = 150 * 1024 * 1024) -> float
 
 def _parallel_ul(url: str, duration: float, streams: int) -> float:
     speeds: list[float | None] = [None] * streams
+    errors: list[str] = []
 
     def _worker(idx: int):
         try:
             speeds[idx] = _stream_ul(url, duration)
-        except Exception:
-            pass
+        except Exception as exc:
+            errors.append(str(exc))
 
     threads = [threading.Thread(target=_worker, args=(i,), daemon=True) for i in range(streams)]
     for t in threads:
@@ -228,7 +231,7 @@ def _parallel_ul(url: str, duration: float, streams: int) -> float:
         t.join(timeout=duration + 20)
     good = [s for s in speeds if s is not None]
     if not good:
-        raise RuntimeError('All parallel upload streams failed')
+        raise RuntimeError('All streams failed: ' + ' | '.join(set(errors)))
     return round(sum(good), 2)
 
 
