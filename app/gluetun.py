@@ -368,6 +368,7 @@ def create_speed_sidecar(sidecar_image: str) -> tuple[bool, str | None]:
             image=sidecar_image,
             name=_SIDECAR_NAME,
             network_mode=f'container:{_TEST_GLUETUN_NAME}',
+            cap_add=['NET_RAW'],
             detach=True,
             remove=False,
         )
