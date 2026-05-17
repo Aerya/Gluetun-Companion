@@ -182,5 +182,10 @@ Benchmark cycle (every X hours)
 - The benchmark **briefly interrupts** services routing through Gluetun
   (qBittorrent, Sonarr, Radarr…) while testing each server.
   Schedule cycles during off-peak hours or increase the interval.
+- **Frequency and server count**: each server test triggers a VPN reconnection.
+  Testing 10 servers every 2 hours means 120 reconnections per day.
+  Most providers (including AirVPN) limit *simultaneous* connections rather than
+  frequency, but a very short interval with many servers may trigger abuse detection.
+  **6 h and fewer than 10 servers** is a sensible default.
 - The `docker-compose.override.yml` file is managed automatically — do not edit it manually.
 - IPv6 is displayed if your VPN provider supports it (AirVPN does).

@@ -186,5 +186,10 @@ Cycle de benchmark (toutes les X heures)
 - Le benchmark **interrompt brièvement** les services qui transitent par Gluetun
   (qBittorrent, Sonarr, Radarr…) le temps de tester chaque serveur.
   Planifiez les cycles pendant les heures creuses ou augmentez l'intervalle.
+- **Fréquence et nombre de serveurs** : chaque test d'un serveur génère une reconnexion VPN.
+  Tester 10 serveurs toutes les 2 heures représente 120 reconnexions par jour.
+  La plupart des fournisseurs (dont AirVPN) limitent les connexions *simultanées* et non
+  la fréquence, mais un intervalle trop court avec beaucoup de serveurs peut déclencher
+  une détection d'abus. **6 h et moins de 10 serveurs** est un réglage raisonnable.
 - Le fichier `docker-compose.override.yml` est géré automatiquement — ne le modifiez pas.
 - L'IPv6 est affiché si votre fournisseur VPN le supporte (AirVPN le supporte).
