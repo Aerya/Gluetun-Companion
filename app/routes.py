@@ -420,11 +420,17 @@ def settings():
             set_setting('speedtest_upload',        '1' if request.form.get('speedtest_upload') else '0')
             set_setting('speedtest_warmup',        '1' if request.form.get('speedtest_warmup') else '0')
             set_setting('speedtest_streams',       request.form.get('speedtest_streams', '4'))
-            set_setting('db_retention_days',       request.form.get('db_retention_days', '30'))
-            set_setting('discord_webhook_url',     request.form.get('discord_webhook_url', '').strip())
-            set_setting('apprise_urls',            request.form.get('apprise_urls', '').strip())
             reschedule(float(request.form.get('interval', '6')))
             flash('Paramètres enregistrés.', 'success')
+
+        elif action == 'db_retention':
+            set_setting('db_retention_days', request.form.get('db_retention_days', '30'))
+            flash('Rétention enregistrée.', 'success')
+
+        elif action == 'notifications':
+            set_setting('discord_webhook_url', request.form.get('discord_webhook_url', '').strip())
+            set_setting('apprise_urls',        request.form.get('apprise_urls', '').strip())
+            flash('Notifications enregistrées.', 'success')
 
         elif action == 'credentials':
             new_user = request.form.get('username', '').strip()
