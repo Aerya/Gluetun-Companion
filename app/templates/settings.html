@@ -300,9 +300,21 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
           </label>
         </div>
 
-        <button type="submit" class="btn btn-warning fw-semibold text-dark btn-sm mb-3">
-          <i class="bi bi-save"></i> {{ t.cmn_save }}
-        </button>
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <button type="submit" class="btn btn-warning fw-semibold text-dark btn-sm">
+            <i class="bi bi-save"></i> {{ t.cmn_save }}
+          </button>
+          {% if cfg.sidecar_mode == '1' %}
+          <span class="badge bg-warning text-dark">
+            <i class="bi bi-boxes"></i> SIDECAR ON
+          </span>
+          {% endif %}
+        </div>
+        {% if cfg.sidecar_mode == '1' %}
+        <p class="text-muted mb-0" style="font-size:.8rem">
+          <i class="bi bi-info-circle"></i> {{ t.set_sidecar_active_note }}
+        </p>
+        {% endif %}
 
         <details class="mt-1">
           <summary class="text-muted small" style="cursor:pointer">
