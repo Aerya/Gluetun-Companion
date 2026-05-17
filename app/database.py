@@ -68,6 +68,7 @@ def init_db(db_path: str):
                 ('auto_switch',              '1'),
                 ('connection_wait_seconds',  '45'),
                 ('benchmark_running',        '0'),
+                ('benchmark_current_server',''),
                 ('proxy_username',           ''),
                 ('proxy_password',           ''),
                 ('speedtest_samples',        '3'),

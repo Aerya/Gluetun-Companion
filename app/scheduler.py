@@ -58,11 +58,13 @@ def _test_one_server(
     Full test cycle for one server: switch → wait → probe IPs → DL → UL → LAT.
     Returns a result dict on success, raises on failure.
     """
+    from .database import set_setting
     from .gluetun import FILTER_VARS, switch_server, wait_for_vpn, get_public_ips, restart_network_dependents
     from .speedtest import test_download, test_latency, test_upload
 
     label = f"{FILTER_VARS.get(filter_type, 'SERVER_NAMES')}={server_name}"
     logger.info('Testing: %s', label)
+    set_setting('benchmark_current_server', server_name)
 
     ok, err = switch_server(server_name, filter_type, container, compose_dir, project)
     if not ok:
@@ -165,14 +167,16 @@ def _test_one_server_sidecar(
 
     The real Gluetun container is never touched during this step.
     """
+    from .database import set_setting
     from .gluetun import (
         FILTER_VARS,
-        create_test_gluetun, create_speed_sidecar,
+        create_test_gluetun, create_speed_sidecar, stream_sidecar_logs,
         wait_for_sidecar, run_sidecar_test, cleanup_test_containers,
     )
 
     label = f"{FILTER_VARS.get(filter_type, 'SERVER_NAMES')}={server_name}"
     logger.info('Sidecar testing: %s', label)
+    set_setting('benchmark_current_server', server_name)
 
     try:
         # Step 1 — launch test Gluetun with the target server
@@ -184,6 +188,9 @@ def _test_one_server_sidecar(
         ok, err = create_speed_sidecar(sidecar_image)
         if not ok:
             raise RuntimeError(f'Speed sidecar creation failed: {err}')
+
+        # Forward sidecar logs to companion logger
+        stream_sidecar_logs()
 
         # Step 3 — wait for VPN connectivity on sidecar
         connected, connect_secs = wait_for_sidecar(sidecar_host, sidecar_port, timeout=wait_secs)
@@ -480,6 +487,7 @@ def _do_benchmark(app):
 
     finally:
         set_setting('benchmark_running', '0')
+        set_setting('benchmark_current_server', '')
 
 
 # ---------------------------------------------------------------------------

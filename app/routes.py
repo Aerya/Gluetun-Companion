@@ -518,9 +518,10 @@ def api_status():
     px_user = get_setting('proxy_username') or None
     px_pass = get_setting('proxy_password') or None
     return jsonify({
-        'vpn_status':        get_vpn_status(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
-        'public_ip':         get_public_ip(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
-        'current_server':    format_filters(get_current_filters(cfg['GLUETUN_CONTAINER'])),
-        'benchmark_running': get_setting('benchmark_running', '0') == '1',
-        'next_run':          str(get_next_run()) if get_next_run() else None,
+        'vpn_status':             get_vpn_status(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
+        'public_ip':              get_public_ip(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
+        'current_server':         format_filters(get_current_filters(cfg['GLUETUN_CONTAINER'])),
+        'benchmark_running':      get_setting('benchmark_running', '0') == '1',
+        'current_server_testing': get_setting('benchmark_current_server', ''),
+        'next_run':               str(get_next_run()) if get_next_run() else None,
     })

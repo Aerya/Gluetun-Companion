@@ -56,6 +56,11 @@ def create_app():
     os.makedirs(app.config['DATA_DIR'], exist_ok=True)
     init_db(app.config['DB_PATH'])
 
+    # Reset stale benchmark flags left by a previous crash/restart
+    from .database import set_setting
+    set_setting('benchmark_running', '0')
+    set_setting('benchmark_current_server', '')
+
     @app.context_processor
     def inject_i18n():
         lang = session.get('lang', 'fr')

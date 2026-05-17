@@ -12,6 +12,7 @@ Network architecture (no shared Docker network required)
 
 import os
 import subprocess
+import threading
 import time
 import logging
 from urllib.parse import quote
@@ -368,6 +369,24 @@ def create_speed_sidecar(sidecar_image: str) -> tuple[bool, str | None]:
         return True, None
     except Exception as exc:
         return False, str(exc)
+
+
+def stream_sidecar_logs() -> None:
+    """Forward gluetun-companion-sidecar container logs to the companion logger (background thread)."""
+    _sidecar_logger = logging.getLogger('sidecar')
+
+    def _run():
+        try:
+            client    = docker.from_env()
+            container = client.containers.get(_SIDECAR_NAME)
+            for raw in container.logs(stream=True, follow=True):
+                line = raw.decode('utf-8', errors='replace').strip()
+                if line:
+                    _sidecar_logger.info(line)
+        except Exception as exc:
+            _sidecar_logger.debug('Log stream ended: %s', exc)
+
+    threading.Thread(target=_run, daemon=True, name='sidecar-logs').start()
 
 
 def wait_for_sidecar(

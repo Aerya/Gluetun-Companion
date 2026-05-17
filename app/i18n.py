@@ -67,6 +67,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'dash_see_all':         'Tout voir',
         'dash_no_tests':        'Aucun test effectué — ajoutez des serveurs et lancez un benchmark.',
         'dash_already_running': 'Un benchmark est déjà en cours.',
+        'dash_testing_server':  'Test en cours :',
         'chart_mbps_avg':       'Mbps (moy.)',
 
         # ── Servers ──
@@ -305,6 +306,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'dash_see_all':         'See all',
         'dash_no_tests':        'No tests yet — add servers and run a benchmark.',
         'dash_already_running': 'A benchmark is already running.',
+        'dash_testing_server':  'Testing:',
         'chart_mbps_avg':       'Mbps (avg.)',
 
         # ── Servers ──

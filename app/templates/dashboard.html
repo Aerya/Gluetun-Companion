@@ -68,6 +68,13 @@
 
 </div>
 
+{# ── Live benchmark banner ─────────────────────────────────────────────── #}
+<div class="live-banner alert alert-success d-flex align-items-center gap-2 py-2 px-3 mb-3 {{ '' if benchmark_running else 'd-none' }}"
+     style="font-size:.85rem">
+  <span class="spinner-border spinner-border-sm flex-shrink-0"></span>
+  <span>{{ t.dash_testing_server }} <strong><span id="live-testing"></span></strong></span>
+</div>
+
 {# ── Sparkline active server ───────────────────────────────────────────── #}
 {% if sparkline_dl %}
 <div class="card mb-4 p-3">
@@ -163,18 +170,24 @@ function pollStatus() {
   fetch('{{ url_for("main.api_status") }}')
     .then(r => r.json())
     .then(d => {
-      const btn = document.getElementById('btn-trigger');
+      const btn    = document.getElementById('btn-trigger');
+      const liveEl = document.getElementById('live-testing');
       if (d.benchmark_running) {
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning;
+        if (liveEl && d.current_server_testing) {
+          liveEl.textContent = d.current_server_testing;
+          liveEl.closest('.live-banner').classList.remove('d-none');
+        }
       } else {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow;
+        if (liveEl) liveEl.closest('.live-banner').classList.add('d-none');
       }
     })
     .catch(() => {});
 }
-setInterval(pollStatus, 5000);
+setInterval(pollStatus, 3000);
 
 // ── Trigger benchmark ────────────────────────────────────────────────────
 function triggerBenchmark() {
