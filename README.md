@@ -227,9 +227,12 @@ Une fois tous les serveurs testés
 
 ## Notes
 
-- Le benchmark **interrompt brièvement** les services qui transitent par Gluetun
-  (qBittorrent, Sonarr, Radarr…) le temps de tester chaque serveur.
-  Planifiez les cycles pendant les heures creuses ou augmentez l'intervalle.
+- **En mode proxy (défaut) :** le benchmark **interrompt brièvement** les services qui
+  transitent par Gluetun (qBittorrent, Sonarr, Radarr…) le temps de tester chaque serveur,
+  car le vrai Gluetun redémarre à chaque bascule. Planifiez les cycles pendant les heures
+  creuses ou augmentez l'intervalle.
+  En **mode sidecar**, votre Gluetun principal n'est jamais relancé pendant les tests —
+  les services dépendants ne sont pas interrompus.
 - **Fréquence et nombre de serveurs** : chaque test d'un serveur génère une reconnexion VPN.
   Tester 10 serveurs toutes les 2 heures représente 120 reconnexions par jour.
   La plupart des fournisseurs (dont AirVPN) limitent les connexions *simultanées* et non

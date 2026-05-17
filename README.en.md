@@ -220,9 +220,11 @@ After all servers are tested
 
 ## Notes
 
-- The benchmark **briefly interrupts** services routing through Gluetun
-  (qBittorrent, Sonarr, Radarr…) while testing each server.
-  Schedule cycles during off-peak hours or increase the interval.
+- **In proxy mode (default):** the benchmark **briefly interrupts** services routing through
+  Gluetun (qBittorrent, Sonarr, Radarr…) while testing each server, because the real Gluetun
+  restarts on every switch. Schedule cycles during off-peak hours or increase the interval.
+  In **sidecar mode**, your main Gluetun is never restarted during testing — dependent services
+  are not interrupted.
 - **Frequency and server count**: each server test triggers a VPN reconnection.
   Testing 10 servers every 2 hours means 120 reconnections per day.
   Most providers (including AirVPN) limit *simultaneous* connections rather than
