@@ -97,9 +97,14 @@ def dashboard():
     current_server    = format_filters(current_filters)
     benchmark_running = get_setting('benchmark_running', '0') == '1'
 
+    _ALLOWED_LIMITS = {10, 20, 50}
+    recent_limit = request.args.get('limit', 15, type=int)
+    if recent_limit not in _ALLOWED_LIMITS:
+        recent_limit = 15
+
     with get_db() as db:
         recent_tests = db.execute(
-            'SELECT * FROM speed_tests ORDER BY tested_at DESC LIMIT 15'
+            'SELECT * FROM speed_tests ORDER BY tested_at DESC LIMIT ?', (recent_limit,)
         ).fetchall()
         last_switch = db.execute(
             'SELECT * FROM switches ORDER BY switched_at DESC LIMIT 1'
@@ -145,6 +150,7 @@ def dashboard():
         public_ip=public_ip,
         current_server=current_server,
         recent_tests=recent_tests,
+        recent_limit=recent_limit,
         last_switch=last_switch,
         server_count=server_count,
         server_stats=server_stats,
@@ -348,6 +354,8 @@ def history():
     sort          = request.args.get('sort', 'date_desc')
     server_filter = request.args.get('server', '').strip()
     method_filter = request.args.get('method', '')
+    from_date     = request.args.get('from_date', '').strip()
+    to_date       = request.args.get('to_date', '').strip()
 
     if sort not in _SORT_COLS:
         sort = 'date_desc'
@@ -361,6 +369,12 @@ def history():
     if method_filter in ('proxy', 'sidecar'):
         where_parts.append('test_method = ?')
         params.append(method_filter)
+    if from_date:
+        where_parts.append("DATE(tested_at) >= ?")
+        params.append(from_date)
+    if to_date:
+        where_parts.append("DATE(tested_at) <= ?")
+        params.append(to_date)
     where_sql = ('WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
 
     offset = (page - 1) * _HISTORY_PER_PAGE
@@ -394,6 +408,7 @@ def history():
         tests=tests, per_server=per_server,
         page=page, pages=pages, total=total,
         sort=sort, server_filter=server_filter, method_filter=method_filter,
+        from_date=from_date, to_date=to_date,
         server_names=server_names,
     )
 

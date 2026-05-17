@@ -12,7 +12,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'nav_settings':     'Paramètres',
         'nav_theme_toggle': 'Changer le thème',
         'nav_logout':       'Déconnexion',
-        'nav_lang_switch':  'EN',
+        'nav_lang_switch':  '🇬🇧',
 
         # ── Login ──
         'login_username':   'Utilisateur',
@@ -114,6 +114,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'hist_empty':       'Aucun test enregistré.',
         'hist_filter_all_servers': 'Tous les serveurs',
         'hist_filter_all_methods': 'Toutes les méthodes',
+        'hist_date_from':          'Depuis',
+        'hist_date_to':            'Jusqu\'au',
         'hist_method_proxy':   'Proxy HTTP',
         'hist_method_sidecar': 'Sidecar',
         'hist_sort_date_desc': 'Date ↓',
@@ -264,7 +266,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'nav_settings':     'Settings',
         'nav_theme_toggle': 'Toggle theme',
         'nav_logout':       'Logout',
-        'nav_lang_switch':  'FR',
+        'nav_lang_switch':  '🇫🇷',
 
         # ── Login ──
         'login_username':   'Username',
@@ -366,6 +368,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'hist_empty':       'No tests recorded.',
         'hist_filter_all_servers': 'All servers',
         'hist_filter_all_methods': 'All methods',
+        'hist_date_from':          'From',
+        'hist_date_to':            'To',
         'hist_method_proxy':   'HTTP proxy',
         'hist_method_sidecar': 'Sidecar',
         'hist_sort_date_desc': 'Date ↓',
