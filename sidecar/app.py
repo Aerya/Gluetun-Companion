@@ -8,20 +8,35 @@ no HTTP proxy involved.
 API
 ---
 GET  /health           → {"vpn": true, "ip": "x.x.x.x"}  (503 if VPN not up)
-POST /test?duration=8&streams=4&method=auto
-                       → {"download_mbps":…, "upload_mbps":…, "latency_ms":…,
-                           "method":"iperf3|librespeed", "ip":…}
+POST /test?duration=8&streams=4&method=dual&iperf_fallback=1
+                       → {
+                           "download_mbps": 450.0,     # avg of succeeded sources
+                           "upload_mbps": 220.0,
+                           "latency_ms": 15.0,
+                           "method": "dual",
+                           "ip": "x.x.x.x",
+                           "dl_ookla": 460.0,          # null if not run / failed
+                           "ul_ookla": 230.0,
+                           "dl_librespeed": 440.0,
+                           "ul_librespeed": 210.0,
+                           "dl_iperf3": null,
+                           "ul_iperf3": null,
+                           "ookla_server": "Paris (Bouygues)",
+                           "iperf_server": null
+                         }
 
 method values:
-  auto        — try iperf3 first, fall back to librespeed if all iperf3 servers fail
-  iperf3      — iperf3 only (error 503 if all servers unreachable)
-  librespeed  — librespeed-cli only
+  dual        — Ookla + librespeed in parallel; iperf3 fallback if both fail (when iperf_fallback=1)
+  ookla       — Ookla only; iperf3 fallback if it fails (when iperf_fallback=1)
+  librespeed  — librespeed-cli only; iperf3 fallback if it fails (when iperf_fallback=1)
+  iperf3      — iperf3 only (no fallback)
 """
 
 import json
 import logging
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from flask import Flask, jsonify, request
@@ -67,46 +82,72 @@ def health():
 
 @app.route('/test', methods=['GET', 'POST'])
 def test():
-    duration = max(4, min(60, int(request.args.get('duration', 8))))
-    streams  = max(1, min(16, int(request.args.get('streams', 4))))
-    method   = request.args.get('method', 'auto')
+    duration       = max(4, min(60, int(request.args.get('duration', 8))))
+    streams        = max(1, min(16, int(request.args.get('streams', 4))))
+    method         = request.args.get('method', 'dual')
+    iperf_fallback = request.args.get('iperf_fallback', '1') == '1'
 
-    result: dict = {}
+    # Normalise legacy 'auto' value
+    if method == 'auto':
+        method = 'dual'
+
+    result: dict = {
+        'dl_ookla': None, 'ul_ookla': None, 'ookla_server': None,
+        'dl_librespeed': None, 'ul_librespeed': None,
+        'dl_iperf3': None, 'ul_iperf3': None, 'iperf_server': None,
+    }
 
     if method == 'iperf3':
-        dl_mbps, ul_mbps, iperf_server = _try_iperf3(duration, streams)
-        if dl_mbps is None:
+        dl, ul, srv = _try_iperf3(duration, streams)
+        if dl is None:
             return jsonify({'error': 'iperf3 failed — all servers unreachable'}), 503
-        result['method']        = 'iperf3'
-        result['iperf_server']  = iperf_server
-        result['download_mbps'] = dl_mbps
-        result['upload_mbps']   = ul_mbps
+        result['dl_iperf3']    = dl
+        result['ul_iperf3']    = ul
+        result['iperf_server'] = srv
+
+    elif method == 'ookla':
+        dl, ul, srv = _ookla_run(duration)
+        if dl is None and iperf_fallback:
+            logger.info('Ookla failed — trying iperf3 fallback')
+            dl, ul, srv2 = _try_iperf3(duration, streams)
+            result['dl_iperf3']    = dl
+            result['ul_iperf3']    = ul
+            result['iperf_server'] = srv2
+        else:
+            result['dl_ookla']    = dl
+            result['ul_ookla']    = ul
+            result['ookla_server'] = srv
+        if dl is None:
+            return jsonify({'error': 'ookla failed and all fallbacks exhausted'}), 503
 
     elif method == 'librespeed':
-        dl_mbps, ul_mbps = _librespeed_run(duration)
-        if dl_mbps is None:
-            return jsonify({'error': 'librespeed failed'}), 503
-        result['method']        = 'librespeed'
-        result['download_mbps'] = dl_mbps
-        result['upload_mbps']   = ul_mbps
-
-    else:  # auto
-        dl_mbps, ul_mbps, iperf_server = _try_iperf3(duration, streams)
-        if dl_mbps is not None:
-            result['method']        = 'iperf3'
-            result['iperf_server']  = iperf_server
-            result['download_mbps'] = dl_mbps
-            result['upload_mbps']   = ul_mbps
+        dl, ul = _librespeed_run(duration)
+        if dl is None and iperf_fallback:
+            logger.info('librespeed failed — trying iperf3 fallback')
+            dl, ul, srv2 = _try_iperf3(duration, streams)
+            result['dl_iperf3']    = dl
+            result['ul_iperf3']    = ul
+            result['iperf_server'] = srv2
         else:
-            logger.info('iperf3 unavailable — falling back to librespeed')
-            dl_mbps, ul_mbps = _librespeed_run(duration)
-            if dl_mbps is None:
-                return jsonify({'error': 'both iperf3 and librespeed failed'}), 503
-            result['method']        = 'librespeed'
-            result['download_mbps'] = dl_mbps
-            result['upload_mbps']   = ul_mbps
+            result['dl_librespeed'] = dl
+            result['ul_librespeed'] = ul
+        if dl is None:
+            return jsonify({'error': 'librespeed failed and all fallbacks exhausted'}), 503
 
-    result['latency_ms'] = _measure_latency()
+    else:  # dual
+        _run_dual(duration, streams, iperf_fallback, result)
+        # Check that at least one source succeeded
+        if (result['dl_ookla'] is None and result['dl_librespeed'] is None
+                and result['dl_iperf3'] is None):
+            return jsonify({'error': 'all speed test sources failed'}), 503
+
+    # Compute averaged download_mbps / upload_mbps from all sources that succeeded
+    dl_values = [v for v in (result['dl_ookla'], result['dl_librespeed'], result['dl_iperf3']) if v]
+    ul_values = [v for v in (result['ul_ookla'], result['ul_librespeed'], result['ul_iperf3']) if v]
+    result['download_mbps'] = round(sum(dl_values) / len(dl_values), 2) if dl_values else None
+    result['upload_mbps']   = round(sum(ul_values) / len(ul_values), 2) if ul_values else None
+    result['method']        = method
+    result['latency_ms']    = _measure_latency()
 
     try:
         resp = requests.get(_PROBE_URL, timeout=10)
@@ -117,6 +158,114 @@ def test():
         pass
 
     return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Dual parallel runner
+# ---------------------------------------------------------------------------
+
+def _run_dual(duration: int, streams: int, iperf_fallback: bool, result: dict) -> None:
+    """Run Ookla + librespeed in parallel; mutates `result` in place."""
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        fut_ookla = ex.submit(_ookla_run, duration)
+        fut_libre = ex.submit(_librespeed_run, duration)
+
+        futures = {fut_ookla: 'ookla', fut_libre: 'libre'}
+        for fut in as_completed(futures):
+            kind = futures[fut]
+            try:
+                if kind == 'ookla':
+                    dl, ul, srv = fut.result()
+                    result['dl_ookla']     = dl
+                    result['ul_ookla']     = ul
+                    result['ookla_server'] = srv
+                else:
+                    dl, ul = fut.result()
+                    result['dl_librespeed'] = dl
+                    result['ul_librespeed'] = ul
+            except Exception as exc:
+                logger.warning('Parallel %s failed: %s', kind, exc)
+
+    # Both failed → try iperf3 as fallback
+    if result['dl_ookla'] is None and result['dl_librespeed'] is None and iperf_fallback:
+        logger.info('Ookla + librespeed both failed — trying iperf3 fallback')
+        dl, ul, srv = _try_iperf3(duration, streams)
+        result['dl_iperf3']    = dl
+        result['ul_iperf3']    = ul
+        result['iperf_server'] = srv
+
+
+# ---------------------------------------------------------------------------
+# Ookla Speedtest CLI
+# ---------------------------------------------------------------------------
+
+def _ookla_run(duration: int) -> tuple[float | None, float | None, str | None]:
+    try:
+        cmd = [
+            'speedtest',
+            '--accept-license', '--accept-gdpr',
+            '--format=json',
+        ]
+        # Ookla controls its own test duration; give generous subprocess timeout
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=duration * 3 + 120)
+
+        result_obj = None
+        for line in r.stdout.strip().splitlines():
+            try:
+                obj = json.loads(line)
+                if obj.get('type') == 'result':
+                    result_obj = obj
+            except Exception:
+                pass
+
+        if not result_obj:
+            raise RuntimeError(
+                f'no result in ookla output (exit {r.returncode}): {r.stdout[:200]}'
+            )
+
+        dl = round(result_obj['download']['bandwidth'] * 8 / 1_000_000, 2)
+        ul = round(result_obj['upload']['bandwidth'] * 8 / 1_000_000, 2)
+
+        srv_name = result_obj.get('server', {}).get('name', '')
+        srv_loc  = result_obj.get('server', {}).get('location', '')
+        srv_str  = f'{srv_name}, {srv_loc}' if srv_loc else srv_name
+
+        logger.info('ookla → DL %.1f  UL %.1f Mbps  [%s]', dl, ul, srv_str)
+        return dl or None, ul or None, srv_str or None
+
+    except Exception as exc:
+        logger.warning('ookla failed: %s', exc)
+        return None, None, None
+
+
+# ---------------------------------------------------------------------------
+# librespeed
+# ---------------------------------------------------------------------------
+
+def _librespeed_run(duration: int) -> tuple[float | None, float | None]:
+    try:
+        cmd = [
+            'librespeed-cli',
+            '--json',
+            '--no-icmp',
+            '--telemetry-level', 'disabled',
+            '--duration', str(duration),
+        ]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=duration + 60)
+        if r.returncode != 0:
+            raise RuntimeError(f'librespeed-cli exit {r.returncode}: {(r.stderr or "")[:120]}')
+        data = json.loads(r.stdout)
+        if isinstance(data, list):
+            data = data[0] if data else None
+        if not data:
+            raise RuntimeError('empty or null librespeed output')
+        dl = round(float(data.get('download', 0)), 2)
+        ul = round(float(data.get('upload', 0)), 2)
+        logger.info('librespeed → DL %.1f  UL %.1f Mbps', dl, ul)
+        return dl or None, ul or None
+    except Exception as exc:
+        logger.warning('librespeed failed: %s', exc)
+        return None, None
 
 
 # ---------------------------------------------------------------------------
@@ -158,36 +307,6 @@ def _try_iperf3(duration: int, streams: int) -> tuple[float | None, float | None
             continue
 
     return None, None, None
-
-
-# ---------------------------------------------------------------------------
-# librespeed
-# ---------------------------------------------------------------------------
-
-def _librespeed_run(duration: int) -> tuple[float | None, float | None]:
-    try:
-        cmd = [
-            'librespeed-cli',
-            '--json',
-            '--no-icmp',
-            '--telemetry-level', 'disabled',
-            '--duration', str(duration),
-        ]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=duration + 60)
-        if r.returncode != 0:
-            raise RuntimeError(f'librespeed-cli exit {r.returncode}: {(r.stderr or "")[:120]}')
-        data = json.loads(r.stdout)
-        if isinstance(data, list):
-            data = data[0] if data else None
-        if not data:
-            raise RuntimeError('empty or null librespeed output')
-        dl = round(float(data.get('download', 0)), 2)
-        ul = round(float(data.get('upload', 0)), 2)
-        logger.info('librespeed → DL %.1f  UL %.1f Mbps', dl, ul)
-        return dl or None, ul or None
-    except Exception as exc:
-        logger.warning('librespeed failed: %s', exc)
-        return None, None
 
 
 # ---------------------------------------------------------------------------

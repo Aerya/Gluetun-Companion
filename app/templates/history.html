@@ -114,11 +114,25 @@
             {% if r.download_mbps %}
               {% set cls = 'speed-good' if r.download_mbps > 50 else ('speed-ok' if r.download_mbps > 15 else 'speed-bad') %}
               <span class="fw-semibold {{ cls }}">{{ '%.1f'|format(r.download_mbps) }} Mbps</span>
+              {% if r.dl_ookla or r.dl_librespeed or r.dl_iperf3 %}
+              <div style="font-size:.7rem;color:var(--muted);line-height:1.6;margin-top:2px">
+                {% if r.dl_ookla %}<span title="Ookla">⚡ {{ '%.0f'|format(r.dl_ookla) }}</span>{% endif %}
+                {% if r.dl_librespeed %}<span title="librespeed" class="ms-1">🟢 {{ '%.0f'|format(r.dl_librespeed) }}</span>{% endif %}
+                {% if r.dl_iperf3 %}<span title="iperf3" class="ms-1">📡 {{ '%.0f'|format(r.dl_iperf3) }}</span>{% endif %}
+              </div>
+              {% endif %}
             {% else %}—{% endif %}
           </td>
           <td>
             {% if r.upload_mbps %}
               <span class="text-info">{{ '%.1f'|format(r.upload_mbps) }} Mbps</span>
+              {% if r.ul_ookla or r.ul_librespeed or r.ul_iperf3 %}
+              <div style="font-size:.7rem;color:var(--muted);line-height:1.6;margin-top:2px">
+                {% if r.ul_ookla %}<span title="Ookla">⚡ {{ '%.0f'|format(r.ul_ookla) }}</span>{% endif %}
+                {% if r.ul_librespeed %}<span title="librespeed" class="ms-1">🟢 {{ '%.0f'|format(r.ul_librespeed) }}</span>{% endif %}
+                {% if r.ul_iperf3 %}<span title="iperf3" class="ms-1">📡 {{ '%.0f'|format(r.ul_iperf3) }}</span>{% endif %}
+              </div>
+              {% endif %}
             {% else %}—{% endif %}
           </td>
           <td>{{ ('%.0f ms'|format(r.latency_ms)) if r.latency_ms else '—' }}</td>

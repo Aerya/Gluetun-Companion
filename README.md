@@ -37,9 +37,11 @@ documentée ici :
 - **Benchmark automatique** toutes les X heures — download, upload et latence par serveur
 - **Mode Sidecar** (défaut) — un container `gluetun-companion-test` clone la config réelle
   de Gluetun pour chaque serveur ; `gluetun-companion-sidecar` mesure le débit via
-  **iperf3** ou **librespeed** directement dans le tunnel VPN. Votre Gluetun principal
-  n'est jamais relancé pendant les tests — seulement une fois à la fin pour basculer vers
-  le meilleur serveur
+  **Ookla + librespeed en parallèle** (mode dual, défaut), **Ookla seul**, **librespeed seul**
+  ou **iperf3** directement dans le tunnel VPN. Votre Gluetun principal n'est jamais relancé
+  pendant les tests — seulement une fois à la fin pour basculer vers le meilleur serveur
+- **Résultats multi-sources** — les vitesses Ookla, librespeed et iperf3 sont stockées
+  séparément et affichées dans le dashboard et l'historique
 - **Mode Proxy HTTP** (optionnel, si sidecar désactivé) — mesure via le proxy HTTP Gluetun
   (port 8887), sans container supplémentaire, mais interrompt brièvement les services
   dépendants à chaque bascule de serveur
@@ -159,8 +161,10 @@ Cycle de benchmark (toutes les X heures)
        3. Lancement de gluetun-companion-sidecar
           (network_mode: container:gluetun-companion-test)
        4. Attente connexion VPN via /health polling (timeout configurable)
-       5. Test de débit via iperf3 ou librespeed dans le tunnel VPN
-          → DL, UL, latence enregistrés
+       5. Test de débit dans le tunnel VPN (selon moteur configuré) :
+          - Dual (défaut) : Ookla + librespeed en parallèle, iperf3 en fallback
+          - Ookla seul, librespeed seul ou iperf3 seul (configurable)
+          → DL, UL, latence enregistrés par source
        6. Stop + suppression des containers et de l'image sidecar
        → Retry automatique si échec, timeout global par serveur
        → Auto-désactivation si N échecs consécutifs
@@ -218,7 +222,7 @@ Pour chaque serveur à tester
   └─ gluetun-companion-test    ← copie de votre Gluetun (même image + variables d'env)
                                   configurée avec la valeur SERVER_* cible
   └─ gluetun-companion-sidecar ← network_mode: container:gluetun-companion-test
-                                  mesure via iperf3 ou librespeed dans le tunnel VPN
+                                  mesure via Ookla + librespeed (parallèle) dans le tunnel VPN
   └─ Stop + suppression des deux containers et de l'image sidecar du disque
 
 Une fois tous les serveurs testés
@@ -226,9 +230,15 @@ Une fois tous les serveurs testés
 ```
 
 **Moteur de test (configurable dans Paramètres → Mode Sidecar) :**
-- **Auto** (défaut) — iperf3 en priorité, librespeed en fallback si tous les serveurs iperf3 sont injoignables
-- **iperf3 uniquement** — erreur si tous les serveurs iperf3 échouent
+- **Dual** (défaut) — Ookla (Speedtest.net) + librespeed en parallèle ; les résultats des deux sources
+  sont stockés séparément et la moyenne sert de valeur principale pour le classement
+- **Ookla uniquement** — CLI officiel Speedtest.net, infrastructure massive, rarement bloquée par les VPN
 - **librespeed uniquement** — librespeed-cli, serveurs publics librespeed.org (HTTP, rarement bloqué)
+- **iperf3 uniquement** — connexions TCP directes vers des serveurs publics iperf3 (souvent bloqués par les IPs VPN)
+
+**Options de fallback (configurables) :**
+- **iperf3 en fallback** (activé par défaut) — si toutes les sources principales échouent, iperf3 est tenté en dernier recours
+- **Proxy HTTP en fallback** (désactivé par défaut) — si le sidecar échoue complètement, bascule sur le mode proxy HTTP
 
 **Avantages par rapport au mode proxy :**
 - Votre vrai Gluetun (et tous les services qui en dépendent) n'est jamais interrompu pendant le benchmark

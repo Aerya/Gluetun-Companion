@@ -84,7 +84,9 @@ def init_db(db_path: str):
                 ('sidecar_mode',             '1'),
                 ('sidecar_image',            'ghcr.io/aerya/gluetun-companion-sidecar:latest'),
                 ('sidecar_port',             '8766'),
-                ('sidecar_speedtest_method', 'auto');
+                ('sidecar_speedtest_method', 'dual'),
+                ('sidecar_iperf_fallback',   '1'),
+                ('sidecar_proxy_fallback',   '0');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [
@@ -98,6 +100,12 @@ def init_db(db_path: str):
             "ALTER TABLE switches ADD COLUMN to_mbps REAL",
             "ALTER TABLE switches ADD COLUMN to_ipv4 TEXT",
             "ALTER TABLE switches ADD COLUMN to_ipv6 TEXT",
+            "ALTER TABLE speed_tests ADD COLUMN dl_ookla REAL",
+            "ALTER TABLE speed_tests ADD COLUMN ul_ookla REAL",
+            "ALTER TABLE speed_tests ADD COLUMN dl_librespeed REAL",
+            "ALTER TABLE speed_tests ADD COLUMN ul_librespeed REAL",
+            "ALTER TABLE speed_tests ADD COLUMN dl_iperf3 REAL",
+            "ALTER TABLE speed_tests ADD COLUMN ul_iperf3 REAL",
         ]:
             try:
                 db.execute(stmt)

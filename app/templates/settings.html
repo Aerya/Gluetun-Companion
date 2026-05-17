@@ -295,11 +295,30 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
         {% if cfg.sidecar_mode == '1' %}
         <div class="mb-3">
           <label class="form-label small fw-semibold">{{ t.set_sidecar_method_label }}</label>
-          <select name="sidecar_speedtest_method" class="form-select form-select-sm" style="max-width:280px">
-            <option value="auto"         {{ 'selected' if cfg.sidecar_speedtest_method == 'auto' }}>{{ t.set_sidecar_method_auto }}</option>
-            <option value="iperf3"       {{ 'selected' if cfg.sidecar_speedtest_method == 'iperf3' }}>{{ t.set_sidecar_method_iperf3 }}</option>
-            <option value="librespeed"   {{ 'selected' if cfg.sidecar_speedtest_method == 'librespeed' }}>{{ t.set_sidecar_method_librespeed }}</option>
+          <select name="sidecar_speedtest_method" class="form-select form-select-sm" style="max-width:340px">
+            <option value="dual"       {{ 'selected' if cfg.sidecar_speedtest_method in ('dual', 'auto') }}>{{ t.set_sidecar_method_dual }}</option>
+            <option value="ookla"      {{ 'selected' if cfg.sidecar_speedtest_method == 'ookla' }}>{{ t.set_sidecar_method_ookla }}</option>
+            <option value="librespeed" {{ 'selected' if cfg.sidecar_speedtest_method == 'librespeed' }}>{{ t.set_sidecar_method_librespeed }}</option>
+            <option value="iperf3"     {{ 'selected' if cfg.sidecar_speedtest_method == 'iperf3' }}>{{ t.set_sidecar_method_iperf3 }}</option>
           </select>
+        </div>
+
+        {% if cfg.sidecar_speedtest_method != 'iperf3' %}
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="sidecar_iperf_fallback" class="form-check-input"
+                 id="sidecar_iperf_fallback" {{ 'checked' if cfg.sidecar_iperf_fallback == '1' }}>
+          <label class="form-check-label small" for="sidecar_iperf_fallback">
+            {{ t.set_sidecar_iperf_fallback_label }}
+          </label>
+        </div>
+        {% endif %}
+
+        <div class="mb-3 form-check form-switch">
+          <input type="checkbox" name="sidecar_proxy_fallback" class="form-check-input"
+                 id="sidecar_proxy_fallback" {{ 'checked' if cfg.sidecar_proxy_fallback == '1' }}>
+          <label class="form-check-label small" for="sidecar_proxy_fallback">
+            {{ t.set_sidecar_proxy_fallback_label }}
+          </label>
         </div>
         {% endif %}
 

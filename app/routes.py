@@ -507,7 +507,9 @@ def settings():
             set_setting('sidecar_image',            request.form.get('sidecar_image', '').strip()
                                                     or 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
             set_setting('sidecar_port',             request.form.get('sidecar_port', '8766').strip() or '8766')
-            set_setting('sidecar_speedtest_method', request.form.get('sidecar_speedtest_method', 'auto'))
+            set_setting('sidecar_speedtest_method', request.form.get('sidecar_speedtest_method', 'dual'))
+            set_setting('sidecar_iperf_fallback',   '1' if request.form.get('sidecar_iperf_fallback') else '0')
+            set_setting('sidecar_proxy_fallback',   '1' if request.form.get('sidecar_proxy_fallback') else '0')
             flash_t('flash_sidecar_saved', 'success')
 
         return redirect(url_for('main.settings'))
@@ -532,7 +534,9 @@ def settings():
         'sidecar_mode':             get_setting('sidecar_mode', '1'),
         'sidecar_image':            get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest'),
         'sidecar_port':             get_setting('sidecar_port', '8766'),
-        'sidecar_speedtest_method': get_setting('sidecar_speedtest_method', 'auto'),
+        'sidecar_speedtest_method': get_setting('sidecar_speedtest_method', 'dual'),
+        'sidecar_iperf_fallback':   get_setting('sidecar_iperf_fallback', '1'),
+        'sidecar_proxy_fallback':   get_setting('sidecar_proxy_fallback', '0'),
     }
     return render_template('settings.html', cfg=cfg, next_run=get_next_run())
 

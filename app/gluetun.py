@@ -425,17 +425,24 @@ def run_sidecar_test(
     port: int,
     duration: int = 8,
     streams: int = 4,
-    method: str = 'auto',
+    method: str = 'dual',
+    iperf_fallback: str = '1',
 ) -> dict:
     """
     Call the sidecar /test endpoint and return the result dict.
     Raises RuntimeError if the call fails.
     """
     url  = f'http://{host}:{port}/test'
-    timeout = duration * 2 + 60  # generous timeout
+    # Ookla controls its own duration; give generous timeout
+    timeout = duration * 4 + 120
     resp = requests.post(
         url,
-        params={'duration': duration, 'streams': streams, 'method': method},
+        params={
+            'duration':       duration,
+            'streams':        streams,
+            'method':         method,
+            'iperf_fallback': iperf_fallback,
+        },
         timeout=timeout,
     )
     resp.raise_for_status()

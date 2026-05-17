@@ -154,7 +154,8 @@ def _test_one_server_sidecar(
     wait_secs: int,
     dl_duration: float,
     dl_streams: int,
-    sidecar_method: str = 'auto',
+    sidecar_method: str = 'dual',
+    sidecar_iperf_fallback: str = '1',
 ) -> dict:
     """
     Full sidecar test cycle for one server:
@@ -199,7 +200,8 @@ def _test_one_server_sidecar(
         # Step 4 — run speed test
         data = run_sidecar_test(sidecar_host, sidecar_port,
                                 duration=int(dl_duration), streams=dl_streams,
-                                method=sidecar_method)
+                                method=sidecar_method,
+                                iperf_fallback=sidecar_iperf_fallback)
 
         dl_median  = data.get('download_mbps') or 0.0
         ul_median  = data.get('upload_mbps')
@@ -208,13 +210,28 @@ def _test_one_server_sidecar(
         method     = data.get('method', '?')
         iperf_srv  = data.get('iperf_server', '')
 
+        dl_ookla      = data.get('dl_ookla')
+        ul_ookla      = data.get('ul_ookla')
+        dl_librespeed = data.get('dl_librespeed')
+        ul_librespeed = data.get('ul_librespeed')
+        dl_iperf3     = data.get('dl_iperf3')
+        ul_iperf3     = data.get('ul_iperf3')
+
+        sources_log = []
+        if dl_ookla:
+            sources_log.append(f'ookla:{dl_ookla:.0f}')
+        if dl_librespeed:
+            sources_log.append(f'libre:{dl_librespeed:.0f}')
+        if dl_iperf3:
+            sources_log.append(f'iperf3:{dl_iperf3:.0f}')
+
         logger.info(
-            '  %s → DL %.1f Mbps  UL %s  LAT %s ms  connect %.0fs  [%s%s]',
+            '  %s → DL %.1f Mbps  UL %s  LAT %s ms  connect %.0fs  [%s]',
             server_name, dl_median,
             f'{ul_median:.1f}' if ul_median else '—',
             f'{lat_median:.0f}' if lat_median else '—',
-            connect_secs, method,
-            f'/{iperf_srv}' if iperf_srv else '',
+            connect_secs,
+            '  '.join(sources_log) or method,
         )
 
         _record_test(
@@ -225,6 +242,12 @@ def _test_one_server_sidecar(
             latency_ms=lat_median,
             public_ip=public_ip,
             method='sidecar',
+            dl_ookla=dl_ookla,
+            ul_ookla=ul_ookla,
+            dl_librespeed=dl_librespeed,
+            ul_librespeed=ul_librespeed,
+            dl_iperf3=dl_iperf3,
+            ul_iperf3=ul_iperf3,
         )
 
         return {
@@ -302,7 +325,8 @@ def _test_server_sidecar_with_retry(
     dl_streams: int,
     max_retries: int,
     timeout_secs: int,
-    sidecar_method: str = 'auto',
+    sidecar_method: str = 'dual',
+    sidecar_iperf_fallback: str = '1',
 ) -> dict | None:
     last_err = 'Unknown error'
     for attempt in range(max_retries + 1):
@@ -313,6 +337,7 @@ def _test_server_sidecar_with_retry(
                     server_name, filter_type,
                     real_container, sidecar_image, sidecar_host, sidecar_port,
                     wait_secs, dl_duration, dl_streams, sidecar_method,
+                    sidecar_iperf_fallback,
                 )
                 return future.result(timeout=timeout_secs)
         except FuturesTimeout:
@@ -371,10 +396,12 @@ def _do_benchmark(app):
         auto_exclude   = int(get_setting('auto_exclude_failures', '5'))
         warmup         = 2.0 if get_setting('speedtest_warmup', '1') == '1' else 0.0
         dl_streams     = int(get_setting('speedtest_streams', '4'))
-        sidecar_mode   = get_setting('sidecar_mode', '1') == '1'
-        sidecar_image  = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
-        sidecar_port   = int(get_setting('sidecar_port', '8766'))
-        sidecar_method = get_setting('sidecar_speedtest_method', 'auto')
+        sidecar_mode          = get_setting('sidecar_mode', '1') == '1'
+        sidecar_image         = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
+        sidecar_port          = int(get_setting('sidecar_port', '8766'))
+        sidecar_method        = get_setting('sidecar_speedtest_method', 'dual')
+        sidecar_iperf_fallback = get_setting('sidecar_iperf_fallback', '1')
+        sidecar_proxy_fallback = get_setting('sidecar_proxy_fallback', '0') == '1'
 
         with get_db() as db:
             servers = db.execute(
@@ -396,8 +423,17 @@ def _do_benchmark(app):
                     row['name'], row['filter_type'],
                     container, sidecar_image, proxy_host, sidecar_port,
                     wait_secs, dl_duration, dl_streams, max_retries, timeout_secs,
-                    sidecar_method,
+                    sidecar_method, sidecar_iperf_fallback,
                 )
+                if result is None and sidecar_proxy_fallback:
+                    logger.info('Sidecar failed for %s — falling back to HTTP proxy', row['name'])
+                    result = _test_server_with_retry(
+                        row['name'], row['filter_type'],
+                        container, compose_dir, project,
+                        proxy_host, proxy_port, proxy_user, proxy_pass,
+                        wait_secs, dl_duration, dl_samples, lat_samples,
+                        warmup, dl_streams, max_retries, timeout_secs,
+                    )
             else:
                 result = _test_server_with_retry(
                     row['name'], row['filter_type'],
@@ -525,18 +561,29 @@ def _do_single_server(app, server_name: str, filter_type: str):
         auto_exclude   = int(get_setting('auto_exclude_failures', '5'))
         warmup         = 2.0 if get_setting('speedtest_warmup', '1') == '1' else 0.0
         dl_streams     = int(get_setting('speedtest_streams', '4'))
-        sidecar_mode   = get_setting('sidecar_mode', '1') == '1'
-        sidecar_image  = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
-        sidecar_port   = int(get_setting('sidecar_port', '8766'))
-        sidecar_method = get_setting('sidecar_speedtest_method', 'auto')
+        sidecar_mode           = get_setting('sidecar_mode', '1') == '1'
+        sidecar_image          = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
+        sidecar_port           = int(get_setting('sidecar_port', '8766'))
+        sidecar_method         = get_setting('sidecar_speedtest_method', 'dual')
+        sidecar_iperf_fallback = get_setting('sidecar_iperf_fallback', '1')
+        sidecar_proxy_fallback = get_setting('sidecar_proxy_fallback', '0') == '1'
 
         if sidecar_mode:
             result = _test_server_sidecar_with_retry(
                 server_name, filter_type,
                 container, sidecar_image, proxy_host, sidecar_port,
                 wait_secs, dl_duration, dl_streams, max_retries, timeout_secs,
-                sidecar_method,
+                sidecar_method, sidecar_iperf_fallback,
             )
+            if result is None and sidecar_proxy_fallback:
+                logger.info('Sidecar failed for %s — falling back to HTTP proxy', server_name)
+                result = _test_server_with_retry(
+                    server_name, filter_type,
+                    container, compose_dir, project,
+                    proxy_host, proxy_port, proxy_user, proxy_pass,
+                    wait_secs, dl_duration, dl_samples, lat_samples,
+                    warmup, dl_streams, max_retries, timeout_secs,
+                )
         else:
             result = _test_server_with_retry(
                 server_name, filter_type,
@@ -569,16 +616,24 @@ def _record_test(
     public_ipv6: str | None = None,
     error: str | None = None,
     method: str = 'proxy',
+    dl_ookla: float | None = None,
+    ul_ookla: float | None = None,
+    dl_librespeed: float | None = None,
+    ul_librespeed: float | None = None,
+    dl_iperf3: float | None = None,
+    ul_iperf3: float | None = None,
 ):
     from .database import get_db
     with get_db() as db:
         db.execute(
             '''INSERT INTO speed_tests
                (server_name, download_mbps, upload_mbps, latency_ms,
-                public_ip, public_ipv6, success, error_msg, test_method)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                public_ip, public_ipv6, success, error_msg, test_method,
+                dl_ookla, ul_ookla, dl_librespeed, ul_librespeed, dl_iperf3, ul_iperf3)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (server_name, download_mbps, upload_mbps, latency_ms,
-             public_ip, public_ipv6, int(success), error, method),
+             public_ip, public_ipv6, int(success), error, method,
+             dl_ookla, ul_ookla, dl_librespeed, ul_librespeed, dl_iperf3, ul_iperf3),
         )
 
 
