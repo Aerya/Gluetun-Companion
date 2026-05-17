@@ -113,7 +113,7 @@
       <thead>
         <tr>
           <th>{{ t.cmn_server }}</th><th>{{ t.cmn_download }}</th><th>{{ t.cmn_upload }}</th>
-          <th>{{ t.cmn_latency }}</th><th>{{ t.cmn_public_ip }}</th><th>{{ t.cmn_status }}</th><th>{{ t.cmn_date }}</th>
+          <th>{{ t.cmn_latency }}</th><th>{{ t.cmn_public_ip }}</th><th>{{ t.hist_col_method }}</th><th>{{ t.cmn_status }}</th><th>{{ t.cmn_date }}</th>
         </tr>
       </thead>
       <tbody>
@@ -138,6 +138,15 @@
             </small>
           </td>
           <td>
+            {% if r.test_method == 'sidecar' %}
+              <span class="badge" style="background:#f0ad4e;color:#000">
+                <i class="bi bi-boxes"></i> sidecar
+              </span>
+            {% else %}
+              <span class="badge bg-secondary">proxy</span>
+            {% endif %}
+          </td>
+          <td>
             {% if r.success %}
               <span class="badge bg-success">OK</span>
             {% else %}
@@ -148,7 +157,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" class="text-center text-muted py-4">
+          <td colspan="8" class="text-center text-muted py-4">
             {{ t.dash_no_tests }}
           </td>
         </tr>

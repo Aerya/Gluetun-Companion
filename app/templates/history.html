@@ -32,6 +32,42 @@
 </div>
 {% endif %}
 
+{# ── Filters + sort bar ─────────────────────────────────────────────────── #}
+<form method="get" class="row g-2 mb-3 align-items-end">
+  <input type="hidden" name="page" value="1">
+  <div class="col-auto">
+    <select name="server" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="" {{ 'selected' if not server_filter }}>{{ t.hist_filter_all_servers }}</option>
+      {% for name in server_names %}
+      <option value="{{ name }}" {{ 'selected' if server_filter == name }}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <select name="method" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value=""       {{ 'selected' if not method_filter }}>{{ t.hist_filter_all_methods }}</option>
+      <option value="proxy"  {{ 'selected' if method_filter == 'proxy' }}>{{ t.hist_method_proxy }}</option>
+      <option value="sidecar"{{ 'selected' if method_filter == 'sidecar' }}>{{ t.hist_method_sidecar }}</option>
+    </select>
+  </div>
+  <div class="col-auto">
+    <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="date_desc"  {{ 'selected' if sort == 'date_desc'  }}>{{ t.hist_sort_date_desc }}</option>
+      <option value="date_asc"   {{ 'selected' if sort == 'date_asc'   }}>{{ t.hist_sort_date_asc }}</option>
+      <option value="server_asc" {{ 'selected' if sort == 'server_asc' }}>{{ t.hist_sort_server }} A→Z</option>
+      <option value="server_desc"{{ 'selected' if sort == 'server_desc'}}>{{ t.hist_sort_server }} Z→A</option>
+      <option value="dl_desc"    {{ 'selected' if sort == 'dl_desc'    }}>{{ t.hist_sort_dl_desc }}</option>
+      <option value="dl_asc"     {{ 'selected' if sort == 'dl_asc'     }}>{{ t.hist_sort_dl_asc }}</option>
+    </select>
+  </div>
+  {% if server_filter or method_filter or sort != 'date_desc' %}
+  <div class="col-auto">
+    <a href="{{ url_for('main.history') }}" class="btn btn-sm btn-outline-secondary">✕</a>
+  </div>
+  {% endif %}
+</form>
+
+{# ── Results table ──────────────────────────────────────────────────────── #}
 <div class="card">
   <div class="card-header py-2 d-flex justify-content-between align-items-center">
     <span><i class="bi bi-table"></i> {{ t.hist_all_tests }}
@@ -45,8 +81,14 @@
     <table class="table table-hover mb-0" style="font-size:.875rem">
       <thead>
         <tr>
-          <th>{{ t.cmn_server }}</th><th>{{ t.cmn_download }}</th><th>{{ t.cmn_upload }}</th>
-          <th>{{ t.cmn_latency }}</th><th>{{ t.cmn_public_ip }}</th><th>{{ t.cmn_status }}</th><th>{{ t.cmn_date }}</th>
+          <th>{{ t.cmn_server }}</th>
+          <th>{{ t.cmn_download }}</th>
+          <th>{{ t.cmn_upload }}</th>
+          <th>{{ t.cmn_latency }}</th>
+          <th>{{ t.cmn_public_ip }}</th>
+          <th>{{ t.hist_col_method }}</th>
+          <th>{{ t.cmn_status }}</th>
+          <th>{{ t.cmn_date }}</th>
         </tr>
       </thead>
       <tbody>
@@ -71,6 +113,15 @@
             </small>
           </td>
           <td>
+            {% if r.test_method == 'sidecar' %}
+              <span class="badge" style="background:#f0ad4e;color:#000">
+                <i class="bi bi-boxes"></i> sidecar
+              </span>
+            {% else %}
+              <span class="badge bg-secondary">proxy</span>
+            {% endif %}
+          </td>
+          <td>
             {% if r.success %}
               <span class="badge bg-success">OK</span>
             {% else %}
@@ -83,30 +134,32 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" class="text-center text-muted py-4">{{ t.hist_empty }}</td>
+          <td colspan="8" class="text-center text-muted py-4">{{ t.hist_empty }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
 {% if pages > 1 %}
+{%- set pg_args = {'sort': sort, 'server': server_filter, 'method': method_filter} %}
 <nav class="mt-3 d-flex justify-content-center">
   <ul class="pagination pagination-sm mb-0">
     <li class="page-item {{ 'disabled' if page == 1 }}">
-      <a class="page-link" href="{{ url_for('main.history', page=page-1) }}">‹</a>
+      <a class="page-link" href="{{ url_for('main.history', page=page-1, **pg_args) }}">‹</a>
     </li>
     {% for p in range(1, pages+1) %}
       {% if p == page or p == 1 or p == pages or (p >= page-2 and p <= page+2) %}
         <li class="page-item {{ 'active' if p == page }}">
-          <a class="page-link" href="{{ url_for('main.history', page=p) }}">{{ p }}</a>
+          <a class="page-link" href="{{ url_for('main.history', page=p, **pg_args) }}">{{ p }}</a>
         </li>
       {% elif p == page-3 or p == page+3 %}
         <li class="page-item disabled"><span class="page-link">…</span></li>
       {% endif %}
     {% endfor %}
     <li class="page-item {{ 'disabled' if page == pages }}">
-      <a class="page-link" href="{{ url_for('main.history', page=page+1) }}">›</a>
+      <a class="page-link" href="{{ url_for('main.history', page=page+1, **pg_args) }}">›</a>
     </li>
   </ul>
 </nav>

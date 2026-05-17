@@ -92,6 +92,7 @@ def init_db(db_path: str):
             "ALTER TABLE servers ADD COLUMN consecutive_failures INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE speed_tests ADD COLUMN upload_mbps REAL",
             "ALTER TABLE speed_tests ADD COLUMN public_ipv6 TEXT",
+            "ALTER TABLE speed_tests ADD COLUMN test_method TEXT NOT NULL DEFAULT 'proxy'",
             "ALTER TABLE switches ADD COLUMN connect_secs REAL",
             "ALTER TABLE switches ADD COLUMN from_mbps REAL",
             "ALTER TABLE switches ADD COLUMN to_mbps REAL",

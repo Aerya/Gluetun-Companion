@@ -332,17 +332,46 @@ def test_server_now(server_id):
 # History
 # ---------------------------------------------------------------------------
 
+_SORT_COLS = {
+    'date_desc':   'tested_at DESC',
+    'date_asc':    'tested_at ASC',
+    'server_asc':  'server_name ASC, tested_at DESC',
+    'server_desc': 'server_name DESC, tested_at DESC',
+    'dl_desc':     'download_mbps DESC',
+    'dl_asc':      'download_mbps ASC',
+}
+
 @bp.route('/history')
 @login_required
 def history():
-    page = max(1, request.args.get('page', 1, type=int))
+    page          = max(1, request.args.get('page', 1, type=int))
+    sort          = request.args.get('sort', 'date_desc')
+    server_filter = request.args.get('server', '').strip()
+    method_filter = request.args.get('method', '')
+
+    if sort not in _SORT_COLS:
+        sort = 'date_desc'
+    order_sql = _SORT_COLS[sort]
+
+    where_parts: list[str] = []
+    params: list = []
+    if server_filter:
+        where_parts.append('server_name = ?')
+        params.append(server_filter)
+    if method_filter in ('proxy', 'sidecar'):
+        where_parts.append('test_method = ?')
+        params.append(method_filter)
+    where_sql = ('WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
+
     offset = (page - 1) * _HISTORY_PER_PAGE
 
     with get_db() as db:
-        total = db.execute('SELECT COUNT(*) AS n FROM speed_tests').fetchone()['n']
+        total = db.execute(
+            f'SELECT COUNT(*) AS n FROM speed_tests {where_sql}', params
+        ).fetchone()['n']
         tests = db.execute(
-            'SELECT * FROM speed_tests ORDER BY tested_at DESC LIMIT ? OFFSET ?',
-            (_HISTORY_PER_PAGE, offset),
+            f'SELECT * FROM speed_tests {where_sql} ORDER BY {order_sql} LIMIT ? OFFSET ?',
+            params + [_HISTORY_PER_PAGE, offset],
         ).fetchall()
         per_server = db.execute('''
             SELECT server_name,
@@ -355,12 +384,17 @@ def history():
             GROUP BY server_name
             ORDER BY avg_dl DESC
         ''').fetchall()
+        server_names = [r['server_name'] for r in db.execute(
+            'SELECT DISTINCT server_name FROM speed_tests ORDER BY server_name'
+        ).fetchall()]
 
     pages = max(1, (total + _HISTORY_PER_PAGE - 1) // _HISTORY_PER_PAGE)
     return render_template(
         'history.html',
         tests=tests, per_server=per_server,
         page=page, pages=pages, total=total,
+        sort=sort, server_filter=server_filter, method_filter=method_filter,
+        server_names=server_names,
     )
 
 

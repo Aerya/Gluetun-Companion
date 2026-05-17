@@ -224,6 +224,7 @@ def _test_one_server_sidecar(
             upload_mbps=ul_median,
             latency_ms=lat_median,
             public_ip=public_ip,
+            method='sidecar',
         )
 
         return {
@@ -565,16 +566,17 @@ def _record_test(
     public_ip: str | None = None,
     public_ipv6: str | None = None,
     error: str | None = None,
+    method: str = 'proxy',
 ):
     from .database import get_db
     with get_db() as db:
         db.execute(
             '''INSERT INTO speed_tests
                (server_name, download_mbps, upload_mbps, latency_ms,
-                public_ip, public_ipv6, success, error_msg)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                public_ip, public_ipv6, success, error_msg, test_method)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (server_name, download_mbps, upload_mbps, latency_ms,
-             public_ip, public_ipv6, int(success), error),
+             public_ip, public_ipv6, int(success), error, method),
         )
 
 
