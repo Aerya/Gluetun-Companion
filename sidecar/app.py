@@ -178,7 +178,9 @@ def _librespeed_run(duration: int) -> tuple[float | None, float | None]:
             raise RuntimeError(f'librespeed-cli exit {r.returncode}: {(r.stderr or "")[:120]}')
         data = json.loads(r.stdout)
         if isinstance(data, list):
-            data = data[0]
+            data = data[0] if data else None
+        if not data:
+            raise RuntimeError('empty or null librespeed output')
         dl = round(float(data.get('download', 0)), 2)
         ul = round(float(data.get('upload', 0)), 2)
         logger.info('librespeed → DL %.1f  UL %.1f Mbps', dl, ul)
