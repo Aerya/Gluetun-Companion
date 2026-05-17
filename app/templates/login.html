@@ -13,7 +13,8 @@
     .form-control { background: #0d1117; color: #c9d1d9; border-color: #30363d; }
     .form-control:focus { background: #0d1117; color: #c9d1d9; border-color: #58a6ff;
                           box-shadow: 0 0 0 .2rem rgba(88,166,255,.15); }
-    .form-label   { color: #8b949e; }
+    .form-label   { color: #c9d1d9; }
+    h4, small.subtitle { color: #c9d1d9; }
     /* Override browser autofill overlay colors */
     .form-control:-webkit-autofill,
     .form-control:-webkit-autofill:hover,
@@ -29,7 +30,7 @@
   <div class="text-center mb-4">
     <div style="font-size:2.5rem">🔒</div>
     <h4 class="fw-bold mt-2">Gluetun Companion</h4>
-    <small class="text-muted">VPN Speed Monitor</small>
+    <small class="subtitle">VPN Speed Monitor</small>
   </div>
 
   {% with msgs = get_flashed_messages(with_categories=true) %}
@@ -40,11 +41,11 @@
 
   <form method="post" autocomplete="on">
     <div class="mb-3">
-      <label class="form-label small text-muted">{{ t.login_username }}</label>
+      <label class="form-label small">{{ t.login_username }}</label>
       <input type="text" name="username" class="form-control" autofocus required>
     </div>
     <div class="mb-4">
-      <label class="form-label small text-muted">{{ t.login_password }}</label>
+      <label class="form-label small">{{ t.login_password }}</label>
       <input type="password" name="password" class="form-control" required>
     </div>
     <button type="submit" class="btn btn-success w-100 fw-semibold">
@@ -60,7 +61,7 @@
   <div class="text-center mt-3">
     <a href="{{ url_for('main.set_lang', code='en' if lang == 'fr' else 'fr') }}"
        style="font-size:.8rem;color:#8b949e;text-decoration:none;letter-spacing:.4px">
-      🌐 {{ t.nav_lang_switch }}
+      {{ t.nav_lang_switch }}
     </a>
   </div>
 </div>
