@@ -28,7 +28,7 @@
       </div>
       {% if last_switch %}
       <div class="mt-1" style="font-size:.75rem;color:var(--muted)">
-        {{ t.dash_last_switch }} {{ last_switch.switched_at[:16] }}
+        {{ t.dash_last_switch }} {{ last_switch.switched_at | localtime | truncate(16, True, '') }}
       </div>
       {% endif %}
     </div>
@@ -175,7 +175,7 @@
               <span class="badge bg-danger" data-bs-toggle="tooltip" title="{{ r.error_msg }}">{{ t.cmn_failure }}</span>
             {% endif %}
           </td>
-          <td><small class="text-muted">{{ r.tested_at[:16] }}</small></td>
+          <td><small class="text-muted">{{ r.tested_at | localtime | truncate(16, True, '') }}</small></td>
         </tr>
         {% else %}
         <tr>

@@ -63,7 +63,7 @@
               <span class="badge bg-danger"><i class="bi bi-x"></i> {{ t.cmn_failure }}</span>
             {% endif %}
           </td>
-          <td><small class="text-muted">{{ s.switched_at[:16] }}</small></td>
+          <td><small class="text-muted">{{ s.switched_at | localtime | truncate(16, True, '') }}</small></td>
         </tr>
         {% else %}
         <tr>

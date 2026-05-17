@@ -1,10 +1,28 @@
+import calendar
 import json
 import logging
 import os
+from datetime import datetime
 
 from flask import Flask, session
 from .database import init_db
 from .i18n import get_translations
+
+
+def _utc_to_local(dt_str: str | None) -> str:
+    """Convert a UTC datetime string (SQLite CURRENT_TIMESTAMP) to local system time.
+
+    Uses calendar.timegm + datetime.fromtimestamp so the TZ env var is
+    respected via the C library — no tzdata package required.
+    """
+    if not dt_str:
+        return dt_str or ''
+    try:
+        utc_dt = datetime.strptime(dt_str[:19], '%Y-%m-%d %H:%M:%S')
+        ts = calendar.timegm(utc_dt.timetuple())   # UTC → Unix timestamp
+        return datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        return dt_str
 
 
 class _JsonFormatter(logging.Formatter):
@@ -60,6 +78,8 @@ def create_app():
     from .database import set_setting
     set_setting('benchmark_running', '0')
     set_setting('benchmark_current_server', '')
+
+    app.jinja_env.filters['localtime'] = _utc_to_local
 
     @app.context_processor
     def inject_i18n():

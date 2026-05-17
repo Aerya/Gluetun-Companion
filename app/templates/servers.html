@@ -73,7 +73,7 @@
             <small class="text-muted">{{ s.ok_tests }}/{{ s.total_tests }}</small>
           </td>
           <td>
-            <small class="text-muted">{{ s.last_tested[:16] if s.last_tested else t.cmn_never }}</small>
+            <small class="text-muted">{{ (s.last_tested | localtime | truncate(16, True, '')) if s.last_tested else t.cmn_never }}</small>
           </td>
           <td class="text-end">
             {# Test now #}

@@ -159,7 +159,7 @@
                     title="{{ r.error_msg or t.cmn_unknown_error }}">{{ t.cmn_failure }}</span>
             {% endif %}
           </td>
-          <td><small class="text-muted">{{ r.tested_at[:16] }}</small></td>
+          <td><small class="text-muted">{{ r.tested_at | localtime | truncate(16, True, '') }}</small></td>
         </tr>
         {% else %}
         <tr>
