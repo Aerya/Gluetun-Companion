@@ -1,15 +1,18 @@
 {% extends 'base.html' %}
-{% block title %}Bascules – Gluetun Companion{% endblock %}
+{% block title %}{{ t.nav_switches }} – Gluetun Companion{% endblock %}
 
 {% block content %}
-<h5 class="mb-3"><i class="bi bi-arrow-left-right"></i> Historique des bascules de serveur</h5>
+<h5 class="mb-3"><i class="bi bi-arrow-left-right"></i> {{ t.sw_title }}</h5>
 
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover mb-0">
       <thead>
         <tr>
-          <th>De</th><th></th><th>Vers</th><th>IP après bascule</th><th>Gain débit</th><th>Connexion</th><th>Raison</th><th>Statut</th><th>Date</th>
+          <th>{{ t.sw_col_from }}</th><th></th><th>{{ t.sw_col_to }}</th>
+          <th>{{ t.sw_col_ip }}</th><th>{{ t.sw_col_gain }}</th>
+          <th>{{ t.sw_col_connect }}</th><th>{{ t.sw_col_reason }}</th>
+          <th>{{ t.cmn_status }}</th><th>{{ t.cmn_date }}</th>
         </tr>
       </thead>
       <tbody>
@@ -43,11 +46,11 @@
           <td>
             {% if s.reason == 'auto_best' %}
               <span class="badge" style="background:#1f6feb">
-                Auto (meilleur)
+                {{ t.sw_reason_auto }}
               </span>
             {% elif s.reason == 'manual' %}
               <span class="badge bg-warning text-dark">
-                <i class="bi bi-hand-index"></i> Manuel
+                <i class="bi bi-hand-index"></i> {{ t.sw_reason_manual }}
               </span>
             {% else %}
               <span class="badge bg-secondary">{{ s.reason }}</span>
@@ -55,9 +58,9 @@
           </td>
           <td>
             {% if s.success %}
-              <span class="badge bg-success"><i class="bi bi-check2"></i> Succès</span>
+              <span class="badge bg-success"><i class="bi bi-check2"></i> {{ t.cmn_success }}</span>
             {% else %}
-              <span class="badge bg-danger"><i class="bi bi-x"></i> Échec</span>
+              <span class="badge bg-danger"><i class="bi bi-x"></i> {{ t.cmn_failure }}</span>
             {% endif %}
           </td>
           <td><small class="text-muted">{{ s.switched_at[:16] }}</small></td>
@@ -66,7 +69,7 @@
         <tr>
           <td colspan="9" class="text-center text-muted py-5">
             <i class="bi bi-arrow-left-right" style="font-size:2rem;opacity:.3"></i><br>
-            Aucune bascule enregistrée.
+            {{ t.sw_empty }}
           </td>
         </tr>
         {% endfor %}

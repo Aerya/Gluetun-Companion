@@ -6,6 +6,8 @@ import logging
 
 import requests
 
+from .i18n import get_translations
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,6 +20,7 @@ def _discord_payload(
     to_ipv4: str | None,
     to_ipv6: str | None,
     reason: str,
+    t: dict,
 ) -> dict:
     gain = (to_mbps - from_mbps) if (from_mbps and to_mbps) else None
     color = 0x3fb950  # green
@@ -26,34 +29,34 @@ def _discord_payload(
     elif gain is None:
         color = 0x58a6ff  # blue / neutral
 
-    reason_label = 'Automatique (meilleur score pondéré)' if reason == 'auto_best' else 'Manuelle'
+    reason_label = t['notif_reason_auto'] if reason == 'auto_best' else t['notif_reason_manual']
 
     fields = [
-        {'name': 'Ancien serveur', 'value': f'`{from_server}`' if from_server else '—', 'inline': True},
-        {'name': 'Nouveau serveur', 'value': f'`{to_server}`', 'inline': True},
+        {'name': t['notif_field_from'], 'value': f'`{from_server}`' if from_server else '—', 'inline': True},
+        {'name': t['notif_field_to'],   'value': f'`{to_server}`', 'inline': True},
         {'name': '​', 'value': '​', 'inline': True},  # spacer
     ]
     if from_mbps is not None:
-        fields.append({'name': 'Débit avant', 'value': f'{from_mbps:.1f} Mbps', 'inline': True})
+        fields.append({'name': t['notif_field_speed_before'], 'value': f'{from_mbps:.1f} Mbps', 'inline': True})
     if to_mbps is not None:
-        fields.append({'name': 'Débit après', 'value': f'{to_mbps:.1f} Mbps', 'inline': True})
+        fields.append({'name': t['notif_field_speed_after'], 'value': f'{to_mbps:.1f} Mbps', 'inline': True})
     if gain is not None:
         sign = '+' if gain >= 0 else ''
-        fields.append({'name': 'Gain', 'value': f'{sign}{gain:.1f} Mbps', 'inline': True})
+        fields.append({'name': t['notif_field_gain'], 'value': f'{sign}{gain:.1f} Mbps', 'inline': True})
     if to_ipv4:
         fields.append({'name': 'IPv4', 'value': to_ipv4, 'inline': True})
     if to_ipv6:
         fields.append({'name': 'IPv6', 'value': to_ipv6, 'inline': True})
     if connect_secs is not None:
-        fields.append({'name': 'Connexion', 'value': f'{connect_secs:.0f} s', 'inline': True})
-    fields.append({'name': 'Raison', 'value': reason_label, 'inline': False})
+        fields.append({'name': t['notif_field_connect'], 'value': f'{connect_secs:.0f} s', 'inline': True})
+    fields.append({'name': t['notif_field_reason'], 'value': reason_label, 'inline': False})
 
     return {
         'embeds': [{
-            'title': '🔄 Bascule VPN',
+            'title': t['notif_title'],
             'color': color,
             'fields': fields,
-            'footer': {'text': 'Gluetun Companion'},
+            'footer': {'text': t['notif_footer']},
         }]
     }
 
@@ -67,22 +70,23 @@ def _text_body(
     to_ipv4: str | None,
     to_ipv6: str | None,
     reason: str,
+    t: dict,
 ) -> str:
     gain = (to_mbps - from_mbps) if (from_mbps and to_mbps) else None
-    reason_label = 'auto (meilleur score)' if reason == 'auto_best' else 'manuelle'
+    reason_label = t['notif_reason_auto_short'] if reason == 'auto_best' else t['notif_reason_manual_short']
 
     lines = [f'🔄 {from_server or "?"} → {to_server}']
     if from_mbps is not None and to_mbps is not None:
         sign = '+' if gain >= 0 else ''
-        lines.append(f'Débit : {from_mbps:.1f} → {to_mbps:.1f} Mbps ({sign}{gain:.1f})')
+        lines.append(f'{t["notif_text_speed"]} : {from_mbps:.1f} → {to_mbps:.1f} Mbps ({sign}{gain:.1f})')
     if to_ipv4:
         ip = to_ipv4
         if to_ipv6:
             ip += f' / {to_ipv6}'
-        lines.append(f'IP : {ip}')
+        lines.append(f'{t["notif_text_ip"]} : {ip}')
     if connect_secs is not None:
-        lines.append(f'Connexion : {connect_secs:.0f} s')
-    lines.append(f'Raison : {reason_label}')
+        lines.append(f'{t["notif_text_connect"]} : {connect_secs:.0f} s')
+    lines.append(f'{t["notif_text_reason"]} : {reason_label}')
     return '\n'.join(lines)
 
 
@@ -97,15 +101,18 @@ def send_switch_notification(
     reason: str,
     discord_url: str | None = None,
     apprise_urls: str | None = None,
+    lang: str = 'fr',
 ):
     if not discord_url and not apprise_urls:
         return
+
+    t = get_translations(lang)
 
     if discord_url:
         try:
             payload = _discord_payload(
                 from_server, to_server, from_mbps, to_mbps,
-                connect_secs, to_ipv4, to_ipv6, reason,
+                connect_secs, to_ipv4, to_ipv6, reason, t,
             )
             resp = requests.post(discord_url.strip(), json=payload, timeout=10)
             resp.raise_for_status()
@@ -123,9 +130,9 @@ def send_switch_notification(
                     ap.add(url)
             body = _text_body(
                 from_server, to_server, from_mbps, to_mbps,
-                connect_secs, to_ipv4, to_ipv6, reason,
+                connect_secs, to_ipv4, to_ipv6, reason, t,
             )
-            ap.notify(title='Bascule VPN — Gluetun Companion', body=body)
+            ap.notify(title=t['notif_apprise_title'], body=body)
             logger.info('Apprise notification sent')
         except ImportError:
             logger.warning('Apprise not installed — add "apprise" to requirements.txt')

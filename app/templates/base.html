@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr" data-bs-theme="dark">
+<html lang="{{ lang }}" data-bs-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -111,11 +111,11 @@
     <div class="collapse navbar-collapse" id="nav">
       <ul class="navbar-nav me-auto gap-1">
         {% set nav = [
-          ('main.dashboard', 'bi-speedometer2', 'Dashboard'),
-          ('main.servers',   'bi-hdd-network',  'Serveurs'),
-          ('main.history',   'bi-graph-up',     'Historique'),
-          ('main.switches',  'bi-arrow-left-right', 'Bascules'),
-          ('main.settings',  'bi-gear',         'Paramètres'),
+          ('main.dashboard', 'bi-speedometer2',     t.nav_dashboard),
+          ('main.servers',   'bi-hdd-network',      t.nav_servers),
+          ('main.history',   'bi-graph-up',         t.nav_history),
+          ('main.switches',  'bi-arrow-left-right', t.nav_switches),
+          ('main.settings',  'bi-gear',             t.nav_settings),
         ] %}
         {% for endpoint, icon, label in nav %}
         <li class="nav-item">
@@ -133,13 +133,21 @@
           </span>
         </li>
         <li class="nav-item">
-          <button class="btn btn-link nav-link px-2" onclick="toggleTheme()" title="Changer le thème">
+          <a class="btn btn-link nav-link px-2 fw-semibold"
+             href="{{ url_for('main.set_lang', code='en' if lang == 'fr' else 'fr') }}"
+             title="{{ t.nav_theme_toggle }}"
+             style="font-size:.8rem;letter-spacing:.5px">
+            {{ t.nav_lang_switch }}
+          </a>
+        </li>
+        <li class="nav-item">
+          <button class="btn btn-link nav-link px-2" onclick="toggleTheme()" title="{{ t.nav_theme_toggle }}">
             <i id="theme-icon" class="bi bi-moon-fill"></i>
           </button>
         </li>
         <li class="nav-item">
           <a class="nav-link text-danger" href="{{ url_for('main.logout') }}">
-            <i class="bi bi-box-arrow-right"></i> Déconnexion
+            <i class="bi bi-box-arrow-right"></i> {{ t.nav_logout }}
           </a>
         </li>
       </ul>

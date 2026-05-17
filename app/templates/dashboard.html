@@ -7,7 +7,7 @@
 
   <div class="col-6 col-lg-3">
     <div class="card stat-card h-100">
-      <div class="stat-label"><i class="bi bi-wifi"></i> Statut VPN</div>
+      <div class="stat-label"><i class="bi bi-wifi"></i> {{ t.dash_vpn_status }}</div>
       <div class="stat-value">
         <span class="dot dot-{{ vpn_status }}"></span>
         {{ vpn_status | capitalize }}
@@ -22,13 +22,13 @@
 
   <div class="col-6 col-lg-3">
     <div class="card stat-card h-100">
-      <div class="stat-label"><i class="bi bi-server"></i> Serveur actif</div>
+      <div class="stat-label"><i class="bi bi-server"></i> {{ t.dash_active_server }}</div>
       <div class="stat-value" style="font-size:1.15rem">
         <code>{{ current_server or '—' }}</code>
       </div>
       {% if last_switch %}
       <div class="mt-1" style="font-size:.75rem;color:var(--muted)">
-        dernière bascule {{ last_switch.switched_at[:16] }}
+        {{ t.dash_last_switch }} {{ last_switch.switched_at[:16] }}
       </div>
       {% endif %}
     </div>
@@ -36,21 +36,21 @@
 
   <div class="col-6 col-lg-3">
     <div class="card stat-card h-100">
-      <div class="stat-label"><i class="bi bi-list-check"></i> Serveurs actifs</div>
+      <div class="stat-label"><i class="bi bi-list-check"></i> {{ t.dash_active_servers }}</div>
       <div class="stat-value">{{ server_count }}</div>
     </div>
   </div>
 
   <div class="col-6 col-lg-3">
     <div class="card stat-card h-100">
-      <div class="stat-label"><i class="bi bi-clock-history"></i> Prochain test</div>
+      <div class="stat-label"><i class="bi bi-clock-history"></i> {{ t.dash_next_test }}</div>
       <div class="stat-value" style="font-size:1rem">
         {% if next_run %}{{ next_run.strftime('%d/%m %H:%M') }}{% else %}—{% endif %}
       </div>
       {% if last_cycle and last_cycle.duration_secs %}
       <div class="mt-1" style="font-size:.75rem;color:var(--muted)">
-        Dernier cycle : {{ last_cycle.duration_secs | int }} s
-        {% if last_cycle.servers_tested %}&nbsp;·&nbsp;{{ last_cycle.servers_tested }} serveurs{% endif %}
+        {{ t.dash_last_cycle }} {{ last_cycle.duration_secs | int }} s
+        {% if last_cycle.servers_tested %}&nbsp;·&nbsp;{{ last_cycle.servers_tested }} {{ t.dash_servers_tested }}{% endif %}
       </div>
       {% endif %}
       <button class="btn btn-success btn-sm mt-2 fw-semibold"
@@ -58,9 +58,9 @@
               onclick="triggerBenchmark()"
               {{ 'disabled' if benchmark_running }}>
         {% if benchmark_running %}
-        <span class="spinner-border spinner-border-sm"></span> En cours…
+        <span class="spinner-border spinner-border-sm"></span> {{ t.dash_running }}
         {% else %}
-        <i class="bi bi-play-fill"></i> Lancer maintenant
+        <i class="bi bi-play-fill"></i> {{ t.dash_run_now }}
         {% endif %}
       </button>
     </div>
@@ -72,8 +72,8 @@
 {% if sparkline_dl %}
 <div class="card mb-4 p-3">
   <div class="d-flex justify-content-between align-items-center mb-2">
-    <span class="fw-semibold"><i class="bi bi-activity text-info"></i> Historique — <code>{{ sparkline_server }}</code></span>
-    <small class="text-muted">{{ sparkline_dl|length }} derniers tests réussis</small>
+    <span class="fw-semibold"><i class="bi bi-activity text-info"></i> {{ t.dash_sparkline_title }} <code>{{ sparkline_server }}</code></span>
+    <small class="text-muted">{{ sparkline_dl|length }} {{ t.dash_sparkline_tests }}</small>
   </div>
   <div style="position:relative;height:120px">
     <canvas id="chartSparkline"></canvas>
@@ -85,8 +85,8 @@
 {% if server_stats %}
 <div class="card mb-4 p-3">
   <div class="d-flex justify-content-between align-items-center mb-2">
-    <span class="fw-semibold"><i class="bi bi-bar-chart-fill text-success"></i> Vitesse moyenne par serveur</span>
-    <small class="text-muted">basé sur tous les tests réussis</small>
+    <span class="fw-semibold"><i class="bi bi-bar-chart-fill text-success"></i> {{ t.dash_avg_speed_title }}</span>
+    <small class="text-muted">{{ t.dash_avg_speed_note }}</small>
   </div>
   {# height = 42px per bar, min 120px #}
   <div style="position:relative; height:{{ [server_stats|length * 42, 120]|max }}px">
@@ -98,51 +98,51 @@
 {# ── Recent tests ──────────────────────────────────────────────────────── #}
 <div class="card">
   <div class="card-header d-flex justify-content-between align-items-center py-2">
-    <span><i class="bi bi-activity"></i> Tests récents</span>
-    <a href="{{ url_for('main.history') }}" class="btn btn-sm btn-outline-secondary">Tout voir</a>
+    <span><i class="bi bi-activity"></i> {{ t.dash_recent_tests }}</span>
+    <a href="{{ url_for('main.history') }}" class="btn btn-sm btn-outline-secondary">{{ t.dash_see_all }}</a>
   </div>
   <div class="table-responsive">
     <table class="table table-hover mb-0">
       <thead>
         <tr>
-          <th>Serveur</th><th>Download</th><th>Upload</th><th>Latence</th>
-          <th>IP publique</th><th>Statut</th><th>Date</th>
+          <th>{{ t.cmn_server }}</th><th>{{ t.cmn_download }}</th><th>{{ t.cmn_upload }}</th>
+          <th>{{ t.cmn_latency }}</th><th>{{ t.cmn_public_ip }}</th><th>{{ t.cmn_status }}</th><th>{{ t.cmn_date }}</th>
         </tr>
       </thead>
       <tbody>
-        {% for t in recent_tests %}
+        {% for r in recent_tests %}
         <tr>
-          <td><code>{{ t.server_name }}</code></td>
+          <td><code>{{ r.server_name }}</code></td>
           <td>
-            {% if t.download_mbps %}
-              {% set cls = 'speed-good' if t.download_mbps > 50 else ('speed-ok' if t.download_mbps > 15 else 'speed-bad') %}
-              <span class="fw-bold {{ cls }}">{{ '%.1f'|format(t.download_mbps) }} Mbps</span>
+            {% if r.download_mbps %}
+              {% set cls = 'speed-good' if r.download_mbps > 50 else ('speed-ok' if r.download_mbps > 15 else 'speed-bad') %}
+              <span class="fw-bold {{ cls }}">{{ '%.1f'|format(r.download_mbps) }} Mbps</span>
             {% else %}—{% endif %}
           </td>
           <td>
-            {% if t.upload_mbps %}
-              <span class="text-info">{{ '%.1f'|format(t.upload_mbps) }} Mbps</span>
+            {% if r.upload_mbps %}
+              <span class="text-info">{{ '%.1f'|format(r.upload_mbps) }} Mbps</span>
             {% else %}—{% endif %}
           </td>
-          <td>{{ ('%.0f ms'|format(t.latency_ms)) if t.latency_ms else '—' }}</td>
+          <td>{{ ('%.0f ms'|format(r.latency_ms)) if r.latency_ms else '—' }}</td>
           <td>
-            <small class="text-muted font-monospace">{{ t.public_ip or '—' }}
-            {% if t.public_ipv6 %}<br><span style="font-size:.7rem">{{ t.public_ipv6 }}</span>{% endif %}
+            <small class="text-muted font-monospace">{{ r.public_ip or '—' }}
+            {% if r.public_ipv6 %}<br><span style="font-size:.7rem">{{ r.public_ipv6 }}</span>{% endif %}
             </small>
           </td>
           <td>
-            {% if t.success %}
+            {% if r.success %}
               <span class="badge bg-success">OK</span>
             {% else %}
-              <span class="badge bg-danger" data-bs-toggle="tooltip" title="{{ t.error_msg }}">Échec</span>
+              <span class="badge bg-danger" data-bs-toggle="tooltip" title="{{ r.error_msg }}">{{ t.cmn_failure }}</span>
             {% endif %}
           </td>
-          <td><small class="text-muted">{{ t.tested_at[:16] }}</small></td>
+          <td><small class="text-muted">{{ r.tested_at[:16] }}</small></td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" class="text-center text-muted py-4">
-            Aucun test effectué — ajoutez des serveurs et lancez un benchmark.
+          <td colspan="7" class="text-center text-muted py-4">
+            {{ t.dash_no_tests }}
           </td>
         </tr>
         {% endfor %}
@@ -154,6 +154,10 @@
 
 {% block scripts %}
 <script>
+const _msgRunning = '{{ t.dash_running }}';
+const _msgRunNow  = '{{ t.dash_run_now }}';
+const _msgAlready = '{{ t.dash_already_running }}';
+
 // ── Live status polling ──────────────────────────────────────────────────
 function pollStatus() {
   fetch('{{ url_for("main.api_status") }}')
@@ -162,10 +166,10 @@ function pollStatus() {
       const btn = document.getElementById('btn-trigger');
       if (d.benchmark_running) {
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> En cours…';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning;
       } else {
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-play-fill"></i> Lancer maintenant';
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow;
       }
     })
     .catch(() => {});
@@ -174,15 +178,20 @@ setInterval(pollStatus, 5000);
 
 // ── Trigger benchmark ────────────────────────────────────────────────────
 function triggerBenchmark() {
+  const btn = document.getElementById('btn-trigger');
   fetch('{{ url_for("main.api_trigger") }}', { method: 'POST' })
     .then(r => {
       if (r.status === 409) {
-        alert('Un benchmark est déjà en cours.');
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + _msgAlready;
+        btn.classList.replace('btn-success', 'btn-warning');
+        setTimeout(() => {
+          btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow;
+          btn.classList.replace('btn-warning', 'btn-success');
+        }, 3000);
         return;
       }
-      const btn = document.getElementById('btn-trigger');
       btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> En cours…';
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning;
     });
 }
 
@@ -232,7 +241,7 @@ new Chart(document.getElementById('chartServers'), {
   data: {
     labels: [{% for s in server_stats %}'{{ s.server_name }}',{% endfor %}],
     datasets: [{
-      label: 'Mbps (moy.)',
+      label: '{{ t.chart_mbps_avg }}',
       data: [{% for s in server_stats %}{{ s.avg_dl or 0 }},{% endfor %}],
       backgroundColor: 'rgba(63,185,80,.7)',
       borderColor: '#3fb950',

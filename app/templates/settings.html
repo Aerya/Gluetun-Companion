@@ -1,8 +1,8 @@
 {% extends 'base.html' %}
-{% block title %}Paramètres – Gluetun Companion{% endblock %}
+{% block title %}{{ t.set_title }} – Gluetun Companion{% endblock %}
 
 {% block content %}
-<h5 class="mb-3"><i class="bi bi-gear"></i> Paramètres</h5>
+<h5 class="mb-3"><i class="bi bi-gear"></i> {{ t.set_title }}</h5>
 
 <div class="row g-4">
 
@@ -10,125 +10,114 @@
   <div class="col-lg-6">
     <div class="card p-4 h-100">
       <h6 class="fw-bold mb-3 text-success">
-        <i class="bi bi-speedometer2"></i> Planification &amp; Benchmark
+        <i class="bi bi-speedometer2"></i> {{ t.set_benchmark_title }}
       </h6>
       <form method="post">
         <input type="hidden" name="action" value="save">
 
         <div class="mb-3">
-          <label class="form-label">Intervalle entre les cycles de test</label>
+          <label class="form-label">{{ t.set_interval_label }}</label>
           <div class="input-group">
             <input type="number" name="interval" class="form-control"
                    value="{{ cfg.interval }}" min="1" max="168" step="0.5">
-            <span class="input-group-text bg-dark text-muted border-secondary">heures</span>
+            <span class="input-group-text bg-dark text-muted border-secondary">{{ t.cmn_hours }}</span>
           </div>
           {% if next_run %}
           <div class="form-text text-muted">
-            Prochain test prévu : <strong>{{ next_run.strftime('%d/%m/%Y à %H:%M:%S') }}</strong>
+            {{ t.set_interval_next }} <strong>{{ next_run.strftime('%d/%m/%Y %H:%M:%S') }}</strong>
           </div>
           {% endif %}
         </div>
 
         <div class="mb-3">
-          <label class="form-label">Durée de streaming par endpoint</label>
+          <label class="form-label">{{ t.set_duration_label }}</label>
           <div class="input-group">
             <input type="number" name="speedtest_duration" class="form-control"
                    value="{{ cfg.speedtest_duration }}" min="3" max="30" step="1">
-            <span class="input-group-text bg-dark text-muted border-secondary">secondes</span>
+            <span class="input-group-text bg-dark text-muted border-secondary">{{ t.cmn_seconds }}</span>
           </div>
-          <div class="form-text text-muted">
-            Durée pendant laquelle on streame depuis chaque endpoint pour mesurer le débit.
-            8 s est un bon compromis précision / rapidité.
-          </div>
+          <div class="form-text text-muted">{{ t.set_duration_hint }}</div>
         </div>
 
         <div class="mb-3">
-          <label class="form-label">Nombre d'endpoints à tester
-            <span class="text-muted">(médiane retenue)</span>
+          <label class="form-label">{{ t.set_samples_label }}
+            <span class="text-muted">{{ t.set_samples_median }}</span>
           </label>
           <div class="input-group" style="max-width:160px">
             <input type="number" name="speedtest_samples" class="form-control"
                    value="{{ cfg.speedtest_samples }}" min="1" max="5" step="1">
             <span class="input-group-text bg-dark text-muted border-secondary">/ 5</span>
           </div>
-          <div class="form-text text-muted mt-1">
-            Endpoints disponibles (dans l'ordre de test) :
-          </div>
+          <div class="form-text text-muted mt-1">{{ t.set_samples_note }}</div>
           <table class="table table-sm mt-1" style="font-size:.78rem">
-            <thead><tr><th>#</th><th>Nom</th><th>Réseau</th></tr></thead>
+            <thead><tr><th>#</th><th>{{ t.set_ep_name }}</th><th>{{ t.set_ep_network }}</th></tr></thead>
             <tbody>
-              <tr><td>1</td><td>Cloudflare</td><td>CDN mondial (paramétrique)</td></tr>
-              <tr><td>2</td><td>Hetzner-DE</td><td>Datacenter Falkenstein, Allemagne</td></tr>
-              <tr><td>3</td><td>Fast.com</td><td>CDN Netflix (URL dynamique via API)</td></tr>
-              <tr><td>4</td><td>OVH-FR</td><td>ISP/cloud, France</td></tr>
-              <tr><td>5</td><td>Tele2</td><td>Opérateur télécom, Suède</td></tr>
+              <tr><td>1</td><td>Cloudflare</td><td>{{ t.set_ep_cf }}</td></tr>
+              <tr><td>2</td><td>Hetzner-DE</td><td>{{ t.set_ep_hetzner }}</td></tr>
+              <tr><td>3</td><td>Fast.com</td><td>{{ t.set_ep_fast }}</td></tr>
+              <tr><td>4</td><td>OVH-FR</td><td>{{ t.set_ep_ovh }}</td></tr>
+              <tr><td>5</td><td>Tele2</td><td>{{ t.set_ep_tele2 }}</td></tr>
             </tbody>
           </table>
         </div>
 
         <div class="mb-3">
-          <label class="form-label">Flux parallèles par endpoint
-            <span class="text-muted">(streams simultanés)</span>
+          <label class="form-label">{{ t.set_streams_label }}
+            <span class="text-muted">{{ t.set_streams_sub }}</span>
           </label>
           <div class="input-group" style="max-width:160px">
             <input type="number" name="speedtest_streams" class="form-control"
                    value="{{ cfg.speedtest_streams }}" min="1" max="16" step="1">
-            <span class="input-group-text bg-dark text-muted border-secondary">flux</span>
+            <span class="input-group-text bg-dark text-muted border-secondary">{{ t.cmn_streams }}</span>
           </div>
-          <div class="form-text text-muted mt-1">
-            Nombre de connexions TCP simultanées par endpoint.
-            <strong>1</strong> = mono-flux (sous-estime sur VPN rapides).
-            <strong>4</strong> = recommandé — sature le tunnel comme un gestionnaire de téléchargement.
-          </div>
+          <div class="form-text text-muted mt-1">{{ t.set_streams_hint | safe }}</div>
         </div>
 
         <div class="mb-3">
-          <label class="form-label">Délai d'attente connexion VPN</label>
+          <label class="form-label">{{ t.set_wait_label }}</label>
           <div class="input-group">
             <input type="number" name="wait_secs" class="form-control"
                    value="{{ cfg.wait_secs }}" min="10" max="180">
-            <span class="input-group-text bg-dark text-muted border-secondary">secondes</span>
+            <span class="input-group-text bg-dark text-muted border-secondary">{{ t.cmn_seconds }}</span>
           </div>
-          <div class="form-text text-muted">
-            Temps accordé à Gluetun pour se reconnecter après chaque bascule.
-          </div>
+          <div class="form-text text-muted">{{ t.set_wait_hint }}</div>
         </div>
 
         <div class="mb-3">
-          <label class="form-label">Réessais par serveur en cas d'échec</label>
+          <label class="form-label">{{ t.set_retries_label }}</label>
           <div class="input-group" style="max-width:160px">
             <input type="number" name="speedtest_retries" class="form-control"
                    value="{{ cfg.speedtest_retries }}" min="0" max="5" step="1">
-            <span class="input-group-text bg-dark text-muted border-secondary">retries</span>
+            <span class="input-group-text bg-dark text-muted border-secondary">{{ t.cmn_retries }}</span>
           </div>
-          <div class="form-text text-muted">0 = pas de retry. Un timeout n'est jamais retryé.</div>
+          <div class="form-text text-muted">{{ t.set_retries_hint }}</div>
         </div>
 
         <div class="mb-3">
-          <label class="form-label">Timeout global par serveur</label>
+          <label class="form-label">{{ t.set_timeout_label }}</label>
           <div class="input-group" style="max-width:160px">
             <input type="number" name="server_timeout_secs" class="form-control"
                    value="{{ cfg.server_timeout_secs }}" min="60" max="900" step="30">
             <span class="input-group-text bg-dark text-muted border-secondary">s</span>
           </div>
-          <div class="form-text text-muted">Si un serveur dépasse cette durée, il est sauté.</div>
+          <div class="form-text text-muted">{{ t.set_timeout_hint }}</div>
         </div>
 
         <div class="mb-3">
-          <label class="form-label">Auto-désactiver après N échecs consécutifs</label>
+          <label class="form-label">{{ t.set_auto_exclude_label }}</label>
           <div class="input-group" style="max-width:160px">
             <input type="number" name="auto_exclude_failures" class="form-control"
                    value="{{ cfg.auto_exclude_failures }}" min="0" max="20" step="1">
-            <span class="input-group-text bg-dark text-muted border-secondary">échecs</span>
+            <span class="input-group-text bg-dark text-muted border-secondary">{{ t.cmn_failures }}</span>
           </div>
-          <div class="form-text text-muted">0 = désactivé. Le serveur peut être réactivé manuellement.</div>
+          <div class="form-text text-muted">{{ t.set_auto_exclude_hint }}</div>
         </div>
 
         <div class="mb-2 form-check form-switch">
           <input type="checkbox" name="speedtest_upload" class="form-check-input"
                  id="speedtest_upload" {{ 'checked' if cfg.speedtest_upload == '1' }}>
           <label class="form-check-label" for="speedtest_upload">
-            Tester l'<strong>upload</strong> (via Cloudflare __up)
+            {{ t.set_upload_label | safe }}
           </label>
         </div>
 
@@ -136,7 +125,7 @@
           <input type="checkbox" name="speedtest_warmup" class="form-check-input"
                  id="speedtest_warmup" {{ 'checked' if cfg.speedtest_warmup == '1' }}>
           <label class="form-check-label" for="speedtest_warmup">
-            Warm-up 2 s avant chaque mesure <span class="text-muted">(évite le biais TCP slow-start)</span>
+            {{ t.set_warmup_label | safe }}
           </label>
         </div>
 
@@ -144,17 +133,16 @@
           <input type="checkbox" name="auto_switch" class="form-check-input"
                  id="auto_switch" {{ 'checked' if cfg.auto_sw == '1' }}>
           <label class="form-check-label" for="auto_switch">
-            Basculer automatiquement vers le <strong>meilleur serveur</strong> après chaque cycle
-            <span class="text-muted">(score pondéré : 65% mesure actuelle + 35% historique)</span>
+            {{ t.set_autoswitch_label | safe }}
           </label>
         </div>
 
         <div class="d-flex gap-2">
           <button type="submit" class="btn btn-success fw-semibold">
-            <i class="bi bi-save"></i> Enregistrer
+            <i class="bi bi-save"></i> {{ t.cmn_save }}
           </button>
           <button type="button" id="btn-trigger" class="btn btn-outline-success" onclick="triggerNow()">
-            <i class="bi bi-play-fill"></i> Lancer un test maintenant
+            <i class="bi bi-play-fill"></i> {{ t.set_run_now }}
           </button>
         </div>
       </form>
@@ -165,166 +153,144 @@
   <div class="col-lg-6">
     <div class="card p-4 mb-4">
       <h6 class="fw-bold mb-3 text-warning">
-        <i class="bi bi-person-lock"></i> Identifiants Web UI
+        <i class="bi bi-person-lock"></i> {{ t.set_credentials_title }}
       </h6>
       <form method="post">
         <input type="hidden" name="action" value="credentials">
 
         <div class="mb-3">
-          <label class="form-label">Nom d'utilisateur</label>
+          <label class="form-label">{{ t.set_username }}</label>
           <input type="text" name="username" class="form-control"
                  value="{{ cfg.username }}" autocomplete="username">
         </div>
 
         <div class="mb-4">
-          <label class="form-label">Nouveau mot de passe</label>
+          <label class="form-label">{{ t.set_new_password }}</label>
           <input type="password" name="password" class="form-control"
-                 placeholder="Laisser vide pour ne pas changer"
+                 placeholder="{{ t.set_password_placeholder }}"
                  autocomplete="new-password">
         </div>
 
         <button type="submit" class="btn btn-warning fw-semibold text-dark">
-          <i class="bi bi-shield-lock"></i> Mettre à jour
+          <i class="bi bi-shield-lock"></i> {{ t.set_update }}
         </button>
       </form>
     </div>
 
     <div class="card p-4 mb-4">
       <h6 class="fw-bold mb-1">
-        <i class="bi bi-key text-info"></i> Authentification proxy HTTP
+        <i class="bi bi-key text-info"></i> {{ t.set_proxy_title }}
       </h6>
-      <p class="text-muted small mb-3">
-        Si le proxy Gluetun est configuré avec <code>HTTPPROXY_USER</code> /
-        <code>HTTPPROXY_PASSWORD</code>, renseignez-les ici. Laissez vide si le proxy
-        est ouvert (votre config actuelle a <code>HTTPPROXY_USER: ""</code>).
-      </p>
+      <p class="text-muted small mb-3">{{ t.set_proxy_hint | safe }}</p>
       <form method="post">
         <input type="hidden" name="action" value="proxy_credentials">
 
         <div class="row g-2 mb-3">
           <div class="col">
-            <label class="form-label small text-muted">Utilisateur proxy</label>
+            <label class="form-label small text-muted">{{ t.set_proxy_user }}</label>
             <input type="text" name="proxy_username" class="form-control"
                    value="{{ cfg.proxy_username }}"
-                   placeholder="Laisser vide = pas d'auth"
+                   placeholder="{{ t.set_proxy_placeholder }}"
                    autocomplete="off">
           </div>
           <div class="col">
-            <label class="form-label small text-muted">Mot de passe proxy</label>
+            <label class="form-label small text-muted">{{ t.set_proxy_pass }}</label>
             <input type="password" name="proxy_password" class="form-control"
                    value="{{ cfg.proxy_password }}"
-                   placeholder="Laisser vide = pas d'auth"
+                   placeholder="{{ t.set_proxy_placeholder }}"
                    autocomplete="off">
           </div>
         </div>
 
         <button type="submit" class="btn btn-info fw-semibold text-dark">
-          <i class="bi bi-save"></i> Enregistrer
+          <i class="bi bi-save"></i> {{ t.cmn_save }}
         </button>
         {% if cfg.proxy_username %}
         <span class="ms-2 badge bg-success">
-          <i class="bi bi-check2-circle"></i> Auth proxy active : {{ cfg.proxy_username }}
+          <i class="bi bi-check2-circle"></i> {{ t.set_proxy_active }} {{ cfg.proxy_username }}
         </span>
         {% else %}
-        <span class="ms-2 badge bg-secondary">Proxy sans auth</span>
+        <span class="ms-2 badge bg-secondary">{{ t.set_proxy_none }}</span>
         {% endif %}
       </form>
     </div>
 
     <div class="card p-4 mb-4">
       <h6 class="fw-bold mb-3 text-info">
-        <i class="bi bi-database-gear"></i> Maintenance de la base de données
+        <i class="bi bi-database-gear"></i> {{ t.set_db_title }}
       </h6>
       <form method="post">
         <input type="hidden" name="action" value="db_retention">
         <div class="mb-3">
-          <label class="form-label">Rétention de l'historique</label>
+          <label class="form-label">{{ t.set_retention_label }}</label>
           <div class="input-group" style="max-width:200px">
             <input type="number" name="db_retention_days" class="form-control"
                    value="{{ cfg.db_retention_days }}" min="0" max="3650" step="1">
-            <span class="input-group-text bg-dark text-muted border-secondary">jours</span>
+            <span class="input-group-text bg-dark text-muted border-secondary">{{ t.cmn_days }}</span>
           </div>
-          <div class="form-text text-muted">
-            Les tests plus anciens sont supprimés automatiquement toutes les 24 h.
-            <strong>0</strong> = désactivé (conservation illimitée).
-          </div>
+          <div class="form-text text-muted">{{ t.set_retention_hint | safe }}</div>
         </div>
         <button type="submit" class="btn btn-info fw-semibold text-dark btn-sm">
-          <i class="bi bi-save"></i> Enregistrer
+          <i class="bi bi-save"></i> {{ t.cmn_save }}
         </button>
       </form>
     </div>
 
     <div class="card p-4 mb-4">
       <h6 class="fw-bold mb-3" style="color:#5865F2">
-        <i class="bi bi-bell-fill"></i> Notifications de bascule
+        <i class="bi bi-bell-fill"></i> {{ t.set_notif_title }}
       </h6>
       <form method="post">
         <input type="hidden" name="action" value="notifications">
 
         <div class="mb-3">
           <label class="form-label">
-            <i class="bi bi-discord"></i> Webhook Discord
+            <i class="bi bi-discord"></i> {{ t.set_discord_label }}
           </label>
           <input type="url" name="discord_webhook_url" class="form-control"
                  value="{{ cfg.discord_webhook_url }}"
                  placeholder="https://discord.com/api/webhooks/…">
-          <div class="form-text text-muted">
-            Laissez vide pour désactiver. Un embed coloré est envoyé à chaque bascule
-            (vert = amélioration, rouge = régression de débit).
-          </div>
+          <div class="form-text text-muted">{{ t.set_discord_hint }}</div>
         </div>
 
         <div class="mb-3">
           <label class="form-label">
-            <i class="bi bi-send-fill"></i> URL(s) Apprise
-            <span class="text-muted small">(une par ligne)</span>
+            <i class="bi bi-send-fill"></i> {{ t.set_apprise_label }}
+            <span class="text-muted small">{{ t.set_apprise_sub }}</span>
           </label>
           <textarea name="apprise_urls" class="form-control font-monospace"
                     rows="3" placeholder="tgram://token/chatid
 ntfy://mytopic
 gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
-          <div class="form-text text-muted">
-            Compatible avec 80+ services : Telegram, ntfy, Gotify, Slack, Pushover…
-            Voir <a href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noreferrer noopener">apprise/wiki</a>
-            pour la liste complète des URLs.
-          </div>
+          <div class="form-text text-muted">{{ t.set_apprise_hint | safe }}</div>
         </div>
 
         <button type="submit" class="btn btn-sm fw-semibold" style="background:#5865F2;color:#fff">
-          <i class="bi bi-save"></i> Enregistrer
+          <i class="bi bi-save"></i> {{ t.cmn_save }}
         </button>
         {% if cfg.discord_webhook_url or cfg.apprise_urls %}
         <span class="ms-2 badge bg-success">
-          <i class="bi bi-check2-circle"></i> Notifications actives
+          <i class="bi bi-check2-circle"></i> {{ t.set_notif_active }}
         </span>
         {% else %}
-        <span class="ms-2 badge bg-secondary">Notifications désactivées</span>
+        <span class="ms-2 badge bg-secondary">{{ t.set_notif_inactive }}</span>
         {% endif %}
       </form>
     </div>
 
     <div class="card p-4">
       <h6 class="fw-bold mb-2">
-        <i class="bi bi-info-circle text-info"></i> Configuration Docker requise
+        <i class="bi bi-info-circle text-info"></i> {{ t.set_docker_title }}
       </h6>
-      <p class="text-muted small mb-2">
-        Pour que le companion puisse contrôler Gluetun, vérifiez que votre
-        <code>docker-compose.yml</code> du companion contient :
-      </p>
+      <p class="text-muted small mb-2">{{ t.set_docker_hint | safe }}</p>
       <pre style="font-size:.78rem">volumes:
   - /var/run/docker.sock:/var/run/docker.sock
   - /chemin/vers/compose/gluetun:/compose
 
 environment:
   GLUETUN_CONTAINER: gluetun-airvpn
-  COMPOSE_DIR: /compose
-  COMPOSE_PROJECT: nom_du_projet</pre>
-      <p class="text-muted small">
-        Le companion écrira un <code>docker-compose.override.yml</code> dans ce dossier
-        pour changer <code>SERVER_NAMES</code> et relancera le service avec
-        <code>docker compose up -d</code>.
-      </p>
+  COMPOSE_DIR: /compose</pre>
+      <p class="text-muted small">{{ t.set_docker_note | safe }}</p>
     </div>
   </div>
 
@@ -335,18 +301,21 @@ environment:
 <script>
 function triggerNow() {
   const btn = document.getElementById('btn-trigger');
+  const msgRunning = '{{ t.set_running }}';
+  const msgLaunched = '{{ t.set_launched }}';
+  const msgDefault = '{{ t.set_run_now }}';
   btn.disabled = true;
   fetch('{{ url_for("main.api_trigger") }}', { method: 'POST' })
     .then(r => {
       if (r.status === 409) {
-        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Déjà en cours…';
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + msgRunning;
         btn.classList.replace('btn-outline-success', 'btn-outline-warning');
       } else {
-        btn.innerHTML = '<i class="bi bi-check2"></i> Lancé';
+        btn.innerHTML = '<i class="bi bi-check2"></i> ' + msgLaunched;
         btn.classList.replace('btn-outline-success', 'btn-outline-info');
       }
       setTimeout(() => {
-        btn.innerHTML = '<i class="bi bi-play-fill"></i> Lancer un test maintenant';
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + msgDefault;
         btn.classList.replace('btn-outline-warning', 'btn-outline-success');
         btn.classList.replace('btn-outline-info', 'btn-outline-success');
         btn.disabled = false;

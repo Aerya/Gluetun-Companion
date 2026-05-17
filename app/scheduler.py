@@ -324,6 +324,7 @@ def _do_benchmark(app):
                         reason='auto_best',
                         discord_url=get_setting('discord_webhook_url') or None,
                         apprise_urls=get_setting('apprise_urls') or None,
+                        lang=get_setting('ui_lang', 'fr'),
                     )
             else:
                 logger.info('Already on best: %s', best_label)

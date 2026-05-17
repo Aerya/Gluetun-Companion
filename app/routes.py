@@ -14,6 +14,7 @@ from .gluetun import (
     get_current_filters, format_filters,
     get_public_ip, get_vpn_status, switch_server,
 )
+from .i18n import flash_t, get_t
 from .scheduler import get_next_run, reschedule, trigger_now, trigger_single_server
 
 bp = Blueprint('main', __name__)
@@ -48,7 +49,7 @@ def login():
             set_setting('admin_password_hash', generate_password_hash(password))
             session['logged_in'] = True
             session['username'] = username
-            flash('Compte créé avec succès.', 'success')
+            flash_t('flash_account_created', 'success')
             return redirect(url_for('main.dashboard'))
 
         if username == stored_user and check_password_hash(stored_hash, password):
@@ -56,7 +57,7 @@ def login():
             session['username'] = username
             return redirect(url_for('main.dashboard'))
 
-        flash('Identifiants incorrects.', 'danger')
+        flash_t('flash_login_failed', 'danger')
 
     first_login = not bool(get_setting('admin_password_hash', ''))
     return render_template('login.html', first_login=first_login)
@@ -66,6 +67,14 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for('main.login'))
+
+
+@bp.route('/lang/<code>')
+def set_lang(code):
+    if code in ('fr', 'en'):
+        session['lang'] = code
+        set_setting('ui_lang', code)
+    return redirect(request.referrer or url_for('main.dashboard'))
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +196,7 @@ def import_servers():
     filters = get_current_filters(container_name)
 
     if not filters:
-        flash('Aucune variable de filtre trouvée dans le container Gluetun.', 'danger')
+        flash_t('flash_no_filter', 'danger')
         return redirect(url_for('main.servers'))
 
     added = 0
@@ -207,9 +216,9 @@ def import_servers():
                     imported.append(f'{FILTER_VARS[filter_type]}={value}')
 
     if added:
-        flash(f'{added} entrée(s) importée(s) : {", ".join(imported)}.', 'success')
+        flash_t('flash_import_done', 'success', count=added, names=', '.join(imported))
     else:
-        flash('Ces entrées sont déjà dans la liste.', 'info')
+        flash_t('flash_import_exists', 'info')
     return redirect(url_for('main.servers'))
 
 
@@ -220,7 +229,7 @@ def add_server():
     filter_type = request.form.get('filter_type', 'name').strip()
 
     if not name:
-        flash('La valeur est requise.', 'warning')
+        flash_t('flash_value_required', 'warning')
         return redirect(url_for('main.servers'))
     if filter_type not in FILTER_VARS:
         filter_type = 'name'
@@ -235,7 +244,7 @@ def add_server():
             flash(str(exc), 'danger')
             return redirect(url_for('main.servers'))
 
-    flash(f'Ajouté : {FILTER_VARS[filter_type]}={name}.', 'success')
+    flash_t('flash_added', 'success', entry=f'{FILTER_VARS[filter_type]}={name}')
     return redirect(url_for('main.servers'))
 
 
@@ -252,7 +261,7 @@ def toggle_server(server_id):
 def delete_server(server_id):
     with get_db() as db:
         db.execute('DELETE FROM servers WHERE id = ?', (server_id,))
-    flash('Serveur supprimé.', 'success')
+    flash_t('flash_server_deleted', 'success')
     return redirect(url_for('main.servers'))
 
 
@@ -277,6 +286,7 @@ def manual_switch(server_id):
             'INSERT INTO switches (from_server, to_server, reason, success) VALUES (?, ?, ?, ?)',
             (from_label, to_label, 'manual', int(ok)),
         )
+    lang = get_setting('ui_lang', 'fr')
     if ok:
         from .notify import send_switch_notification
         send_switch_notification(
@@ -290,10 +300,11 @@ def manual_switch(server_id):
             reason='manual',
             discord_url=get_setting('discord_webhook_url') or None,
             apprise_urls=get_setting('apprise_urls') or None,
+            lang=lang,
         )
-        flash(f'Basculé vers {to_label}.', 'success')
+        flash_t('flash_switched', 'success', to=to_label)
     else:
-        flash(f'Échec : {err}', 'danger')
+        flash_t('flash_switch_failed', 'danger', err=err)
     return redirect(url_for('main.servers'))
 
 
@@ -301,23 +312,19 @@ def manual_switch(server_id):
 @login_required
 def test_server_now(server_id):
     if get_setting('benchmark_running', '0') == '1':
-        flash('Un benchmark est déjà en cours.', 'warning')
+        flash_t('flash_benchmark_running', 'warning')
         return redirect(url_for('main.servers'))
 
     with get_db() as db:
         row = db.execute('SELECT name, filter_type FROM servers WHERE id=?', (server_id,)).fetchone()
     if not row:
-        flash('Serveur introuvable.', 'danger')
+        flash_t('flash_server_not_found', 'danger')
         return redirect(url_for('main.servers'))
 
     trigger_single_server(
         current_app._get_current_object(), row['name'], row['filter_type']
     )
-    flash(
-        f'Test lancé pour {row["name"]} en arrière-plan — '
-        f'le résultat apparaîtra dans l\'historique dans quelques minutes.',
-        'info',
-    )
+    flash_t('flash_test_started', 'info', name=row['name'])
     return redirect(url_for('main.servers'))
 
 
@@ -422,16 +429,16 @@ def settings():
             set_setting('speedtest_warmup',        '1' if request.form.get('speedtest_warmup') else '0')
             set_setting('speedtest_streams',       request.form.get('speedtest_streams', '4'))
             reschedule(float(request.form.get('interval', '6')))
-            flash('Paramètres enregistrés.', 'success')
+            flash_t('flash_settings_saved', 'success')
 
         elif action == 'db_retention':
             set_setting('db_retention_days', request.form.get('db_retention_days', '30'))
-            flash('Rétention enregistrée.', 'success')
+            flash_t('flash_retention_saved', 'success')
 
         elif action == 'notifications':
             set_setting('discord_webhook_url', request.form.get('discord_webhook_url', '').strip())
             set_setting('apprise_urls',        request.form.get('apprise_urls', '').strip())
-            flash('Notifications enregistrées.', 'success')
+            flash_t('flash_notifications_saved', 'success')
 
         elif action == 'credentials':
             new_user = request.form.get('username', '').strip()
@@ -440,12 +447,12 @@ def settings():
                 set_setting('admin_username', new_user)
             if new_pass:
                 set_setting('admin_password_hash', generate_password_hash(new_pass))
-            flash('Identifiants mis à jour.', 'success')
+            flash_t('flash_credentials_saved', 'success')
 
         elif action == 'proxy_credentials':
             set_setting('proxy_username', request.form.get('proxy_username', '').strip())
             set_setting('proxy_password', request.form.get('proxy_password', ''))
-            flash('Identifiants proxy enregistrés.', 'success')
+            flash_t('flash_proxy_saved', 'success')
 
         return redirect(url_for('main.settings'))
 

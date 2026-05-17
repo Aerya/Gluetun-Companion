@@ -2,8 +2,9 @@ import json
 import logging
 import os
 
-from flask import Flask
+from flask import Flask, session
 from .database import init_db
+from .i18n import get_translations
 
 
 class _JsonFormatter(logging.Formatter):
@@ -54,6 +55,11 @@ def create_app():
 
     os.makedirs(app.config['DATA_DIR'], exist_ok=True)
     init_db(app.config['DB_PATH'])
+
+    @app.context_processor
+    def inject_i18n():
+        lang = session.get('lang', 'fr')
+        return {'t': get_translations(lang), 'lang': lang}
 
     from .routes import bp
     app.register_blueprint(bp)

@@ -1,8 +1,8 @@
 {% extends 'base.html' %}
-{% block title %}Historique – Gluetun Companion{% endblock %}
+{% block title %}{{ t.nav_history }} – Gluetun Companion{% endblock %}
 
 {% block content %}
-<h5 class="mb-3"><i class="bi bi-graph-up"></i> Historique des tests de vitesse</h5>
+<h5 class="mb-3"><i class="bi bi-graph-up"></i> {{ t.hist_title }}</h5>
 
 {% if per_server %}
 <div class="row g-3 mb-4">
@@ -13,7 +13,7 @@
       <div class="text-muted" style="font-size:.7rem;text-transform:uppercase">{{ s.server_name }}</div>
       {% set cls = 'speed-good' if s.avg_dl > 50 else ('speed-ok' if s.avg_dl > 15 else 'speed-bad') %}
       <div class="fw-bold {{ cls }}" style="font-size:1.25rem">{{ s.avg_dl }} Mbps</div>
-      <div class="text-muted" style="font-size:.75rem">moy. · {{ s.cnt }} tests</div>
+      <div class="text-muted" style="font-size:.75rem">{{ t.hist_avg }} · {{ s.cnt }} {{ t.hist_tests }}</div>
       <div class="text-muted" style="font-size:.7rem">
         ↓ {{ s.min_dl }} &nbsp;↑ {{ s.max_dl }} Mbps
       </div>
@@ -24,7 +24,7 @@
 
 <div class="card mb-4 p-3">
   <div class="fw-semibold mb-2">
-    <i class="bi bi-bar-chart-fill text-success"></i> Comparaison des serveurs
+    <i class="bi bi-bar-chart-fill text-success"></i> {{ t.hist_comparison }}
   </div>
   <div style="position:relative; height:{{ [per_server|length * 42, 120]|max }}px">
     <canvas id="chartAvg"></canvas>
@@ -34,56 +34,56 @@
 
 <div class="card">
   <div class="card-header py-2 d-flex justify-content-between align-items-center">
-    <span><i class="bi bi-table"></i> Tous les tests
-      <small class="text-muted ms-2">{{ total }} entrées</small>
+    <span><i class="bi bi-table"></i> {{ t.hist_all_tests }}
+      <small class="text-muted ms-2">{{ total }} {{ t.hist_entries }}</small>
     </span>
     <a href="{{ url_for('main.history_export') }}" class="btn btn-sm btn-outline-secondary">
-      <i class="bi bi-download"></i> Export CSV
+      <i class="bi bi-download"></i> {{ t.hist_export_csv }}
     </a>
   </div>
   <div class="table-responsive">
     <table class="table table-hover mb-0" style="font-size:.875rem">
       <thead>
         <tr>
-          <th>Serveur</th><th>Download</th><th>Upload</th><th>Latence</th>
-          <th>IP publique</th><th>Statut</th><th>Date</th>
+          <th>{{ t.cmn_server }}</th><th>{{ t.cmn_download }}</th><th>{{ t.cmn_upload }}</th>
+          <th>{{ t.cmn_latency }}</th><th>{{ t.cmn_public_ip }}</th><th>{{ t.cmn_status }}</th><th>{{ t.cmn_date }}</th>
         </tr>
       </thead>
       <tbody>
-        {% for t in tests %}
+        {% for r in tests %}
         <tr>
-          <td><code>{{ t.server_name }}</code></td>
+          <td><code>{{ r.server_name }}</code></td>
           <td>
-            {% if t.download_mbps %}
-              {% set cls = 'speed-good' if t.download_mbps > 50 else ('speed-ok' if t.download_mbps > 15 else 'speed-bad') %}
-              <span class="fw-semibold {{ cls }}">{{ '%.1f'|format(t.download_mbps) }} Mbps</span>
+            {% if r.download_mbps %}
+              {% set cls = 'speed-good' if r.download_mbps > 50 else ('speed-ok' if r.download_mbps > 15 else 'speed-bad') %}
+              <span class="fw-semibold {{ cls }}">{{ '%.1f'|format(r.download_mbps) }} Mbps</span>
             {% else %}—{% endif %}
           </td>
           <td>
-            {% if t.upload_mbps %}
-              <span class="text-info">{{ '%.1f'|format(t.upload_mbps) }} Mbps</span>
+            {% if r.upload_mbps %}
+              <span class="text-info">{{ '%.1f'|format(r.upload_mbps) }} Mbps</span>
             {% else %}—{% endif %}
           </td>
-          <td>{{ ('%.0f ms'|format(t.latency_ms)) if t.latency_ms else '—' }}</td>
+          <td>{{ ('%.0f ms'|format(r.latency_ms)) if r.latency_ms else '—' }}</td>
           <td>
-            <small class="text-muted font-monospace">{{ t.public_ip or '—' }}
-            {% if t.public_ipv6 %}<br><span style="font-size:.7rem">{{ t.public_ipv6 }}</span>{% endif %}
+            <small class="text-muted font-monospace">{{ r.public_ip or '—' }}
+            {% if r.public_ipv6 %}<br><span style="font-size:.7rem">{{ r.public_ipv6 }}</span>{% endif %}
             </small>
           </td>
           <td>
-            {% if t.success %}
+            {% if r.success %}
               <span class="badge bg-success">OK</span>
             {% else %}
               <span class="badge bg-danger"
                     data-bs-toggle="tooltip"
-                    title="{{ t.error_msg or 'Erreur inconnue' }}">Échec</span>
+                    title="{{ r.error_msg or t.cmn_unknown_error }}">{{ t.cmn_failure }}</span>
             {% endif %}
           </td>
-          <td><small class="text-muted">{{ t.tested_at[:16] }}</small></td>
+          <td><small class="text-muted">{{ r.tested_at[:16] }}</small></td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" class="text-center text-muted py-4">Aucun test enregistré.</td>
+          <td colspan="7" class="text-center text-muted py-4">{{ t.hist_empty }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -126,7 +126,7 @@ new Chart(document.getElementById('chartAvg'), {
     labels,
     datasets: [
       {
-        label: 'Moy.',
+        label: '{{ t.chart_avg }}',
         data: avgData,
         backgroundColor: 'rgba(63,185,80,.7)',
         borderColor: '#3fb950',
@@ -135,7 +135,7 @@ new Chart(document.getElementById('chartAvg'), {
         maxBarThickness: 20,
       },
       {
-        label: 'Max',
+        label: '{{ t.chart_max }}',
         data: maxData,
         backgroundColor: 'rgba(88,166,255,.35)',
         borderColor: '#58a6ff',

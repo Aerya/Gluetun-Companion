@@ -43,7 +43,7 @@ It is primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_
 - **TCP warm-up** to avoid slow-start bias
 - Configurable **retry** per server + global timeout per server
 - **Auto-disable** a server after N consecutive failures
-- **Web UI** dark/light — auth, dashboard with sparkline, paginated history, charts,
+- **Web UI** dark/light, **FR/EN** — auth, dashboard with sparkline, paginated history, charts,
   switches page with Mbps gain and connection time
 - **CSV export** of the full history
 - **On-demand test** of a single server from the UI without waiting for the next cycle

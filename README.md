@@ -46,7 +46,7 @@ documentée ici :
 - **Warm-up TCP** configurable pour éviter le biais slow-start
 - **Retry** configurable par serveur + timeout global par serveur
 - **Auto-désactivation** d'un serveur après N échecs consécutifs
-- **Web UI** dark/light — auth, dashboard avec sparkline, historique paginé, graphiques,
+- **Web UI** dark/light, **FR/EN** — auth, dashboard avec sparkline, historique paginé, graphiques,
   page bascules avec gain Mbps et temps de connexion
 - **Export CSV** de l'historique complet
 - **Test unitaire** d'un serveur depuis l'UI sans attendre le prochain cycle

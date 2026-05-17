@@ -1,19 +1,19 @@
 {% extends 'base.html' %}
-{% block title %}Serveurs – Gluetun Companion{% endblock %}
+{% block title %}{{ t.nav_servers }} – Gluetun Companion{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h5 class="mb-0"><i class="bi bi-hdd-network"></i> Serveurs configurés</h5>
+  <h5 class="mb-0"><i class="bi bi-hdd-network"></i> {{ t.srv_title }}</h5>
   <div class="d-flex gap-2">
     <form method="post" action="{{ url_for('main.import_servers') }}">
       <button class="btn btn-outline-info btn-sm fw-semibold"
-              title="Lit SERVER_NAMES depuis le container Gluetun et importe chaque serveur">
-        <i class="bi bi-download"></i> Importer depuis Gluetun
+              title="{{ t.srv_import_title }}">
+        <i class="bi bi-download"></i> {{ t.srv_import }}
       </button>
     </form>
     <button class="btn btn-success btn-sm fw-semibold"
             data-bs-toggle="modal" data-bs-target="#addModal">
-      <i class="bi bi-plus-lg"></i> Ajouter
+      <i class="bi bi-plus-lg"></i> {{ t.srv_add }}
     </button>
   </div>
 </div>
@@ -23,16 +23,16 @@
     <table class="table table-hover mb-0">
       <thead>
         <tr>
-          <th>Valeur</th>
-          <th>Type</th>
-          <th>IP publique</th>
-          <th>Avg DL</th>
-          <th>Avg UL</th>
-          <th>Max DL</th>
-          <th>Latence</th>
-          <th>Tests</th>
-          <th>Dernier test</th>
-          <th class="text-end">Actions</th>
+          <th>{{ t.srv_col_value }}</th>
+          <th>{{ t.srv_col_type }}</th>
+          <th>{{ t.cmn_public_ip }}</th>
+          <th>{{ t.srv_col_avg_dl }}</th>
+          <th>{{ t.srv_col_avg_ul }}</th>
+          <th>{{ t.srv_col_max_dl }}</th>
+          <th>{{ t.srv_col_latency }}</th>
+          <th>{{ t.srv_col_tests }}</th>
+          <th>{{ t.srv_col_last_test }}</th>
+          <th class="text-end">{{ t.srv_col_actions }}</th>
         </tr>
       </thead>
       <tbody>
@@ -73,15 +73,15 @@
             <small class="text-muted">{{ s.ok_tests }}/{{ s.total_tests }}</small>
           </td>
           <td>
-            <small class="text-muted">{{ s.last_tested[:16] if s.last_tested else 'Jamais' }}</small>
+            <small class="text-muted">{{ s.last_tested[:16] if s.last_tested else t.cmn_never }}</small>
           </td>
           <td class="text-end">
             {# Test now #}
             <form method="post"
                   action="{{ url_for('main.test_server_now', server_id=s.id) }}"
                   class="d-inline"
-                  onsubmit="return confirm('Tester {{ s.name }} maintenant ? Gluetun va basculer sur ce serveur.')">
-              <button class="btn btn-outline-info btn-sm" title="Tester maintenant">
+                  onsubmit="return confirm('{{ t.srv_confirm_test_a }} {{ s.name }} {{ t.srv_confirm_test_b }}')">
+              <button class="btn btn-outline-info btn-sm" title="{{ t.srv_test_now }}">
                 <i class="bi bi-speedometer2"></i>
               </button>
             </form>
@@ -89,8 +89,8 @@
             <form method="post"
                   action="{{ url_for('main.manual_switch', server_id=s.id) }}"
                   class="d-inline"
-                  onsubmit="return confirm('Basculer Gluetun vers {{ filter_vars.get(s.filter_type) }}={{ s.name }} maintenant ?')">
-              <button class="btn btn-success btn-sm" title="Basculer maintenant">
+                  onsubmit="return confirm('{{ t.srv_confirm_switch_a }} {{ filter_vars.get(s.filter_type) }}={{ s.name }} {{ t.srv_confirm_switch_b }}')">
+              <button class="btn btn-success btn-sm" title="{{ t.srv_switch_now }}">
                 <i class="bi bi-arrow-right-circle-fill"></i>
               </button>
             </form>
@@ -99,7 +99,7 @@
                   action="{{ url_for('main.toggle_server', server_id=s.id) }}"
                   class="d-inline">
               <button class="btn btn-outline-secondary btn-sm"
-                      title="{{ 'Activer' if not s.enabled else 'Désactiver' }}">
+                      title="{{ t.srv_enable if not s.enabled else t.srv_disable }}">
                 <i class="bi bi-toggle-{{ 'off' if not s.enabled else 'on text-success' }}"></i>
               </button>
             </form>
@@ -107,8 +107,8 @@
             <form method="post"
                   action="{{ url_for('main.delete_server', server_id=s.id) }}"
                   class="d-inline"
-                  onsubmit="return confirm('Supprimer « {{ s.name }} » ?')">
-              <button class="btn btn-outline-danger btn-sm" title="Supprimer">
+                  onsubmit="return confirm('{{ t.srv_confirm_delete_a }} {{ s.name }} {{ t.srv_confirm_delete_b }}')">
+              <button class="btn btn-outline-danger btn-sm" title="{{ t.srv_delete }}">
                 <i class="bi bi-trash3"></i>
               </button>
             </form>
@@ -118,8 +118,8 @@
         <tr>
           <td colspan="10" class="text-center text-muted py-5">
             <i class="bi bi-hdd-network" style="font-size:2rem;opacity:.3"></i><br>
-            Aucun serveur configuré.<br>
-            <small>Ajoutez des noms de serveurs AirVPN (ex : <code>Chamukuy</code>, <code>Elgafar</code>…)</small>
+            {{ t.srv_empty }}<br>
+            <small>{{ t.srv_empty_hint | safe }}</small>
           </td>
         </tr>
         {% endfor %}
@@ -133,34 +133,34 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Ajouter un serveur</h5>
+        <h5 class="modal-title"><i class="bi bi-plus-circle"></i> {{ t.srv_modal_title }}</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <form method="post" action="{{ url_for('main.add_server') }}">
         <div class="modal-body">
           <div class="mb-3">
-            <label class="form-label fw-semibold">Type de filtre <span class="text-danger">*</span></label>
+            <label class="form-label fw-semibold">{{ t.srv_filter_type }} <span class="text-danger">*</span></label>
             <select name="filter_type" class="form-select" id="filterTypeSelect" onchange="updatePlaceholder()">
-              {% for key, label in filter_labels.items() %}
-              <option value="{{ key }}">{{ filter_vars[key] }} — {{ label }}</option>
+              {% for key in filter_vars %}
+              <option value="{{ key }}">{{ filter_vars[key] }} — {{ t['filter_label_' + key] }}</option>
               {% endfor %}
             </select>
           </div>
           <div class="mb-3">
-            <label class="form-label fw-semibold">Valeur <span class="text-danger">*</span></label>
+            <label class="form-label fw-semibold">{{ t.srv_filter_value }} <span class="text-danger">*</span></label>
             <input type="text" name="name" id="filterValueInput" class="form-control"
                    placeholder="ex : Chamukuy" required autofocus>
             <div class="form-text text-muted" id="filterHint">
-              Valeur exacte telle qu'attendue par Gluetun pour cette variable.
+              {{ t.srv_filter_hint }}
               <a href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/airvpn.md"
-                 target="_blank" class="text-info">Référence AirVPN</a>
+                 target="_blank" class="text-info">{{ t.srv_filter_ref }}</a>
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t.cmn_cancel }}</button>
           <button type="submit" class="btn btn-success fw-semibold">
-            <i class="bi bi-plus-lg"></i> Ajouter
+            <i class="bi bi-plus-lg"></i> {{ t.cmn_add }}
           </button>
         </div>
       </form>
