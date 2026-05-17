@@ -116,9 +116,9 @@
               <span class="fw-semibold {{ cls }}">{{ '%.1f'|format(r.download_mbps) }} Mbps</span>
               {% if r.dl_ookla or r.dl_librespeed or r.dl_iperf3 %}
               <div style="font-size:.7rem;color:var(--muted);line-height:1.6;margin-top:2px">
-                {% if r.dl_ookla %}<span title="Ookla">⚡ {{ '%.0f'|format(r.dl_ookla) }}</span>{% endif %}
-                {% if r.dl_librespeed %}<span title="librespeed" class="ms-1">🟢 {{ '%.0f'|format(r.dl_librespeed) }}</span>{% endif %}
-                {% if r.dl_iperf3 %}<span title="iperf3" class="ms-1">📡 {{ '%.0f'|format(r.dl_iperf3) }}</span>{% endif %}
+                {% if r.dl_ookla %}<span>Ookla {{ '%.0f'|format(r.dl_ookla) }}</span>{% endif %}
+                {% if r.dl_librespeed %}<span class="ms-1">LibreSpeed {{ '%.0f'|format(r.dl_librespeed) }}</span>{% endif %}
+                {% if r.dl_iperf3 %}<span class="ms-1">iPerf3 {{ '%.0f'|format(r.dl_iperf3) }}</span>{% endif %}
               </div>
               {% endif %}
             {% else %}—{% endif %}
@@ -128,9 +128,9 @@
               <span class="text-info">{{ '%.1f'|format(r.upload_mbps) }} Mbps</span>
               {% if r.ul_ookla or r.ul_librespeed or r.ul_iperf3 %}
               <div style="font-size:.7rem;color:var(--muted);line-height:1.6;margin-top:2px">
-                {% if r.ul_ookla %}<span title="Ookla">⚡ {{ '%.0f'|format(r.ul_ookla) }}</span>{% endif %}
-                {% if r.ul_librespeed %}<span title="librespeed" class="ms-1">🟢 {{ '%.0f'|format(r.ul_librespeed) }}</span>{% endif %}
-                {% if r.ul_iperf3 %}<span title="iperf3" class="ms-1">📡 {{ '%.0f'|format(r.ul_iperf3) }}</span>{% endif %}
+                {% if r.ul_ookla %}<span>Ookla {{ '%.0f'|format(r.ul_ookla) }}</span>{% endif %}
+                {% if r.ul_librespeed %}<span class="ms-1">LibreSpeed {{ '%.0f'|format(r.ul_librespeed) }}</span>{% endif %}
+                {% if r.ul_iperf3 %}<span class="ms-1">iPerf3 {{ '%.0f'|format(r.ul_iperf3) }}</span>{% endif %}
               </div>
               {% endif %}
             {% else %}—{% endif %}

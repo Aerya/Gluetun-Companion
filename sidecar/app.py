@@ -141,11 +141,11 @@ def test():
                 and result['dl_iperf3'] is None):
             return jsonify({'error': 'all speed test sources failed'}), 503
 
-    # Compute averaged download_mbps / upload_mbps from all sources that succeeded
+    # download_mbps / upload_mbps = best value across all sources (used for server ranking)
     dl_values = [v for v in (result['dl_ookla'], result['dl_librespeed'], result['dl_iperf3']) if v]
     ul_values = [v for v in (result['ul_ookla'], result['ul_librespeed'], result['ul_iperf3']) if v]
-    result['download_mbps'] = round(sum(dl_values) / len(dl_values), 2) if dl_values else None
-    result['upload_mbps']   = round(sum(ul_values) / len(ul_values), 2) if ul_values else None
+    result['download_mbps'] = max(dl_values) if dl_values else None
+    result['upload_mbps']   = max(ul_values) if ul_values else None
     result['method']        = method
     result['latency_ms']    = _measure_latency()
 
