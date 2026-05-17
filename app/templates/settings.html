@@ -153,7 +153,7 @@
           <button type="submit" class="btn btn-success fw-semibold">
             <i class="bi bi-save"></i> Enregistrer
           </button>
-          <button type="button" class="btn btn-outline-success" onclick="triggerNow()">
+          <button type="button" id="btn-trigger" class="btn btn-outline-success" onclick="triggerNow()">
             <i class="bi bi-play-fill"></i> Lancer un test maintenant
           </button>
         </div>
@@ -323,7 +323,7 @@ environment:
       <p class="text-muted small">
         Le companion écrira un <code>docker-compose.override.yml</code> dans ce dossier
         pour changer <code>SERVER_NAMES</code> et relancera le service avec
-        <code>docker compose up -d --force-recreate</code>.
+        <code>docker compose up -d</code>.
       </p>
     </div>
   </div>
@@ -334,10 +334,23 @@ environment:
 {% block scripts %}
 <script>
 function triggerNow() {
+  const btn = document.getElementById('btn-trigger');
+  btn.disabled = true;
   fetch('{{ url_for("main.api_trigger") }}', { method: 'POST' })
     .then(r => {
-      if (r.status === 409) { alert('Un benchmark est déjà en cours.'); return; }
-      alert('Benchmark lancé en arrière-plan !');
+      if (r.status === 409) {
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Déjà en cours…';
+        btn.classList.replace('btn-outline-success', 'btn-outline-warning');
+      } else {
+        btn.innerHTML = '<i class="bi bi-check2"></i> Lancé';
+        btn.classList.replace('btn-outline-success', 'btn-outline-info');
+      }
+      setTimeout(() => {
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> Lancer un test maintenant';
+        btn.classList.replace('btn-outline-warning', 'btn-outline-success');
+        btn.classList.replace('btn-outline-info', 'btn-outline-success');
+        btn.disabled = false;
+      }, 3000);
     });
 }
 </script>
