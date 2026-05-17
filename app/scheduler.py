@@ -96,7 +96,7 @@ def _test_one_server(
     if do_upload:
         try:
             ul_median, ul_detail = test_upload(
-                proxy_host, proxy_port, duration=dl_duration,
+                proxy_host, proxy_port, duration=dl_duration, streams=dl_streams,
                 proxy_user=proxy_user, proxy_password=proxy_pass,
             )
             ul_parts = '  '.join(

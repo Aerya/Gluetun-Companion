@@ -275,6 +275,44 @@ def _parallel_stream_speed(
     return round(sum(good), 2)
 
 
+def _parallel_stream_upload(
+    url: str,
+    px: dict,
+    duration: float,
+    cap_bytes: int,
+    streams: int,
+    min_bytes: int = 512 * 1024,
+) -> float:
+    """
+    Launch `streams` concurrent uploads to `url` and sum their individual speeds.
+    Each worker POSTs independently; total = Σ Mbps.
+    """
+    speeds: list[float | None] = [None] * streams
+    errors: list[str] = []
+
+    def _worker(idx: int):
+        try:
+            speeds[idx] = _stream_upload(
+                url, px,
+                duration=duration,
+                cap_bytes=cap_bytes,
+                min_bytes=min_bytes,
+            )
+        except Exception as exc:
+            errors.append(str(exc))
+
+    threads = [threading.Thread(target=_worker, args=(i,), daemon=True) for i in range(streams)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=duration + 20)
+
+    good = [s for s in speeds if s is not None]
+    if not good:
+        raise RuntimeError('All parallel upload streams failed: ' + '; '.join(errors))
+    return round(sum(good), 2)
+
+
 def _ttfb(url: str, px: dict) -> float:
     """Return TTFB in ms (TCP+TLS+first-byte) through proxy. Raises on failure."""
     start = time.perf_counter()
@@ -346,11 +384,14 @@ def test_upload(
     proxy_host: str,
     proxy_port: int,
     duration: float = 8.0,
+    streams: int = 1,
     proxy_user: str | None = None,
     proxy_password: str | None = None,
 ) -> tuple[float, list[dict]]:
     """
     Test upload speed through the proxy (Cloudflare __up endpoint).
+    With streams > 1, multiple concurrent POSTs are sent so the VPN tunnel
+    is saturated the same way as parallel download streams.
     Returns (mbps, [{'endpoint', 'mbps', 'error'}, ...]).
     Raises RuntimeError if no endpoint succeeded.
     """
@@ -362,10 +403,15 @@ def test_upload(
 
     for label, url in UPLOAD_ENDPOINTS:
         try:
-            mbps = _stream_upload(url, px, duration=duration, cap_bytes=cap)
+            if streams > 1:
+                mbps = _parallel_stream_upload(
+                    url, px, duration=duration, cap_bytes=cap, streams=streams,
+                )
+            else:
+                mbps = _stream_upload(url, px, duration=duration, cap_bytes=cap)
             speeds.append(mbps)
             results.append({'endpoint': label, 'mbps': mbps, 'error': None})
-            logger.debug('  UL %s → %.1f Mbps', label, mbps)
+            logger.debug('  UL %s ×%d → %.1f Mbps', label, streams, mbps)
         except Exception as exc:
             results.append({'endpoint': label, 'mbps': None, 'error': str(exc)})
             logger.debug('  UL %s → error: %s', label, exc)
