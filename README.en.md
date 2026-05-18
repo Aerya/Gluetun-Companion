@@ -277,3 +277,11 @@ In **Settings → Containers to restart after switch**, you can define an ordere
   **6 h and fewer than 10 servers** is a sensible default.
 - The `docker-compose.override.yml` file is managed automatically — do not edit it manually.
 - IPv6 is displayed if your VPN provider supports it (AirVPN does).
+
+---
+
+## Credits
+
+Thanks to **[qdm12](https://github.com/qdm12/gluetun)** for Gluetun, without which this project would not exist.
+
+Thanks to **Zup** for the ideas and testing.

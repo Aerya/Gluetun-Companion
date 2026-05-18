@@ -285,3 +285,11 @@ Dans **Paramètres → Containers à redémarrer après bascule**, vous pouvez d
   une détection d'abus. **6 h et moins de 10 serveurs** est un réglage raisonnable.
 - Le fichier `docker-compose.override.yml` est géré automatiquement — ne le modifiez pas.
 - L'IPv6 est affiché si votre fournisseur VPN le supporte (AirVPN le supporte).
+
+---
+
+## Remerciements
+
+Merci à **[qdm12](https://github.com/qdm12/gluetun)** pour Gluetun, sans lequel ce projet n'existerait pas.
+
+Merci à **Zup** pour les idées et les tests.
