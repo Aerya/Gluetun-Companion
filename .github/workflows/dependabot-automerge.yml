@@ -1,0 +1,32 @@
+name: Auto-merge Dependabot patch PRs
+
+# Strategy:
+#   - PATCH updates (x.y.Z) → auto-merge once CI passes (bugfix only, zero risk)
+#   - MINOR updates (x.Y.z) → manual review required (kept open as PR)
+#   - MAJOR updates         → blocked entirely by dependabot.yml (ignore list)
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Auto-merge patch updates
+        if: steps.meta.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
