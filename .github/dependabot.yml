@@ -3,9 +3,11 @@
 #
 # Behaviour:
 #   - Scans every Monday at 06:00 UTC
-#   - Opens one PR per outdated package
-#   - PRs include the changelog, severity, and CI results
-#   - Nothing is merged automatically — you review and approve each PR
+#   - Opens one PR per outdated package (grouped by ecosystem when possible)
+#   - PATCH updates → auto-merged by .github/workflows/dependabot-automerge.yml
+#   - MINOR updates → manual review
+#   - MAJOR updates → ignored (handle manually)
+#   - Python base image → only patch updates (3.12.X), no Python version bumps
 #
 version: 2
 updates:
@@ -18,13 +20,9 @@ updates:
       day: "monday"
       time: "06:00"
     open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "python"
     commit-message:
       prefix: "deps"
       include: "scope"
-    # Block major updates — they're handled manually (breaking changes risk)
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
@@ -42,10 +40,6 @@ updates:
       day: "monday"
       time: "06:00"
     open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "python"
-      - "sidecar"
     commit-message:
       prefix: "deps(sidecar)"
       include: "scope"
@@ -58,7 +52,7 @@ updates:
           - "minor"
           - "patch"
 
-  # ── GitHub Actions workflows (docker/build-push-action, etc.) ────────────
+  # ── GitHub Actions workflows ─────────────────────────────────────────────
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -66,43 +60,45 @@ updates:
       day: "monday"
       time: "06:00"
     open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "github-actions"
     commit-message:
       prefix: "ci"
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
-  # ── Docker base images (python:3.12-slim) ────────────────────────────────
+  # ── Docker base image — Companion ────────────────────────────────────────
+  # Python tag "3.12-slim": Dependabot would treat 3.12→3.14 as a "minor"
+  # update, but it's actually a Python major version change → ignore minor too.
+  # Only allow patch updates (rebuilds for security on the same 3.12 base).
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "06:00"
-    labels:
-      - "dependencies"
-      - "docker"
     commit-message:
       prefix: "docker"
     ignore:
+      - dependency-name: "python"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
+  # ── Docker base image — Sidecar ──────────────────────────────────────────
   - package-ecosystem: "docker"
     directory: "/sidecar"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "06:00"
-    labels:
-      - "dependencies"
-      - "docker"
-      - "sidecar"
     commit-message:
       prefix: "docker(sidecar)"
     ignore:
+      - dependency-name: "python"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
