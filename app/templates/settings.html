@@ -257,16 +257,26 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
           <div class="form-text text-muted">{{ t.set_apprise_hint | safe }}</div>
         </div>
 
-        <button type="submit" class="btn btn-sm fw-semibold" style="background:#5865F2;color:#fff">
-          <i class="bi bi-save"></i> {{ t.cmn_save }}
-        </button>
-        {% if cfg.discord_webhook_url or cfg.apprise_urls %}
-        <span class="ms-2 badge bg-success">
-          <i class="bi bi-check2-circle"></i> {{ t.set_notif_active }}
-        </span>
-        {% else %}
-        <span class="ms-2 badge bg-secondary">{{ t.set_notif_inactive }}</span>
-        {% endif %}
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <button type="submit" class="btn btn-sm fw-semibold" style="background:#5865F2;color:#fff">
+            <i class="bi bi-save"></i> {{ t.cmn_save }}
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+                  onclick="testNotif('discord')" id="btn-test-discord">
+            <i class="bi bi-discord"></i> {{ t.set_notif_test_discord }}
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+                  onclick="testNotif('apprise')" id="btn-test-apprise">
+            <i class="bi bi-send-fill"></i> {{ t.set_notif_test_apprise }}
+          </button>
+          {% if cfg.discord_webhook_url or cfg.apprise_urls %}
+          <span class="badge bg-success">
+            <i class="bi bi-check2-circle"></i> {{ t.set_notif_active }}
+          </span>
+          {% else %}
+          <span class="badge bg-secondary">{{ t.set_notif_inactive }}</span>
+          {% endif %}
+        </div>
       </form>
     </div>
 
@@ -494,6 +504,49 @@ fetch('{{ url_for("main.api_docker_containers") }}')
   .finally(() => {
     _savedContainers.forEach(name => addPostSwitchRow(name));
   });
+
+// ── Notification test ─────────────────────────────────────────────────────
+const _notifTestOk   = '{{ t.set_notif_test_ok }}';
+const _notifTestFail = '{{ t.set_notif_test_fail }}';
+
+function testNotif(target) {
+  const btn = document.getElementById('btn-test-' + target);
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+  const discordUrl  = document.querySelector('[name="discord_webhook_url"]')?.value || '';
+  const appriseUrls = document.querySelector('[name="apprise_urls"]')?.value || '';
+
+  fetch('{{ url_for("main.api_notify_test") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, discord_url: discordUrl, apprise_urls: appriseUrls }),
+  })
+  .then(r => r.json().then(d => ({ ok: r.ok, d })))
+  .then(({ ok, d }) => {
+    if (ok) {
+      btn.innerHTML = '<i class="bi bi-check2"></i> ' + _notifTestOk;
+      btn.classList.replace('btn-outline-secondary', 'btn-outline-success');
+    } else {
+      btn.innerHTML = '<i class="bi bi-x-lg"></i> ' + _notifTestFail;
+      btn.classList.replace('btn-outline-secondary', 'btn-outline-danger');
+      if (d.msg) console.warn('Notify test error:', d.msg);
+    }
+  })
+  .catch(() => {
+    btn.innerHTML = '<i class="bi bi-x-lg"></i> ' + _notifTestFail;
+    btn.classList.replace('btn-outline-secondary', 'btn-outline-danger');
+  })
+  .finally(() => {
+    setTimeout(() => {
+      btn.innerHTML = origHtml;
+      btn.classList.replace('btn-outline-success', 'btn-outline-secondary');
+      btn.classList.replace('btn-outline-danger',  'btn-outline-secondary');
+      btn.disabled = false;
+    }, 3000);
+  });
+}
 
 // ── Benchmark trigger ─────────────────────────────────────────────────────
 function triggerNow() {

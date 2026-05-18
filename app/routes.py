@@ -574,6 +574,20 @@ def api_trigger():
     return jsonify({'status': 'started'})
 
 
+@bp.route('/api/notify-test', methods=['POST'])
+@login_required
+def api_notify_test():
+    """Send a test notification using the URLs provided in the request body."""
+    from .notify import send_test_notification
+    data        = request.get_json(silent=True) or {}
+    target      = data.get('target', 'all')          # 'discord' | 'apprise' | 'all'
+    discord_url = (data.get('discord_url') or '').strip() or None
+    apprise_urls= (data.get('apprise_urls') or '').strip() or None
+    lang        = get_setting('ui_lang', 'fr')
+    ok, msg     = send_test_notification(target, discord_url, apprise_urls, lang)
+    return jsonify({'ok': ok, 'msg': msg}), (200 if ok else 502)
+
+
 @bp.route('/api/docker-containers')
 @login_required
 def api_docker_containers():

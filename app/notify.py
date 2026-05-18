@@ -90,6 +90,58 @@ def _text_body(
     return '\n'.join(lines)
 
 
+def send_test_notification(
+    target: str,
+    discord_url: str | None = None,
+    apprise_urls: str | None = None,
+    lang: str = 'fr',
+) -> tuple[bool, str]:
+    """
+    Send a test notification to Discord and/or Apprise.
+    `target` is 'discord', 'apprise', or 'all'.
+    Returns (success, message).
+    """
+    t = get_translations(lang)
+
+    if target in ('discord', 'all') and discord_url:
+        try:
+            payload = {
+                'embeds': [{
+                    'title': f'✅ {t["notif_footer"]} — test',
+                    'description': t.get('notif_test_body', 'Notification test — OK'),
+                    'color': 0x3fb950,
+                    'footer': {'text': t['notif_footer']},
+                }]
+            }
+            resp = requests.post(discord_url.strip(), json=payload, timeout=10)
+            resp.raise_for_status()
+            logger.info('Discord test notification sent')
+        except Exception as exc:
+            logger.warning('Discord test notification failed: %s', exc)
+            return False, f'Discord : {exc}'
+
+    if target in ('apprise', 'all') and apprise_urls:
+        try:
+            import apprise as _apprise
+            ap = _apprise.Apprise()
+            for url in apprise_urls.splitlines():
+                url = url.strip()
+                if url:
+                    ap.add(url)
+            body = t.get('notif_test_body', 'Notification test — OK')
+            ok = ap.notify(title=f'{t["notif_footer"]} — test', body=body)
+            if not ok:
+                return False, 'Apprise : notify() returned False'
+            logger.info('Apprise test notification sent')
+        except ImportError:
+            return False, 'Apprise not installed'
+        except Exception as exc:
+            logger.warning('Apprise test notification failed: %s', exc)
+            return False, f'Apprise : {exc}'
+
+    return True, 'OK'
+
+
 def send_switch_notification(
     from_server: str | None,
     to_server: str,

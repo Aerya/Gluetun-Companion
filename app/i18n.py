@@ -195,6 +195,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_apprise_hint':        'Compatible avec 80+ services : Telegram, ntfy, Gotify, Slack, Pushover… Voir <a href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noreferrer noopener">apprise/wiki</a> pour la liste complète des URLs.',
         'set_notif_active':        'Notifications actives',
         'set_notif_inactive':      'Notifications désactivées',
+        'set_notif_test_discord':  'Tester Discord',
+        'set_notif_test_apprise':  'Tester Apprise',
+        'set_notif_test_ok':       'Envoyé !',
+        'set_notif_test_fail':     'Échec',
         'set_docker_title':        'Configuration Docker requise',
         'set_docker_hint':         'Pour que le companion puisse contrôler Gluetun, vérifiez que votre <code>docker-compose.yml</code> du companion contient :',
         'set_docker_note':         'Le companion écrira un <code>docker-compose.override.yml</code> dans ce dossier pour changer <code>SERVER_NAMES</code> et relancera le service avec <code>docker compose up -d</code>.',
@@ -268,6 +272,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_reason_auto_short':  'auto',
         'notif_reason_manual_short':'manuelle',
         'notif_apprise_title':      'Bascule VPN — Gluetun Companion',
+        'notif_test_body':          'Notification de test envoyée par Gluetun Companion — tout fonctionne.',
     },
 
     'en': {
@@ -462,6 +467,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_apprise_hint':        'Compatible with 80+ services: Telegram, ntfy, Gotify, Slack, Pushover… See <a href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noreferrer noopener">apprise/wiki</a> for the full URL list.',
         'set_notif_active':        'Notifications enabled',
         'set_notif_inactive':      'Notifications disabled',
+        'set_notif_test_discord':  'Test Discord',
+        'set_notif_test_apprise':  'Test Apprise',
+        'set_notif_test_ok':       'Sent!',
+        'set_notif_test_fail':     'Failed',
         'set_docker_title':        'Required Docker configuration',
         'set_docker_hint':         'For the companion to control Gluetun, check that your companion\'s <code>docker-compose.yml</code> contains:',
         'set_docker_note':         'The companion will write a <code>docker-compose.override.yml</code> in this folder to change <code>SERVER_NAMES</code> and restart the service with <code>docker compose up -d</code>.',
@@ -534,6 +543,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_reason_auto_short':  'auto',
         'notif_reason_manual_short':'manual',
         'notif_apprise_title':      'VPN Switch — Gluetun Companion',
+        'notif_test_body':          'Test notification sent by Gluetun Companion — everything is working.',
     },
 }
 
