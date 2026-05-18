@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 from functools import wraps
 
 from flask import (
@@ -13,6 +14,7 @@ from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
     get_current_filters, format_filters,
     get_public_ip, get_vpn_status, switch_server,
+    list_docker_containers,
 )
 from .i18n import flash_t, get_t
 from .scheduler import get_next_run, reschedule, trigger_now, trigger_single_server
@@ -512,6 +514,13 @@ def settings():
             set_setting('sidecar_proxy_fallback',   '1' if request.form.get('sidecar_proxy_fallback') else '0')
             flash_t('flash_sidecar_saved', 'success')
 
+        elif action == 'post_switch':
+            containers = request.form.getlist('post_switch_containers')
+            # Filter blanks and preserve order
+            containers = [c.strip() for c in containers if c.strip()]
+            set_setting('post_switch_containers', json.dumps(containers))
+            flash_t('flash_post_switch_saved', 'success')
+
         return redirect(url_for('main.settings'))
 
     cfg = {
@@ -535,8 +544,9 @@ def settings():
         'sidecar_image':            get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest'),
         'sidecar_port':             get_setting('sidecar_port', '8766'),
         'sidecar_speedtest_method': get_setting('sidecar_speedtest_method', 'dual'),
-        'sidecar_iperf_fallback':   get_setting('sidecar_iperf_fallback', '1'),
-        'sidecar_proxy_fallback':   get_setting('sidecar_proxy_fallback', '0'),
+        'sidecar_iperf_fallback':      get_setting('sidecar_iperf_fallback', '1'),
+        'sidecar_proxy_fallback':      get_setting('sidecar_proxy_fallback', '0'),
+        'post_switch_containers':      json.loads(get_setting('post_switch_containers', '[]')),
     }
     return render_template('settings.html', cfg=cfg, next_run=get_next_run())
 
@@ -562,6 +572,13 @@ def api_trigger():
         return jsonify({'status': 'already_running'}), 409
     trigger_now(current_app._get_current_object())
     return jsonify({'status': 'started'})
+
+
+@bp.route('/api/docker-containers')
+@login_required
+def api_docker_containers():
+    """Return the list of currently running Docker container names."""
+    return jsonify(list_docker_containers())
 
 
 @bp.route('/api/status')

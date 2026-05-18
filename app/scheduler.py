@@ -57,8 +57,12 @@ def _test_one_server(
     Full test cycle for one server: switch → wait → probe IPs → DL → UL → LAT.
     Returns a result dict on success, raises on failure.
     """
-    from .database import set_setting
-    from .gluetun import FILTER_VARS, switch_server, wait_for_vpn, get_public_ips, restart_network_dependents
+    import json as _json
+    from .database import get_setting, set_setting
+    from .gluetun import (
+        FILTER_VARS, switch_server, wait_for_vpn, get_public_ips,
+        restart_network_dependents, restart_containers_in_order,
+    )
     from .speedtest import test_download, test_latency, test_upload
 
     label = f"{FILTER_VARS.get(filter_type, 'SERVER_NAMES')}={server_name}"
@@ -80,6 +84,13 @@ def _test_one_server(
     restarted = restart_network_dependents(container)
     if restarted:
         logger.info('Restarted network dependents: %s', ', '.join(restarted))
+
+    # Restart user-configured containers in order
+    _post_switch = _json.loads(get_setting('post_switch_containers', '[]'))
+    if _post_switch:
+        _restarted2 = restart_containers_in_order(_post_switch)
+        if _restarted2:
+            logger.info('Post-switch containers restarted: %s', ', '.join(_restarted2))
 
     public_ip, public_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
 
@@ -366,11 +377,12 @@ def run_benchmark(app):
 
 
 def _do_benchmark(app):
+    import json as _json
     from .database import get_db, get_setting, set_setting
     from .gluetun import (
         FILTER_VARS, switch_server, wait_for_vpn,
         get_public_ips, get_current_filters, format_filters,
-        restart_network_dependents,
+        restart_network_dependents, restart_containers_in_order,
     )
 
     set_setting('benchmark_running', '1')
@@ -475,6 +487,11 @@ def _do_benchmark(app):
                     restarted = restart_network_dependents(container)
                     if restarted:
                         logger.info('Restarted network dependents: %s', ', '.join(restarted))
+                    _post_switch = _json.loads(get_setting('post_switch_containers', '[]'))
+                    if _post_switch:
+                        _restarted2 = restart_containers_in_order(_post_switch)
+                        if _restarted2:
+                            logger.info('Post-switch containers restarted: %s', ', '.join(_restarted2))
                     to_ipv4, to_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
                     logger.info(
                         'Switched to best: %s  (%s / %s)  connect %.0fs',

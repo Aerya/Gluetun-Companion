@@ -363,6 +363,39 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
       </form>
     </div>
 
+    {# ── Post-switch containers ──────────────────────────────────────────── #}
+    <div class="card p-4 mb-4">
+      <h6 class="fw-bold mb-1">
+        <i class="bi bi-arrow-repeat text-primary"></i> {{ t.set_post_switch_title }}
+      </h6>
+      <p class="text-muted small mb-3">{{ t.set_post_switch_hint }}</p>
+
+      <form method="post" id="form-post-switch">
+        <input type="hidden" name="action" value="post_switch">
+
+        <div id="post-switch-list" class="d-flex flex-column gap-2 mb-3">
+          {# existing rows injected by JS on load #}
+          <div id="post-switch-placeholder" class="text-muted small fst-italic
+               {{ 'd-none' if cfg.post_switch_containers }}">
+            {{ t.set_post_switch_empty }}
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 align-items-center flex-wrap mb-2">
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="addPostSwitchRow()">
+            <i class="bi bi-plus-lg"></i> {{ t.set_post_switch_add }}
+          </button>
+          <button type="submit" class="btn btn-sm btn-primary fw-semibold">
+            <i class="bi bi-save"></i> {{ t.cmn_save }}
+          </button>
+        </div>
+
+        <p class="text-muted mb-0" style="font-size:.78rem">
+          <i class="bi bi-info-circle"></i> {{ t.set_post_switch_note | safe }}
+        </p>
+      </form>
+    </div>
+
   </div>
 
 </div>
@@ -370,6 +403,99 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 
 {% block scripts %}
 <script>
+// ── Post-switch containers ────────────────────────────────────────────────
+let _dockerContainers = [];
+const _savedContainers = {{ cfg.post_switch_containers | tojson }};
+
+function _buildPostSwitchSelect(selectedValue) {
+  const sel = document.createElement('select');
+  sel.name = 'post_switch_containers';
+  sel.className = 'form-select form-select-sm flex-grow-1';
+  const blank = document.createElement('option');
+  blank.value = '';
+  blank.textContent = '— container —';
+  sel.appendChild(blank);
+  _dockerContainers.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    if (name === selectedValue) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  // Keep saved value even if container is currently stopped
+  if (selectedValue && !_dockerContainers.includes(selectedValue)) {
+    const opt = document.createElement('option');
+    opt.value = selectedValue;
+    opt.textContent = selectedValue + ' (arrêté)';
+    opt.selected = true;
+    sel.appendChild(opt);
+  }
+  return sel;
+}
+
+function addPostSwitchRow(value) {
+  const list        = document.getElementById('post-switch-list');
+  const placeholder = document.getElementById('post-switch-placeholder');
+  placeholder.classList.add('d-none');
+
+  const row = document.createElement('div');
+  row.className = 'd-flex align-items-center gap-2';
+  row.setAttribute('draggable', 'true');
+
+  const handle = document.createElement('span');
+  handle.className = 'text-muted';
+  handle.style.cursor = 'grab';
+  handle.innerHTML = '<i class="bi bi-grip-vertical"></i>';
+
+  const sel = _buildPostSwitchSelect(value || '');
+
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'btn btn-sm btn-outline-danger';
+  del.innerHTML = '<i class="bi bi-trash3"></i>';
+  del.onclick = () => {
+    row.remove();
+    const remaining = list.querySelectorAll('.d-flex[draggable]');
+    if (!remaining.length) placeholder.classList.remove('d-none');
+  };
+
+  row.appendChild(handle);
+  row.appendChild(sel);
+  row.appendChild(del);
+  list.appendChild(row);
+}
+
+// Drag-to-reorder (delegated — one listener on the list)
+(function initDragSort() {
+  const list = document.getElementById('post-switch-list');
+  let dragged = null;
+  list.addEventListener('dragstart', e => {
+    dragged = e.target.closest('[draggable="true"]');
+    if (dragged) { dragged.style.opacity = '0.5'; }
+  });
+  list.addEventListener('dragend', () => {
+    if (dragged) { dragged.style.opacity = ''; dragged = null; }
+  });
+  list.addEventListener('dragover', e => {
+    e.preventDefault();
+    const target = e.target.closest('[draggable="true"]');
+    if (target && dragged && target !== dragged) {
+      const mid = target.getBoundingClientRect().top + target.getBoundingClientRect().height / 2;
+      list.insertBefore(dragged, e.clientY > mid ? target.nextSibling : target);
+    }
+  });
+})();
+
+// Fetch running containers then render saved rows
+fetch('{{ url_for("main.api_docker_containers") }}')
+  .then(r => r.json())
+  .then(containers => { _dockerContainers = containers; })
+  .catch(() => {})
+  .finally(() => {
+    _savedContainers.forEach(name => addPostSwitchRow(name));
+  });
+
+// ── Benchmark trigger ─────────────────────────────────────────────────────
 function triggerNow() {
   const btn = document.getElementById('btn-trigger');
   const msgRunning = '{{ t.set_running }}';

@@ -120,9 +120,9 @@ networks: {}
 > **Running the companion in the same stack as Gluetun?**
 > You can drop `extra_hosts` and use the service name as the host:
 > `GLUETUN_HOST: gluetun` (or whatever your Gluetun service is named).
-> **Caution:** in this setup, if Compose decides to recreate the companion
-> (e.g. on an image update), it will stop mid-benchmark.
-> A separate stack is recommended.
+> On each server switch, Gluetun Companion now targets **only the Gluetun service**
+> (`docker compose up -d <service>`) — so the companion itself is never recreated.
+> A separate stack is still recommended to avoid side-effects on image updates.
 
 ### 4. Start
 
@@ -242,6 +242,17 @@ After all servers are tested
 
 **Proxy mode (optional):** Settings → Sidecar Mode → toggle off.
 Useful if you do not have access to the Docker socket.
+
+### Containers to restart after a switch
+
+In **Settings → Containers to restart after switch**, you can define an ordered list of Docker containers to restart automatically after each VPN server switch (both proxy and sidecar modes).
+
+- Available containers are detected automatically via the Docker API — a dropdown lets you pick them
+- Rows can be reordered by drag and drop
+- A 3-second delay is applied between each restart
+- Typical use: `qbittorrent`, `radarr`, `sonarr`, or any service that needs to reconnect after a VPN tunnel change
+
+> ⚠ **Requirement:** the Docker socket (`/var/run/docker.sock`) must be mounted in the Gluetun Companion container (already required for sidecar mode).
 
 > ⚠ **Simultaneous connection warning** — valid for ALL VPN providers
 >

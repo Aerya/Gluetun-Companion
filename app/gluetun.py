@@ -4,7 +4,8 @@ Gluetun container control + VPN connectivity helpers.
 Network architecture (no shared Docker network required)
 ---------------------------------------------------------
 - Docker socket  → read container env (current filters), switch server via
-                   docker compose up --force-recreate
+                   docker compose up -d <service> (only the Gluetun service,
+                   so Companion is never inadvertently restarted).
 - Proxy port     → VPN status check, public IP, wait loop.
                    The proxy is exposed on the host so the companion reaches it
                    via host.docker.internal (see docker-compose.yml extra_hosts).
@@ -89,6 +90,23 @@ def _detect_compose_project(container_name: str) -> str:
         return ''
 
 
+def _detect_compose_service(container_name: str) -> str:
+    """
+    Read the compose service name from the container's Docker labels.
+    Docker Compose sets com.docker.compose.service on every managed container.
+    Falls back to container_name if the label is absent.
+    """
+    try:
+        container = docker.from_env().containers.get(container_name)
+        service = container.labels.get('com.docker.compose.service', '')
+        if service:
+            logger.debug('Detected compose service: %s', service)
+            return service
+    except Exception as exc:
+        logger.warning('_detect_compose_service: %s', exc)
+    return container_name
+
+
 # ---------------------------------------------------------------------------
 # Docker / container helpers
 # ---------------------------------------------------------------------------
@@ -154,16 +172,18 @@ def switch_server(
 
     # Use provided project name, or auto-detect from container labels
     project = compose_project or _detect_compose_project(container_name)
+    # Detect the Compose service name (may differ from the container name)
+    service = _detect_compose_service(container_name)
 
-    # Do NOT pass --force-recreate or a specific service name.
-    # Compose compares desired state (main file + override) with running containers:
-    # - gluetun gets recreated because its env changed
-    # - services using network_mode: service:gluetun are automatically restarted
-    #   by Compose because their dependency (gluetun's container ID) changed.
+    # Pass only the gluetun service name so that Compose recreates exclusively
+    # that service.  This prevents the Companion (or any other service in the
+    # same stack) from being inadvertently restarted.
+    # Network-dependent containers (network_mode: service:gluetun) are handled
+    # separately by restart_network_dependents() once the VPN is confirmed up.
     cmd = ['docker', 'compose']
     if project:
         cmd += ['-p', project]
-    cmd += ['up', '-d']
+    cmd += ['up', '-d', service]
 
     try:
         result = subprocess.run(
@@ -209,6 +229,49 @@ def restart_network_dependents(container_name: str) -> list[str]:
                 restarted.append(c.name)
     except Exception as exc:
         logger.warning('restart_network_dependents: %s', exc)
+    return restarted
+
+
+def list_docker_containers() -> list[str]:
+    """Return the names of all currently running Docker containers, sorted."""
+    try:
+        client = docker.from_env()
+        return sorted(c.name for c in client.containers.list())
+    except Exception as exc:
+        logger.warning('list_docker_containers: %s', exc)
+        return []
+
+
+def restart_containers_in_order(
+    container_names: list[str],
+    delay_secs: float = 3.0,
+) -> list[str]:
+    """
+    Restart Docker containers one by one in the specified order, with a short
+    pause between each.  Intended to be called after a VPN server switch so
+    that user-chosen dependents (e.g. qbittorrent, Radarr …) come back up in
+    the right sequence.
+
+    Returns the list of container names that were successfully restarted.
+    """
+    restarted: list[str] = []
+    names = [n.strip() for n in container_names if n and n.strip()]
+    if not names:
+        return restarted
+    try:
+        client = docker.from_env()
+        for idx, name in enumerate(names):
+            try:
+                c = client.containers.get(name)
+                c.restart(timeout=15)
+                restarted.append(name)
+                logger.info('Post-switch restart [%d/%d]: %s', idx + 1, len(names), name)
+                if delay_secs > 0 and idx < len(names) - 1:
+                    time.sleep(delay_secs)
+            except Exception as exc:
+                logger.warning('Failed to restart container %s: %s', name, exc)
+    except Exception as exc:
+        logger.warning('restart_containers_in_order: %s', exc)
     return restarted
 
 

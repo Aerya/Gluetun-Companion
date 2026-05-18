@@ -86,7 +86,8 @@ def init_db(db_path: str):
                 ('sidecar_port',             '8766'),
                 ('sidecar_speedtest_method', 'dual'),
                 ('sidecar_iperf_fallback',   '1'),
-                ('sidecar_proxy_fallback',   '0');
+                ('sidecar_proxy_fallback',   '0'),
+                ('post_switch_containers',   '[]');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [

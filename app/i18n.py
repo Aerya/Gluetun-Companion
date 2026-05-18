@@ -219,6 +219,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'flash_credentials_saved':  'Identifiants mis à jour.',
         'flash_proxy_saved':        'Identifiants proxy enregistrés.',
         'flash_sidecar_saved':      'Configuration sidecar enregistrée.',
+        'flash_post_switch_saved':  'Containers post-bascule enregistrés.',
 
         # ── Sidecar ──
         'set_sidecar_title':              'Mode Sidecar (défaut)',
@@ -238,6 +239,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_sidecar_method_iperf3':        'iperf3 uniquement',
         'set_sidecar_iperf_fallback_label': 'iperf3 en fallback si toutes les sources échouent',
         'set_sidecar_proxy_fallback_label': 'Proxy HTTP en fallback si le sidecar échoue complètement',
+
+        # ── Post-switch containers ──
+        'set_post_switch_title':   'Containers à redémarrer après bascule',
+        'set_post_switch_hint':    'Ces containers seront redémarrés dans l\'ordre indiqué après chaque bascule de serveur VPN (mode proxy ou sidecar). Utile pour qbittorrent, Radarr, etc.',
+        'set_post_switch_add':     'Ajouter un container',
+        'set_post_switch_empty':   'Aucun container configuré — cliquez sur Ajouter.',
+        'set_post_switch_loading': 'Chargement des containers…',
+        'set_post_switch_delay':   'Délai entre redémarrages',
+        'set_post_switch_note':    'L\'accès au socket Docker (<code>/var/run/docker.sock</code>) est requis.',
 
         # ── Notifications (notify.py) ──
         'notif_title':              '🔄 Bascule VPN',
@@ -495,6 +505,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_sidecar_method_iperf3':        'iperf3 only',
         'set_sidecar_iperf_fallback_label': 'iperf3 as fallback if all sources fail',
         'set_sidecar_proxy_fallback_label': 'HTTP proxy as fallback if sidecar fails entirely',
+
+        # ── Post-switch containers ──
+        'set_post_switch_title':   'Containers to restart after switch',
+        'set_post_switch_hint':    'These containers will be restarted in the listed order after each VPN server switch (proxy or sidecar mode). Useful for qbittorrent, Radarr, etc.',
+        'set_post_switch_add':     'Add a container',
+        'set_post_switch_empty':   'No containers configured — click Add.',
+        'set_post_switch_loading': 'Loading containers…',
+        'set_post_switch_delay':   'Delay between restarts',
+        'set_post_switch_note':    'Docker socket access (<code>/var/run/docker.sock</code>) is required.',
 
         # ── Notifications (notify.py) ──
         'notif_title':              '🔄 VPN Switch',
