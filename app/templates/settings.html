@@ -252,45 +252,6 @@
       </form>
     </div>
 
-    {# ── HTTP proxy authentication ──────────────────────────────────────────── #}
-    <div class="card p-4 mb-4">
-      <h6 class="fw-bold mb-1">
-        <i class="bi bi-key text-info"></i> {{ t.set_proxy_title }}
-      </h6>
-      <p class="text-muted small mb-3">{{ t.set_proxy_hint | safe }}</p>
-      <form method="post">
-        <input type="hidden" name="action" value="proxy_credentials">
-
-        <div class="row g-2 mb-3">
-          <div class="col">
-            <label class="form-label small text-muted">{{ t.set_proxy_user }}</label>
-            <input type="text" name="proxy_username" class="form-control"
-                   value="{{ cfg.proxy_username }}"
-                   placeholder="{{ t.set_proxy_placeholder }}"
-                   autocomplete="off">
-          </div>
-          <div class="col">
-            <label class="form-label small text-muted">{{ t.set_proxy_pass }}</label>
-            <input type="password" name="proxy_password" class="form-control"
-                   value="{{ cfg.proxy_password }}"
-                   placeholder="{{ t.set_proxy_placeholder }}"
-                   autocomplete="off">
-          </div>
-        </div>
-
-        <button type="submit" class="btn btn-info fw-semibold text-dark">
-          <i class="bi bi-save"></i> {{ t.cmn_save }}
-        </button>
-        {% if cfg.proxy_username %}
-        <span class="ms-2 badge bg-success">
-          <i class="bi bi-check2-circle"></i> {{ t.set_proxy_active }} {{ cfg.proxy_username }}
-        </span>
-        {% else %}
-        <span class="ms-2 badge bg-secondary">{{ t.set_proxy_none }}</span>
-        {% endif %}
-      </form>
-    </div>
-
   </div>
 
   {# ── Right column ──────────────────────────────────────────────────────── #}
@@ -380,6 +341,45 @@
         <button type="submit" class="btn btn-info fw-semibold text-dark btn-sm">
           <i class="bi bi-save"></i> {{ t.cmn_save }}
         </button>
+      </form>
+    </div>
+
+    {# ── HTTP proxy authentication ──────────────────────────────────────────── #}
+    <div class="card p-4 mb-4">
+      <h6 class="fw-bold mb-1">
+        <i class="bi bi-key text-info"></i> {{ t.set_proxy_title }}
+      </h6>
+      <p class="text-muted small mb-3">{{ t.set_proxy_hint | safe }}</p>
+      <form method="post">
+        <input type="hidden" name="action" value="proxy_credentials">
+
+        <div class="row g-2 mb-3">
+          <div class="col">
+            <label class="form-label small text-muted">{{ t.set_proxy_user }}</label>
+            <input type="text" name="proxy_username" class="form-control"
+                   value="{{ cfg.proxy_username }}"
+                   placeholder="{{ t.set_proxy_placeholder }}"
+                   autocomplete="off">
+          </div>
+          <div class="col">
+            <label class="form-label small text-muted">{{ t.set_proxy_pass }}</label>
+            <input type="password" name="proxy_password" class="form-control"
+                   value="{{ cfg.proxy_password }}"
+                   placeholder="{{ t.set_proxy_placeholder }}"
+                   autocomplete="off">
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-info fw-semibold text-dark">
+          <i class="bi bi-save"></i> {{ t.cmn_save }}
+        </button>
+        {% if cfg.proxy_username %}
+        <span class="ms-2 badge bg-success">
+          <i class="bi bi-check2-circle"></i> {{ t.set_proxy_active }} {{ cfg.proxy_username }}
+        </span>
+        {% else %}
+        <span class="ms-2 badge bg-secondary">{{ t.set_proxy_none }}</span>
+        {% endif %}
       </form>
     </div>
 

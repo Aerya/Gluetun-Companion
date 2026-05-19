@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import time
 from functools import wraps
 
 from flask import (
@@ -22,6 +23,8 @@ from .scheduler import get_next_run, reschedule, trigger_now, trigger_single_ser
 bp = Blueprint('main', __name__)
 
 _HISTORY_PER_PAGE = 50
+_airvpn_cache: dict = {'data': None, 'ts': 0.0}
+_AIRVPN_CACHE_TTL = 300  # 5 minutes
 
 
 def login_required(f):
@@ -194,7 +197,9 @@ def servers():
             GROUP BY s.id
             ORDER BY avg_dl DESC NULLS LAST, s.name
         ''').fetchall()
-    return render_template('servers.html', servers=rows, filter_labels=FILTER_LABELS, filter_vars=FILTER_VARS)
+    existing_names = [r['name'] for r in rows if r['filter_type'] == 'name']
+    return render_template('servers.html', servers=rows, filter_labels=FILTER_LABELS, filter_vars=FILTER_VARS,
+                           existing_names=existing_names)
 
 
 @bp.route('/servers/import', methods=['POST'])
@@ -334,6 +339,31 @@ def test_server_now(server_id):
     )
     flash_t('flash_test_started', 'info', name=row['name'])
     return redirect(url_for('main.servers'))
+
+
+@bp.route('/servers/add-bulk', methods=['POST'])
+@login_required
+def add_servers_bulk():
+    data        = request.get_json(silent=True) or {}
+    names       = data.get('names', [])
+    filter_type = data.get('filter_type', 'name')
+    if filter_type not in FILTER_VARS:
+        filter_type = 'name'
+    added = skipped = 0
+    with get_db() as db:
+        for name in names:
+            name = name.strip()
+            if not name:
+                continue
+            cur = db.execute(
+                'INSERT OR IGNORE INTO servers (name, filter_type) VALUES (?, ?)',
+                (name, filter_type),
+            )
+            if cur.rowcount:
+                added += 1
+            else:
+                skipped += 1
+    return jsonify({'added': added, 'skipped': skipped})
 
 
 # ---------------------------------------------------------------------------
@@ -558,6 +588,75 @@ def settings():
         'pause_bench_containers':  json.loads(get_setting('pause_bench_containers', '[]')),
     }
     return render_template('settings.html', cfg=cfg, next_run=get_next_run())
+
+
+# ---------------------------------------------------------------------------
+# AirVPN live data
+# ---------------------------------------------------------------------------
+
+@bp.route('/api/airvpn-servers')
+@login_required
+def api_airvpn_servers():
+    global _airvpn_cache
+    now = time.time()
+    if _airvpn_cache['data'] and now - _airvpn_cache['ts'] < _AIRVPN_CACHE_TTL:
+        return jsonify(_airvpn_cache['data'])
+    try:
+        import requests as _req
+        resp = _req.get(
+            'https://airvpn.org/api/status/',
+            headers={'User-Agent': 'Gluetun-Companion/1.0'},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 502
+
+    servers: list[dict] = []
+    countries_map: dict[str, dict] = {}
+
+    for s in raw.get('servers', []):
+        name    = s.get('public_name', '')
+        country = s.get('country_name', '')
+        cc      = (s.get('country_code') or '').lower()
+        bw      = s.get('bw', 0) or 0
+        bw_max  = s.get('bw_max', 0) or 0
+        load    = s.get('currentload', 0) or 0
+        entry   = {
+            'name':        name,
+            'country':     country,
+            'country_code': cc,
+            'location':    s.get('location', ''),
+            'continent':   s.get('continent', ''),
+            'load':        load,
+            'users':       s.get('users', 0) or 0,
+            'bw':          bw,
+            'bw_max':      bw_max,
+            'avail_mbps':  max(0, bw_max - bw),
+            'health':      s.get('health', 'ok'),
+        }
+        servers.append(entry)
+        if country not in countries_map:
+            countries_map[country] = {'country': country, 'country_code': cc, 'servers': []}
+        countries_map[country]['servers'].append(entry)
+
+    servers.sort(key=lambda x: x['name'])
+
+    countries_list: list[dict] = []
+    for cdata in countries_map.values():
+        healthy = [sv for sv in cdata['servers'] if sv['health'] == 'ok']
+        pool    = healthy or cdata['servers']
+        best    = min(pool, key=lambda x: x['load'])['name'] if pool else None
+        cdata['best']         = best
+        cdata['server_count'] = len(cdata['servers'])
+        cdata['servers'].sort(key=lambda x: x['load'])
+        countries_list.append(cdata)
+    countries_list.sort(key=lambda x: x['country'])
+
+    result = {'servers': servers, 'countries': countries_list}
+    _airvpn_cache = {'data': result, 'ts': now}
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------

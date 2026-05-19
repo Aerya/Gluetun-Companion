@@ -38,6 +38,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 
 ## Fonctionnalités
 
+- 🆕 **Sélecteur de serveurs AirVPN intégré** — bouton *+ Ajouter un serveur AirVPN* sur la page Serveurs : données en direct depuis `airvpn.org/api/status/` (cache 5 min), deux vues — liste complète searchable (charge, utilisateurs, santé) et répartition géographique par pays avec badge **Best** sur le serveur le moins chargé ; ajout multi-sélection en un clic
 - 🆕 **Pause pendant le benchmark** — liste de containers (torrents, Usenet…) stoppés avant le début du benchmark et relancés automatiquement à la fin, même en cas d'erreur ; évite que leur trafic fausse les mesures et prévient la surcharge du tunnel VPN sur matériel modeste
 - 🆕 **Containers à redémarrer après bascule** — liste ordonnée (glisser-déposer), redémarrage séquentiel via `docker compose up -d --force-recreate` après chaque bascule VPN ; gère correctement les containers en `network_mode: service:gluetun`
 - **Benchmark automatique** toutes les X heures — download, upload et latence par serveur ; cycle automatique désactivable (déclenchement manuel uniquement)
@@ -201,6 +202,14 @@ Dans **Paramètres → Containers à redémarrer après bascule** : liste ordonn
 ### Containers à stopper pendant le benchmark
 
 Dans **Paramètres → Containers à stopper pendant le benchmark** : liste de containers stoppés avant le benchmark et relancés après — dans tous les cas, même si le benchmark plante. Si un container est dans les deux listes, la liste de pause a priorité (pas de doublon). Utile pour `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`.
+
+### Sélecteur de serveurs AirVPN
+
+Sur **Serveurs → + Ajouter un serveur AirVPN** : un modal charge les données en direct depuis l'[API AirVPN](https://airvpn.org/?referred_by=483746) (cache 5 min côté serveur). Deux onglets :
+- **Serveurs** — liste complète avec barre de charge colorée (vert/orange/rouge), nombre d'utilisateurs, statut de santé, recherche en temps réel
+- **Par pays** — sections collapsibles par pays avec flag emoji, badge 🏆 **Best** sur le serveur le moins chargé, bouton "Sélectionner tous" par pays
+
+Les serveurs déjà dans la base sont grisés et leur case à cocher est désactivée. Sélection multiple, ajout en un clic.
 
 ### Cycle automatique vs déclenchement manuel
 

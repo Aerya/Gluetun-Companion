@@ -38,6 +38,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 
 ## Features
 
+- 🆕 **Built-in AirVPN server picker** — *+ Add an AirVPN server* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), two views — full searchable list (load, users, health) and geographic distribution by country with a **Best** badge on the least-loaded server; multi-select, one-click add
 - 🆕 **Pause during benchmark** — list of containers (torrent, Usenet…) stopped before the benchmark starts and automatically restarted when it ends, even on error; prevents their traffic from skewing measurements and avoids overloading the VPN tunnel on modest hardware
 - 🆕 **Containers to restart after switch** — ordered list (drag & drop), sequential restart via `docker compose up -d --force-recreate` after each VPN switch; correctly handles containers using `network_mode: service:gluetun`
 - **Automatic benchmarking** every X hours — download, upload and latency per server; automatic cycle can be disabled (manual trigger only)
@@ -201,6 +202,14 @@ In **Settings → Containers to restart after switch**: ordered list of containe
 ### Containers to pause during benchmark
 
 In **Settings → Containers to pause during benchmark**: list of containers stopped before the benchmark and restarted after — in all cases, even if the benchmark crashes. If a container is in both lists, the pause list takes priority (no duplicate restart). Useful for `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`.
+
+### AirVPN server picker
+
+On **Servers → + Add an AirVPN server**: a modal loads live data from the [AirVPN API](https://airvpn.org/?referred_by=483746) (5-min server-side cache). Two tabs:
+- **Servers** — full list with color-coded load bar (green/orange/red), user count, health status, real-time search
+- **By country** — collapsible sections per country with flag emoji, 🏆 **Best** badge on the least-loaded server, "Select all" button per country
+
+Servers already in the database are grayed out with their checkbox disabled. Multi-select, one-click add.
 
 ### Automatic cycle vs manual trigger
 
