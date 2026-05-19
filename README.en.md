@@ -1,64 +1,59 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Gluetun Companion" width="480">
+</p>
+
 # Gluetun Companion
 
-Automatic VPN server benchmarking via [Gluetun](https://github.com/qdm12/gluetun),
-with automatic switching to the fastest server and a full Web UI.
+Automatic VPN server benchmarking via [Gluetun](https://github.com/qdm12/gluetun), switches to the fastest server, full Web UI.
 
-> **Thanks to [qdm12](https://github.com/qdm12/gluetun)** for Gluetun, without which this project would not exist.
+> 🇫🇷 [Version française](README.md)
+
+[![Build](https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml/badge.svg?branch=main)](https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://github.com/Aerya/Gluetun-Companion/pkgs/container/gluetun-companion)
+[![arch](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-lightgrey)](#)
+[![i18n](https://img.shields.io/badge/i18n-FR%20%7C%20EN-informational)](README.md)
+[![Latest release](https://img.shields.io/github/v/release/Aerya/Gluetun-Companion?label=release&color=brightgreen)](https://github.com/Aerya/Gluetun-Companion/releases/latest)
+[![Gluetun compatible](https://img.shields.io/badge/Gluetun-compatible-0d1117?logo=github&logoColor=white)](https://github.com/qdm12/gluetun)
+
+> **Using it? Liking it? [⭐ Drop a star!](https://github.com/Aerya/Gluetun-Companion/stargazers)** — takes two seconds.
 
 ---
 
 ## Compatibility
 
-Gluetun Companion works in theory with **any Gluetun-compatible VPN provider**
-as long as at least one of these filter variables is used in your configuration:
+Gluetun Companion works with **any Gluetun-compatible VPN provider** as long as at least one of these filter variables is present in your configuration:
 
-| Gluetun variable | Description |
+| Gluetun variable | Filter |
 |---|---|
 | `SERVER_NAMES` | Server name |
 | `SERVER_COUNTRIES` | Country |
 | `SERVER_REGIONS` | Region |
 | `SERVER_CITIES` | City |
-| `SERVER_HOSTNAMES` | Server hostname |
+| `SERVER_HOSTNAMES` | Hostname |
 
-The companion is **independent of the tunnel technology** in use: it works identically
-with OpenVPN, WireGuard, or any other protocol supported by your provider.
+Independent of tunnel technology: works identically with OpenVPN, WireGuard, or any other protocol supported by Gluetun.
 
-It is primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483746)**
-*(affiliate link — thank you if you use it!)*, whose filter variables are documented here:
-[gluetun-wiki — AirVPN optional environment variables](https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/airvpn.md#optional-environment-variables)
+Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483746)** *(affiliate link)* — [AirVPN filter variables](https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/airvpn.md#optional-environment-variables).
 
 ---
 
 ## Features
 
+- 🆕 **Pause during benchmark** — list of containers (torrent, Usenet…) stopped before the benchmark starts and automatically restarted when it ends, even on error; prevents their traffic from skewing measurements and avoids overloading the VPN tunnel on modest hardware
+- 🆕 **Containers to restart after switch** — ordered list (drag & drop), sequential restart via `docker compose up -d --force-recreate` after each VPN switch; correctly handles containers using `network_mode: service:gluetun`
 - **Automatic benchmarking** every X hours — download, upload and latency per server
-- **Sidecar mode** (default) — a `gluetun-companion-test` container clones the real Gluetun
-  config for each server; a `gluetun-companion-sidecar` container measures speed via
-  **Ookla + librespeed in parallel** (dual mode, default), **Ookla only**, **librespeed only**
-  or **iperf3** directly inside the VPN tunnel. Your main Gluetun is never restarted during
-  testing — only once at the end to switch to the winner
-- **Multi-source results** — Ookla, librespeed and iperf3 speeds are stored separately and
-  displayed in both the dashboard and history
-- **HTTP proxy mode** (optional, if sidecar is disabled) — measures speed through the
-  Gluetun HTTP proxy (port 8887), no extra containers, but briefly interrupts dependent
-  services on each server switch
+- **Sidecar mode** (default) — a `gluetun-companion-test` container clones the real Gluetun config for each server; `gluetun-companion-sidecar` measures speed via **Ookla + librespeed in parallel** (dual mode, default), Ookla only, librespeed only, or iperf3 directly inside the VPN tunnel; your main Gluetun is never restarted during testing
+- **Multi-source results** — Ookla, librespeed and iperf3 speeds stored separately and displayed in the dashboard and history
+- **HTTP proxy mode** (optional) — measures speed via the Gluetun HTTP proxy with no extra containers; briefly interrupts dependent services on each server switch
 - **Multi-stream download** — N concurrent TCP connections (configurable, default: 4)
-- **Automatic switching** to the fastest server (`docker compose up -d`),
-  based on a weighted score (65% current measurement + 35% historical);
-  dependent services (`network_mode: service:gluetun`) are restarted automatically
-- **Pause during benchmark** — list of containers (torrent clients, Usenet…) stopped
-  before the benchmark starts and restarted automatically when it ends, even on error;
-  prevents their traffic from skewing speed measurements and avoids overloading the VPN tunnel
-- **5 filter types**: SERVER\_NAMES, SERVER\_COUNTRIES, SERVER\_REGIONS,
-  SERVER\_CITIES, SERVER\_HOSTNAMES
+- **Automatic switching** to the fastest server (`docker compose up -d`), based on a weighted score (65% current + 35% history); dependent services (`network_mode: service:gluetun`) are recreated automatically
+- **5 filter types**: `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - Configurable **retry** per server + global timeout per server
 - **Auto-disable** a server after N consecutive failures
-- **Web UI** dark/light, **FR/EN** — auth, dashboard with sparkline, paginated history, charts,
-  switches page with Mbps gain and connection time
+- **Web UI** dark/light, FR/EN — auth, dashboard with sparkline, paginated history, charts, switches page with Mbps gain and connection time
 - **CSV export** of the full history
 - **On-demand test** of a single server from the UI without waiting for the next cycle
-- **Notifications** on every switch — Discord webhook (rich embed) and/or
-  [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
+- **Notifications** on every switch — Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
 - **Automatic purge** of SQLite history with configurable retention (in days)
 - **`/healthz` endpoint** unauthenticated, for Docker healthchecks
 - **Structured JSON logs** optional via `LOG_JSON=1` (Loki/Grafana compatible)
@@ -66,14 +61,9 @@ It is primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_
 
 ---
 
-## Getting started
+## Quick start
 
 ### 1. Expose Gluetun's HTTP proxy on the host
-
-The companion does **not** use the Gluetun API (port 8000) or a shared Docker network.
-It exclusively goes through Gluetun's **HTTP proxy**, reachable via `host.docker.internal`.
-
-In your Gluetun compose, expose the HTTP proxy on the host:
 
 ```yaml
 # in your existing Gluetun docker-compose.yml
@@ -83,16 +73,15 @@ ports:
 environment:
   HTTPPROXY: "on"
   HTTPPROXY_LOG: "off"
-  # HTTPPROXY_USER: ""       # optional — set in the UI settings if needed
+  # HTTPPROXY_USER: ""       # optional — set in the UI Settings if needed
   # HTTPPROXY_PASSWORD: ""
 ```
 
 ### 2. Mount the Gluetun compose directory
 
-The companion must be able to write a `docker-compose.override.yml` into the directory
-that contains your Gluetun `docker-compose.yml`, then restart the service.
+The companion needs write access to the directory containing your Gluetun `docker-compose.yml` so it can write a `docker-compose.override.yml` and restart the service.
 
-### 3. Configure the companion
+### 3. Run the companion
 
 ```yaml
 services:
@@ -103,94 +92,34 @@ services:
     ports:
       - 8765:8765
     volumes:
-      - /home/user/docker/gluetun-companion:/data
+      - /path/to/data:/data
       - /var/run/docker.sock:/var/run/docker.sock
-      - /home/aerya/docker/dockge-enhanced/stacks/airvpn:/compose   # <-- adapt this
+      - /path/to/gluetun/stack:/compose   # ← adapt this path
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
       - TZ=Europe/Paris
-      - SECRET_KEY=replace-with-a-long-random-string   # openssl rand -hex 32
+      - SECRET_KEY=replace-with-a-random-string   # openssl rand -hex 32
       - DATA_DIR=/data
       - GLUETUN_HOST=host.docker.internal
-      - GLUETUN_PROXY_PORT=8887          # Gluetun HTTP proxy port exposed on the host
-      - GLUETUN_CONTAINER=gluetun-airvpn   # exact service name in the Gluetun compose
+      - GLUETUN_PROXY_PORT=8887
+      - GLUETUN_CONTAINER=gluetun-airvpn   # exact name of your Gluetun container
       - COMPOSE_DIR=/compose
-
-networks: {}
 ```
-
-> **Running the companion in the same stack as Gluetun?**
-> You can drop `extra_hosts` and use the service name as the host:
-> `GLUETUN_HOST: gluetun` (or whatever your Gluetun service is named).
-> On each server switch, Gluetun Companion now targets **only the Gluetun service**
-> (`docker compose up -d <service>`) — so the companion itself is never recreated.
-> A separate stack is still recommended to avoid side-effects on image updates.
-
-### 4. Start
 
 ```bash
 docker compose up -d
 ```
 
-Open: **http://localhost:8765**
+Open **http://localhost:8765** — first login: enter the credentials you want (account created automatically).
 
-First login → enter the credentials you want to create (saved automatically).
+> **Companion in the same stack as Gluetun?**
+> Remove `extra_hosts` and use the service name: `GLUETUN_HOST: gluetun`.
+> On a switch, the companion only targets the Gluetun service (`docker compose up -d <service>`) — it never restarts itself.
 
-### 5. Import servers
+### 4. Import servers
 
-**Servers** → **Import from Gluetun**: the companion reads `SERVER_NAMES`,
-`SERVER_COUNTRIES`, etc. directly from the running container and imports each value
-with its filter type.
-
-You can also add servers manually from the same page.
-
----
-
-## How it works
-
-**Sidecar mode (default)**
-
-```
-Benchmark cycle (every X hours)
-  └─ For each enabled server:
-       1. Pull ghcr.io/aerya/gluetun-companion-sidecar:latest
-       2. Start gluetun-companion-test
-          (clone of your Gluetun, configured for the target server)
-       3. Start gluetun-companion-sidecar
-          (network_mode: container:gluetun-companion-test)
-       4. Wait for VPN via /health polling (configurable timeout)
-       5. Speed test inside the VPN tunnel (according to configured engine):
-          - Dual (default): Ookla + librespeed in parallel, iperf3 as fallback
-          - Ookla only, librespeed only, or iperf3 only (configurable)
-          → DL, UL, latency recorded per source
-       6. Stop + remove both containers and delete the sidecar image
-       → Auto-retry on failure, global timeout per server
-       → Auto-disable after N consecutive failures
-  └─ Weighted score per server (65% current + 35% exponential history)
-  └─ Switch real Gluetun to best server (single restart)
-  └─ Discord / Apprise notification (if configured)
-  └─ Cycle record (total duration, servers tested, best server)
-```
-
-**HTTP proxy mode (optional, if sidecar is disabled)**
-
-```
-Benchmark cycle (every X hours)
-  └─ For each enabled server:
-       1. Write docker-compose.override.yml
-          → target variable = "<server>", all others cleared
-       2. docker compose up -d  ← real Gluetun restarts
-       3. Wait for VPN via HTTP proxy polling (configurable timeout)
-       4. Optional TCP warm-up (2s drained, not counted)
-       5. Download from N endpoints (Cloudflare, Hetzner, Fast.com, OVH, Tele2)
-          → median Mbps
-       6. Upload to Cloudflare __up → Mbps
-       7. Latency TTFB from N endpoints → median ms
-       8. SQLite record
-       → Dependent services are briefly interrupted on each switch
-  └─ Weighted score → switch → notification → cycle record
-```
+**Servers → Import from Gluetun**: the companion reads `SERVER_NAMES`, `SERVER_COUNTRIES`, etc. directly from the running container and imports each value with its filter type. Manual addition is also available on the same screen.
 
 ---
 
@@ -201,96 +130,88 @@ Benchmark cycle (every X hours)
 | `SECRET_KEY` | *(required)* | Flask session signing key |
 | `GLUETUN_HOST` | `host.docker.internal` | Gluetun HTTP proxy host |
 | `GLUETUN_PROXY_PORT` | `8887` | Gluetun HTTP proxy port |
-| `GLUETUN_CONTAINER` | `gluetun-airvpn` | Gluetun container name (for Docker SDK) |
+| `GLUETUN_CONTAINER` | `gluetun-airvpn` | Gluetun container name |
 | `COMPOSE_DIR` | `/compose` | Path (inside the container) to the Gluetun compose directory |
 | `DATA_DIR` | `/data` | SQLite database directory |
 
-> Benchmark parameters (parallel streams, duration, warm-up, etc.) are configured
-> directly in the UI → **Settings**.
+Benchmark parameters (streams, duration, warm-up, retry…) are configured in the UI → **Settings**.
 
 ---
 
-## Sidecar mode
+## How it works
 
-**Sidecar mode is enabled by default.** It is more accurate and less disruptive than proxy
-mode: your real Gluetun is never restarted during testing.
+### Sidecar mode (default)
 
 ```
-For each server under test
-  └─ Pull ghcr.io/aerya/gluetun-companion-sidecar:latest  (always latest version)
-  └─ gluetun-companion-test   ← clone of your Gluetun (same image + env vars)
-                                 configured with the target SERVER_* value
-  └─ gluetun-companion-sidecar← network_mode: container:gluetun-companion-test
-                                 measures via Ookla + librespeed (parallel) inside the VPN tunnel
-  └─ Stop + remove both containers and delete the sidecar image from disk
-
-After all servers are tested
+Benchmark cycle (every X hours)
+  ├─ "Pause bench" containers stopped (torrents, Usenet…)
+  └─ For each enabled server:
+       1. Pull ghcr.io/aerya/gluetun-companion-sidecar:latest
+       2. Start gluetun-companion-test
+          (clone of your Gluetun, configured for the target server)
+       3. Start gluetun-companion-sidecar
+          (network_mode: container:gluetun-companion-test)
+       4. Wait for VPN via /health polling (configurable timeout)
+       5. Speed test inside the VPN tunnel (configurable engine):
+          - Dual (default): Ookla + librespeed in parallel, iperf3 as fallback
+          - Ookla only, librespeed only, or iperf3 only
+          → DL, UL, latency recorded per source
+       6. Stop + remove containers and sidecar image
+       → Auto-retry on failure, global timeout per server
+       → Auto-disable after N consecutive failures
+  └─ Weighted score (65% current cycle + 35% exponential history)
   └─ Switch real Gluetun to the best server (one single restart)
+  └─ "Post-switch" containers recreated (network namespace included)
+  └─ "Pause bench" containers restarted (guaranteed — finally block)
+  └─ Discord / Apprise notification (if configured)
 ```
 
-**Test engine (configurable in Settings → Sidecar Mode):**
-- **Dual** (default) — Ookla (Speedtest.net) + librespeed in parallel; both source results are
-  stored separately and their average is used as the main ranking value
-- **Ookla only** — official Speedtest.net CLI, massive infrastructure, rarely blocked by VPN IPs
-- **librespeed only** — librespeed-cli, public librespeed.org servers (HTTP, rarely blocked)
-- **iperf3 only** — direct TCP connections to public iperf3 servers (often blocked by VPN IPs)
+**Available test engines (Settings → Sidecar Mode):**
+- **Dual** (default) — Ookla + librespeed in parallel; results from both sources stored separately
+- **Ookla only** — official Speedtest.net CLI, rarely blocked by VPN IPs
+- **librespeed only** — librespeed-cli, public librespeed.org servers (HTTP)
+- **iperf3 only** — direct TCP to public iperf3 servers (often blocked by VPN IPs)
 
-**Fallback options (configurable):**
-- **iperf3 as fallback** (enabled by default) — if all primary sources fail, iperf3 is attempted as a last resort
-- **HTTP proxy as fallback** (disabled by default) — if the sidecar fails entirely, falls back to HTTP proxy mode
+**Fallbacks:**
+- iperf3 as last resort if all primary sources fail (enabled by default)
+- HTTP proxy fallback if sidecar fails entirely (disabled by default)
 
-**Advantages over proxy mode:**
-- Your real Gluetun (and all services depending on it) is never interrupted during benchmarking
-- Measures raw TCP throughput without HTTP proxy overhead — more accurate on fast VPNs
+> ⚠ **Simultaneous connection**: sidecar mode uses one extra VPN connection slot for the entire benchmark duration. Check your provider's limits (AirVPN: 3–5 depending on plan).
 
-**Proxy mode (optional):** Settings → Sidecar Mode → toggle off.
-Useful if you do not have access to the Docker socket.
+### HTTP proxy mode (optional)
 
-### Containers to restart after a switch
+```
+Benchmark cycle (every X hours)
+  └─ For each enabled server:
+       1. Write docker-compose.override.yml
+       2. docker compose up -d  ← real Gluetun restarts
+       3. Wait for VPN via HTTP proxy polling
+       4. Optional TCP warm-up (2 s, not counted)
+       5. Download from N endpoints → median Mbps
+       6. Upload → Mbps
+       7. Latency TTFB → median ms
+  └─ Weighted score → switch → notification
+```
 
-In **Settings → Containers to restart after switch**, you can define an ordered list of Docker containers to restart automatically after each VPN server switch (both proxy and sidecar modes).
+Enable via **Settings → Sidecar Mode → toggle off**.
 
-- Available containers are detected automatically via the Docker API — a dropdown lets you pick them
-- Rows can be reordered by drag and drop
-- A 3-second delay is applied between each restart
-- Typical use: `qbittorrent`, `radarr`, `sonarr`, or any service that needs to reconnect after a VPN tunnel change
+### Containers to restart after switch
 
-> ⚠ **Requirement:** the Docker socket (`/var/run/docker.sock`) must be mounted in the Gluetun Companion container (already required for sidecar mode).
+In **Settings → Containers to restart after switch**: ordered list of containers recreated via `docker compose up -d --force-recreate` after each VPN switch. Drag & drop to reorder. Useful for `qbittorrent`, `radarr`, `sonarr`, or any service with `network_mode: service:gluetun`.
 
 ### Containers to pause during benchmark
 
-In **Settings → Containers to pause during benchmark**, you can define a list of containers to stop automatically before each benchmark and restart as soon as it finishes.
-
-**Why?** A torrent or Usenet client actively downloading during the benchmark skews speed measurements (shared bandwidth) and can, on modest hardware (ARM NAS…), overload the TUN interface during VPN reconnection.
-
-- Containers are stopped **before** the benchmark starts, restarted **after** — in all cases, even if the benchmark fails (guaranteed `finally` block)
-- If a container appears in both lists (pause + post-switch), the pause list takes priority: it is managed here, no duplicate restart
-- No ordering required (all stopped at once, all restarted together via `docker compose up -d --force-recreate`)
-- Typical use: `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`, any heavy FTP/DDL client
-
-> ⚠ **Simultaneous connection warning** — valid for ALL VPN providers
->
-> Sidecar mode adds **one extra concurrent VPN connection** for the entire duration of the
-> benchmark (the test Gluetun container). If your provider limits simultaneous connections
-> (AirVPN: 3–5 depending on plan; most other providers: similar), this consumes one extra slot.
-> Make sure you have a free connection slot.
-> This warning applies to **all providers compatible with Gluetun**, not just AirVPN.
+In **Settings → Containers to pause during benchmark**: list of containers stopped before the benchmark and restarted after — in all cases, even if the benchmark crashes. If a container is in both lists, the pause list takes priority (no duplicate restart). Useful for `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`.
 
 ---
 
 ## Notes
 
-- **In sidecar mode (default):** your main Gluetun is never restarted during testing —
-  dependent services (qBittorrent, Sonarr, Radarr…) are not interrupted.
-  **In proxy mode (optional):** the benchmark briefly interrupts these services while testing
-  each server. Schedule cycles during off-peak hours or increase the interval.
-- **Frequency and server count**: each server test triggers a VPN reconnection.
-  Testing 10 servers every 2 hours means 120 reconnections per day.
-  Most providers (including AirVPN) limit *simultaneous* connections rather than
-  frequency, but a very short interval with many servers may trigger abuse detection.
-  **6 h and fewer than 10 servers** is a sensible default.
-- The `docker-compose.override.yml` file is managed automatically — do not edit it manually.
+- **Sidecar mode (default):** your main Gluetun is never restarted during testing — dependent services are not interrupted. **Proxy mode (optional):** the benchmark briefly interrupts those services on each server test. Schedule during off-peak hours.
+- **Frequency and server count:** each test triggers a VPN reconnection. Testing 10 servers every 2 hours = 120 reconnections/day. Most providers limit *simultaneous* connections, not frequency — but a very short interval may trigger abuse detection. **6 h and fewer than 10 servers** is a sensible default.
+- `docker-compose.override.yml` is managed automatically — do not edit it manually.
 - IPv6 is displayed if your VPN provider supports it (AirVPN does).
+- The Docker socket (`/var/run/docker.sock`) is required for sidecar mode, post-switch containers, and the benchmark pause feature.
 
 ---
 
@@ -298,4 +219,10 @@ In **Settings → Containers to pause during benchmark**, you can define a list 
 
 Thanks to **[qdm12](https://github.com/qdm12/gluetun)** for Gluetun, without which this project would not exist.
 
-Thanks to **Zup** for the ideas and testing.
+Thanks to **Zup** for ideas and testing.
+
+---
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE) — free for personal and non-profit use, commercial use requires authorization.
