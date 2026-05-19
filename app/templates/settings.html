@@ -8,7 +8,7 @@
 
   {# ── Benchmark settings ──────────────────────────────────────────────── #}
   <div class="col-lg-6">
-    <div class="card p-4 h-100">
+    <div class="card p-4 mb-4">
       <h6 class="fw-bold mb-3 text-success">
         <i class="bi bi-speedometer2"></i> {{ t.set_benchmark_title }}
       </h6>
@@ -139,147 +139,8 @@
         </div>
       </form>
     </div>
-  </div>
 
-  {# ── Credentials ─────────────────────────────────────────────────────── #}
-  <div class="col-lg-6">
-    <div class="card p-4 mb-4">
-      <h6 class="fw-bold mb-3 text-warning">
-        <i class="bi bi-person-lock"></i> {{ t.set_credentials_title }}
-      </h6>
-      <form method="post">
-        <input type="hidden" name="action" value="credentials">
-
-        <div class="mb-3">
-          <label class="form-label">{{ t.set_username }}</label>
-          <input type="text" name="username" class="form-control"
-                 value="{{ cfg.username }}" autocomplete="username">
-        </div>
-
-        <div class="mb-4">
-          <label class="form-label">{{ t.set_new_password }}</label>
-          <input type="password" name="password" class="form-control"
-                 placeholder="{{ t.set_password_placeholder }}"
-                 autocomplete="new-password">
-        </div>
-
-        <button type="submit" class="btn btn-warning fw-semibold text-dark">
-          <i class="bi bi-shield-lock"></i> {{ t.set_update }}
-        </button>
-      </form>
-    </div>
-
-    <div class="card p-4 mb-4">
-      <h6 class="fw-bold mb-1">
-        <i class="bi bi-key text-info"></i> {{ t.set_proxy_title }}
-      </h6>
-      <p class="text-muted small mb-3">{{ t.set_proxy_hint | safe }}</p>
-      <form method="post">
-        <input type="hidden" name="action" value="proxy_credentials">
-
-        <div class="row g-2 mb-3">
-          <div class="col">
-            <label class="form-label small text-muted">{{ t.set_proxy_user }}</label>
-            <input type="text" name="proxy_username" class="form-control"
-                   value="{{ cfg.proxy_username }}"
-                   placeholder="{{ t.set_proxy_placeholder }}"
-                   autocomplete="off">
-          </div>
-          <div class="col">
-            <label class="form-label small text-muted">{{ t.set_proxy_pass }}</label>
-            <input type="password" name="proxy_password" class="form-control"
-                   value="{{ cfg.proxy_password }}"
-                   placeholder="{{ t.set_proxy_placeholder }}"
-                   autocomplete="off">
-          </div>
-        </div>
-
-        <button type="submit" class="btn btn-info fw-semibold text-dark">
-          <i class="bi bi-save"></i> {{ t.cmn_save }}
-        </button>
-        {% if cfg.proxy_username %}
-        <span class="ms-2 badge bg-success">
-          <i class="bi bi-check2-circle"></i> {{ t.set_proxy_active }} {{ cfg.proxy_username }}
-        </span>
-        {% else %}
-        <span class="ms-2 badge bg-secondary">{{ t.set_proxy_none }}</span>
-        {% endif %}
-      </form>
-    </div>
-
-    <div class="card p-4 mb-4">
-      <h6 class="fw-bold mb-3 text-info">
-        <i class="bi bi-database-gear"></i> {{ t.set_db_title }}
-      </h6>
-      <form method="post">
-        <input type="hidden" name="action" value="db_retention">
-        <div class="mb-3">
-          <label class="form-label">{{ t.set_retention_label }}</label>
-          <div class="input-group" style="max-width:200px">
-            <input type="number" name="db_retention_days" class="form-control"
-                   value="{{ cfg.db_retention_days }}" min="0" max="3650" step="1">
-            <span class="input-group-text text-muted">{{ t.cmn_days }}</span>
-          </div>
-          <div class="form-text text-muted">{{ t.set_retention_hint | safe }}</div>
-        </div>
-        <button type="submit" class="btn btn-info fw-semibold text-dark btn-sm">
-          <i class="bi bi-save"></i> {{ t.cmn_save }}
-        </button>
-      </form>
-    </div>
-
-    <div class="card p-4 mb-4">
-      <h6 class="fw-bold mb-3" style="color:#5865F2">
-        <i class="bi bi-bell-fill"></i> {{ t.set_notif_title }}
-      </h6>
-      <form method="post">
-        <input type="hidden" name="action" value="notifications">
-
-        <div class="mb-3">
-          <label class="form-label">
-            <i class="bi bi-discord"></i> {{ t.set_discord_label }}
-          </label>
-          <input type="url" name="discord_webhook_url" class="form-control"
-                 value="{{ cfg.discord_webhook_url }}"
-                 placeholder="https://discord.com/api/webhooks/…">
-          <div class="form-text text-muted">{{ t.set_discord_hint }}</div>
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label">
-            <i class="bi bi-send-fill"></i> {{ t.set_apprise_label }}
-            <span class="text-muted small">{{ t.set_apprise_sub }}</span>
-          </label>
-          <textarea name="apprise_urls" class="form-control font-monospace"
-                    rows="3" placeholder="tgram://token/chatid
-ntfy://mytopic
-gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
-          <div class="form-text text-muted">{{ t.set_apprise_hint | safe }}</div>
-        </div>
-
-        <div class="d-flex flex-wrap gap-2 align-items-center">
-          <button type="submit" class="btn btn-sm fw-semibold" style="background:#5865F2;color:#fff">
-            <i class="bi bi-save"></i> {{ t.cmn_save }}
-          </button>
-          <button type="button" class="btn btn-sm btn-outline-secondary"
-                  onclick="testNotif('discord')" id="btn-test-discord">
-            <i class="bi bi-discord"></i> {{ t.set_notif_test_discord }}
-          </button>
-          <button type="button" class="btn btn-sm btn-outline-secondary"
-                  onclick="testNotif('apprise')" id="btn-test-apprise">
-            <i class="bi bi-send-fill"></i> {{ t.set_notif_test_apprise }}
-          </button>
-          {% if cfg.discord_webhook_url or cfg.apprise_urls %}
-          <span class="badge bg-success">
-            <i class="bi bi-check2-circle"></i> {{ t.set_notif_active }}
-          </span>
-          {% else %}
-          <span class="badge bg-secondary">{{ t.set_notif_inactive }}</span>
-          {% endif %}
-        </div>
-      </form>
-    </div>
-
+    {# ── Sidecar mode ──────────────────────────────────────────────────────── #}
     <div class="card p-4 mb-4 border-warning">
       <h6 class="fw-bold mb-3" style="color:#f0ad4e">
         <i class="bi bi-boxes"></i> {{ t.set_sidecar_title }}
@@ -373,6 +234,50 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
       </form>
     </div>
 
+    {# ── HTTP proxy authentication ──────────────────────────────────────────── #}
+    <div class="card p-4 mb-4">
+      <h6 class="fw-bold mb-1">
+        <i class="bi bi-key text-info"></i> {{ t.set_proxy_title }}
+      </h6>
+      <p class="text-muted small mb-3">{{ t.set_proxy_hint | safe }}</p>
+      <form method="post">
+        <input type="hidden" name="action" value="proxy_credentials">
+
+        <div class="row g-2 mb-3">
+          <div class="col">
+            <label class="form-label small text-muted">{{ t.set_proxy_user }}</label>
+            <input type="text" name="proxy_username" class="form-control"
+                   value="{{ cfg.proxy_username }}"
+                   placeholder="{{ t.set_proxy_placeholder }}"
+                   autocomplete="off">
+          </div>
+          <div class="col">
+            <label class="form-label small text-muted">{{ t.set_proxy_pass }}</label>
+            <input type="password" name="proxy_password" class="form-control"
+                   value="{{ cfg.proxy_password }}"
+                   placeholder="{{ t.set_proxy_placeholder }}"
+                   autocomplete="off">
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-info fw-semibold text-dark">
+          <i class="bi bi-save"></i> {{ t.cmn_save }}
+        </button>
+        {% if cfg.proxy_username %}
+        <span class="ms-2 badge bg-success">
+          <i class="bi bi-check2-circle"></i> {{ t.set_proxy_active }} {{ cfg.proxy_username }}
+        </span>
+        {% else %}
+        <span class="ms-2 badge bg-secondary">{{ t.set_proxy_none }}</span>
+        {% endif %}
+      </form>
+    </div>
+
+  </div>
+
+  {# ── Right column ──────────────────────────────────────────────────────── #}
+  <div class="col-lg-6">
+
     {# ── Post-switch containers ──────────────────────────────────────────── #}
     <div class="card p-4 mb-4">
       <h6 class="fw-bold mb-1">
@@ -435,6 +340,108 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
         <p class="text-muted mb-0" style="font-size:.78rem">
           <i class="bi bi-info-circle"></i> {{ t.set_pause_bench_note | safe }}
         </p>
+      </form>
+    </div>
+
+    {# ── Database maintenance ───────────────────────────────────────────────── #}
+    <div class="card p-4 mb-4">
+      <h6 class="fw-bold mb-3 text-info">
+        <i class="bi bi-database-gear"></i> {{ t.set_db_title }}
+      </h6>
+      <form method="post">
+        <input type="hidden" name="action" value="db_retention">
+        <div class="mb-3">
+          <label class="form-label">{{ t.set_retention_label }}</label>
+          <div class="input-group" style="max-width:200px">
+            <input type="number" name="db_retention_days" class="form-control"
+                   value="{{ cfg.db_retention_days }}" min="0" max="3650" step="1">
+            <span class="input-group-text text-muted">{{ t.cmn_days }}</span>
+          </div>
+          <div class="form-text text-muted">{{ t.set_retention_hint | safe }}</div>
+        </div>
+        <button type="submit" class="btn btn-info fw-semibold text-dark btn-sm">
+          <i class="bi bi-save"></i> {{ t.cmn_save }}
+        </button>
+      </form>
+    </div>
+
+    {# ── Switch notifications ───────────────────────────────────────────────── #}
+    <div class="card p-4 mb-4">
+      <h6 class="fw-bold mb-3" style="color:#5865F2">
+        <i class="bi bi-bell-fill"></i> {{ t.set_notif_title }}
+      </h6>
+      <form method="post">
+        <input type="hidden" name="action" value="notifications">
+
+        <div class="mb-3">
+          <label class="form-label">
+            <i class="bi bi-discord"></i> {{ t.set_discord_label }}
+          </label>
+          <input type="url" name="discord_webhook_url" class="form-control"
+                 value="{{ cfg.discord_webhook_url }}"
+                 placeholder="https://discord.com/api/webhooks/…">
+          <div class="form-text text-muted">{{ t.set_discord_hint }}</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">
+            <i class="bi bi-send-fill"></i> {{ t.set_apprise_label }}
+            <span class="text-muted small">{{ t.set_apprise_sub }}</span>
+          </label>
+          <textarea name="apprise_urls" class="form-control font-monospace"
+                    rows="3" placeholder="tgram://token/chatid
+ntfy://mytopic
+gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
+          <div class="form-text text-muted">{{ t.set_apprise_hint | safe }}</div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <button type="submit" class="btn btn-sm fw-semibold" style="background:#5865F2;color:#fff">
+            <i class="bi bi-save"></i> {{ t.cmn_save }}
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+                  onclick="testNotif('discord')" id="btn-test-discord">
+            <i class="bi bi-discord"></i> {{ t.set_notif_test_discord }}
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+                  onclick="testNotif('apprise')" id="btn-test-apprise">
+            <i class="bi bi-send-fill"></i> {{ t.set_notif_test_apprise }}
+          </button>
+          {% if cfg.discord_webhook_url or cfg.apprise_urls %}
+          <span class="badge bg-success">
+            <i class="bi bi-check2-circle"></i> {{ t.set_notif_active }}
+          </span>
+          {% else %}
+          <span class="badge bg-secondary">{{ t.set_notif_inactive }}</span>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+
+    {# ── Web UI credentials ────────────────────────────────────────────────── #}
+    <div class="card p-4 mb-4">
+      <h6 class="fw-bold mb-3 text-warning">
+        <i class="bi bi-person-lock"></i> {{ t.set_credentials_title }}
+      </h6>
+      <form method="post">
+        <input type="hidden" name="action" value="credentials">
+
+        <div class="mb-3">
+          <label class="form-label">{{ t.set_username }}</label>
+          <input type="text" name="username" class="form-control"
+                 value="{{ cfg.username }}" autocomplete="username">
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label">{{ t.set_new_password }}</label>
+          <input type="password" name="password" class="form-control"
+                 placeholder="{{ t.set_password_placeholder }}"
+                 autocomplete="new-password">
+        </div>
+
+        <button type="submit" class="btn btn-warning fw-semibold text-dark">
+          <i class="bi bi-shield-lock"></i> {{ t.set_update }}
+        </button>
       </form>
     </div>
 
