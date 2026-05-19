@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Gluetun Companion" width="480">
+  <img src="assets/logo.png" alt="Gluetun Companion" width="200">
 </p>
 
 # Gluetun Companion
