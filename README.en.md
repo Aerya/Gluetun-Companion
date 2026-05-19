@@ -12,7 +12,6 @@ Automatic VPN server benchmarking via [Gluetun](https://github.com/qdm12/gluetun
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://github.com/Aerya/Gluetun-Companion/pkgs/container/gluetun-companion)
 [![arch](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-lightgrey)](#)
 [![i18n](https://img.shields.io/badge/i18n-FR%20%7C%20EN-informational)](README.md)
-[![Latest release](https://img.shields.io/github/v/release/Aerya/Gluetun-Companion?label=release&color=brightgreen)](https://github.com/Aerya/Gluetun-Companion/releases/latest)
 [![Gluetun compatible](https://img.shields.io/badge/Gluetun-compatible-0d1117?logo=github&logoColor=white)](https://github.com/qdm12/gluetun)
 
 > **Using it? Liking it? [⭐ Drop a star!](https://github.com/Aerya/Gluetun-Companion/stargazers)** — takes two seconds.
