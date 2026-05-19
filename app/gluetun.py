@@ -368,12 +368,22 @@ def stop_containers(container_names: list[str]) -> list[str]:
     return handled
 
 
-def start_stopped_containers(container_names: list[str]) -> list[str]:
+def start_stopped_containers(
+    container_names: list[str],
+    compose_dir: str = '',
+    compose_project: str = '',
+) -> list[str]:
     """
     Start containers that were previously stopped (but not removed) via
-    ``stop_containers()``.  Uses a plain ``docker start`` (SDK ``c.start()``)
-    rather than ``docker compose up``, so it works for containers from *any*
-    Compose stack — not just the one mounted at ``COMPOSE_DIR``.
+    ``stop_containers()``.
+
+    Strategy (handles both network-independent and network-dependent containers):
+    1. Try a plain ``docker start`` — works for containers from any stack that
+       don't share a network namespace with a recreated parent.
+    2. If ``docker start`` fails (e.g. the container uses
+       ``network_mode: service:<gluetun>`` and gluetun was just recreated),
+       fall back to ``docker compose up -d --force-recreate`` so Compose can
+       resolve the *current* parent container ID.
 
     Returns the list of container names that were successfully started.
     """
@@ -388,11 +398,20 @@ def start_stopped_containers(container_names: list[str]) -> list[str]:
                 c = client.containers.get(name)
                 logger.info('Starting paused container: %s (status: %s)', name, c.status)
                 if c.status != 'running':
-                    c.start()
+                    try:
+                        c.start()
+                    except Exception as start_exc:
+                        # Plain start failed — likely stale network namespace after
+                        # gluetun recreation.  Try compose recreate as fallback.
+                        logger.warning(
+                            'docker start failed for %s (%s) — trying compose recreate',
+                            name, start_exc,
+                        )
+                        _compose_recreate(name, compose_dir, compose_project)
                 started.append(name)
-                logger.info('Started: %s OK', name)
+                logger.info('Started paused container: %s OK', name)
             except Exception as exc:
-                logger.warning('Failed to start container %s: %s', name, exc)
+                logger.warning('Failed to start paused container %s: %s', name, exc)
     except Exception as exc:
         logger.warning('start_stopped_containers: %s', exc)
     return started

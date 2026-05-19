@@ -4,6 +4,15 @@
 {% block content %}
 <h5 class="mb-3"><i class="bi bi-gear"></i> {{ t.set_title }}</h5>
 
+<div id="overlap-warning" class="alert alert-warning d-flex gap-2 align-items-start mb-3 d-none">
+  <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
+  <div>
+    <strong>{{ t.set_overlap_warning_title }}</strong>
+    <span id="overlap-warning-names"></span>
+    — {{ t.set_overlap_warning_body | safe }}
+  </div>
+</div>
+
 <div class="row g-4">
 
   {# ── Benchmark settings ──────────────────────────────────────────────── #}
@@ -578,7 +587,31 @@ fetch('{{ url_for("main.api_docker_containers") }}')
   .finally(() => {
     _savedContainers.forEach(name => addPostSwitchRow(name));
     _savedPauseContainers.forEach(name => addPauseBenchRow(name));
+    _checkOverlap();
   });
+
+// ── Overlap detection (post-switch ∩ pause-bench) ────────────────────────
+function _checkOverlap() {
+  const postSwitch = Array.from(
+    document.querySelectorAll('#post-switch-list select[name="post_switch_containers"]')
+  ).map(s => s.value).filter(Boolean);
+  const pauseBench = Array.from(
+    document.querySelectorAll('#pause-bench-list select[name="pause_bench_containers"]')
+  ).map(s => s.value).filter(Boolean);
+  const overlap = postSwitch.filter(n => pauseBench.includes(n));
+  const box = document.getElementById('overlap-warning');
+  const names = document.getElementById('overlap-warning-names');
+  if (overlap.length) {
+    names.textContent = overlap.map(n => `« ${n} »`).join(', ');
+    box.classList.remove('d-none');
+  } else {
+    box.classList.add('d-none');
+  }
+}
+
+// Recheck on any select change in the two lists
+document.getElementById('post-switch-list').addEventListener('change', _checkOverlap);
+document.getElementById('pause-bench-list').addEventListener('change', _checkOverlap);
 
 // ── Notification test ─────────────────────────────────────────────────────
 const _notifTestOk   = '{{ t.set_notif_test_ok }}';

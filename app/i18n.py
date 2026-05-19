@@ -260,6 +260,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_pause_bench_add':     'Ajouter un container',
         'set_pause_bench_empty':   'Aucun container configuré — cliquez sur Ajouter.',
         'set_pause_bench_note':    'Si un container est dans cette liste <strong>et</strong> dans « Containers à redémarrer après bascule », il est géré ici en priorité : stoppé avant le bench, relancé après (namespace réseau inclus). Pas de doublon.',
+        'set_overlap_warning_title': 'Container en double :',
+        'set_overlap_warning_body':  'présent dans <em>Containers à redémarrer après bascule</em> <strong>et</strong> dans <em>Containers à stopper pendant le benchmark</em>. Ce n\'est pas utile — la liste pause suffit.',
 
         # ── Notifications (notify.py) ──
         'notif_title':              '🔄 Bascule VPN',
@@ -540,6 +542,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_pause_bench_add':     'Add a container',
         'set_pause_bench_empty':   'No containers configured — click Add.',
         'set_pause_bench_note':    'If a container is in this list <strong>and</strong> in "Containers to restart after switch", it is managed here with priority: stopped before the benchmark, restarted after (network namespace included). No duplicate restart.',
+        'set_overlap_warning_title': 'Duplicate container:',
+        'set_overlap_warning_body':  'found in both <em>Containers to restart after switch</em> <strong>and</strong> <em>Containers to pause during benchmark</em>. This is unnecessary — the pause list is sufficient.',
 
         # ── Notifications (notify.py) ──
         'notif_title':              '🔄 VPN Switch',
