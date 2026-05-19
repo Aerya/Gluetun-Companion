@@ -381,7 +381,7 @@ def _do_benchmark(app):
         FILTER_VARS, switch_server, wait_for_vpn,
         get_public_ips, get_current_filters, format_filters,
         restart_network_dependents, restart_containers_in_order,
-        stop_containers,
+        stop_containers, start_stopped_containers,
     )
 
     set_setting('benchmark_running', '1')
@@ -570,7 +570,10 @@ def _do_benchmark(app):
                 'Restarting %d paused container(s) after benchmark: %s',
                 len(pause_containers), ', '.join(pause_containers),
             )
-            _resumed = restart_containers_in_order(pause_containers, compose_dir, project)
+            # Use plain docker start — containers were stopped (not removed),
+            # so they don't need compose recreate.  This also works for
+            # containers from stacks other than the gluetun stack.
+            _resumed = start_stopped_containers(pause_containers)
             logger.info(
                 'Paused containers restarted: %d/%d',
                 len(_resumed), len(pause_containers),

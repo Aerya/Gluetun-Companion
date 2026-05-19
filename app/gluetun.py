@@ -368,6 +368,36 @@ def stop_containers(container_names: list[str]) -> list[str]:
     return handled
 
 
+def start_stopped_containers(container_names: list[str]) -> list[str]:
+    """
+    Start containers that were previously stopped (but not removed) via
+    ``stop_containers()``.  Uses a plain ``docker start`` (SDK ``c.start()``)
+    rather than ``docker compose up``, so it works for containers from *any*
+    Compose stack — not just the one mounted at ``COMPOSE_DIR``.
+
+    Returns the list of container names that were successfully started.
+    """
+    started: list[str] = []
+    names = [n.strip() for n in container_names if n and n.strip()]
+    if not names:
+        return started
+    try:
+        client = docker.from_env()
+        for name in names:
+            try:
+                c = client.containers.get(name)
+                logger.info('Starting paused container: %s (status: %s)', name, c.status)
+                if c.status != 'running':
+                    c.start()
+                started.append(name)
+                logger.info('Started: %s OK', name)
+            except Exception as exc:
+                logger.warning('Failed to start container %s: %s', name, exc)
+    except Exception as exc:
+        logger.warning('start_stopped_containers: %s', exc)
+    return started
+
+
 def list_docker_containers() -> list[str]:
     """Return the names of all currently running Docker containers, sorted."""
     try:
