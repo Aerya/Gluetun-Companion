@@ -46,6 +46,9 @@ It is primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_
 - **Automatic switching** to the fastest server (`docker compose up -d`),
   based on a weighted score (65% current measurement + 35% historical);
   dependent services (`network_mode: service:gluetun`) are restarted automatically
+- **Pause during benchmark** — list of containers (torrent clients, Usenet…) stopped
+  before the benchmark starts and restarted automatically when it ends, even on error;
+  prevents their traffic from skewing speed measurements and avoids overloading the VPN tunnel
 - **5 filter types**: SERVER\_NAMES, SERVER\_COUNTRIES, SERVER\_REGIONS,
   SERVER\_CITIES, SERVER\_HOSTNAMES
 - Configurable **retry** per server + global timeout per server
@@ -253,6 +256,17 @@ In **Settings → Containers to restart after switch**, you can define an ordere
 - Typical use: `qbittorrent`, `radarr`, `sonarr`, or any service that needs to reconnect after a VPN tunnel change
 
 > ⚠ **Requirement:** the Docker socket (`/var/run/docker.sock`) must be mounted in the Gluetun Companion container (already required for sidecar mode).
+
+### Containers to pause during benchmark
+
+In **Settings → Containers to pause during benchmark**, you can define a list of containers to stop automatically before each benchmark and restart as soon as it finishes.
+
+**Why?** A torrent or Usenet client actively downloading during the benchmark skews speed measurements (shared bandwidth) and can, on modest hardware (ARM NAS…), overload the TUN interface during VPN reconnection.
+
+- Containers are stopped **before** the benchmark starts, restarted **after** — in all cases, even if the benchmark fails (guaranteed `finally` block)
+- If a container appears in both lists (pause + post-switch), the pause list takes priority: it is managed here, no duplicate restart
+- No ordering required (all stopped at once, all restarted together via `docker compose up -d --force-recreate`)
+- Typical use: `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`, any heavy FTP/DDL client
 
 > ⚠ **Simultaneous connection warning** — valid for ALL VPN providers
 >

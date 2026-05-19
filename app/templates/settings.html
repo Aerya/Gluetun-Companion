@@ -406,6 +406,38 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
       </form>
     </div>
 
+    {# ── Pause during benchmark ────────────────────────────────────────────── #}
+    <div class="card p-4 mb-4 border-danger">
+      <h6 class="fw-bold mb-1 text-danger">
+        <i class="bi bi-pause-circle-fill"></i> {{ t.set_pause_bench_title }}
+      </h6>
+      <p class="text-muted small mb-3">{{ t.set_pause_bench_hint }}</p>
+
+      <form method="post" id="form-pause-bench">
+        <input type="hidden" name="action" value="pause_bench">
+
+        <div id="pause-bench-list" class="d-flex flex-column gap-2 mb-3">
+          <div id="pause-bench-placeholder" class="text-muted small fst-italic
+               {{ 'd-none' if cfg.pause_bench_containers }}">
+            {{ t.set_pause_bench_empty }}
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 align-items-center flex-wrap mb-2">
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="addPauseBenchRow()">
+            <i class="bi bi-plus-lg"></i> {{ t.set_pause_bench_add }}
+          </button>
+          <button type="submit" class="btn btn-sm btn-danger fw-semibold">
+            <i class="bi bi-save"></i> {{ t.cmn_save }}
+          </button>
+        </div>
+
+        <p class="text-muted mb-0" style="font-size:.78rem">
+          <i class="bi bi-info-circle"></i> {{ t.set_pause_bench_note | safe }}
+        </p>
+      </form>
+    </div>
+
   </div>
 
 </div>
@@ -413,13 +445,15 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 
 {% block scripts %}
 <script>
-// ── Post-switch containers ────────────────────────────────────────────────
-let _dockerContainers = [];
-const _savedContainers = {{ cfg.post_switch_containers | tojson }};
+// ── Shared: Docker container list ─────────────────────────────────────────
+let _dockerContainers       = [];
+const _savedContainers      = {{ cfg.post_switch_containers | tojson }};
+const _savedPauseContainers = {{ cfg.pause_bench_containers | tojson }};
 
-function _buildPostSwitchSelect(selectedValue) {
+// Generic select builder (shared between both lists)
+function _buildContainerSelect(fieldName, selectedValue) {
   const sel = document.createElement('select');
-  sel.name = 'post_switch_containers';
+  sel.name = fieldName;
   sel.className = 'form-select form-select-sm flex-grow-1';
   const blank = document.createElement('option');
   blank.value = '';
@@ -432,7 +466,6 @@ function _buildPostSwitchSelect(selectedValue) {
     if (name === selectedValue) opt.selected = true;
     sel.appendChild(opt);
   });
-  // Keep saved value even if container is currently stopped
   if (selectedValue && !_dockerContainers.includes(selectedValue)) {
     const opt = document.createElement('option');
     opt.value = selectedValue;
@@ -441,6 +474,10 @@ function _buildPostSwitchSelect(selectedValue) {
     sel.appendChild(opt);
   }
   return sel;
+}
+
+function _buildPostSwitchSelect(selectedValue) {
+  return _buildContainerSelect('post_switch_containers', selectedValue);
 }
 
 function addPostSwitchRow(value) {
@@ -475,7 +512,37 @@ function addPostSwitchRow(value) {
   list.appendChild(row);
 }
 
-// Drag-to-reorder (delegated — one listener on the list)
+// ── Pause-during-benchmark rows ───────────────────────────────────────────
+function addPauseBenchRow(value) {
+  const list        = document.getElementById('pause-bench-list');
+  const placeholder = document.getElementById('pause-bench-placeholder');
+  placeholder.classList.add('d-none');
+
+  const row = document.createElement('div');
+  row.className = 'd-flex align-items-center gap-2';
+
+  const icon = document.createElement('span');
+  icon.className = 'text-danger';
+  icon.innerHTML = '<i class="bi bi-pause-fill"></i>';
+
+  const sel = _buildContainerSelect('pause_bench_containers', value || '');
+
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'btn btn-sm btn-outline-danger';
+  del.innerHTML = '<i class="bi bi-trash3"></i>';
+  del.onclick = () => {
+    row.remove();
+    if (!list.querySelectorAll('.d-flex').length) placeholder.classList.remove('d-none');
+  };
+
+  row.appendChild(icon);
+  row.appendChild(sel);
+  row.appendChild(del);
+  list.appendChild(row);
+}
+
+// ── Post-switch drag-to-reorder (delegated — one listener on the list) ───
 (function initDragSort() {
   const list = document.getElementById('post-switch-list');
   let dragged = null;
@@ -496,13 +563,14 @@ function addPostSwitchRow(value) {
   });
 })();
 
-// Fetch running containers then render saved rows
+// Fetch running containers then render saved rows for both lists
 fetch('{{ url_for("main.api_docker_containers") }}')
   .then(r => r.json())
   .then(containers => { _dockerContainers = containers; })
   .catch(() => {})
   .finally(() => {
     _savedContainers.forEach(name => addPostSwitchRow(name));
+    _savedPauseContainers.forEach(name => addPauseBenchRow(name));
   });
 
 // ── Notification test ─────────────────────────────────────────────────────

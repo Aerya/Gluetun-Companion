@@ -521,6 +521,12 @@ def settings():
             set_setting('post_switch_containers', json.dumps(containers))
             flash_t('flash_post_switch_saved', 'success')
 
+        elif action == 'pause_bench':
+            containers = request.form.getlist('pause_bench_containers')
+            containers = [c.strip() for c in containers if c.strip()]
+            set_setting('pause_bench_containers', json.dumps(containers))
+            flash_t('flash_pause_bench_saved', 'success')
+
         return redirect(url_for('main.settings'))
 
     cfg = {
@@ -546,7 +552,8 @@ def settings():
         'sidecar_speedtest_method': get_setting('sidecar_speedtest_method', 'dual'),
         'sidecar_iperf_fallback':      get_setting('sidecar_iperf_fallback', '1'),
         'sidecar_proxy_fallback':      get_setting('sidecar_proxy_fallback', '0'),
-        'post_switch_containers':      json.loads(get_setting('post_switch_containers', '[]')),
+        'post_switch_containers':  json.loads(get_setting('post_switch_containers', '[]')),
+        'pause_bench_containers':  json.loads(get_setting('pause_bench_containers', '[]')),
     }
     return render_template('settings.html', cfg=cfg, next_run=get_next_run())
 

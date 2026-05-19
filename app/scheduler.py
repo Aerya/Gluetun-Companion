@@ -381,16 +381,34 @@ def _do_benchmark(app):
         FILTER_VARS, switch_server, wait_for_vpn,
         get_public_ips, get_current_filters, format_filters,
         restart_network_dependents, restart_containers_in_order,
+        stop_containers,
     )
 
     set_setting('benchmark_running', '1')
     cycle_start = time.time()
+
+    # These are needed in the finally block, so define them before try.
+    container   = app.config['GLUETUN_CONTAINER']
+    compose_dir = app.config['COMPOSE_DIR']
+    project     = app.config.get('COMPOSE_PROJECT', '')
+
+    # Containers to pause before benchmark and restart after
+    # (e.g. torrent clients that would distort speed measurements)
+    _pause_raw = _json.loads(get_setting('pause_bench_containers', '[]'))
+    pause_containers: list[str] = [c.strip() for c in _pause_raw if c and c.strip()]
+    pause_exclude = set(pause_containers)  # passed to restart functions
+
+    if pause_containers:
+        logger.info(
+            'Pausing %d container(s) before benchmark: %s',
+            len(pause_containers), ', '.join(pause_containers),
+        )
+        _stopped = stop_containers(pause_containers)
+        logger.info('Paused %d/%d container(s)', len(_stopped), len(pause_containers))
+
     logger.info('=== Benchmark cycle started ===')
 
     try:
-        container   = app.config['GLUETUN_CONTAINER']
-        compose_dir = app.config['COMPOSE_DIR']
-        project     = app.config.get('COMPOSE_PROJECT', '')
         proxy_host  = app.config['GLUETUN_HOST']
         proxy_port  = app.config['GLUETUN_PROXY_PORT']
 
@@ -482,13 +500,15 @@ def _do_benchmark(app):
                         proxy_host, proxy_port, timeout=wait_secs,
                         proxy_user=proxy_user, proxy_password=proxy_pass,
                     )
-                    restarted = restart_network_dependents(container, compose_dir, project)
+                    restarted = restart_network_dependents(
+                        container, compose_dir, project, exclude=pause_exclude,
+                    )
                     if restarted:
                         logger.info('Recreated network dependents: %s', ', '.join(restarted))
                     _post_switch = _json.loads(get_setting('post_switch_containers', '[]'))
                     if _post_switch:
                         _restarted2 = restart_containers_in_order(
-                            _post_switch, compose_dir, project
+                            _post_switch, compose_dir, project, exclude=pause_exclude,
                         )
                         logger.info(
                             'Post-switch containers: %d/%d recreated',
@@ -543,6 +563,18 @@ def _do_benchmark(app):
             )
 
     finally:
+        # Always restart paused containers — even if the benchmark failed or
+        # was interrupted — so the user's downloads resume automatically.
+        if pause_containers:
+            logger.info(
+                'Restarting %d paused container(s) after benchmark: %s',
+                len(pause_containers), ', '.join(pause_containers),
+            )
+            _resumed = restart_containers_in_order(pause_containers, compose_dir, project)
+            logger.info(
+                'Paused containers restarted: %d/%d',
+                len(_resumed), len(pause_containers),
+            )
         set_setting('benchmark_running', '0')
         set_setting('benchmark_current_server', '')
 

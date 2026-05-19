@@ -276,6 +276,7 @@ def restart_network_dependents(
     container_name: str,
     compose_dir: str = '',
     compose_project: str = '',
+    exclude: set[str] | None = None,
 ) -> list[str]:
     """
     Find and recreate every container whose NetworkMode references
@@ -291,9 +292,13 @@ def restart_network_dependents(
     the gluetun service — they are already mounted/known inside the companion
     container and let us call ``docker compose up -d --force-recreate``.
 
+    ``exclude`` — container names to skip (e.g. those paused before the
+    benchmark; they will be restarted separately at benchmark end).
+
     Returns the list of successfully recreated container names.
     """
     restarted: list[str] = []
+    exclude_set = set(exclude) if exclude else set()
     try:
         client = docker.from_env()
 
@@ -310,8 +315,13 @@ def restart_network_dependents(
 
         for c in client.containers.list(all=True):
             mode = c.attrs['HostConfig'].get('NetworkMode', '')
-            # Also match any 'container:<id-prefix>' (Docker may truncate)
             if mode == name_target or (id_target and mode == id_target):
+                if c.name in exclude_set:
+                    logger.info(
+                        'Skipping network-dependent %s (paused — will restart at benchmark end)',
+                        c.name,
+                    )
+                    continue
                 logger.info('Recreating network-dependent container: %s', c.name)
                 try:
                     _compose_recreate(c.name, compose_dir, compose_project)
@@ -321,6 +331,41 @@ def restart_network_dependents(
     except Exception as exc:
         logger.warning('restart_network_dependents: %s', exc)
     return restarted
+
+
+def stop_containers(container_names: list[str]) -> list[str]:
+    """
+    Gracefully stop the named containers (without removing them) so that
+    benchmark speed tests are not distorted by concurrent download traffic.
+
+    Already-stopped containers are skipped without error.
+    Returns the list of containers that were in a running state and got stopped
+    (plus those already stopped — all are counted as "handled" so the caller
+    knows they should be restarted afterwards).
+    """
+    handled: list[str] = []
+    names = [n.strip() for n in container_names if n and n.strip()]
+    if not names:
+        return handled
+    try:
+        client = docker.from_env()
+        for name in names:
+            try:
+                c = client.containers.get(name)
+                if c.status == 'running':
+                    logger.info('Pausing container before benchmark: %s', name)
+                    c.stop(timeout=30)
+                else:
+                    logger.info(
+                        'Container %s already stopped (status: %s) — skipping',
+                        name, c.status,
+                    )
+                handled.append(name)
+            except Exception as exc:
+                logger.warning('Failed to stop container %s: %s', name, exc)
+    except Exception as exc:
+        logger.warning('stop_containers: %s', exc)
+    return handled
 
 
 def list_docker_containers() -> list[str]:
@@ -338,6 +383,7 @@ def restart_containers_in_order(
     compose_dir: str = '',
     compose_project: str = '',
     delay_secs: float = 3.0,
+    exclude: set[str] | None = None,
 ) -> list[str]:
     """
     Recreate Docker containers one by one in the specified order, with a short
@@ -352,10 +398,17 @@ def restart_containers_in_order(
     ``compose_dir`` / ``compose_project`` should match those of the gluetun
     service when the dependent containers live in the same Compose stack.
 
+    ``exclude`` — container names to skip (e.g. those paused before the
+    benchmark; they will be restarted separately at benchmark end).
+
     Returns the list of container names that were successfully recreated.
     """
     restarted: list[str] = []
-    names = [n.strip() for n in container_names if n and n.strip()]
+    exclude_set = set(exclude) if exclude else set()
+    names = [
+        n.strip() for n in container_names
+        if n and n.strip() and n.strip() not in exclude_set
+    ]
     if not names:
         return restarted
     logger.info('Post-switch restart: will recreate %d container(s): %s', len(names), ', '.join(names))

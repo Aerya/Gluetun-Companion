@@ -224,6 +224,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'flash_proxy_saved':        'Identifiants proxy enregistrés.',
         'flash_sidecar_saved':      'Configuration sidecar enregistrée.',
         'flash_post_switch_saved':  'Containers post-bascule enregistrés.',
+        'flash_pause_bench_saved':  'Containers en pause pendant le benchmark enregistrés.',
 
         # ── Sidecar ──
         'set_sidecar_title':              'Mode Sidecar (défaut)',
@@ -252,6 +253,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_post_switch_loading': 'Chargement des containers…',
         'set_post_switch_delay':   'Délai entre redémarrages',
         'set_post_switch_note':    'L\'accès au socket Docker (<code>/var/run/docker.sock</code>) est requis.',
+
+        # ── Pause during benchmark ──
+        'set_pause_bench_title':   'Containers à stopper pendant le benchmark',
+        'set_pause_bench_hint':    'Ces containers sont stoppés avant le début du benchmark et relancés automatiquement à la fin — même en cas d\'erreur. Idéal pour les clients torrent, Usenet, FTP… dont le trafic fausserait les mesures de vitesse.',
+        'set_pause_bench_add':     'Ajouter un container',
+        'set_pause_bench_empty':   'Aucun container configuré — cliquez sur Ajouter.',
+        'set_pause_bench_note':    'Si un container est dans cette liste <strong>et</strong> dans « Containers à redémarrer après bascule », il est géré ici en priorité : stoppé avant le bench, relancé après (namespace réseau inclus). Pas de doublon.',
 
         # ── Notifications (notify.py) ──
         'notif_title':              '🔄 Bascule VPN',
@@ -495,6 +503,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'flash_credentials_saved':  'Credentials updated.',
         'flash_proxy_saved':        'Proxy credentials saved.',
         'flash_sidecar_saved':      'Sidecar configuration saved.',
+        'flash_post_switch_saved':  'Post-switch containers saved.',
+        'flash_pause_bench_saved':  'Containers to pause during benchmark saved.',
 
         # ── Sidecar ──
         'set_sidecar_title':              'Sidecar Mode (default)',
@@ -523,6 +533,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_post_switch_loading': 'Loading containers…',
         'set_post_switch_delay':   'Delay between restarts',
         'set_post_switch_note':    'Docker socket access (<code>/var/run/docker.sock</code>) is required.',
+
+        # ── Pause during benchmark ──
+        'set_pause_bench_title':   'Containers to pause during benchmark',
+        'set_pause_bench_hint':    'These containers are stopped before the benchmark starts and automatically restarted when it ends — even if it fails. Ideal for torrent clients, Usenet, FTP… whose traffic would skew speed measurements.',
+        'set_pause_bench_add':     'Add a container',
+        'set_pause_bench_empty':   'No containers configured — click Add.',
+        'set_pause_bench_note':    'If a container is in this list <strong>and</strong> in "Containers to restart after switch", it is managed here with priority: stopped before the benchmark, restarted after (network namespace included). No duplicate restart.',
 
         # ── Notifications (notify.py) ──
         'notif_title':              '🔄 VPN Switch',

@@ -49,6 +49,9 @@ documentée ici :
 - **Bascule automatique** vers le meilleur serveur (`docker compose up -d`),
   basée sur un score pondéré (65 % mesure actuelle + 35 % historique) ;
   les services dépendants (`network_mode: service:gluetun`) sont relancés automatiquement
+- **Pause pendant le benchmark** — liste de containers (clients torrent, Usenet…) stoppés
+  avant le début du benchmark et relancés automatiquement à la fin, même en cas d'erreur ;
+  évite que leur trafic fausse les mesures et prévient la surcharge du tunnel VPN
 - **5 types de filtre** : SERVER\_NAMES, SERVER\_COUNTRIES, SERVER\_REGIONS,
   SERVER\_CITIES, SERVER\_HOSTNAMES
 - **Retry** configurable par serveur + timeout global par serveur
@@ -258,6 +261,17 @@ Dans **Paramètres → Containers à redémarrer après bascule**, vous pouvez d
 - Typiquement utile pour : `qbittorrent`, `radarr`, `sonarr`, ou tout service qui doit se reconnecter après un changement de tunnel VPN
 
 > ⚠ **Prérequis :** le socket Docker (`/var/run/docker.sock`) doit être monté dans le container Gluetun Companion (déjà requis pour le mode sidecar).
+
+### Containers à stopper pendant le benchmark
+
+Dans **Paramètres → Containers à stopper pendant le benchmark**, vous pouvez définir une liste de containers à stopper automatiquement avant chaque benchmark et à relancer dès qu'il se termine.
+
+**Pourquoi ?** Un client torrent ou Usenet qui télécharge à plein régime pendant le benchmark fausse les mesures de vitesse (la bande passante est partagée) et peut, sur du matériel modeste (NAS ARM…), provoquer une surcharge du tunnel TUN lors de la reconnexion VPN.
+
+- Les containers sont stoppés **avant** le début du benchmark, relancés **après** — dans tous les cas, même si le benchmark échoue (bloc `finally`)
+- Si un container est dans les deux listes (pause + post-bascule), la liste de pause a priorité : il est géré ici, pas en double
+- Aucun ordre requis (tous stoppés en même temps, tous relancés en même temps via `docker compose up -d --force-recreate`)
+- Typiquement utile pour : `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`, tout client FTP/DDL intensif
 
 > ⚠ **Connexion simultanée — valable pour tous les fournisseurs VPN**
 >
