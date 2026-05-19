@@ -59,7 +59,7 @@ def create_app():
     app = Flask(
         __name__,
         template_folder='templates',
-        static_folder=os.path.join(os.path.dirname(__file__), '..', 'static'),
+        static_folder=os.path.join(os.path.dirname(__file__), '..', 'assets'),
     )
     app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-me')
 
