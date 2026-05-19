@@ -247,7 +247,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Post-switch containers ──
         'set_post_switch_title':   'Containers à redémarrer après bascule',
-        'set_post_switch_hint':    'Ces containers seront redémarrés dans l\'ordre indiqué après chaque bascule de serveur VPN (mode proxy ou sidecar). Utile pour qbittorrent, Radarr, etc.',
+        'set_post_switch_hint':    'Ces containers seront redémarrés dans l\'ordre indiqué après chaque bascule de serveur VPN (mode proxy ou sidecar). Utile pour qBittorrent, Radarr, etc.',
         'set_post_switch_add':     'Ajouter un container',
         'set_post_switch_empty':   'Aucun container configuré — cliquez sur Ajouter.',
         'set_post_switch_loading': 'Chargement des containers…',
@@ -256,7 +256,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Pause during benchmark ──
         'set_pause_bench_title':   'Containers à stopper pendant le benchmark',
-        'set_pause_bench_hint':    'Ces containers sont stoppés avant le début du benchmark et relancés automatiquement à la fin — même en cas d\'erreur. Idéal pour les clients torrent, Usenet, FTP… dont le trafic fausserait les mesures de vitesse.',
+        'set_pause_bench_hint':    'Ces containers sont stoppés avant le début du benchmark et relancés automatiquement à la fin — même en cas d\'erreur. Idéal pour les clients BitTorrent, Usenet, FTP, Speedtest/Netronome… dont le trafic fausserait les mesures de vitesse.',
         'set_pause_bench_add':     'Ajouter un container',
         'set_pause_bench_empty':   'Aucun container configuré — cliquez sur Ajouter.',
         'set_pause_bench_note':    'Si un container est dans cette liste <strong>et</strong> dans « Containers à redémarrer après bascule », il est géré ici en priorité : stoppé avant le bench, relancé après (namespace réseau inclus). Pas de doublon.',
@@ -527,7 +527,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Post-switch containers ──
         'set_post_switch_title':   'Containers to restart after switch',
-        'set_post_switch_hint':    'These containers will be restarted in the listed order after each VPN server switch (proxy or sidecar mode). Useful for qbittorrent, Radarr, etc.',
+        'set_post_switch_hint':    'These containers will be restarted in the listed order after each VPN server switch (proxy or sidecar mode). Useful for qBittorrent, Radarr, etc.',
         'set_post_switch_add':     'Add a container',
         'set_post_switch_empty':   'No containers configured — click Add.',
         'set_post_switch_loading': 'Loading containers…',
@@ -536,7 +536,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Pause during benchmark ──
         'set_pause_bench_title':   'Containers to pause during benchmark',
-        'set_pause_bench_hint':    'These containers are stopped before the benchmark starts and automatically restarted when it ends — even if it fails. Ideal for torrent clients, Usenet, FTP… whose traffic would skew speed measurements.',
+        'set_pause_bench_hint':    'These containers are stopped before the benchmark starts and automatically restarted when it ends — even if it fails. Ideal for BitTorrent, Usenet, FTP, Speedtest/Netronome… clients whose traffic would skew speed measurements.',
         'set_pause_bench_add':     'Add a container',
         'set_pause_bench_empty':   'No containers configured — click Add.',
         'set_pause_bench_note':    'If a container is in this list <strong>and</strong> in "Containers to restart after switch", it is managed here with priority: stopped before the benchmark, restarted after (network namespace included). No duplicate restart.',
