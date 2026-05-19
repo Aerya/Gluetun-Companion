@@ -80,17 +80,15 @@ def _test_one_server(
     if not connected:
         raise RuntimeError(f'VPN connection timeout after {connect_secs:.0f}s')
 
-    # VPN is up — restart services that lost their network namespace
-    restarted = restart_network_dependents(container)
+    # VPN is up — recreate services that lost their network namespace
+    # (compose_dir/project let us use `docker compose up` with the already-
+    # mounted path rather than the container-inaccessible host-label path)
+    restarted = restart_network_dependents(container, compose_dir, project)
     if restarted:
-        logger.info('Restarted network dependents: %s', ', '.join(restarted))
-
-    # Restart user-configured containers in order
-    _post_switch = _json.loads(get_setting('post_switch_containers', '[]'))
-    if _post_switch:
-        _restarted2 = restart_containers_in_order(_post_switch)
-        if _restarted2:
-            logger.info('Post-switch containers restarted: %s', ', '.join(_restarted2))
+        logger.info('Recreated network dependents: %s', ', '.join(restarted))
+    # NOTE: post_switch_containers are intentionally NOT restarted here.
+    # They are only restarted once after the final winning-server switch in
+    # _do_benchmark, not after every per-server test during a benchmark cycle.
 
     public_ip, public_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
 
@@ -484,14 +482,18 @@ def _do_benchmark(app):
                         proxy_host, proxy_port, timeout=wait_secs,
                         proxy_user=proxy_user, proxy_password=proxy_pass,
                     )
-                    restarted = restart_network_dependents(container)
+                    restarted = restart_network_dependents(container, compose_dir, project)
                     if restarted:
-                        logger.info('Restarted network dependents: %s', ', '.join(restarted))
+                        logger.info('Recreated network dependents: %s', ', '.join(restarted))
                     _post_switch = _json.loads(get_setting('post_switch_containers', '[]'))
                     if _post_switch:
-                        _restarted2 = restart_containers_in_order(_post_switch)
-                        if _restarted2:
-                            logger.info('Post-switch containers restarted: %s', ', '.join(_restarted2))
+                        _restarted2 = restart_containers_in_order(
+                            _post_switch, compose_dir, project
+                        )
+                        logger.info(
+                            'Post-switch containers: %d/%d recreated',
+                            len(_restarted2), len(_post_switch),
+                        )
                     to_ipv4, to_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
                     logger.info(
                         'Switched to best: %s  (%s / %s)  connect %.0fs',

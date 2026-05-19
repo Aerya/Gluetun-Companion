@@ -210,33 +210,47 @@ def switch_server(
 # Dependent-container restart
 # ---------------------------------------------------------------------------
 
-def _compose_recreate(container_name: str) -> None:
+def _compose_recreate(
+    container_name: str,
+    compose_dir: str = '',
+    compose_project: str = '',
+) -> None:
     """
-    Recreate a container via ``docker compose up -d <service>`` so that it
-    re-attaches to the correct (possibly new) network namespace.
+    Recreate a container via ``docker compose up -d --force-recreate <service>``
+    so that it re-attaches to the correct (possibly new) network namespace.
 
     When a container uses ``network_mode: service:X`` and X has just been
     recreated (new container ID), a plain ``docker restart`` fails with
     "joining network namespace … No such container".  Running
-    ``docker compose up -d <service>`` lets Compose resolve the *current*
-    container ID for X and recreate the dependent properly.
+    ``docker compose up -d --force-recreate <service>`` lets Compose resolve
+    the *current* container ID for X and recreate the dependent properly.
 
-    Falls back to ``container.restart()`` for containers that are not managed
-    by Compose (no ``com.docker.compose.service`` label).
+    Priority for compose_dir / compose_project:
+      1. Values passed explicitly (e.g. from gluetun's known COMPOSE_DIR)
+      2. ``com.docker.compose.project.working_dir`` / ``com.docker.compose.project``
+         labels on the container (host path — only works when not running inside
+         a container, i.e. bare-metal install)
+      3. Falls back to a plain ``docker restart`` as last resort.
     """
     client = docker.from_env()
     c = client.containers.get(container_name)
-    labels   = c.labels
-    service  = labels.get('com.docker.compose.service', '')
-    project  = labels.get('com.docker.compose.project', '')
-    work_dir = labels.get('com.docker.compose.project.working_dir', '')
+    labels = c.labels
+    service = labels.get('com.docker.compose.service', '') or container_name
 
-    if service and work_dir:
+    # Resolve working directory: prefer the caller-supplied path (already
+    # mounted inside the companion) over the host-side label path.
+    work_dir = compose_dir or labels.get('com.docker.compose.project.working_dir', '')
+    project  = compose_project or labels.get('com.docker.compose.project', '')
+
+    if work_dir:
         cmd = ['docker', 'compose']
         if project:
             cmd += ['-p', project]
-        cmd += ['up', '-d', service]
-        logger.debug('Recreating %s via: %s (cwd=%s)', container_name, ' '.join(cmd), work_dir)
+        cmd += ['up', '-d', '--force-recreate', service]
+        logger.info(
+            'Recreating %s via compose: %s (cwd=%s)',
+            container_name, ' '.join(cmd), work_dir,
+        )
         result = subprocess.run(
             cmd,
             cwd=work_dir,
@@ -248,32 +262,59 @@ def _compose_recreate(container_name: str) -> None:
             err = (result.stderr or result.stdout or 'unknown error').strip()
             raise RuntimeError(f'docker compose up failed for {container_name}: {err}')
     else:
-        # Non-Compose container — best effort plain restart
-        logger.debug('No Compose labels on %s, using plain restart', container_name)
+        # No compose dir known — plain restart (may fail for network-dependent
+        # containers after their parent was recreated)
+        logger.warning(
+            'No compose dir for %s — falling back to plain restart '
+            '(may fail if using network_mode: service:X)',
+            container_name,
+        )
         c.restart(timeout=15)
 
 
-def restart_network_dependents(container_name: str) -> list[str]:
+def restart_network_dependents(
+    container_name: str,
+    compose_dir: str = '',
+    compose_project: str = '',
+) -> list[str]:
     """
-    Find and recreate every container whose NetworkMode is
-    'container:<container_name>' (i.e. network_mode: service:<container_name>
-    in Compose).  Called after the VPN is confirmed up so the dependents
+    Find and recreate every container whose NetworkMode references
+    ``container_name`` (i.e. ``network_mode: service:<container_name>`` in
+    Compose).  Called after the VPN is confirmed up so the dependents
     re-attach to the live network namespace.
 
-    Uses ``docker compose up -d <service>`` (not ``docker restart``) so that
-    Compose resolves the *current* gluetun container ID after its recreation.
+    Docker stores the NetworkMode as ``container:<id>`` (old container ID) or
+    ``container:<name>`` depending on the Compose version.  We match both by
+    inspecting every running (or errored) container.
+
+    ``compose_dir`` / ``compose_project`` should be the same values used for
+    the gluetun service — they are already mounted/known inside the companion
+    container and let us call ``docker compose up -d --force-recreate``.
 
     Returns the list of successfully recreated container names.
     """
     restarted: list[str] = []
     try:
         client = docker.from_env()
-        target = f'container:{container_name}'
+
+        # Match by name OR by current container ID (Docker Compose stores the
+        # resolved ID at container-creation time, not the service name).
+        try:
+            gluetun = client.containers.get(container_name)
+            gluetun_id = gluetun.id
+        except Exception:
+            gluetun_id = ''
+
+        name_target = f'container:{container_name}'
+        id_target   = f'container:{gluetun_id}' if gluetun_id else None
+
         for c in client.containers.list(all=True):
-            if c.attrs['HostConfig'].get('NetworkMode') == target:
-                logger.info('Recreating network dependent: %s', c.name)
+            mode = c.attrs['HostConfig'].get('NetworkMode', '')
+            # Also match any 'container:<id-prefix>' (Docker may truncate)
+            if mode == name_target or (id_target and mode == id_target):
+                logger.info('Recreating network-dependent container: %s', c.name)
                 try:
-                    _compose_recreate(c.name)
+                    _compose_recreate(c.name, compose_dir, compose_project)
                     restarted.append(c.name)
                 except Exception as exc:
                     logger.warning('Failed to recreate %s: %s', c.name, exc)
@@ -294,6 +335,8 @@ def list_docker_containers() -> list[str]:
 
 def restart_containers_in_order(
     container_names: list[str],
+    compose_dir: str = '',
+    compose_project: str = '',
     delay_secs: float = 3.0,
 ) -> list[str]:
     """
@@ -302,9 +345,12 @@ def restart_containers_in_order(
     that user-chosen dependents (e.g. qbittorrent, Radarr …) come back up in
     the right sequence.
 
-    Uses ``docker compose up -d <service>`` (not ``docker restart``) so that
-    containers using ``network_mode: service:<gluetun>`` are recreated with
-    the correct new network namespace reference.
+    Uses ``docker compose up -d --force-recreate <service>`` (not ``docker
+    restart``) so that containers using ``network_mode: service:<gluetun>``
+    are recreated with the correct new network namespace reference.
+
+    ``compose_dir`` / ``compose_project`` should match those of the gluetun
+    service when the dependent containers live in the same Compose stack.
 
     Returns the list of container names that were successfully recreated.
     """
@@ -312,13 +358,15 @@ def restart_containers_in_order(
     names = [n.strip() for n in container_names if n and n.strip()]
     if not names:
         return restarted
+    logger.info('Post-switch restart: will recreate %d container(s): %s', len(names), ', '.join(names))
     for idx, name in enumerate(names):
+        logger.info('Post-switch recreate [%d/%d]: %s …', idx + 1, len(names), name)
         try:
-            _compose_recreate(name)
+            _compose_recreate(name, compose_dir, compose_project)
             restarted.append(name)
-            logger.info('Post-switch recreate [%d/%d]: %s', idx + 1, len(names), name)
+            logger.info('Post-switch recreate [%d/%d]: %s OK', idx + 1, len(names), name)
         except Exception as exc:
-            logger.warning('Failed to recreate container %s: %s', name, exc)
+            logger.warning('Post-switch recreate [%d/%d]: %s FAILED — %s', idx + 1, len(names), name, exc)
         if delay_secs > 0 and idx < len(names) - 1:
             time.sleep(delay_secs)
     return restarted
