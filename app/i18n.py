@@ -116,6 +116,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'srv_airvpn_selected':       'sélectionné(s)',
         'srv_airvpn_add_btn':        'Ajouter',
         'srv_airvpn_already_added':  'Déjà ajouté',
+        'srv_airvpn_health_ok':      'Serveur opérationnel',
+        'srv_airvpn_health_err':     'Serveur signalé en erreur ou en maintenance par AirVPN — peut être indisponible',
+        'srv_airvpn_health_hint':    '✅ opérationnel · ⚠️ en erreur / maintenance',
 
         # ── History ──
         'hist_title':       'Historique des tests de vitesse',
@@ -413,6 +416,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'srv_airvpn_selected':       'selected',
         'srv_airvpn_add_btn':        'Add',
         'srv_airvpn_already_added':  'Already added',
+        'srv_airvpn_health_ok':      'Server operational',
+        'srv_airvpn_health_err':     'Server reported as in error or under maintenance by AirVPN — may be unavailable',
+        'srv_airvpn_health_hint':    '✅ operational · ⚠️ error / maintenance',
 
         # ── History ──
         'hist_title':       'Speed test history',

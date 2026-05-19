@@ -190,12 +190,22 @@
                 <thead class="sticky-top" style="z-index:1">
                   <tr>
                     <th class="ps-3" style="width:36px"></th>
-                    <th>{{ t.srv_airvpn_col_server }}</th>
-                    <th>{{ t.filter_label_country }}</th>
+                    <th class="airvpn-sort-th" data-col="name" style="cursor:pointer;user-select:none;white-space:nowrap">
+                      {{ t.srv_airvpn_col_server }} <span class="airvpn-sort-icon" data-col="name">⇅</span>
+                    </th>
+                    <th class="airvpn-sort-th" data-col="country" style="cursor:pointer;user-select:none;white-space:nowrap">
+                      {{ t.filter_label_country }} <span class="airvpn-sort-icon" data-col="country">⇅</span>
+                    </th>
                     <th>{{ t.srv_airvpn_col_location }}</th>
-                    <th style="min-width:130px">{{ t.srv_airvpn_col_load }}</th>
-                    <th>{{ t.srv_airvpn_col_users }}</th>
-                    <th></th>
+                    <th class="airvpn-sort-th" data-col="load" style="cursor:pointer;user-select:none;white-space:nowrap;min-width:130px">
+                      {{ t.srv_airvpn_col_load }} <span class="airvpn-sort-icon" data-col="load">⇅</span>
+                    </th>
+                    <th class="airvpn-sort-th" data-col="users" style="cursor:pointer;user-select:none;white-space:nowrap">
+                      {{ t.srv_airvpn_col_users }} <span class="airvpn-sort-icon" data-col="users">⇅</span>
+                    </th>
+                    <th title="{{ t.srv_airvpn_health_hint }}" style="cursor:help">
+                      <i class="bi bi-info-circle text-muted" style="font-size:.8rem"></i>
+                    </th>
                   </tr>
                 </thead>
                 <tbody id="airvpn-servers-tbody"></tbody>
@@ -241,10 +251,55 @@ const _t = {
   addBtn:        {{ t.srv_airvpn_add_btn | tojson }},
   alreadyAdded:  {{ t.srv_airvpn_already_added | tojson }},
   selectCountry: {{ t.srv_airvpn_select_country | tojson }},
+  healthOk:      {{ t.srv_airvpn_health_ok | tojson }},
+  healthErr:     {{ t.srv_airvpn_health_err | tojson }},
 };
 
-let _airvpnData   = null;
+let _airvpnData     = null;
 let _airvpnSelected = new Set();
+let _sortCol        = 'name';   // default: alphabetical by server name
+let _sortDir        = 1;        // 1 = asc, -1 = desc
+
+// ── Column sort ───────────────────────────────────────────────────────────
+function _sortedServers() {
+  if (!_airvpnData) return [];
+  return [..._airvpnData.servers].sort((a, b) => {
+    let va = a[_sortCol], vb = b[_sortCol];
+    if (typeof va === 'string') va = va.toLowerCase();
+    if (typeof vb === 'string') vb = vb.toLowerCase();
+    if (va < vb) return -_sortDir;
+    if (va > vb) return  _sortDir;
+    return 0;
+  });
+}
+
+function _applySortUI() {
+  document.querySelectorAll('.airvpn-sort-icon').forEach(el => {
+    const col = el.dataset.col;
+    if (col === _sortCol) {
+      el.textContent = _sortDir === 1 ? '↑' : '↓';
+      el.style.color = 'var(--bs-success)';
+    } else {
+      el.textContent = '⇅';
+      el.style.color = '';
+    }
+  });
+}
+
+// Wire sort clicks (headers exist in DOM from template)
+document.querySelectorAll('.airvpn-sort-th').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (_sortCol === col) {
+      _sortDir *= -1;
+    } else {
+      _sortCol = col;
+      _sortDir = 1;   // always start ascending on new column
+    }
+    _applySortUI();
+    if (_airvpnData) _renderServersTab(_sortedServers());
+  });
+});
 
 // Load when modal opens (only once — data cached server-side 5 min)
 document.getElementById('airvpnModal').addEventListener('show.bs.modal', () => {
@@ -253,7 +308,8 @@ document.getElementById('airvpnModal').addEventListener('show.bs.modal', () => {
     .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(data => {
       _airvpnData = data;
-      _renderServersTab(data.servers);
+      _applySortUI();
+      _renderServersTab(_sortedServers());
       _renderCountriesTab(data.countries);
       document.getElementById('airvpn-loading').classList.add('d-none');
       document.getElementById('airvpn-tab-content').classList.remove('d-none');
@@ -319,7 +375,7 @@ function _renderServersTab(servers) {
       <td><small class="text-muted">${s.users}</small></td>
       <td>${healthy
         ? '<i class="bi bi-check-circle-fill text-success"></i>'
-        : '<i class="bi bi-exclamation-triangle-fill text-warning"></i>'}</td>
+        : '<i class="bi bi-exclamation-triangle-fill text-warning" style="cursor:help" data-bs-toggle="tooltip" data-bs-placement="left" data-bs-title="' + _t.healthErr + '"></i>'}</td>
     `;
     if (!exists) {
       tr.style.cursor = 'pointer';
@@ -332,6 +388,10 @@ function _renderServersTab(servers) {
     }
     tbody.appendChild(tr);
   }
+  // Init Bootstrap tooltips on newly rendered warning icons
+  tbody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+    new bootstrap.Tooltip(el, { trigger: 'hover focus' });
+  });
 }
 
 // ── Render countries tab ──────────────────────────────────────────────────
