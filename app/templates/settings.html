@@ -24,7 +24,7 @@
       <form method="post">
         <input type="hidden" name="action" value="save">
 
-        <div class="mb-3">
+        <div class="mb-3" id="interval-group">
           <label class="form-label">{{ t.set_interval_label }}</label>
           <div class="input-group">
             <input type="number" name="interval" class="form-control"
@@ -127,6 +127,15 @@
                  id="speedtest_warmup" {{ 'checked' if cfg.speedtest_warmup == '1' }}>
           <label class="form-check-label" for="speedtest_warmup">
             {{ t.set_warmup_label | safe }}
+          </label>
+        </div>
+
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="auto_benchmark" class="form-check-input"
+                 id="auto_benchmark" {{ 'checked' if cfg.auto_benchmark == '1' }}
+                 onchange="toggleAutoBenchmark(this.checked)">
+          <label class="form-check-label" for="auto_benchmark">
+            {{ t.set_auto_benchmark_label | safe }}
           </label>
         </div>
 
@@ -655,6 +664,17 @@ function testNotif(target) {
     }, 3000);
   });
 }
+
+// ── Auto benchmark toggle ─────────────────────────────────────────────────
+function toggleAutoBenchmark(enabled) {
+  const group = document.getElementById('interval-group');
+  if (group) {
+    group.style.opacity = enabled ? '' : '0.45';
+    group.querySelectorAll('input').forEach(el => el.disabled = !enabled);
+  }
+}
+// Apply on page load
+toggleAutoBenchmark(document.getElementById('auto_benchmark').checked);
 
 // ── Benchmark trigger ─────────────────────────────────────────────────────
 function triggerNow() {

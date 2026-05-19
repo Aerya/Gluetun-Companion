@@ -470,6 +470,7 @@ def settings():
         if action == 'save':
             set_setting('test_interval_hours',     request.form.get('interval', '6'))
             set_setting('auto_switch',             '1' if request.form.get('auto_switch') else '0')
+            set_setting('auto_benchmark',          '1' if request.form.get('auto_benchmark') else '0')
             set_setting('connection_wait_seconds', request.form.get('wait_secs', '45'))
             set_setting('speedtest_samples',       request.form.get('speedtest_samples', '3'))
             set_setting('speedtest_duration',      request.form.get('speedtest_duration', '8'))
@@ -531,6 +532,7 @@ def settings():
 
     cfg = {
         'interval':              get_setting('test_interval_hours', '6'),
+        'auto_benchmark':        get_setting('auto_benchmark', '1'),
         'auto_sw':               get_setting('auto_switch', '1'),
         'wait_secs':             get_setting('connection_wait_seconds', '45'),
         'username':              get_setting('admin_username', 'admin'),

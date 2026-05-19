@@ -88,7 +88,8 @@ def init_db(db_path: str):
                 ('sidecar_iperf_fallback',   '1'),
                 ('sidecar_proxy_fallback',   '0'),
                 ('post_switch_containers',   '[]'),
-                ('pause_bench_containers',   '[]');
+                ('pause_bench_containers',   '[]'),
+                ('auto_benchmark',           '1');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [

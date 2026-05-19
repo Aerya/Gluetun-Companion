@@ -370,6 +370,10 @@ def _test_server_sidecar_with_retry(
 # ---------------------------------------------------------------------------
 
 def run_benchmark(app):
+    from .database import get_setting
+    if get_setting('auto_benchmark', '1') != '1':
+        logger.info('Auto benchmark disabled — skipping scheduled run')
+        return
     with _lock:
         _do_benchmark(app)
 

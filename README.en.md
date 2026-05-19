@@ -40,7 +40,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 
 - 🆕 **Pause during benchmark** — list of containers (torrent, Usenet…) stopped before the benchmark starts and automatically restarted when it ends, even on error; prevents their traffic from skewing measurements and avoids overloading the VPN tunnel on modest hardware
 - 🆕 **Containers to restart after switch** — ordered list (drag & drop), sequential restart via `docker compose up -d --force-recreate` after each VPN switch; correctly handles containers using `network_mode: service:gluetun`
-- **Automatic benchmarking** every X hours — download, upload and latency per server
+- **Automatic benchmarking** every X hours — download, upload and latency per server; automatic cycle can be disabled (manual trigger only)
 - **Sidecar mode** (default) — a `gluetun-companion-test` container clones the real Gluetun config for each server; `gluetun-companion-sidecar` measures speed via **Ookla + librespeed in parallel** (dual mode, default), Ookla only, librespeed only, or iperf3 directly inside the VPN tunnel; your main Gluetun is never restarted during testing
 - **Multi-source results** — Ookla, librespeed and iperf3 speeds stored separately and displayed in the dashboard and history
 - **HTTP proxy mode** (optional) — measures speed via the Gluetun HTTP proxy with no extra containers; briefly interrupts dependent services on each server switch
@@ -201,6 +201,10 @@ In **Settings → Containers to restart after switch**: ordered list of containe
 ### Containers to pause during benchmark
 
 In **Settings → Containers to pause during benchmark**: list of containers stopped before the benchmark and restarted after — in all cases, even if the benchmark crashes. If a container is in both lists, the pause list takes priority (no duplicate restart). Useful for `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`.
+
+### Automatic cycle vs manual trigger
+
+In **Settings → Scheduling & Benchmark**: the automatic cycle can be disabled via the *Enable automatic benchmark cycle* toggle. The interval field is then grayed out. The **Run a test now** button remains available at any time to trigger a benchmark manually, regardless of this setting.
 
 ---
 

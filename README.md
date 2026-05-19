@@ -40,7 +40,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 
 - 🆕 **Pause pendant le benchmark** — liste de containers (torrents, Usenet…) stoppés avant le début du benchmark et relancés automatiquement à la fin, même en cas d'erreur ; évite que leur trafic fausse les mesures et prévient la surcharge du tunnel VPN sur matériel modeste
 - 🆕 **Containers à redémarrer après bascule** — liste ordonnée (glisser-déposer), redémarrage séquentiel via `docker compose up -d --force-recreate` après chaque bascule VPN ; gère correctement les containers en `network_mode: service:gluetun`
-- **Benchmark automatique** toutes les X heures — download, upload et latence par serveur
+- **Benchmark automatique** toutes les X heures — download, upload et latence par serveur ; cycle automatique désactivable (déclenchement manuel uniquement)
 - **Mode Sidecar** (défaut) — un container `gluetun-companion-test` clone la config réelle de Gluetun pour chaque serveur ; `gluetun-companion-sidecar` mesure le débit via **Ookla + librespeed en parallèle** (mode dual, défaut), Ookla seul, librespeed seul ou iperf3 directement dans le tunnel VPN ; votre Gluetun principal n'est jamais relancé pendant les tests
 - **Résultats multi-sources** — les vitesses Ookla, librespeed et iperf3 sont stockées séparément et affichées dans le dashboard et l'historique
 - **Mode Proxy HTTP** (optionnel) — mesure via le proxy HTTP Gluetun sans container supplémentaire ; interrompt brièvement les services dépendants à chaque bascule
@@ -201,6 +201,10 @@ Dans **Paramètres → Containers à redémarrer après bascule** : liste ordonn
 ### Containers à stopper pendant le benchmark
 
 Dans **Paramètres → Containers à stopper pendant le benchmark** : liste de containers stoppés avant le benchmark et relancés après — dans tous les cas, même si le benchmark plante. Si un container est dans les deux listes, la liste de pause a priorité (pas de doublon). Utile pour `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`.
+
+### Cycle automatique vs déclenchement manuel
+
+Dans **Paramètres → Planification & Benchmark** : le cycle automatique peut être désactivé via le toggle *Activer le cycle de benchmark automatique*. Le champ intervalle est alors grisé. Le bouton **Lancer un test maintenant** reste disponible à tout moment pour déclencher un benchmark manuellement, quelle que soit cette option.
 
 ---
 
