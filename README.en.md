@@ -267,7 +267,7 @@ In **Settings → Scheduling & Benchmark**: the automatic cycle can be disabled 
 - **XSS** — Third-party API data (AirVPN) injected into the DOM via `innerHTML` is always escaped by a `_esc()` helper (HTML entity encoding). Event handlers on dynamic elements use `addEventListener` rather than inline `onchange` attributes.
 - **SECRET_KEY** — The application refuses to start if `SECRET_KEY` is missing or equal to the default value. Generate a secure key with: `openssl rand -hex 32`.
 - **YAML injection** — The server filter value is sanitised before being written to `docker-compose.override.yml` (newlines stripped, quotes and backslashes escaped).
-- **Docker socket** — In sidecar mode, the Docker socket is exposed. Using [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) is recommended to restrict access to the minimum required (see the dedicated section above).
+- **Docker socket** — The Docker socket is secured via [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy), restricting access to the bare minimum (container read access, no root access to the daemon).
 
 ---
 
