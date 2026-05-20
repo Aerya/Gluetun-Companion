@@ -343,21 +343,31 @@ def _quick_check(
     filter_type = next(iter(filters))
     server_name = filters[filter_type].split(',')[0].strip()
 
-    # ── Last known speed ──────────────────────────────────────────────────
+    # ── Last known *proxy* speed ──────────────────────────────────────────
+    # We only compare against proxy measurements — sidecar results use a
+    # different measurement path and are systematically higher, which would
+    # make the delta always look huge and defeat the purpose of the quick check.
     with get_db() as db:
         row = db.execute(
-            'SELECT download_mbps FROM speed_tests '
-            'WHERE server_name=? AND success=1 ORDER BY tested_at DESC LIMIT 1',
+            "SELECT download_mbps FROM speed_tests "
+            "WHERE server_name=? AND success=1 AND test_method='proxy' "
+            "ORDER BY tested_at DESC LIMIT 1",
             (server_name,),
         ).fetchone()
 
-    if not row:
-        logger.info('Quick check: no previous result for %s — running full benchmark', server_name)
-        return False, server_name, None, None
+    last_dl = row['download_mbps'] if row else None
 
-    last_dl = row['download_mbps']
-    logger.info('Quick check: testing %s via proxy (last known: %.1f Mbps, threshold: ±%.0f%%)',
-                server_name, last_dl, threshold_pct)
+    if last_dl is None:
+        logger.info(
+            'Quick check: no previous proxy result for %s — '
+            'running proxy test to establish baseline then full benchmark',
+            server_name,
+        )
+
+    logger.info('Quick check: testing %s via proxy%s, threshold: ±%.0f%%',
+                server_name,
+                f' (last proxy: {last_dl:.1f} Mbps' + ')' if last_dl else ' (no proxy baseline)',
+                threshold_pct)
 
     # ── Test via existing Gluetun HTTP proxy — fast, no container ────────
     current_dl = _test_direct_proxy(
@@ -369,12 +379,23 @@ def _quick_check(
         logger.warning('Quick check: proxy test failed — running full benchmark')
         return False, server_name, None, last_dl
 
+    # ── Always save the result so future quick checks have a proxy baseline ──
+    _record_test(server_name, success=True, download_mbps=current_dl, method='proxy')
+
+    # ── No baseline yet → establish it, then run full benchmark ──────────
+    if last_dl is None:
+        logger.info(
+            'Quick check: %s — %.1f Mbps recorded as proxy baseline — running full benchmark',
+            server_name, current_dl,
+        )
+        return False, server_name, current_dl, None
+
     # ── Compare ───────────────────────────────────────────────────────────
     diff_pct = abs(current_dl - last_dl) / last_dl * 100 if last_dl > 0 else 100.0
     within   = diff_pct <= threshold_pct
 
     logger.info(
-        'Quick check: %s — current %.1f Mbps / last %.1f Mbps (Δ%.1f%%) → %s',
+        'Quick check: %s — current %.1f Mbps / last proxy %.1f Mbps (Δ%.1f%%) → %s',
         server_name, current_dl, last_dl, diff_pct,
         f'within ±{threshold_pct:.0f}% — skipping full benchmark'
         if within else
