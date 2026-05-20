@@ -137,6 +137,80 @@ def send_test_notification(
     return True, 'OK'
 
 
+def send_already_best_notification(
+    server: str,
+    speed_mbps: float | None,
+    ipv4: str | None,
+    ipv6: str | None,
+    discord_url: str | None = None,
+    apprise_urls: str | None = None,
+    lang: str = 'fr',
+):
+    """Send a notification when the current server is already the best — no switch needed."""
+    if not discord_url and not apprise_urls:
+        return
+
+    t = get_translations(lang)
+    title = t.get('notif_already_best_title', 'Already on best server')
+
+    if discord_url:
+        try:
+            fields = [
+                {
+                    'name':   t.get('notif_already_best_field', 'Active server'),
+                    'value':  f'`{server}`',
+                    'inline': True,
+                },
+            ]
+            if speed_mbps is not None:
+                fields.append({
+                    'name':   t.get('notif_field_speed_after', 'Speed'),
+                    'value':  f'{speed_mbps:.1f} Mbps',
+                    'inline': True,
+                })
+            if ipv4:
+                fields.append({'name': 'IPv4', 'value': ipv4, 'inline': True})
+            if ipv6:
+                fields.append({'name': 'IPv6', 'value': ipv6, 'inline': True})
+            payload = {
+                'embeds': [{
+                    'title':  title,
+                    'color':  0x58a6ff,   # blue — no change
+                    'fields': fields,
+                    'footer': {'text': t['notif_footer']},
+                }]
+            }
+            resp = requests.post(discord_url.strip(), json=payload, timeout=10)
+            resp.raise_for_status()
+            logger.info('Discord already-best notification sent')
+        except Exception as exc:
+            logger.warning('Discord already-best notification failed: %s', exc)
+
+    if apprise_urls:
+        try:
+            import apprise as _apprise
+            ap = _apprise.Apprise()
+            for url in apprise_urls.splitlines():
+                url = url.strip()
+                if url:
+                    ap.add(url)
+            lines = [server]
+            if speed_mbps is not None:
+                lines.append(f'{t.get("notif_text_speed", "Speed")} : {speed_mbps:.1f} Mbps')
+            if ipv4:
+                ip = ipv4 + (f' / {ipv6}' if ipv6 else '')
+                lines.append(f'{t.get("notif_text_ip", "IP")} : {ip}')
+            ap.notify(
+                title=t.get('notif_already_best_apprise_title', 'Already optimal — Gluetun Companion'),
+                body='\n'.join(lines),
+            )
+            logger.info('Apprise already-best notification sent')
+        except ImportError:
+            logger.warning('Apprise not installed — add "apprise" to requirements.txt')
+        except Exception as exc:
+            logger.warning('Apprise already-best notification failed: %s', exc)
+
+
 def send_switch_notification(
     from_server: str | None,
     to_server: str,

@@ -301,6 +301,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_reason_manual_short':'manuelle',
         'notif_apprise_title':      'Bascule VPN — Gluetun Companion',
         'notif_test_body':          'Notification de test envoyée par Gluetun Companion — tout fonctionne.',
+        'notif_already_best_title': 'Déjà sur le meilleur serveur',
+        'notif_already_best_field': 'Serveur actif',
+        'notif_already_best_apprise_title': 'Déjà optimal — Gluetun Companion',
     },
 
     'en': {
@@ -601,6 +604,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_reason_manual_short':'manual',
         'notif_apprise_title':      'VPN Switch — Gluetun Companion',
         'notif_test_body':          'Test notification sent by Gluetun Companion — everything is working.',
+        'notif_already_best_title': 'Already on the best server',
+        'notif_already_best_field': 'Active server',
+        'notif_already_best_apprise_title': 'Already optimal — Gluetun Companion',
     },
 }
 

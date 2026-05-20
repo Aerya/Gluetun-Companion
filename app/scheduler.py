@@ -554,6 +554,17 @@ def _do_benchmark(app):
                     )
             else:
                 logger.info('Already on best: %s', best_label)
+                cur_ipv4, cur_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
+                from .notify import send_already_best_notification
+                send_already_best_notification(
+                    server=best_label,
+                    speed_mbps=best['dl'],
+                    ipv4=cur_ipv4,
+                    ipv6=cur_ipv6,
+                    discord_url=get_setting('discord_webhook_url') or None,
+                    apprise_urls=get_setting('apprise_urls') or None,
+                    lang=get_setting('ui_lang', 'fr'),
+                )
 
         duration_secs = round(time.time() - cycle_start, 1)
         logger.info('=== Benchmark cycle finished in %.0fs ===', duration_secs)
