@@ -350,7 +350,7 @@ def _quick_check(
     with get_db() as db:
         row = db.execute(
             "SELECT download_mbps FROM speed_tests "
-            "WHERE server_name=? AND success=1 AND test_method='proxy' "
+            "WHERE server_name=? AND success=1 AND test_method='proxy_qc' "
             "ORDER BY tested_at DESC LIMIT 1",
             (server_name,),
         ).fetchone()
@@ -380,7 +380,9 @@ def _quick_check(
         return False, server_name, None, last_dl
 
     # ── Always save the result so future quick checks have a proxy baseline ──
-    _record_test(server_name, success=True, download_mbps=current_dl, method='proxy')
+    # Uses a distinct method tag ('proxy_qc') so these appear separately in
+    # /history without being mixed with full proxy-mode benchmark results.
+    _record_test(server_name, success=True, download_mbps=current_dl, method='proxy_qc')
 
     # ── No baseline yet → establish it, then run full benchmark ──────────
     if last_dl is None:
