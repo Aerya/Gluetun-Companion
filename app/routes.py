@@ -501,6 +501,11 @@ def settings():
         if action == 'save':
             set_setting('test_interval_hours',     request.form.get('interval', '6'))
             set_setting('auto_switch',             '1' if request.form.get('auto_switch') else '0')
+            try:
+                wsp = float(request.form.get('weighted_score_current_pct', '65'))
+                set_setting('weighted_score_current_pct', str(max(1.0, min(wsp, 99.0))))
+            except ValueError:
+                pass
             set_setting('auto_benchmark',          '1' if request.form.get('auto_benchmark') else '0')
             set_setting('pull_gluetun',            '1' if request.form.get('pull_gluetun') else '0')
             set_setting('quick_check_mode',        '1' if request.form.get('quick_check_mode') else '0')
@@ -606,6 +611,7 @@ def settings():
         'pull_network_containers':      set(json.loads(get_setting('pull_network_containers', '[]'))),
         'quick_check_mode':             get_setting('quick_check_mode', '0'),
         'quick_check_threshold':        get_setting('quick_check_threshold', '15'),
+        'weighted_score_current_pct':   get_setting('weighted_score_current_pct', '65'),
     }
     return render_template(
         'settings.html',

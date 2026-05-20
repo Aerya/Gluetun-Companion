@@ -55,7 +55,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Résultats multi-sources** — les vitesses Ookla, librespeed et iperf3 sont stockées séparément et affichées dans le dashboard et l'historique
 - **Mode Proxy HTTP** (optionnel) — mesure via le proxy HTTP Gluetun sans container supplémentaire ; interrompt brièvement les services dépendants à chaque bascule
 - **Téléchargement multi-flux** — N connexions TCP simultanées (configurable, défaut : 4)
-- **Bascule automatique** vers le meilleur serveur (`docker compose up -d`), basée sur un score pondéré (65 % mesure actuelle + 35 % historique) ; les services dépendants (`network_mode: service:gluetun`) sont recréés automatiquement
+- **Bascule automatique** vers le meilleur serveur (`docker compose up -d`), basée sur un score pondéré (poids configurable : mesure actuelle vs historique exponentiel) ; les services dépendants (`network_mode: service:gluetun`) sont recréés automatiquement
 - **5 types de filtre** : `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - **Retry** configurable par serveur + timeout global par serveur
 - **Auto-désactivation** d'un serveur après N échecs consécutifs

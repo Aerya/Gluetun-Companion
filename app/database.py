@@ -95,7 +95,8 @@ def init_db(db_path: str):
                 ('pull_pause_bench_containers', '[]'),
                 ('pull_network_containers',     '[]'),
                 ('quick_check_mode',            '0'),
-                ('quick_check_threshold',       '15');
+                ('quick_check_threshold',       '15'),
+                ('weighted_score_current_pct',  '65');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [

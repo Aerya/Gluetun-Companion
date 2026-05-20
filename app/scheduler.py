@@ -15,10 +15,12 @@ _lock = threading.Lock()
 # Weighted score for best-server selection
 # ---------------------------------------------------------------------------
 
-def _weighted_score(server_name: str, current_dl: float, db) -> float:
+def _weighted_score(server_name: str, current_dl: float, db, current_pct: float = 65.0) -> float:
     """
-    Blend the current cycle's result (65%) with exponentially-weighted
-    historical data (35%) so that a single lucky/unlucky run doesn't dominate.
+    Blend the current cycle's result with exponentially-weighted historical
+    data so that a single lucky/unlucky run doesn't dominate.
+    ``current_pct`` controls how much weight (0–100) goes to the current
+    measurement; the remainder goes to the exponential history.
     """
     rows = db.execute(
         'SELECT download_mbps FROM speed_tests '
@@ -27,9 +29,11 @@ def _weighted_score(server_name: str, current_dl: float, db) -> float:
     ).fetchall()
     if not rows:
         return current_dl
+    w_cur  = max(0.0, min(current_pct, 100.0)) / 100.0
+    w_hist = 1.0 - w_cur
     weights = [0.5 ** i for i in range(len(rows))]
     hist = sum(w * r['download_mbps'] for w, r in zip(weights, rows)) / sum(weights)
-    return 0.65 * current_dl + 0.35 * hist
+    return w_cur * current_dl + w_hist * hist
 
 
 # ---------------------------------------------------------------------------
@@ -664,8 +668,9 @@ def _do_benchmark(app):
 
         best_server_label: str | None = None
         if auto_sw and results:
+            current_pct = float(get_setting('weighted_score_current_pct', '65'))
             with get_db() as db:
-                best = max(results, key=lambda r: _weighted_score(r['server'], r['dl'], db))
+                best = max(results, key=lambda r: _weighted_score(r['server'], r['dl'], db, current_pct))
             best_label = f"{FILTER_VARS.get(best['filter_type'], 'SERVER_NAMES')}={best['server']}"
             logger.info('Best (weighted): %s (%.1f Mbps current)', best_label, best['dl'])
             best_server_label = best_label

@@ -179,12 +179,25 @@
 
         <hr class="my-3">
 
-        <div class="mb-4 form-check form-switch">
+        <div class="mb-2 form-check form-switch">
           <input type="checkbox" name="auto_switch" class="form-check-input"
                  id="auto_switch" {{ 'checked' if cfg.auto_sw == '1' }}>
           <label class="form-check-label" for="auto_switch">
             {{ t.set_autoswitch_label | safe }}
           </label>
+        </div>
+
+        <div class="mb-4 ms-4">
+          <label class="form-label small mb-1" for="weighted_score_current_pct">
+            {{ t.set_weighted_score_label }}
+          </label>
+          <div class="input-group" style="max-width:180px">
+            <input type="number" name="weighted_score_current_pct" id="weighted_score_current_pct"
+                   class="form-control form-control-sm" min="1" max="99" step="1"
+                   value="{{ cfg.weighted_score_current_pct }}">
+            <span class="input-group-text">%</span>
+          </div>
+          <div class="form-text">{{ t.set_weighted_score_hint }}</div>
         </div>
 
         <div class="d-flex gap-2">
