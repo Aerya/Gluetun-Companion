@@ -265,7 +265,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Post-switch containers ──
         'set_post_switch_title':   'Containers à redémarrer après bascule',
-        'set_post_switch_hint':    'Ces containers seront redémarrés dans l\'ordre indiqué après chaque bascule de serveur VPN (mode proxy ou sidecar). Utile pour qBittorrent, Radarr, etc.',
+        'set_post_switch_hint':    'Ces containers seront redémarrés dans l\'ordre indiqué après chaque bascule de serveur VPN (mode proxy ou sidecar). Utile pour qBittorrent, Radarr, etc. Le container Gluetun lui-même est toujours relancé par Companion lors d\'une bascule — inutile de l\'ajouter ici.',
         'set_post_switch_add':     'Ajouter un container',
         'set_post_switch_empty':   'Aucun container configuré — cliquez sur Ajouter.',
         'set_post_switch_loading': 'Chargement des containers…',
@@ -278,6 +278,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_pause_bench_add':     'Ajouter un container',
         'set_pause_bench_empty':   'Aucun container configuré — cliquez sur Ajouter.',
         'set_pause_bench_note':    'Si un container est dans cette liste <strong>et</strong> dans « Containers à redémarrer après bascule », il est géré ici en priorité : stoppé avant le bench, relancé après (namespace réseau inclus). Pas de doublon.',
+        'set_gluetun_in_list_warn': 'Le container Gluetun (<code>{name}</code>) est géré automatiquement par Companion — l\'ajouter ici est inutile et peut provoquer des conflits.',
         'set_overlap_warning_title': 'Container en double :',
         'set_overlap_warning_body':  'présent dans <em>Containers à redémarrer après bascule</em> <strong>et</strong> dans <em>Containers à stopper pendant le benchmark</em>. Ce n\'est pas utile — la liste pause suffit.',
 
@@ -569,7 +570,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Post-switch containers ──
         'set_post_switch_title':   'Containers to restart after switch',
-        'set_post_switch_hint':    'These containers will be restarted in the listed order after each VPN server switch (proxy or sidecar mode). Useful for qBittorrent, Radarr, etc.',
+        'set_post_switch_hint':    'These containers will be restarted in the listed order after each VPN server switch (proxy or sidecar mode). Useful for qBittorrent, Radarr, etc. The Gluetun container itself is always restarted by Companion during a switch — no need to add it here.',
         'set_post_switch_add':     'Add a container',
         'set_post_switch_empty':   'No containers configured — click Add.',
         'set_post_switch_loading': 'Loading containers…',
@@ -582,6 +583,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_pause_bench_add':     'Add a container',
         'set_pause_bench_empty':   'No containers configured — click Add.',
         'set_pause_bench_note':    'If a container is in this list <strong>and</strong> in "Containers to restart after switch", it is managed here with priority: stopped before the benchmark, restarted after (network namespace included). No duplicate restart.',
+        'set_gluetun_in_list_warn': 'The Gluetun container (<code>{name}</code>) is managed automatically by Companion — adding it here is unnecessary and may cause conflicts.',
         'set_overlap_warning_title': 'Duplicate container:',
         'set_overlap_warning_body':  'found in both <em>Containers to restart after switch</em> <strong>and</strong> <em>Containers to pause during benchmark</em>. This is unnecessary — the pause list is sufficient.',
 

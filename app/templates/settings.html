@@ -277,6 +277,10 @@
             {{ t.set_post_switch_empty }}
           </div>
         </div>
+        <div id="warn-gluetun-post-switch" class="alert alert-warning py-2 px-3 d-none" style="font-size:.82rem">
+          <i class="bi bi-exclamation-triangle-fill me-1"></i>
+          <span id="warn-gluetun-post-switch-text"></span>
+        </div>
 
         <div class="d-flex gap-2 align-items-center flex-wrap mb-2">
           <button type="button" class="btn btn-sm btn-outline-primary" onclick="addPostSwitchRow()">
@@ -309,6 +313,10 @@
                {{ 'd-none' if cfg.pause_bench_containers }}">
             {{ t.set_pause_bench_empty }}
           </div>
+        </div>
+        <div id="warn-gluetun-pause-bench" class="alert alert-warning py-2 px-3 d-none" style="font-size:.82rem">
+          <i class="bi bi-exclamation-triangle-fill me-1"></i>
+          <span id="warn-gluetun-pause-bench-text"></span>
         </div>
 
         <div class="d-flex gap-2 align-items-center flex-wrap mb-2">
@@ -482,6 +490,8 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 let _dockerContainers       = [];
 const _savedContainers      = {{ cfg.post_switch_containers | tojson }};
 const _savedPauseContainers = {{ cfg.pause_bench_containers | tojson }};
+const _gluetunContainer     = {{ gluetun_container | tojson }};
+const _warnGluetunTpl       = {{ t.set_gluetun_in_list_warn | tojson }};
 
 // Generic select builder (shared between both lists)
 function _buildContainerSelect(fieldName, selectedValue) {
@@ -607,7 +617,7 @@ fetch('{{ url_for("main.api_docker_containers") }}')
     _checkOverlap();
   });
 
-// ── Overlap detection (post-switch ∩ pause-bench) ────────────────────────
+// ── Overlap detection (post-switch ∩ pause-bench) + Gluetun warn ─────────
 function _checkOverlap() {
   const postSwitch = Array.from(
     document.querySelectorAll('#post-switch-list select[name="post_switch_containers"]')
@@ -615,6 +625,8 @@ function _checkOverlap() {
   const pauseBench = Array.from(
     document.querySelectorAll('#pause-bench-list select[name="pause_bench_containers"]')
   ).map(s => s.value).filter(Boolean);
+
+  // Overlap warning
   const overlap = postSwitch.filter(n => pauseBench.includes(n));
   const box = document.getElementById('overlap-warning');
   const names = document.getElementById('overlap-warning-names');
@@ -623,6 +635,23 @@ function _checkOverlap() {
     box.classList.remove('d-none');
   } else {
     box.classList.add('d-none');
+  }
+
+  // Gluetun-in-list warnings
+  const warnMsg = _warnGluetunTpl.replace('{name}', _gluetunContainer);
+  const warnPost  = document.getElementById('warn-gluetun-post-switch');
+  const warnPause = document.getElementById('warn-gluetun-pause-bench');
+  if (postSwitch.includes(_gluetunContainer)) {
+    document.getElementById('warn-gluetun-post-switch-text').innerHTML = warnMsg;
+    warnPost.classList.remove('d-none');
+  } else {
+    warnPost.classList.add('d-none');
+  }
+  if (pauseBench.includes(_gluetunContainer)) {
+    document.getElementById('warn-gluetun-pause-bench-text').innerHTML = warnMsg;
+    warnPause.classList.remove('d-none');
+  } else {
+    warnPause.classList.add('d-none');
   }
 }
 

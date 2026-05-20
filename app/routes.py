@@ -588,7 +588,12 @@ def settings():
         'post_switch_containers':  json.loads(get_setting('post_switch_containers', '[]')),
         'pause_bench_containers':  json.loads(get_setting('pause_bench_containers', '[]')),
     }
-    return render_template('settings.html', cfg=cfg, next_run=get_next_run())
+    return render_template(
+        'settings.html',
+        cfg=cfg,
+        next_run=get_next_run(),
+        gluetun_container=current_app.config['GLUETUN_CONTAINER'],
+    )
 
 
 # ---------------------------------------------------------------------------
