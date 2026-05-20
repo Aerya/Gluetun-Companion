@@ -13,17 +13,24 @@
   </div>
 </div>
 
-<div class="row g-4">
+{# ═══════════════════════════════════════════════════════════════════════════
+   Main configuration form — covers: planning, speed test, sidecar,
+   VPN connection, proxy auth, auto-switch settings.
+   ═══════════════════════════════════════════════════════════════════════════ #}
+<form method="post">
+  <input type="hidden" name="action" value="save">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 
-  {# ── Benchmark settings ──────────────────────────────────────────────── #}
-  <div class="col-lg-6">
-    <div class="card p-4 mb-4">
-      <h6 class="fw-bold mb-3 text-success">
-        <i class="bi bi-speedometer2"></i> {{ t.set_benchmark_title }}
-      </h6>
-      <form method="post">
-        <input type="hidden" name="action" value="save">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+  <div class="row g-4">
+
+    {# ── Left column ───────────────────────────────────────────────────────── #}
+    <div class="col-lg-6">
+
+      {# ── Planification & Cycle ────────────────────────────────────────────── #}
+      <div class="card p-4 mb-4">
+        <h6 class="fw-bold mb-3 text-success">
+          <i class="bi bi-calendar3"></i> {{ t.set_benchmark_title }}
+        </h6>
 
         <div class="mb-3" id="interval-group">
           <label class="form-label">{{ t.set_interval_label }}</label>
@@ -38,6 +45,48 @@
           </div>
           {% endif %}
         </div>
+
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="auto_benchmark" class="form-check-input"
+                 id="auto_benchmark" {{ 'checked' if cfg.auto_benchmark == '1' }}
+                 onchange="toggleAutoBenchmark(this.checked)">
+          <label class="form-check-label" for="auto_benchmark">
+            {{ t.set_auto_benchmark_label | safe }}
+          </label>
+        </div>
+
+        <hr class="my-3">
+
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="quick_check_mode" class="form-check-input"
+                 id="quick_check_mode" {{ 'checked' if cfg.quick_check_mode == '1' }}
+                 onchange="toggleQuickCheck(this.checked)">
+          <label class="form-check-label fw-semibold" for="quick_check_mode">
+            {{ t.set_quick_check_label }}
+          </label>
+        </div>
+        <div class="form-text text-muted mb-2" style="font-size:.78rem">
+          {{ t.set_quick_check_hint | safe }}
+        </div>
+        <div id="quick-check-threshold-group" class="ps-1"
+             style="{{ '' if cfg.quick_check_mode == '1' else 'opacity:.45;pointer-events:none' }}">
+          <label class="form-label form-label-sm mb-1">{{ t.set_quick_check_threshold_label }}</label>
+          <div class="input-group" style="max-width:160px">
+            <input type="number" name="quick_check_threshold" class="form-control form-control-sm"
+                   value="{{ cfg.quick_check_threshold }}" min="1" max="100" step="1">
+            <span class="input-group-text text-muted">%</span>
+          </div>
+          <div class="form-text text-muted" style="font-size:.75rem">
+            {{ t.set_quick_check_threshold_hint }}
+          </div>
+        </div>
+      </div>
+
+      {# ── Mesure de vitesse ─────────────────────────────────────────────────── #}
+      <div class="card p-4 mb-4">
+        <h6 class="fw-bold mb-3 text-success">
+          <i class="bi bi-speedometer2"></i> {{ t.set_speed_title }}
+        </h6>
 
         <div class="mb-3">
           <label class="form-label">{{ t.set_duration_label }}</label>
@@ -83,6 +132,103 @@
           <div class="form-text text-muted mt-1">{{ t.set_streams_hint | safe }}</div>
         </div>
 
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="speedtest_warmup" class="form-check-input"
+                 id="speedtest_warmup" {{ 'checked' if cfg.speedtest_warmup == '1' }}>
+          <label class="form-check-label" for="speedtest_warmup">
+            {{ t.set_warmup_label | safe }}
+          </label>
+        </div>
+
+        {# ── Sidecar (integrated) ───────────────────────────────────────────── #}
+        <hr class="my-3">
+
+        <div class="alert alert-warning d-flex gap-2 py-2 px-3 mb-3" style="font-size:.82rem">
+          <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
+          <span>{{ t.set_sidecar_warning | safe }}</span>
+        </div>
+
+        <div class="mb-1 form-check form-switch">
+          <input type="checkbox" name="sidecar_mode" class="form-check-input"
+                 id="sidecar_mode" {{ 'checked' if cfg.sidecar_mode == '1' }}>
+          <label class="form-check-label fw-semibold" for="sidecar_mode">
+            {{ t.set_sidecar_mode_label | safe }}
+          </label>
+        </div>
+        <div class="form-text text-muted mb-3" style="font-size:.78rem">
+          {{ t.set_sidecar_mode_sub | safe }}
+        </div>
+
+        {% if cfg.sidecar_mode == '1' %}
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">{{ t.set_sidecar_method_label }}</label>
+          <select name="sidecar_speedtest_method" class="form-select form-select-sm" style="max-width:340px">
+            <option value="dual"       {{ 'selected' if cfg.sidecar_speedtest_method in ('dual', 'auto') }}>{{ t.set_sidecar_method_dual }}</option>
+            <option value="ookla"      {{ 'selected' if cfg.sidecar_speedtest_method == 'ookla' }}>{{ t.set_sidecar_method_ookla }}</option>
+            <option value="librespeed" {{ 'selected' if cfg.sidecar_speedtest_method == 'librespeed' }}>{{ t.set_sidecar_method_librespeed }}</option>
+            <option value="iperf3"     {{ 'selected' if cfg.sidecar_speedtest_method == 'iperf3' }}>{{ t.set_sidecar_method_iperf3 }}</option>
+          </select>
+        </div>
+        {% if cfg.sidecar_speedtest_method != 'iperf3' %}
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="sidecar_iperf_fallback" class="form-check-input"
+                 id="sidecar_iperf_fallback" {{ 'checked' if cfg.sidecar_iperf_fallback == '1' }}>
+          <label class="form-check-label small" for="sidecar_iperf_fallback">
+            {{ t.set_sidecar_iperf_fallback_label }}
+          </label>
+        </div>
+        {% endif %}
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="sidecar_proxy_fallback" class="form-check-input"
+                 id="sidecar_proxy_fallback" {{ 'checked' if cfg.sidecar_proxy_fallback == '1' }}>
+          <label class="form-check-label small" for="sidecar_proxy_fallback">
+            {{ t.set_sidecar_proxy_fallback_label }}
+          </label>
+        </div>
+        <p class="text-muted mb-0" style="font-size:.8rem">
+          <i class="bi bi-info-circle"></i> {{ t.set_sidecar_active_note }}
+        </p>
+        {% else %}
+        <span class="badge" style="background:#f0ad4e;color:#000">
+          <i class="bi bi-exclamation-triangle-fill"></i> PROXY MODE
+        </span>
+        {% endif %}
+
+        <details class="mt-2">
+          <summary class="text-muted small" style="cursor:pointer">
+            <i class="bi bi-info-circle"></i> {{ t.set_sidecar_how_title }}
+          </summary>
+          <div class="mt-2 text-muted" style="font-size:.8rem">
+            <p>{{ t.set_sidecar_how_body | safe }}</p>
+            <p class="mb-0">{{ t.set_sidecar_compose_hint | safe }}</p>
+            <hr class="my-2">
+            <div class="mb-2">
+              <label class="form-label small mb-1">{{ t.set_sidecar_image_label }}</label>
+              <input type="text" name="sidecar_image" class="form-control form-control-sm font-monospace"
+                     value="{{ cfg.sidecar_image }}"
+                     placeholder="ghcr.io/aerya/gluetun-companion-sidecar:latest">
+            </div>
+            <div class="mb-0">
+              <label class="form-label small mb-1">{{ t.set_sidecar_port_label }}</label>
+              <input type="number" name="sidecar_port" class="form-control form-control-sm"
+                     style="max-width:140px"
+                     value="{{ cfg.sidecar_port }}" min="1024" max="65535">
+            </div>
+          </div>
+        </details>
+      </div>
+
+    </div>{# end left col #}
+
+    {# ── Right column ──────────────────────────────────────────────────────── #}
+    <div class="col-lg-6">
+
+      {# ── Connexion VPN ─────────────────────────────────────────────────────── #}
+      <div class="card p-4 mb-4">
+        <h6 class="fw-bold mb-3 text-info">
+          <i class="bi bi-shield-check"></i> {{ t.set_vpn_title }}
+        </h6>
+
         <div class="mb-3">
           <label class="form-label">{{ t.set_wait_label }}</label>
           <div class="input-group">
@@ -123,61 +269,44 @@
           <div class="form-text text-muted">{{ t.set_auto_exclude_hint }}</div>
         </div>
 
-        <div class="mb-2 form-check form-switch">
-          <input type="checkbox" name="speedtest_warmup" class="form-check-input"
-                 id="speedtest_warmup" {{ 'checked' if cfg.speedtest_warmup == '1' }}>
-          <label class="form-check-label" for="speedtest_warmup">
-            {{ t.set_warmup_label | safe }}
-          </label>
-        </div>
-
-        <div class="mb-2 form-check form-switch">
-          <input type="checkbox" name="auto_benchmark" class="form-check-input"
-                 id="auto_benchmark" {{ 'checked' if cfg.auto_benchmark == '1' }}
-                 onchange="toggleAutoBenchmark(this.checked)">
-          <label class="form-check-label" for="auto_benchmark">
-            {{ t.set_auto_benchmark_label | safe }}
-          </label>
-        </div>
-
-        <div class="mb-2 form-check form-switch">
-          <input type="checkbox" name="pull_gluetun" class="form-check-input"
-                 id="pull_gluetun" {{ 'checked' if cfg.pull_gluetun == '1' }}>
-          <label class="form-check-label" for="pull_gluetun">
-            {{ t.set_pull_gluetun_label }}
-          </label>
-        </div>
-        <div class="form-text text-muted mb-3" style="font-size:.78rem">
-          {{ t.set_pull_gluetun_hint | safe }}
-        </div>
-
+        {# ── Proxy auth (integrated) ─────────────────────────────────────────── #}
         <hr class="my-3">
 
-        <div class="mb-2 form-check form-switch">
-          <input type="checkbox" name="quick_check_mode" class="form-check-input"
-                 id="quick_check_mode" {{ 'checked' if cfg.quick_check_mode == '1' }}
-                 onchange="toggleQuickCheck(this.checked)">
-          <label class="form-check-label fw-semibold" for="quick_check_mode">
-            {{ t.set_quick_check_label }}
-          </label>
-        </div>
-        <div class="form-text text-muted mb-2" style="font-size:.78rem">
-          {{ t.set_quick_check_hint | safe }}
-        </div>
-        <div id="quick-check-threshold-group" class="mb-3 ps-1"
-             style="{{ '' if cfg.quick_check_mode == '1' else 'opacity:.45;pointer-events:none' }}">
-          <label class="form-label form-label-sm mb-1">{{ t.set_quick_check_threshold_label }}</label>
-          <div class="input-group" style="max-width:160px">
-            <input type="number" name="quick_check_threshold" class="form-control form-control-sm"
-                   value="{{ cfg.quick_check_threshold }}" min="1" max="100" step="1">
-            <span class="input-group-text text-muted">%</span>
-          </div>
-          <div class="form-text text-muted" style="font-size:.75rem">
-            {{ t.set_quick_check_threshold_hint }}
-          </div>
-        </div>
+        <p class="fw-semibold mb-1 small">
+          <i class="bi bi-key text-info"></i> {{ t.set_proxy_title }}
+        </p>
+        <p class="text-muted small mb-3">{{ t.set_proxy_hint | safe }}</p>
 
-        <hr class="my-3">
+        <div class="row g-2 mb-2">
+          <div class="col">
+            <label class="form-label small text-muted">{{ t.set_proxy_user }}</label>
+            <input type="text" name="proxy_username" class="form-control"
+                   value="{{ cfg.proxy_username }}"
+                   placeholder="{{ t.set_proxy_placeholder }}"
+                   autocomplete="off">
+          </div>
+          <div class="col">
+            <label class="form-label small text-muted">{{ t.set_proxy_pass }}</label>
+            <input type="password" name="proxy_password" class="form-control"
+                   value="{{ cfg.proxy_password }}"
+                   placeholder="{{ t.set_proxy_placeholder }}"
+                   autocomplete="off">
+          </div>
+        </div>
+        {% if cfg.proxy_username %}
+        <span class="badge bg-success">
+          <i class="bi bi-check2-circle"></i> {{ t.set_proxy_active }} {{ cfg.proxy_username }}
+        </span>
+        {% else %}
+        <span class="badge bg-secondary">{{ t.set_proxy_none }}</span>
+        {% endif %}
+      </div>
+
+      {# ── Bascule automatique ───────────────────────────────────────────────── #}
+      <div class="card p-4 mb-4">
+        <h6 class="fw-bold mb-3 text-success">
+          <i class="bi bi-shuffle"></i> {{ t.set_switch_title }}
+        </h6>
 
         <div class="mb-2 form-check form-switch">
           <input type="checkbox" name="auto_switch" class="form-check-input"
@@ -200,118 +329,71 @@
           <div class="form-text">{{ t.set_weighted_score_hint }}</div>
         </div>
 
-        <div class="d-flex gap-2">
-          <button type="submit" class="btn btn-success fw-semibold">
-            <i class="bi bi-save"></i> {{ t.cmn_save }}
-          </button>
-          <button type="button" id="btn-trigger" class="btn btn-outline-success" onclick="triggerNow()">
-            <i class="bi bi-play-fill"></i> {{ t.set_run_now }}
-          </button>
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="pull_gluetun" class="form-check-input"
+                 id="pull_gluetun" {{ 'checked' if cfg.pull_gluetun == '1' }}>
+          <label class="form-check-label" for="pull_gluetun">
+            {{ t.set_pull_gluetun_label }}
+          </label>
         </div>
-      </form>
-    </div>
-
-    {# ── Sidecar mode ──────────────────────────────────────────────────────── #}
-    <div class="card p-4 mb-4 border-warning">
-      <h6 class="fw-bold mb-3" style="color:#f0ad4e">
-        <i class="bi bi-boxes"></i> {{ t.set_sidecar_title }}
-      </h6>
-
-      <div class="alert alert-warning d-flex gap-2 py-2 px-3 mb-3" style="font-size:.82rem">
-        <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
-        <span>{{ t.set_sidecar_warning | safe }}</span>
+        <div class="form-text text-muted mb-0" style="font-size:.78rem">
+          {{ t.set_pull_gluetun_hint | safe }}
+        </div>
       </div>
 
-      <form method="post">
-        <input type="hidden" name="action" value="sidecar">
+    </div>{# end right col #}
+  </div>{# end row #}
+
+  {# ── Save / trigger bar ──────────────────────────────────────────────────── #}
+  <div class="d-flex gap-2 mb-5">
+    <button type="submit" class="btn btn-success fw-semibold">
+      <i class="bi bi-save"></i> {{ t.cmn_save }}
+    </button>
+    <button type="button" id="btn-trigger" class="btn btn-outline-success" onclick="triggerNow()">
+      <i class="bi bi-play-fill"></i> {{ t.set_run_now }}
+    </button>
+  </div>
+</form>
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   Containers
+   ═══════════════════════════════════════════════════════════════════════════ #}
+<div class="row g-4 mb-4">
+
+  <div class="col-lg-6">
+
+    {# ── Gluetun network containers (auto-managed) ─────────────────────────── #}
+    <div class="card p-4 mb-4">
+      <h6 class="fw-bold mb-1 text-success">
+        <i class="bi bi-diagram-3-fill"></i> {{ t.set_network_containers_title }}
+      </h6>
+      <p class="text-muted small mb-3">{{ t.set_network_containers_hint | safe }}</p>
+
+      <form method="post" id="form-pull-network">
+        <input type="hidden" name="action" value="pull_network">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 
-        <div class="mb-3 form-check form-switch">
-          <input type="checkbox" name="sidecar_mode" class="form-check-input"
-                 id="sidecar_mode" {{ 'checked' if cfg.sidecar_mode == '1' }}>
-          <label class="form-check-label fw-semibold" for="sidecar_mode">
-            {{ t.set_sidecar_mode_label }}
-            <span class="text-muted fw-normal">{{ t.set_sidecar_mode_sub }}</span>
-          </label>
+        <div id="network-containers-loading" class="text-muted small fst-italic">
+          <span class="spinner-border spinner-border-sm me-1"></span> Chargement…
+        </div>
+        <div id="network-containers-list" class="d-flex flex-column gap-2 mb-3 d-none"></div>
+        <div id="network-containers-empty" class="text-muted small fst-italic d-none">
+          {{ t.set_network_containers_empty | safe }}
         </div>
 
-        {% if cfg.sidecar_mode == '1' %}
-        <div class="mb-3">
-          <label class="form-label small fw-semibold">{{ t.set_sidecar_method_label }}</label>
-          <select name="sidecar_speedtest_method" class="form-select form-select-sm" style="max-width:340px">
-            <option value="dual"       {{ 'selected' if cfg.sidecar_speedtest_method in ('dual', 'auto') }}>{{ t.set_sidecar_method_dual }}</option>
-            <option value="ookla"      {{ 'selected' if cfg.sidecar_speedtest_method == 'ookla' }}>{{ t.set_sidecar_method_ookla }}</option>
-            <option value="librespeed" {{ 'selected' if cfg.sidecar_speedtest_method == 'librespeed' }}>{{ t.set_sidecar_method_librespeed }}</option>
-            <option value="iperf3"     {{ 'selected' if cfg.sidecar_speedtest_method == 'iperf3' }}>{{ t.set_sidecar_method_iperf3 }}</option>
-          </select>
-        </div>
-
-        {% if cfg.sidecar_speedtest_method != 'iperf3' %}
-        <div class="mb-2 form-check form-switch">
-          <input type="checkbox" name="sidecar_iperf_fallback" class="form-check-input"
-                 id="sidecar_iperf_fallback" {{ 'checked' if cfg.sidecar_iperf_fallback == '1' }}>
-          <label class="form-check-label small" for="sidecar_iperf_fallback">
-            {{ t.set_sidecar_iperf_fallback_label }}
-          </label>
-        </div>
-        {% endif %}
-
-        <div class="mb-3 form-check form-switch">
-          <input type="checkbox" name="sidecar_proxy_fallback" class="form-check-input"
-                 id="sidecar_proxy_fallback" {{ 'checked' if cfg.sidecar_proxy_fallback == '1' }}>
-          <label class="form-check-label small" for="sidecar_proxy_fallback">
-            {{ t.set_sidecar_proxy_fallback_label }}
-          </label>
-        </div>
-        {% endif %}
-
-        <div class="d-flex align-items-center gap-2 mb-3">
-          <button type="submit" class="btn btn-warning fw-semibold text-dark btn-sm">
+        <div class="d-flex gap-2 mt-2">
+          <button type="submit" class="btn btn-sm btn-success fw-semibold" id="btn-pull-network-save">
             <i class="bi bi-save"></i> {{ t.cmn_save }}
           </button>
-          {% if cfg.sidecar_mode != '1' %}
-          <span class="badge" style="background:#f0ad4e;color:#000">
-            <i class="bi bi-exclamation-triangle-fill"></i> PROXY MODE
-          </span>
-          {% endif %}
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+                  onclick="loadNetworkContainers()">
+            <i class="bi bi-arrow-clockwise"></i> {{ t.set_network_containers_refresh }}
+          </button>
         </div>
-        {% if cfg.sidecar_mode == '1' %}
-        <p class="text-muted mb-0" style="font-size:.8rem">
-          <i class="bi bi-info-circle"></i> {{ t.set_sidecar_active_note }}
-        </p>
-        {% endif %}
-
-        <details class="mt-1">
-          <summary class="text-muted small" style="cursor:pointer">
-            <i class="bi bi-info-circle"></i> {{ t.set_sidecar_how_title }}
-          </summary>
-          <div class="mt-2 text-muted" style="font-size:.8rem">
-            <p>{{ t.set_sidecar_how_body | safe }}</p>
-            <p class="mb-0">{{ t.set_sidecar_compose_hint | safe }}</p>
-            <hr class="my-2">
-            <div class="mb-2">
-              <label class="form-label small mb-1">{{ t.set_sidecar_image_label }}</label>
-              <input type="text" name="sidecar_image" class="form-control form-control-sm font-monospace"
-                     value="{{ cfg.sidecar_image }}"
-                     placeholder="ghcr.io/aerya/gluetun-companion-sidecar:latest">
-            </div>
-            <div class="mb-0">
-              <label class="form-label small mb-1">{{ t.set_sidecar_port_label }}</label>
-              <input type="number" name="sidecar_port" class="form-control form-control-sm"
-                     style="max-width:140px"
-                     value="{{ cfg.sidecar_port }}" min="1024" max="65535">
-            </div>
-          </div>
-        </details>
       </form>
     </div>
 
-  </div>
-
-  {# ── Right column ──────────────────────────────────────────────────────── #}
-  <div class="col-lg-6">
-
-    {# ── Post-switch containers ──────────────────────────────────────────── #}
+    {# ── Post-switch containers ────────────────────────────────────────────── #}
     <div class="card p-4 mb-4">
       <h6 class="fw-bold mb-1">
         <i class="bi bi-arrow-repeat text-primary"></i> {{ t.set_post_switch_title }}
@@ -323,7 +405,6 @@
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 
         <div id="post-switch-list" class="d-flex flex-column gap-2 mb-3">
-          {# existing rows injected by JS on load #}
           <div id="post-switch-placeholder" class="text-muted small fst-italic
                {{ 'd-none' if cfg.post_switch_containers }}">
             {{ t.set_post_switch_empty }}
@@ -349,8 +430,12 @@
       </form>
     </div>
 
+  </div>{# end left containers col #}
+
+  <div class="col-lg-6">
+
     {# ── Pause during benchmark ────────────────────────────────────────────── #}
-    <div class="card p-4 mb-4 border-danger">
+    <div class="card p-4 border-danger">
       <h6 class="fw-bold mb-1 text-danger">
         <i class="bi bi-pause-circle-fill"></i> {{ t.set_pause_bench_title }}
       </h6>
@@ -386,101 +471,17 @@
       </form>
     </div>
 
-    {# ── Gluetun network containers (auto-managed) ────────────────────────── #}
-    <div class="card p-4 mb-4">
-      <h6 class="fw-bold mb-1 text-success">
-        <i class="bi bi-diagram-3-fill"></i> {{ t.set_network_containers_title }}
-      </h6>
-      <p class="text-muted small mb-3">{{ t.set_network_containers_hint | safe }}</p>
+  </div>{# end right containers col #}
 
-      <form method="post" id="form-pull-network">
-        <input type="hidden" name="action" value="pull_network">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+</div>{# end containers row #}
 
-        <div id="network-containers-loading" class="text-muted small fst-italic">
-          <span class="spinner-border spinner-border-sm me-1"></span> Chargement…
-        </div>
-        <div id="network-containers-list" class="d-flex flex-column gap-2 mb-3 d-none"></div>
-        <div id="network-containers-empty" class="text-muted small fst-italic d-none">
-          {{ t.set_network_containers_empty | safe }}
-        </div>
+{# ═══════════════════════════════════════════════════════════════════════════
+   Notifications + Maintenance
+   ═══════════════════════════════════════════════════════════════════════════ #}
+<div class="row g-4">
 
-        <div class="d-flex gap-2 mt-2">
-          <button type="submit" class="btn btn-sm btn-success fw-semibold" id="btn-pull-network-save">
-            <i class="bi bi-save"></i> {{ t.cmn_save }}
-          </button>
-          <button type="button" class="btn btn-sm btn-outline-secondary"
-                  onclick="loadNetworkContainers()">
-            <i class="bi bi-arrow-clockwise"></i> {{ t.set_network_containers_refresh }}
-          </button>
-        </div>
-      </form>
-    </div>
-
-    {# ── Database maintenance ───────────────────────────────────────────────── #}
-    <div class="card p-4 mb-4">
-      <h6 class="fw-bold mb-3 text-info">
-        <i class="bi bi-database-gear"></i> {{ t.set_db_title }}
-      </h6>
-      <form method="post">
-        <input type="hidden" name="action" value="db_retention">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-        <div class="mb-3">
-          <label class="form-label">{{ t.set_retention_label }}</label>
-          <div class="input-group" style="max-width:200px">
-            <input type="number" name="db_retention_days" class="form-control"
-                   value="{{ cfg.db_retention_days }}" min="0" max="3650" step="1">
-            <span class="input-group-text text-muted">{{ t.cmn_days }}</span>
-          </div>
-          <div class="form-text text-muted">{{ t.set_retention_hint | safe }}</div>
-        </div>
-        <button type="submit" class="btn btn-info fw-semibold text-dark btn-sm">
-          <i class="bi bi-save"></i> {{ t.cmn_save }}
-        </button>
-      </form>
-    </div>
-
-    {# ── HTTP proxy authentication ──────────────────────────────────────────── #}
-    <div class="card p-4 mb-4">
-      <h6 class="fw-bold mb-1">
-        <i class="bi bi-key text-info"></i> {{ t.set_proxy_title }}
-      </h6>
-      <p class="text-muted small mb-3">{{ t.set_proxy_hint | safe }}</p>
-      <form method="post">
-        <input type="hidden" name="action" value="proxy_credentials">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-
-        <div class="row g-2 mb-3">
-          <div class="col">
-            <label class="form-label small text-muted">{{ t.set_proxy_user }}</label>
-            <input type="text" name="proxy_username" class="form-control"
-                   value="{{ cfg.proxy_username }}"
-                   placeholder="{{ t.set_proxy_placeholder }}"
-                   autocomplete="off">
-          </div>
-          <div class="col">
-            <label class="form-label small text-muted">{{ t.set_proxy_pass }}</label>
-            <input type="password" name="proxy_password" class="form-control"
-                   value="{{ cfg.proxy_password }}"
-                   placeholder="{{ t.set_proxy_placeholder }}"
-                   autocomplete="off">
-          </div>
-        </div>
-
-        <button type="submit" class="btn btn-info fw-semibold text-dark">
-          <i class="bi bi-save"></i> {{ t.cmn_save }}
-        </button>
-        {% if cfg.proxy_username %}
-        <span class="ms-2 badge bg-success">
-          <i class="bi bi-check2-circle"></i> {{ t.set_proxy_active }} {{ cfg.proxy_username }}
-        </span>
-        {% else %}
-        <span class="ms-2 badge bg-secondary">{{ t.set_proxy_none }}</span>
-        {% endif %}
-      </form>
-    </div>
-
-    {# ── Switch notifications ───────────────────────────────────────────────── #}
+  {# ── Notifications ─────────────────────────────────────────────────────── #}
+  <div class="col-lg-6">
     <div class="card p-4 mb-4">
       <h6 class="fw-bold mb-3" style="color:#5865F2">
         <i class="bi bi-bell-fill"></i> {{ t.set_notif_title }}
@@ -533,9 +534,36 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
         </div>
       </form>
     </div>
+  </div>
 
-    {# ── Web UI credentials ────────────────────────────────────────────────── #}
+  {# ── Maintenance ───────────────────────────────────────────────────────── #}
+  <div class="col-lg-6">
     <div class="card p-4 mb-4">
+
+      {# DB retention #}
+      <h6 class="fw-bold mb-3 text-info">
+        <i class="bi bi-database-gear"></i> {{ t.set_db_title }}
+      </h6>
+      <form method="post">
+        <input type="hidden" name="action" value="db_retention">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+          <label class="form-label">{{ t.set_retention_label }}</label>
+          <div class="input-group" style="max-width:200px">
+            <input type="number" name="db_retention_days" class="form-control"
+                   value="{{ cfg.db_retention_days }}" min="0" max="3650" step="1">
+            <span class="input-group-text text-muted">{{ t.cmn_days }}</span>
+          </div>
+          <div class="form-text text-muted">{{ t.set_retention_hint | safe }}</div>
+        </div>
+        <button type="submit" class="btn btn-info fw-semibold text-dark btn-sm">
+          <i class="bi bi-save"></i> {{ t.cmn_save }}
+        </button>
+      </form>
+
+      <hr class="my-4">
+
+      {# Web UI credentials #}
       <h6 class="fw-bold mb-3 text-warning">
         <i class="bi bi-person-lock"></i> {{ t.set_credentials_title }}
       </h6>
@@ -560,11 +588,12 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
           <i class="bi bi-shield-lock"></i> {{ t.set_update }}
         </button>
       </form>
-    </div>
 
+    </div>
   </div>
 
-</div>
+</div>{# end notifications + maintenance row #}
+
 {% endblock %}
 
 {% block scripts %}
@@ -648,7 +677,6 @@ function addPostSwitchRow(value) {
   const { wrap: pullWrap, cb: pullCb } = _buildPullCheckbox(
     'pull_post_switch_containers', value || '', _pullPostSwitch.has(value || '')
   );
-  // Keep pull checkbox value in sync with select
   sel.addEventListener('change', () => { pullCb.value = sel.value; });
 
   const del = document.createElement('button');
@@ -704,7 +732,7 @@ function addPauseBenchRow(value) {
   list.appendChild(row);
 }
 
-// ── Post-switch drag-to-reorder (delegated — one listener on the list) ───
+// ── Post-switch drag-to-reorder ───────────────────────────────────────────
 (function initDragSort() {
   const list = document.getElementById('post-switch-list');
   let dragged = null;
@@ -736,7 +764,7 @@ fetch('{{ url_for("main.api_docker_containers") }}')
     _checkOverlap();
   });
 
-// ── Overlap detection (post-switch ∩ pause-bench) + Gluetun warn ─────────
+// ── Overlap detection ─────────────────────────────────────────────────────
 function _checkOverlap() {
   const postSwitch = Array.from(
     document.querySelectorAll('#post-switch-list select[name="post_switch_containers"]')
@@ -745,7 +773,6 @@ function _checkOverlap() {
     document.querySelectorAll('#pause-bench-list select[name="pause_bench_containers"]')
   ).map(s => s.value).filter(Boolean);
 
-  // Overlap warning
   const overlap = postSwitch.filter(n => pauseBench.includes(n));
   const box = document.getElementById('overlap-warning');
   const names = document.getElementById('overlap-warning-names');
@@ -756,7 +783,6 @@ function _checkOverlap() {
     box.classList.add('d-none');
   }
 
-  // Gluetun-in-list warnings
   const warnMsg = _warnGluetunTpl.replace('{name}', _gluetunContainer);
   const warnPost  = document.getElementById('warn-gluetun-post-switch');
   const warnPause = document.getElementById('warn-gluetun-pause-bench');
@@ -774,7 +800,6 @@ function _checkOverlap() {
   }
 }
 
-// Recheck on any select change in the two lists
 document.getElementById('post-switch-list').addEventListener('change', _checkOverlap);
 document.getElementById('pause-bench-list').addEventListener('change', _checkOverlap);
 
@@ -821,7 +846,7 @@ function testNotif(target) {
   });
 }
 
-// ── Network containers pull section ──────────────────────────────────────
+// ── Network containers ────────────────────────────────────────────────────
 function loadNetworkContainers() {
   const loading = document.getElementById('network-containers-loading');
   const list    = document.getElementById('network-containers-list');
@@ -862,29 +887,26 @@ function loadNetworkContainers() {
       empty.classList.remove('d-none');
     });
 }
-// Auto-load on page ready
 document.addEventListener('DOMContentLoaded', loadNetworkContainers);
 
 // ── Auto benchmark toggle ─────────────────────────────────────────────────
 function toggleAutoBenchmark(enabled) {
   const group = document.getElementById('interval-group');
   if (group) {
-    group.style.opacity      = enabled ? '' : '0.45';
+    group.style.opacity       = enabled ? '' : '0.45';
     group.style.pointerEvents = enabled ? '' : 'none';
   }
 }
-// Apply on page load
 toggleAutoBenchmark(document.getElementById('auto_benchmark').checked);
 
 // ── Quick check toggle ────────────────────────────────────────────────────
 function toggleQuickCheck(enabled) {
   const group = document.getElementById('quick-check-threshold-group');
   if (group) {
-    group.style.opacity      = enabled ? '' : '0.45';
+    group.style.opacity       = enabled ? '' : '0.45';
     group.style.pointerEvents = enabled ? '' : 'none';
   }
 }
-// Apply on page load
 toggleQuickCheck(document.getElementById('quick_check_mode').checked);
 
 // ── Benchmark trigger ─────────────────────────────────────────────────────

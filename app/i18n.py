@@ -158,7 +158,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Settings ──
         'set_title':               'Paramètres',
-        'set_benchmark_title':     'Planification & Benchmark',
+        'set_benchmark_title':     'Planification & Cycle',
+        'set_speed_title':         'Mesure de vitesse',
+        'set_vpn_title':           'Connexion VPN',
+        'set_switch_title':        'Bascule automatique',
         'set_interval_label':      'Intervalle entre les cycles de test',
         'set_interval_next':       'Prochain test prévu :',
         'set_duration_label':      'Durée de streaming par endpoint',
@@ -249,8 +252,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ── Sidecar ──
         'set_sidecar_title':              'Mode Sidecar (défaut)',
         'set_sidecar_warning':            '<strong>⚠ Connexion simultanée :</strong> le mode sidecar crée un container Gluetun supplémentaire pour chaque test. Cela compte comme une connexion VPN supplémentaire auprès de votre fournisseur. Si celui-ci limite le nombre de connexions simultanées (ex. AirVPN : 3–5 selon l\'abonnement), cette option consomme un slot de plus pendant toute la durée du benchmark. Planifiez en conséquence.',
-        'set_sidecar_mode_label':         'Activer le mode sidecar',
-        'set_sidecar_mode_sub':           '— iperf3 ou librespeed via tunnel direct, sans perturber votre Gluetun principal',
+        'set_sidecar_mode_label':         'Mode sidecar <span class="badge bg-success ms-1" style="font-size:.7rem">défaut</span>',
+        'set_sidecar_mode_sub':           'Mesure directement dans le tunnel VPN, sans perturber votre Gluetun principal. Si désactivé, seul le proxy HTTP est utilisé (votre Gluetun est redémarré à chaque test).',
         'set_sidecar_active_note':        'Les containers sidecar sont créés automatiquement au lancement du prochain benchmark.',
         'set_sidecar_image_label':        'Image sidecar',
         'set_sidecar_port_label':         'Port API sidecar',
@@ -481,7 +484,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Settings ──
         'set_title':               'Settings',
-        'set_benchmark_title':     'Scheduling & Benchmark',
+        'set_benchmark_title':     'Scheduling & Cycle',
+        'set_speed_title':         'Speed measurement',
+        'set_vpn_title':           'VPN Connection',
+        'set_switch_title':        'Automatic switching',
         'set_interval_label':      'Interval between test cycles',
         'set_interval_next':       'Next test scheduled:',
         'set_duration_label':      'Streaming duration per endpoint',
@@ -572,8 +578,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ── Sidecar ──
         'set_sidecar_title':              'Sidecar Mode (default)',
         'set_sidecar_warning':            '<strong>⚠ Simultaneous connection:</strong> sidecar mode creates an extra Gluetun container for each server test. This counts as one additional VPN connection at your provider. If your provider limits simultaneous connections (e.g. AirVPN: 3–5 depending on plan), this option uses one extra slot for the entire benchmark duration. Plan accordingly.',
-        'set_sidecar_mode_label':         'Enable sidecar mode',
-        'set_sidecar_mode_sub':           '— iperf3 or librespeed through direct VPN tunnel, without disrupting your main Gluetun',
+        'set_sidecar_mode_label':         'Sidecar mode <span class="badge bg-success ms-1" style="font-size:.7rem">default</span>',
+        'set_sidecar_mode_sub':           'Measures speed directly inside the VPN tunnel, without disrupting your main Gluetun. If disabled, only the HTTP proxy is used (your Gluetun is restarted on each server test).',
         'set_sidecar_active_note':        'Sidecar containers are created automatically at the start of the next benchmark.',
         'set_sidecar_image_label':        'Sidecar image',
         'set_sidecar_port_label':         'Sidecar API port',
