@@ -44,9 +44,11 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 
 ## Features
 
-- 🆕 **Built-in AirVPN server picker** — *+ Add an AirVPN server* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), two views — full searchable list (load, users, health) and geographic distribution by country with a **Best** badge on the least-loaded server; multi-select, one-click add
-- 🆕 **Pause during benchmark** — list of containers (torrent, Usenet…) stopped before the benchmark starts and automatically restarted when it ends, even on error; prevents their traffic from skewing measurements and avoids overloading the VPN tunnel on modest hardware
-- 🆕 **Containers to restart after switch** — ordered list (drag & drop), sequential restart via `docker compose up -d --force-recreate` after each VPN switch; correctly handles containers using `network_mode: service:gluetun`
+- **Built-in AirVPN server picker** — *+ Add an AirVPN server* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), two views — full searchable list (load, users, health) and geographic distribution by country with a **Best** badge on the least-loaded server; multi-select, one-click add
+- **Pause during benchmark** — list of containers (torrent, Usenet…) stopped before the benchmark starts and automatically restarted when it ends, even on error; per-container option to update the image before restart
+- **Gluetun network containers (auto-managed)** — all containers using `network_mode: service:gluetun` are detected and restarted automatically after each switch; per-container option to update the image
+- **Containers to restart after switch** — only for containers routing through Gluetun's HTTP/SOCKS5 proxy (ports 8118/8388); ordered list (drag & drop), per-container option to update the image
+- **Gluetun image update** — option to run `docker pull` on the Gluetun image just before each switch
 - **Automatic benchmarking** every X hours — download, upload and latency per server; automatic cycle can be disabled (manual trigger only)
 - **Sidecar mode** (default) — a `gluetun-companion-test` container clones the real Gluetun config for each server; `gluetun-companion-sidecar` measures speed via **Ookla + librespeed in parallel** (dual mode, default), Ookla only, librespeed only, or iperf3 directly inside the VPN tunnel; your main Gluetun is never restarted during testing
 - **Multi-source results** — Ookla, librespeed and iperf3 speeds stored separately and displayed in the dashboard and history

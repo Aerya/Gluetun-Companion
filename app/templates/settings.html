@@ -140,6 +140,17 @@
           </label>
         </div>
 
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="pull_gluetun" class="form-check-input"
+                 id="pull_gluetun" {{ 'checked' if cfg.pull_gluetun == '1' }}>
+          <label class="form-check-label" for="pull_gluetun">
+            {{ t.set_pull_gluetun_label }}
+          </label>
+        </div>
+        <div class="form-text text-muted mb-3" style="font-size:.78rem">
+          {{ t.set_pull_gluetun_hint | safe }}
+        </div>
+
         <div class="mb-4 form-check form-switch">
           <input type="checkbox" name="auto_switch" class="form-check-input"
                  id="auto_switch" {{ 'checked' if cfg.auto_sw == '1' }}>
@@ -334,6 +345,37 @@
       </form>
     </div>
 
+    {# ── Gluetun network containers (auto-managed) ────────────────────────── #}
+    <div class="card p-4 mb-4">
+      <h6 class="fw-bold mb-1 text-success">
+        <i class="bi bi-diagram-3-fill"></i> {{ t.set_network_containers_title }}
+      </h6>
+      <p class="text-muted small mb-3">{{ t.set_network_containers_hint | safe }}</p>
+
+      <form method="post" id="form-pull-network">
+        <input type="hidden" name="action" value="pull_network">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+        <div id="network-containers-loading" class="text-muted small fst-italic">
+          <span class="spinner-border spinner-border-sm me-1"></span> Chargement…
+        </div>
+        <div id="network-containers-list" class="d-flex flex-column gap-2 mb-3 d-none"></div>
+        <div id="network-containers-empty" class="text-muted small fst-italic d-none">
+          {{ t.set_network_containers_empty | safe }}
+        </div>
+
+        <div class="d-flex gap-2 mt-2">
+          <button type="submit" class="btn btn-sm btn-success fw-semibold" id="btn-pull-network-save">
+            <i class="bi bi-save"></i> {{ t.cmn_save }}
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+                  onclick="loadNetworkContainers()">
+            <i class="bi bi-arrow-clockwise"></i> {{ t.set_network_containers_refresh }}
+          </button>
+        </div>
+      </form>
+    </div>
+
     {# ── Database maintenance ───────────────────────────────────────────────── #}
     <div class="card p-4 mb-4">
       <h6 class="fw-bold mb-3 text-info">
@@ -490,8 +532,13 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 let _dockerContainers       = [];
 const _savedContainers      = {{ cfg.post_switch_containers | tojson }};
 const _savedPauseContainers = {{ cfg.pause_bench_containers | tojson }};
+const _pullPostSwitch       = new Set({{ cfg.pull_post_switch_containers | list | tojson }});
+const _pullPauseBench       = new Set({{ cfg.pull_pause_bench_containers | list | tojson }});
+const _pullNetwork          = new Set({{ cfg.pull_network_containers | list | tojson }});
 const _gluetunContainer     = {{ gluetun_container | tojson }};
 const _warnGluetunTpl       = {{ t.set_gluetun_in_list_warn | tojson }};
+const _pullColTitle         = {{ t.set_pull_col_title | tojson }};
+const _pullColHeader        = {{ t.set_pull_col_header | tojson }};
 
 // Generic select builder (shared between both lists)
 function _buildContainerSelect(fieldName, selectedValue) {
@@ -523,6 +570,24 @@ function _buildPostSwitchSelect(selectedValue) {
   return _buildContainerSelect('post_switch_containers', selectedValue);
 }
 
+function _buildPullCheckbox(fieldName, containerValue, checked) {
+  const wrap = document.createElement('div');
+  wrap.className = 'form-check form-switch mb-0 flex-shrink-0';
+  wrap.title = _pullColTitle;
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.name = fieldName;
+  cb.className = 'form-check-input';
+  cb.value = containerValue || '';
+  cb.checked = !!checked;
+  const lbl = document.createElement('label');
+  lbl.className = 'form-check-label small text-muted';
+  lbl.textContent = _pullColHeader;
+  wrap.appendChild(cb);
+  wrap.appendChild(lbl);
+  return { wrap, cb };
+}
+
 function addPostSwitchRow(value) {
   const list        = document.getElementById('post-switch-list');
   const placeholder = document.getElementById('post-switch-placeholder');
@@ -539,6 +604,12 @@ function addPostSwitchRow(value) {
 
   const sel = _buildPostSwitchSelect(value || '');
 
+  const { wrap: pullWrap, cb: pullCb } = _buildPullCheckbox(
+    'pull_post_switch_containers', value || '', _pullPostSwitch.has(value || '')
+  );
+  // Keep pull checkbox value in sync with select
+  sel.addEventListener('change', () => { pullCb.value = sel.value; });
+
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'btn btn-sm btn-outline-danger';
@@ -551,6 +622,7 @@ function addPostSwitchRow(value) {
 
   row.appendChild(handle);
   row.appendChild(sel);
+  row.appendChild(pullWrap);
   row.appendChild(del);
   list.appendChild(row);
 }
@@ -570,6 +642,11 @@ function addPauseBenchRow(value) {
 
   const sel = _buildContainerSelect('pause_bench_containers', value || '');
 
+  const { wrap: pullWrap, cb: pullCb } = _buildPullCheckbox(
+    'pull_pause_bench_containers', value || '', _pullPauseBench.has(value || '')
+  );
+  sel.addEventListener('change', () => { pullCb.value = sel.value; });
+
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'btn btn-sm btn-outline-danger';
@@ -581,6 +658,7 @@ function addPauseBenchRow(value) {
 
   row.appendChild(icon);
   row.appendChild(sel);
+  row.appendChild(pullWrap);
   row.appendChild(del);
   list.appendChild(row);
 }
@@ -701,6 +779,50 @@ function testNotif(target) {
     }, 3000);
   });
 }
+
+// ── Network containers pull section ──────────────────────────────────────
+function loadNetworkContainers() {
+  const loading = document.getElementById('network-containers-loading');
+  const list    = document.getElementById('network-containers-list');
+  const empty   = document.getElementById('network-containers-empty');
+  loading.classList.remove('d-none');
+  list.classList.add('d-none');
+  empty.classList.add('d-none');
+  list.innerHTML = '';
+
+  fetch('{{ url_for("main.api_gluetun_network_containers") }}')
+    .then(r => r.json())
+    .then(containers => {
+      loading.classList.add('d-none');
+      if (!containers.length) {
+        empty.classList.remove('d-none');
+        return;
+      }
+      for (const name of containers) {
+        const row = document.createElement('div');
+        row.className = 'd-flex align-items-center gap-3';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.name = 'pull_network_containers';
+        cb.value = name;
+        cb.checked = _pullNetwork.has(name);
+        cb.className = 'form-check-input flex-shrink-0';
+        const lbl = document.createElement('label');
+        lbl.className = 'mb-0';
+        lbl.innerHTML = `<code>${name}</code> <small class="text-muted ms-1">${_pullColHeader}</small>`;
+        row.appendChild(cb);
+        row.appendChild(lbl);
+        list.appendChild(row);
+      }
+      list.classList.remove('d-none');
+    })
+    .catch(() => {
+      loading.classList.add('d-none');
+      empty.classList.remove('d-none');
+    });
+}
+// Auto-load on page ready
+document.addEventListener('DOMContentLoaded', loadNetworkContainers);
 
 // ── Auto benchmark toggle ─────────────────────────────────────────────────
 function toggleAutoBenchmark(enabled) {

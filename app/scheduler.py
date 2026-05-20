@@ -401,6 +401,9 @@ def _do_benchmark(app):
     _pause_raw = _json.loads(get_setting('pause_bench_containers', '[]'))
     pause_containers: list[str] = [c.strip() for c in _pause_raw if c and c.strip()]
     pause_exclude = set(pause_containers)  # passed to restart functions
+    pull_post_switch_set = set(_json.loads(get_setting('pull_post_switch_containers', '[]')))
+    pull_pause_bench_set = set(_json.loads(get_setting('pull_pause_bench_containers', '[]')))
+    pull_network_set     = set(_json.loads(get_setting('pull_network_containers', '[]')))
 
     if pause_containers:
         logger.info(
@@ -418,6 +421,7 @@ def _do_benchmark(app):
 
         wait_secs      = int(get_setting('connection_wait_seconds', '45'))
         auto_sw        = get_setting('auto_switch', '1') == '1'
+        pull_gluetun   = get_setting('pull_gluetun', '0') == '1'
         proxy_user     = get_setting('proxy_username', '') or None
         proxy_pass     = get_setting('proxy_password', '') or None
         dl_duration    = float(get_setting('speedtest_duration', '8'))
@@ -496,6 +500,10 @@ def _do_benchmark(app):
             from_mbps = from_result['dl'] if from_result else None
 
             if best_label != from_label:
+                if pull_gluetun:
+                    from .gluetun import pull_image
+                    ok_p, upd, img = pull_image(container)
+                    logger.info('Gluetun pull: %s — %s', img, 'updated' if upd else 'up to date' if ok_p else 'failed')
                 ok, err = switch_server(
                     best['server'], best['filter_type'], container, compose_dir, project
                 )
@@ -505,14 +513,16 @@ def _do_benchmark(app):
                         proxy_user=proxy_user, proxy_password=proxy_pass,
                     )
                     restarted = restart_network_dependents(
-                        container, compose_dir, project, exclude=pause_exclude,
+                        container, compose_dir, project,
+                        exclude=pause_exclude, pull_set=pull_network_set,
                     )
                     if restarted:
                         logger.info('Recreated network dependents: %s', ', '.join(restarted))
                     _post_switch = _json.loads(get_setting('post_switch_containers', '[]'))
                     if _post_switch:
                         _restarted2 = restart_containers_in_order(
-                            _post_switch, compose_dir, project, exclude=pause_exclude,
+                            _post_switch, compose_dir, project,
+                            exclude=pause_exclude, pull_set=pull_post_switch_set,
                         )
                         logger.info(
                             'Post-switch containers: %d/%d recreated',
@@ -590,7 +600,8 @@ def _do_benchmark(app):
             # Use plain docker start — containers were stopped (not removed),
             # so they don't need compose recreate.  This also works for
             # containers from stacks other than the gluetun stack.
-            _resumed = start_stopped_containers(pause_containers, compose_dir, project)
+            _resumed = start_stopped_containers(pause_containers, compose_dir, project,
+                                                pull_set=pull_pause_bench_set)
             logger.info(
                 'Paused containers restarted: %d/%d',
                 len(_resumed), len(pause_containers),

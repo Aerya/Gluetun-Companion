@@ -279,6 +279,7 @@ def restart_network_dependents(
     compose_dir: str = '',
     compose_project: str = '',
     exclude: set[str] | None = None,
+    pull_set: set[str] | None = None,
 ) -> list[str]:
     """
     Find and recreate every container whose NetworkMode references
@@ -326,6 +327,9 @@ def restart_network_dependents(
                     continue
                 logger.info('Recreating network-dependent container: %s', c.name)
                 try:
+                    if pull_set and c.name in pull_set:
+                        ok, updated, img = pull_image(c.name)
+                        logger.info('  pull %s: %s%s', img, 'updated' if updated else 'up to date', '' if ok else ' (failed)')
                     _compose_recreate(c.name, compose_dir, compose_project)
                     restarted.append(c.name)
                 except Exception as exc:
@@ -374,6 +378,7 @@ def start_stopped_containers(
     container_names: list[str],
     compose_dir: str = '',
     compose_project: str = '',
+    pull_set: set[str] | None = None,
 ) -> list[str]:
     """
     Start containers that were previously stopped (but not removed) via
@@ -400,6 +405,9 @@ def start_stopped_containers(
                 c = client.containers.get(name)
                 logger.info('Starting paused container: %s (status: %s)', name, c.status)
                 if c.status != 'running':
+                    if pull_set and name in pull_set:
+                        ok, updated, img = pull_image(name)
+                        logger.info('  pull %s: %s%s', img, 'updated' if updated else 'up to date', '' if ok else ' (failed)')
                     try:
                         c.start()
                     except Exception as start_exc:
@@ -419,6 +427,55 @@ def start_stopped_containers(
     return started
 
 
+def pull_image(container_name: str) -> tuple[bool, bool, str]:
+    """
+    Pull the latest version of the image used by *container_name*.
+    Returns (success, updated, image_name).
+    *updated* is True when the local image digest changed after the pull.
+    """
+    try:
+        client = docker.from_env()
+        c = client.containers.get(container_name)
+        image_name = c.attrs['Config']['Image']
+        old_id     = c.attrs['Image']          # sha256 of current image
+        new_image  = client.images.pull(image_name)
+        new_id     = new_image.id
+        updated    = old_id != new_id
+        if updated:
+            logger.info('Image updated for %s: %s', container_name, image_name)
+        else:
+            logger.info('Image already up to date for %s: %s', container_name, image_name)
+        return True, updated, image_name
+    except Exception as exc:
+        logger.warning('pull_image %s: %s', container_name, exc)
+        return False, False, str(exc)
+
+
+def list_network_dependents(container_name: str) -> list[str]:
+    """
+    Return the sorted names of all containers that use
+    ``network_mode: service:<container_name>`` (i.e. share Gluetun's namespace).
+    Read-only — does not restart anything.
+    """
+    result: list[str] = []
+    try:
+        client = docker.from_env()
+        try:
+            gluetun    = client.containers.get(container_name)
+            gluetun_id = gluetun.id
+        except Exception:
+            gluetun_id = ''
+        name_target = f'container:{container_name}'
+        id_target   = f'container:{gluetun_id}' if gluetun_id else None
+        for c in client.containers.list(all=True):
+            mode = c.attrs['HostConfig'].get('NetworkMode', '')
+            if mode == name_target or (id_target and mode == id_target):
+                result.append(c.name)
+    except Exception as exc:
+        logger.warning('list_network_dependents: %s', exc)
+    return sorted(result)
+
+
 def list_docker_containers() -> list[str]:
     """Return the names of all currently running Docker containers, sorted."""
     try:
@@ -435,6 +492,7 @@ def restart_containers_in_order(
     compose_project: str = '',
     delay_secs: float = 3.0,
     exclude: set[str] | None = None,
+    pull_set: set[str] | None = None,
 ) -> list[str]:
     """
     Recreate Docker containers one by one in the specified order, with a short
@@ -466,6 +524,9 @@ def restart_containers_in_order(
     for idx, name in enumerate(names):
         logger.info('Post-switch recreate [%d/%d]: %s …', idx + 1, len(names), name)
         try:
+            if pull_set and name in pull_set:
+                ok, updated, img = pull_image(name)
+                logger.info('  pull %s: %s%s', img, 'updated' if updated else 'up to date', '' if ok else ' (failed)')
             _compose_recreate(name, compose_dir, compose_project)
             restarted.append(name)
             logger.info('Post-switch recreate [%d/%d]: %s OK', idx + 1, len(names), name)

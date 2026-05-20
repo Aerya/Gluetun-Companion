@@ -502,6 +502,7 @@ def settings():
             set_setting('test_interval_hours',     request.form.get('interval', '6'))
             set_setting('auto_switch',             '1' if request.form.get('auto_switch') else '0')
             set_setting('auto_benchmark',          '1' if request.form.get('auto_benchmark') else '0')
+            set_setting('pull_gluetun',            '1' if request.form.get('pull_gluetun') else '0')
             set_setting('connection_wait_seconds', request.form.get('wait_secs', '45'))
             set_setting('speedtest_samples',       request.form.get('speedtest_samples', '3'))
             set_setting('speedtest_duration',      request.form.get('speedtest_duration', '8'))
@@ -547,17 +548,23 @@ def settings():
             flash_t('flash_sidecar_saved', 'success')
 
         elif action == 'post_switch':
-            containers = request.form.getlist('post_switch_containers')
-            # Filter blanks and preserve order
-            containers = [c.strip() for c in containers if c.strip()]
-            set_setting('post_switch_containers', json.dumps(containers))
+            containers = [c.strip() for c in request.form.getlist('post_switch_containers') if c.strip()]
+            pull_set   = set(request.form.getlist('pull_post_switch_containers'))
+            set_setting('post_switch_containers',      json.dumps(containers))
+            set_setting('pull_post_switch_containers', json.dumps([n for n in containers if n in pull_set]))
             flash_t('flash_post_switch_saved', 'success')
 
         elif action == 'pause_bench':
-            containers = request.form.getlist('pause_bench_containers')
-            containers = [c.strip() for c in containers if c.strip()]
-            set_setting('pause_bench_containers', json.dumps(containers))
+            containers = [c.strip() for c in request.form.getlist('pause_bench_containers') if c.strip()]
+            pull_set   = set(request.form.getlist('pull_pause_bench_containers'))
+            set_setting('pause_bench_containers',      json.dumps(containers))
+            set_setting('pull_pause_bench_containers', json.dumps([n for n in containers if n in pull_set]))
             flash_t('flash_pause_bench_saved', 'success')
+
+        elif action == 'pull_network':
+            pull_list = [n.strip() for n in request.form.getlist('pull_network_containers') if n.strip()]
+            set_setting('pull_network_containers', json.dumps(pull_list))
+            flash_t('flash_post_switch_saved', 'success')  # reuse generic "saved" flash
 
         return redirect(url_for('main.settings'))
 
@@ -585,8 +592,12 @@ def settings():
         'sidecar_speedtest_method': get_setting('sidecar_speedtest_method', 'dual'),
         'sidecar_iperf_fallback':      get_setting('sidecar_iperf_fallback', '1'),
         'sidecar_proxy_fallback':      get_setting('sidecar_proxy_fallback', '0'),
-        'post_switch_containers':  json.loads(get_setting('post_switch_containers', '[]')),
-        'pause_bench_containers':  json.loads(get_setting('pause_bench_containers', '[]')),
+        'post_switch_containers':       json.loads(get_setting('post_switch_containers', '[]')),
+        'pause_bench_containers':       json.loads(get_setting('pause_bench_containers', '[]')),
+        'pull_gluetun':                 get_setting('pull_gluetun', '0'),
+        'pull_post_switch_containers':  set(json.loads(get_setting('pull_post_switch_containers', '[]'))),
+        'pull_pause_bench_containers':  set(json.loads(get_setting('pull_pause_bench_containers', '[]'))),
+        'pull_network_containers':      set(json.loads(get_setting('pull_network_containers', '[]'))),
     }
     return render_template(
         'settings.html',
@@ -707,6 +718,18 @@ def api_notify_test():
 def api_docker_containers():
     """Return the list of currently running Docker container names."""
     return jsonify(list_docker_containers())
+
+
+@bp.route('/api/gluetun-network-containers')
+@login_required
+def api_gluetun_network_containers():
+    """Return containers using network_mode: service:<gluetun_container>."""
+    from .gluetun import list_network_dependents
+    container = current_app.config['GLUETUN_CONTAINER']
+    try:
+        return jsonify(list_network_dependents(container))
+    except Exception:
+        return jsonify([])
 
 
 @bp.route('/api/status')
