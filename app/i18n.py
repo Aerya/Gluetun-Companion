@@ -334,7 +334,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_already_best_apprise_title': 'Déjà optimal — Gluetun Companion',
         'notif_open_dashboard':     'Ouvrir le tableau de bord',
         'notif_updated_images':     'Images mises à jour',
-        'notif_qc_triggered_field': 'Vérification rapide',
+        'notif_qc_triggered_field': 'Dérive détectée',
+        'notif_qc_triggered_bench': 'benchmark lancé',
 
         # ── Quick check ──
         'set_quick_check_label':     'Vérification rapide avant benchmark',
@@ -678,7 +679,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_already_best_apprise_title': 'Already optimal — Gluetun Companion',
         'notif_open_dashboard':     'Open dashboard',
         'notif_updated_images':     'Updated images',
-        'notif_qc_triggered_field': 'Quick check',
+        'notif_qc_triggered_field': 'Drift detected',
+        'notif_qc_triggered_bench': 'benchmark triggered',
 
         # ── Quick check ──
         'set_quick_check_label':     'Quick check before benchmark',

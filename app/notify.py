@@ -14,11 +14,11 @@ logger = logging.getLogger(__name__)
 _LOGO_URL = 'https://raw.githubusercontent.com/Aerya/Gluetun-Companion/main/assets/logo.png'
 
 
-def _footer_text(base: str, companion_url: str | None) -> str:
-    """Build footer text: 'Gluetun Companion' or 'Gluetun Companion — https://...'"""
-    if companion_url:
-        return f'{base} — {companion_url}'
-    return base
+def _strip_filter(label: str | None) -> str:
+    """'SERVER_NAMES=Chamukuy' → 'Chamukuy'. Strips filter-key prefix for display."""
+    if not label:
+        return '—'
+    return label.split('=', 1)[1] if '=' in label else label
 
 
 def _discord_payload(
@@ -42,9 +42,11 @@ def _discord_payload(
     elif gain is None:
         color = 0x58a6ff  # blue / neutral
 
+    from_label = _strip_filter(from_server)
+    to_label   = _strip_filter(to_server)
     fields = [
-        {'name': t['notif_field_from'], 'value': f'`{from_server}`' if from_server else '—', 'inline': True},
-        {'name': t['notif_field_to'],   'value': f'`{to_server}`', 'inline': True},
+        {'name': t['notif_field_from'], 'value': f'`{from_label}`' if from_server else '—', 'inline': True},
+        {'name': t['notif_field_to'],   'value': f'`{to_label}`', 'inline': True},
         {'name': '​', 'value': '​', 'inline': True},  # spacer
     ]
     if from_mbps is not None:
@@ -61,15 +63,17 @@ def _discord_payload(
     if connect_secs is not None:
         fields.append({'name': t['notif_field_connect'], 'value': f'{connect_secs:.0f} s', 'inline': True})
 
-    # Quick check triggered info
+    # Quick check triggered info — explains why the full benchmark was launched
     if qc_info and qc_info.get('current_dl') is not None and qc_info.get('last_dl'):
-        sign = '−' if qc_info['current_dl'] < qc_info['last_dl'] else '+'
+        degraded = qc_info['current_dl'] < qc_info['last_dl']
+        sign = '−' if degraded else '+'
+        qc_server = _strip_filter(qc_info.get('server', ''))
         fields.append({
-            'name': t.get('notif_qc_triggered_field', 'Quick check'),
+            'name': t.get('notif_qc_triggered_field', 'Dérive détectée'),
             'value': (
-                f'`{qc_info["server"]}` — '
-                f'{qc_info["current_dl"]:.1f} Mbps '
-                f'({sign}{qc_info["diff_pct"]:.1f}% vs {qc_info["last_dl"]:.1f} Mbps)'
+                f'`{qc_server}` {sign}{qc_info["diff_pct"]:.0f}% '
+                f'({qc_info["current_dl"]:.0f} → {qc_info["last_dl"]:.0f} Mbps) '
+                f'→ {t.get("notif_qc_triggered_bench", "benchmark lancé")}'
             ),
             'inline': False,
         })
@@ -115,7 +119,7 @@ def _text_body(
 ) -> str:
     gain = (to_mbps - from_mbps) if (from_mbps and to_mbps) else None
 
-    lines = [f'🔄 {from_server or "?"} → {to_server}']
+    lines = [f'🔄 {_strip_filter(from_server) or "?"} → {_strip_filter(to_server)}']
     if from_mbps is not None and to_mbps is not None:
         sign = '+' if gain >= 0 else ''
         lines.append(f'{t["notif_text_speed"]} : {from_mbps:.1f} → {to_mbps:.1f} Mbps ({sign}{gain:.1f})')
@@ -130,11 +134,11 @@ def _text_body(
     # Quick check triggered info
     if qc_info and qc_info.get('current_dl') is not None and qc_info.get('last_dl'):
         sign = '−' if qc_info['current_dl'] < qc_info['last_dl'] else '+'
+        qc_server = _strip_filter(qc_info.get('server', ''))
         lines.append(
-            f'{t.get("notif_qc_triggered_field", "Quick check")} : '
-            f'{qc_info["server"]} — '
-            f'{qc_info["current_dl"]:.1f} Mbps '
-            f'({sign}{qc_info["diff_pct"]:.1f}% vs {qc_info["last_dl"]:.1f} Mbps)'
+            f'{t.get("notif_qc_triggered_field", "Dérive")} : '
+            f'{qc_server} {sign}{qc_info["diff_pct"]:.0f}% '
+            f'({qc_info["current_dl"]:.0f}→{qc_info["last_dl"]:.0f} Mbps)'
         )
 
     # Updated images
