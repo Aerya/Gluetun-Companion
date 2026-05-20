@@ -92,6 +92,23 @@ The companion needs write access to the directory containing your Gluetun `docke
 
 ```yaml
 services:
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: socket-proxy
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      POST: 1
+      DELETE: 1
+    networks:
+      - companion-net
+
   gluetun-companion:
     image: ghcr.io/aerya/gluetun-companion:latest
     container_name: gluetun-companion
@@ -100,7 +117,6 @@ services:
       - 8765:8765
     volumes:
       - /path/to/data:/data
-      - /var/run/docker.sock:/var/run/docker.sock
       - /path/to/gluetun/stack:/compose   # ← adapt this path
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -112,11 +128,22 @@ services:
       - GLUETUN_PROXY_PORT=8887
       - GLUETUN_CONTAINER=gluetun-airvpn   # exact name of your Gluetun container
       - COMPOSE_DIR=/compose
+      - DOCKER_HOST=tcp://socket-proxy:2375
+    networks:
+      - companion-net
+    depends_on:
+      - socket-proxy
+
+networks:
+  companion-net:
 ```
 
 ```bash
 docker compose up -d
 ```
+
+> **Why `socket-proxy`?**
+> The Docker socket gives near-total access to the host. The [Tecnativa proxy](https://github.com/Tecnativa/docker-socket-proxy) sits between Companion and the socket, exposing only the operations Companion actually needs — it cannot launch privileged containers, mount arbitrary paths, etc. Fully transparent for the user, reduced attack surface.
 
 Open **http://localhost:8765** — first login: enter the credentials you want (account created automatically).
 
@@ -140,6 +167,7 @@ Open **http://localhost:8765** — first login: enter the credentials you want (
 | `GLUETUN_CONTAINER` | `gluetun-airvpn` | Gluetun container name |
 | `COMPOSE_DIR` | `/compose` | Path (inside the container) to the Gluetun compose directory |
 | `DATA_DIR` | `/data` | SQLite database directory |
+| `DOCKER_HOST` | *(local socket)* | Set to `tcp://socket-proxy:2375` when using the Tecnativa socket proxy |
 
 Benchmark parameters (streams, duration, warm-up, retry…) are configured in the UI → **Settings**.
 
@@ -237,6 +265,8 @@ In **Settings → Scheduling & Benchmark**: the automatic cycle can be disabled 
 ## Credits
 
 Thanks to **[qdm12](https://github.com/qdm12/gluetun)** for Gluetun, without which this project would not exist.
+
+Thanks to **[Tecnativa](https://github.com/Tecnativa/docker-socket-proxy)** for docker-socket-proxy, used to secure access to the Docker socket.
 
 Thanks to **Zup** for ideas and testing.
 
