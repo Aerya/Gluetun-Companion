@@ -14,19 +14,17 @@
 </div>
 
 {# ═══════════════════════════════════════════════════════════════════════════
-   Main configuration form — covers: planning, speed test, sidecar,
-   VPN connection, proxy auth, auto-switch settings.
+   Main configuration — one form per card
    ═══════════════════════════════════════════════════════════════════════════ #}
-<form method="post">
-  <input type="hidden" name="action" value="save">
-  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+<div class="row g-4">
 
-  <div class="row g-4">
+  {# ── Left column ─────────────────────────────────────────────────────────── #}
+  <div class="col-lg-6">
 
-    {# ── Left column ───────────────────────────────────────────────────────── #}
-    <div class="col-lg-6">
-
-      {# ── Planification & Cycle ────────────────────────────────────────────── #}
+    {# ── Planification & Cycle ──────────────────────────────────────────────── #}
+    <form method="post">
+      <input type="hidden" name="action" value="save_planning">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="card p-4 mb-4">
         <h6 class="fw-bold mb-3 text-success">
           <i class="bi bi-calendar3"></i> {{ t.set_benchmark_title }}
@@ -80,9 +78,22 @@
             {{ t.set_quick_check_threshold_hint }}
           </div>
         </div>
-      </div>
 
-      {# ── Mesure de vitesse ─────────────────────────────────────────────────── #}
+        <div class="d-flex gap-2 mb-0">
+          <button type="submit" class="btn btn-sm btn-success fw-semibold">
+            <i class="bi bi-save"></i> {{ t.cmn_save }}
+          </button>
+          <button type="button" id="btn-trigger" class="btn btn-sm btn-outline-success" onclick="triggerNow()">
+            <i class="bi bi-play-fill"></i> {{ t.set_run_now }}
+          </button>
+        </div>
+      </div>
+    </form>
+
+    {# ── Mesure de vitesse ──────────────────────────────────────────────────── #}
+    <form method="post">
+      <input type="hidden" name="action" value="save_speed">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="card p-4 mb-4">
         <h6 class="fw-bold mb-3 text-success">
           <i class="bi bi-speedometer2"></i> {{ t.set_speed_title }}
@@ -107,17 +118,19 @@
                    value="{{ cfg.speedtest_samples }}" min="1" max="5" step="1">
             <span class="input-group-text text-muted">/ 5</span>
           </div>
-          <div class="form-text text-muted mt-1">{{ t.set_samples_note }}</div>
-          <table class="table table-sm mt-1" style="font-size:.78rem">
-            <thead><tr><th>#</th><th>{{ t.set_ep_name }}</th><th>{{ t.set_ep_network }}</th></tr></thead>
-            <tbody>
-              <tr><td>1</td><td>Cloudflare</td><td>{{ t.set_ep_cf }}</td></tr>
-              <tr><td>2</td><td>Hetzner-DE</td><td>{{ t.set_ep_hetzner }}</td></tr>
-              <tr><td>3</td><td>Fast.com</td><td>{{ t.set_ep_fast }}</td></tr>
-              <tr><td>4</td><td>OVH-FR</td><td>{{ t.set_ep_ovh }}</td></tr>
-              <tr><td>5</td><td>Tele2</td><td>{{ t.set_ep_tele2 }}</td></tr>
-            </tbody>
-          </table>
+          <details class="mt-1">
+            <summary class="text-muted small" style="cursor:pointer">{{ t.set_samples_note }}</summary>
+            <table class="table table-sm mt-1" style="font-size:.78rem">
+              <thead><tr><th>#</th><th>{{ t.set_ep_name }}</th><th>{{ t.set_ep_network }}</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>Cloudflare</td><td>{{ t.set_ep_cf }}</td></tr>
+                <tr><td>2</td><td>Hetzner-DE</td><td>{{ t.set_ep_hetzner }}</td></tr>
+                <tr><td>3</td><td>Fast.com</td><td>{{ t.set_ep_fast }}</td></tr>
+                <tr><td>4</td><td>OVH-FR</td><td>{{ t.set_ep_ovh }}</td></tr>
+                <tr><td>5</td><td>Tele2</td><td>{{ t.set_ep_tele2 }}</td></tr>
+              </tbody>
+            </table>
+          </details>
         </div>
 
         <div class="mb-3">
@@ -140,90 +153,23 @@
           </label>
         </div>
 
-        {# ── Sidecar (integrated) ───────────────────────────────────────────── #}
-        <hr class="my-3">
-
-        <div class="alert alert-warning d-flex gap-2 py-2 px-3 mb-3" style="font-size:.82rem">
-          <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
-          <span>{{ t.set_sidecar_warning | safe }}</span>
+        <div class="d-flex gap-2 mt-3 mb-0">
+          <button type="submit" class="btn btn-sm btn-success fw-semibold">
+            <i class="bi bi-save"></i> {{ t.cmn_save }}
+          </button>
         </div>
-
-        <div class="mb-1 form-check form-switch">
-          <input type="checkbox" name="sidecar_mode" class="form-check-input"
-                 id="sidecar_mode" {{ 'checked' if cfg.sidecar_mode == '1' }}>
-          <label class="form-check-label fw-semibold" for="sidecar_mode">
-            {{ t.set_sidecar_mode_label | safe }}
-          </label>
-        </div>
-        <div class="form-text text-muted mb-3" style="font-size:.78rem">
-          {{ t.set_sidecar_mode_sub | safe }}
-        </div>
-
-        {% if cfg.sidecar_mode == '1' %}
-        <div class="mb-3">
-          <label class="form-label small fw-semibold">{{ t.set_sidecar_method_label }}</label>
-          <select name="sidecar_speedtest_method" class="form-select form-select-sm" style="max-width:340px">
-            <option value="dual"       {{ 'selected' if cfg.sidecar_speedtest_method in ('dual', 'auto') }}>{{ t.set_sidecar_method_dual }}</option>
-            <option value="ookla"      {{ 'selected' if cfg.sidecar_speedtest_method == 'ookla' }}>{{ t.set_sidecar_method_ookla }}</option>
-            <option value="librespeed" {{ 'selected' if cfg.sidecar_speedtest_method == 'librespeed' }}>{{ t.set_sidecar_method_librespeed }}</option>
-            <option value="iperf3"     {{ 'selected' if cfg.sidecar_speedtest_method == 'iperf3' }}>{{ t.set_sidecar_method_iperf3 }}</option>
-          </select>
-        </div>
-        {% if cfg.sidecar_speedtest_method != 'iperf3' %}
-        <div class="mb-2 form-check form-switch">
-          <input type="checkbox" name="sidecar_iperf_fallback" class="form-check-input"
-                 id="sidecar_iperf_fallback" {{ 'checked' if cfg.sidecar_iperf_fallback == '1' }}>
-          <label class="form-check-label small" for="sidecar_iperf_fallback">
-            {{ t.set_sidecar_iperf_fallback_label }}
-          </label>
-        </div>
-        {% endif %}
-        <div class="mb-2 form-check form-switch">
-          <input type="checkbox" name="sidecar_proxy_fallback" class="form-check-input"
-                 id="sidecar_proxy_fallback" {{ 'checked' if cfg.sidecar_proxy_fallback == '1' }}>
-          <label class="form-check-label small" for="sidecar_proxy_fallback">
-            {{ t.set_sidecar_proxy_fallback_label }}
-          </label>
-        </div>
-        <p class="text-muted mb-0" style="font-size:.8rem">
-          <i class="bi bi-info-circle"></i> {{ t.set_sidecar_active_note }}
-        </p>
-        {% else %}
-        <span class="badge" style="background:#f0ad4e;color:#000">
-          <i class="bi bi-exclamation-triangle-fill"></i> PROXY MODE
-        </span>
-        {% endif %}
-
-        <details class="mt-2">
-          <summary class="text-muted small" style="cursor:pointer">
-            <i class="bi bi-info-circle"></i> {{ t.set_sidecar_how_title }}
-          </summary>
-          <div class="mt-2 text-muted" style="font-size:.8rem">
-            <p>{{ t.set_sidecar_how_body | safe }}</p>
-            <p class="mb-0">{{ t.set_sidecar_compose_hint | safe }}</p>
-            <hr class="my-2">
-            <div class="mb-2">
-              <label class="form-label small mb-1">{{ t.set_sidecar_image_label }}</label>
-              <input type="text" name="sidecar_image" class="form-control form-control-sm font-monospace"
-                     value="{{ cfg.sidecar_image }}"
-                     placeholder="ghcr.io/aerya/gluetun-companion-sidecar:latest">
-            </div>
-            <div class="mb-0">
-              <label class="form-label small mb-1">{{ t.set_sidecar_port_label }}</label>
-              <input type="number" name="sidecar_port" class="form-control form-control-sm"
-                     style="max-width:140px"
-                     value="{{ cfg.sidecar_port }}" min="1024" max="65535">
-            </div>
-          </div>
-        </details>
       </div>
+    </form>
 
-    </div>{# end left col #}
+  </div>{# end left col #}
 
-    {# ── Right column ──────────────────────────────────────────────────────── #}
-    <div class="col-lg-6">
+  {# ── Right column ─────────────────────────────────────────────────────────── #}
+  <div class="col-lg-6">
 
-      {# ── Connexion VPN ─────────────────────────────────────────────────────── #}
+    {# ── Connexion VPN ──────────────────────────────────────────────────────── #}
+    <form method="post">
+      <input type="hidden" name="action" value="save_vpn">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="card p-4 mb-4">
         <h6 class="fw-bold mb-3 text-info">
           <i class="bi bi-shield-check"></i> {{ t.set_vpn_title }}
@@ -300,9 +246,19 @@
         {% else %}
         <span class="badge bg-secondary">{{ t.set_proxy_none }}</span>
         {% endif %}
-      </div>
 
-      {# ── Bascule automatique ───────────────────────────────────────────────── #}
+        <div class="d-flex gap-2 mt-3 mb-0">
+          <button type="submit" class="btn btn-sm btn-info fw-semibold text-dark">
+            <i class="bi bi-save"></i> {{ t.cmn_save }}
+          </button>
+        </div>
+      </div>
+    </form>
+
+    {# ── Bascule automatique ────────────────────────────────────────────────── #}
+    <form method="post">
+      <input type="hidden" name="action" value="save_switch">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="card p-4 mb-4">
         <h6 class="fw-bold mb-3 text-success">
           <i class="bi bi-shuffle"></i> {{ t.set_switch_title }}
@@ -339,21 +295,108 @@
         <div class="form-text text-muted mb-0" style="font-size:.78rem">
           {{ t.set_pull_gluetun_hint | safe }}
         </div>
+
+        <div class="d-flex gap-2 mt-3 mb-0">
+          <button type="submit" class="btn btn-sm btn-success fw-semibold">
+            <i class="bi bi-save"></i> {{ t.cmn_save }}
+          </button>
+        </div>
       </div>
+    </form>
 
-    </div>{# end right col #}
-  </div>{# end row #}
+    {# ── Sidecar ────────────────────────────────────────────────────────────── #}
+    <form method="post">
+      <input type="hidden" name="action" value="sidecar">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="card p-4 mb-4 border-warning">
+        <h6 class="fw-bold mb-3" style="color:#f0ad4e">
+          <i class="bi bi-boxes"></i> {{ t.set_sidecar_title }}
+        </h6>
 
-  {# ── Save / trigger bar ──────────────────────────────────────────────────── #}
-  <div class="d-flex gap-2 mb-5">
-    <button type="submit" class="btn btn-success fw-semibold">
-      <i class="bi bi-save"></i> {{ t.cmn_save }}
-    </button>
-    <button type="button" id="btn-trigger" class="btn btn-outline-success" onclick="triggerNow()">
-      <i class="bi bi-play-fill"></i> {{ t.set_run_now }}
-    </button>
-  </div>
-</form>
+        <div class="alert alert-warning d-flex gap-2 py-2 px-3 mb-3" style="font-size:.82rem">
+          <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
+          <span>{{ t.set_sidecar_warning | safe }}</span>
+        </div>
+
+        <div class="mb-1 form-check form-switch">
+          <input type="checkbox" name="sidecar_mode" class="form-check-input"
+                 id="sidecar_mode" {{ 'checked' if cfg.sidecar_mode == '1' }}>
+          <label class="form-check-label fw-semibold" for="sidecar_mode">
+            {{ t.set_sidecar_mode_label | safe }}
+          </label>
+        </div>
+        <div class="form-text text-muted mb-3" style="font-size:.78rem">
+          {{ t.set_sidecar_mode_sub | safe }}
+        </div>
+
+        {% if cfg.sidecar_mode == '1' %}
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">{{ t.set_sidecar_method_label }}</label>
+          <select name="sidecar_speedtest_method" class="form-select form-select-sm" style="max-width:340px">
+            <option value="dual"       {{ 'selected' if cfg.sidecar_speedtest_method in ('dual', 'auto') }}>{{ t.set_sidecar_method_dual }}</option>
+            <option value="ookla"      {{ 'selected' if cfg.sidecar_speedtest_method == 'ookla' }}>{{ t.set_sidecar_method_ookla }}</option>
+            <option value="librespeed" {{ 'selected' if cfg.sidecar_speedtest_method == 'librespeed' }}>{{ t.set_sidecar_method_librespeed }}</option>
+            <option value="iperf3"     {{ 'selected' if cfg.sidecar_speedtest_method == 'iperf3' }}>{{ t.set_sidecar_method_iperf3 }}</option>
+          </select>
+        </div>
+        {% if cfg.sidecar_speedtest_method != 'iperf3' %}
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="sidecar_iperf_fallback" class="form-check-input"
+                 id="sidecar_iperf_fallback" {{ 'checked' if cfg.sidecar_iperf_fallback == '1' }}>
+          <label class="form-check-label small" for="sidecar_iperf_fallback">
+            {{ t.set_sidecar_iperf_fallback_label }}
+          </label>
+        </div>
+        {% endif %}
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="sidecar_proxy_fallback" class="form-check-input"
+                 id="sidecar_proxy_fallback" {{ 'checked' if cfg.sidecar_proxy_fallback == '1' }}>
+          <label class="form-check-label small" for="sidecar_proxy_fallback">
+            {{ t.set_sidecar_proxy_fallback_label }}
+          </label>
+        </div>
+        <p class="text-muted mb-0" style="font-size:.8rem">
+          <i class="bi bi-info-circle"></i> {{ t.set_sidecar_active_note }}
+        </p>
+        {% else %}
+        <span class="badge" style="background:#f0ad4e;color:#000">
+          <i class="bi bi-exclamation-triangle-fill"></i> PROXY MODE
+        </span>
+        {% endif %}
+
+        <details class="mt-2">
+          <summary class="text-muted small" style="cursor:pointer">
+            <i class="bi bi-info-circle"></i> {{ t.set_sidecar_how_title }}
+          </summary>
+          <div class="mt-2 text-muted" style="font-size:.8rem">
+            <p>{{ t.set_sidecar_how_body | safe }}</p>
+            <p class="mb-0">{{ t.set_sidecar_compose_hint | safe }}</p>
+            <hr class="my-2">
+            <div class="mb-2">
+              <label class="form-label small mb-1">{{ t.set_sidecar_image_label }}</label>
+              <input type="text" name="sidecar_image" class="form-control form-control-sm font-monospace"
+                     value="{{ cfg.sidecar_image }}"
+                     placeholder="ghcr.io/aerya/gluetun-companion-sidecar:latest">
+            </div>
+            <div class="mb-0">
+              <label class="form-label small mb-1">{{ t.set_sidecar_port_label }}</label>
+              <input type="number" name="sidecar_port" class="form-control form-control-sm"
+                     style="max-width:140px"
+                     value="{{ cfg.sidecar_port }}" min="1024" max="65535">
+            </div>
+          </div>
+        </details>
+
+        <div class="d-flex gap-2 mt-3 mb-0">
+          <button type="submit" class="btn btn-sm fw-semibold" style="background:#f0ad4e;color:#000">
+            <i class="bi bi-save"></i> {{ t.cmn_save }}
+          </button>
+        </div>
+      </div>
+    </form>
+
+  </div>{# end right col #}
+</div>{# end row #}
 
 {# ═══════════════════════════════════════════════════════════════════════════
    Containers

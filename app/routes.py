@@ -498,43 +498,46 @@ def settings():
     if request.method == 'POST':
         action = request.form.get('action')
 
-        if action == 'save':
-            set_setting('test_interval_hours',     request.form.get('interval', '6'))
-            set_setting('auto_switch',             '1' if request.form.get('auto_switch') else '0')
-            try:
-                wsp = float(request.form.get('weighted_score_current_pct', '65'))
-                set_setting('weighted_score_current_pct', str(max(1.0, min(wsp, 99.0))))
-            except ValueError:
-                pass
-            set_setting('auto_benchmark',          '1' if request.form.get('auto_benchmark') else '0')
-            set_setting('pull_gluetun',            '1' if request.form.get('pull_gluetun') else '0')
-            set_setting('quick_check_mode',        '1' if request.form.get('quick_check_mode') else '0')
+        if action == 'save_planning':
+            set_setting('test_interval_hours', request.form.get('interval', '6'))
+            set_setting('auto_benchmark',      '1' if request.form.get('auto_benchmark') else '0')
+            set_setting('quick_check_mode',    '1' if request.form.get('quick_check_mode') else '0')
             try:
                 qct = float(request.form.get('quick_check_threshold', '15'))
                 set_setting('quick_check_threshold', str(max(1.0, min(qct, 100.0))))
             except ValueError:
                 pass
+            reschedule(float(request.form.get('interval', '6')))
+            flash_t('flash_settings_saved', 'success')
+
+        elif action == 'save_speed':
+            set_setting('speedtest_duration', request.form.get('speedtest_duration', '8'))
+            set_setting('speedtest_samples',  request.form.get('speedtest_samples', '3'))
+            set_setting('speedtest_streams',  request.form.get('speedtest_streams', '4'))
+            set_setting('speedtest_warmup',   '1' if request.form.get('speedtest_warmup') else '0')
+            flash_t('flash_settings_saved', 'success')
+
+        elif action == 'save_vpn':
             set_setting('connection_wait_seconds', request.form.get('wait_secs', '45'))
-            set_setting('speedtest_samples',       request.form.get('speedtest_samples', '3'))
-            set_setting('speedtest_duration',      request.form.get('speedtest_duration', '8'))
             set_setting('speedtest_retries',       request.form.get('speedtest_retries', '2'))
             set_setting('server_timeout_secs',     request.form.get('server_timeout_secs', '300'))
             set_setting('auto_exclude_failures',   request.form.get('auto_exclude_failures', '5'))
-            set_setting('speedtest_warmup',        '1' if request.form.get('speedtest_warmup') else '0')
-            set_setting('speedtest_streams',       request.form.get('speedtest_streams', '4'))
-            # Sidecar settings (merged into main save form)
-            set_setting('sidecar_mode',            '1' if request.form.get('sidecar_mode') else '0')
-            set_setting('sidecar_image',           request.form.get('sidecar_image', '').strip()
-                                                   or 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
-            set_setting('sidecar_port',            request.form.get('sidecar_port', '8766').strip() or '8766')
-            set_setting('sidecar_speedtest_method',request.form.get('sidecar_speedtest_method')
-                                                   or get_setting('sidecar_speedtest_method', 'dual'))
-            set_setting('sidecar_iperf_fallback',  '1' if request.form.get('sidecar_iperf_fallback') else '0')
-            set_setting('sidecar_proxy_fallback',  '1' if request.form.get('sidecar_proxy_fallback') else '0')
-            # Proxy credentials (merged into main save form)
             set_setting('proxy_username',          request.form.get('proxy_username', '').strip())
             set_setting('proxy_password',          request.form.get('proxy_password', '').strip())
-            reschedule(float(request.form.get('interval', '6')))
+            flash_t('flash_settings_saved', 'success')
+
+        elif action == 'save_switch':
+            set_setting('auto_switch',   '1' if request.form.get('auto_switch') else '0')
+            set_setting('pull_gluetun',  '1' if request.form.get('pull_gluetun') else '0')
+            try:
+                wsp = float(request.form.get('weighted_score_current_pct', '65'))
+                set_setting('weighted_score_current_pct', str(max(1.0, min(wsp, 99.0))))
+            except ValueError:
+                pass
+            flash_t('flash_settings_saved', 'success')
+
+        # Legacy catch-all (kept for backward compat / direct API calls)
+        elif action == 'save':
             flash_t('flash_settings_saved', 'success')
 
         elif action == 'db_retention':
