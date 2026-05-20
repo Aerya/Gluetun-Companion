@@ -522,8 +522,6 @@ def settings():
             set_setting('speedtest_retries',       request.form.get('speedtest_retries', '2'))
             set_setting('server_timeout_secs',     request.form.get('server_timeout_secs', '300'))
             set_setting('auto_exclude_failures',   request.form.get('auto_exclude_failures', '5'))
-            set_setting('proxy_username',          request.form.get('proxy_username', '').strip())
-            set_setting('proxy_password',          request.form.get('proxy_password', '').strip())
             flash_t('flash_settings_saved', 'success')
 
         elif action == 'save_switch':

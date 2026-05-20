@@ -5,9 +5,24 @@
 <h5 class="mb-3"><i class="bi bi-gear"></i> {{ t.set_title }}</h5>
 
 <style>
-  .settings-section { margin-bottom: 1.25rem; }
-  .settings-section-title {
+  .settings-board {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+  }
+  .settings-column {
     display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 0;
+  }
+  #settings-source {
+    display: none;
+  }
+  .settings-section { margin-bottom: 0; }
+  .settings-section-title {
+    display: none;
     align-items: center;
     gap: .5rem;
     margin: 0 0 .75rem;
@@ -22,25 +37,16 @@
     flex: 1;
     border-top: 1px solid var(--bs-border-color);
   }
-  .settings-card { height: 100%; margin-bottom: 0 !important; }
-  .settings-stack { display: grid; gap: 1rem; }
-  .settings-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
-    align-items: start;
+  .settings-column > form,
+  .settings-column > .card {
+    min-width: 0;
+    margin-bottom: 0 !important;
   }
-  .settings-grid > [class*="col-"] { display: contents; }
-  .settings-grid form { min-width: 0; }
-  .settings-grid .card { margin-bottom: 0 !important; }
-  .settings-containers .card:has(form#form-pull-network) { order: 1; }
-  .settings-containers .card:has(form#form-pause-bench) { order: 2; }
-  .settings-containers .card:has(form#form-post-switch) { order: 3; }
-  .settings-admin .card:has(input[name="action"][value="notifications"]) { order: 1; }
-  .settings-admin .card:has(input[name="action"][value="db_retention"]) { order: 2; }
   @media (max-width: 991.98px) {
-    .settings-card { height: auto; }
-    .settings-grid { grid-template-columns: 1fr; }
+    .settings-board {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: .75rem;
+    }
   }
 </style>
 
@@ -52,6 +58,11 @@
     â€” {{ t.set_overlap_warning_body | safe }}
   </div>
 </div>
+
+<div class="settings-board">
+  <div id="settings-left" class="settings-column"></div>
+  <div id="settings-right" class="settings-column"></div>
+  <div id="settings-source">
 
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    Main configuration â€” one form per card
@@ -307,38 +318,6 @@
           <div class="form-text text-muted">{{ t.set_auto_exclude_hint }}</div>
         </div>
 
-        {# â”€â”€ Proxy auth (integrated) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
-        <hr class="my-3">
-
-        <p class="fw-semibold mb-1 small">
-          <i class="bi bi-key text-info"></i> {{ t.set_proxy_title }}
-        </p>
-        <p class="text-muted small mb-3">{{ t.set_proxy_hint | safe }}</p>
-
-        <div class="row g-2 mb-2">
-          <div class="col">
-            <label class="form-label small text-muted">{{ t.set_proxy_user }}</label>
-            <input type="text" name="proxy_username" class="form-control"
-                   value="{{ cfg.proxy_username }}"
-                   placeholder="{{ t.set_proxy_placeholder }}"
-                   autocomplete="off">
-          </div>
-          <div class="col">
-            <label class="form-label small text-muted">{{ t.set_proxy_pass }}</label>
-            <input type="password" name="proxy_password" class="form-control"
-                   value="{{ cfg.proxy_password }}"
-                   placeholder="{{ t.set_proxy_placeholder }}"
-                   autocomplete="off">
-          </div>
-        </div>
-        {% if cfg.proxy_username %}
-        <span class="badge bg-success">
-          <i class="bi bi-check2-circle"></i> {{ t.set_proxy_active }} {{ cfg.proxy_username }}
-        </span>
-        {% else %}
-        <span class="badge bg-secondary">{{ t.set_proxy_none }}</span>
-        {% endif %}
-
         <div class="d-flex gap-2 mt-3 mb-0">
           <button type="submit" class="btn btn-sm btn-info fw-semibold text-dark">
             <i class="bi bi-save"></i> {{ t.cmn_save }}
@@ -432,6 +411,47 @@
 
         <div class="d-flex gap-2 mt-3 mb-0">
           <button type="submit" class="btn btn-sm fw-semibold" style="background:#f0ad4e;color:#000">
+            <i class="bi bi-save"></i> {{ t.cmn_save }}
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <form method="post">
+      <input type="hidden" name="action" value="proxy_credentials">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="card p-4 mb-4">
+        <h6 class="fw-bold mb-3 text-info">
+          <i class="bi bi-key"></i> {{ t.set_proxy_title }}
+        </h6>
+        <p class="text-muted small mb-3">{{ t.set_proxy_hint | safe }}</p>
+
+        <div class="row g-2 mb-2">
+          <div class="col">
+            <label class="form-label small text-muted">{{ t.set_proxy_user }}</label>
+            <input type="text" name="proxy_username" class="form-control"
+                   value="{{ cfg.proxy_username }}"
+                   placeholder="{{ t.set_proxy_placeholder }}"
+                   autocomplete="off">
+          </div>
+          <div class="col">
+            <label class="form-label small text-muted">{{ t.set_proxy_pass }}</label>
+            <input type="password" name="proxy_password" class="form-control"
+                   value="{{ cfg.proxy_password }}"
+                   placeholder="{{ t.set_proxy_placeholder }}"
+                   autocomplete="off">
+          </div>
+        </div>
+        {% if cfg.proxy_username %}
+        <span class="badge bg-success">
+          <i class="bi bi-check2-circle"></i> {{ t.set_proxy_active }} {{ cfg.proxy_username }}
+        </span>
+        {% else %}
+        <span class="badge bg-secondary">{{ t.set_proxy_none }}</span>
+        {% endif %}
+
+        <div class="d-flex gap-2 mt-3 mb-0">
+          <button type="submit" class="btn btn-sm btn-info fw-semibold text-dark">
             <i class="bi bi-save"></i> {{ t.cmn_save }}
           </button>
         </div>
@@ -657,7 +677,9 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
         </button>
       </form>
 
-      <hr class="my-4">
+    </div>
+
+    <div class="card p-4 mb-4">
 
       {# Web UI credentials #}
       <h6 class="fw-bold mb-3 text-warning">
@@ -690,6 +712,45 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 
 </div>{# end notifications + maintenance row #}
 </section>
+
+</div>
+
+<script>
+(function arrangeSettingsColumns() {
+  const source = document.getElementById('settings-source');
+  const left = document.getElementById('settings-left');
+  const right = document.getElementById('settings-right');
+  if (!source || !left || !right) return;
+
+  const form = action =>
+    source.querySelector(`form:has(input[name="action"][value="${action}"])`);
+  const cardWithAction = action =>
+    source.querySelector(`.card:has(input[name="action"][value="${action}"])`);
+  const cardWithForm = id =>
+    source.querySelector(`.card:has(form#${id})`);
+  const move = (target, el) => { if (el) target.appendChild(el); };
+
+  [
+    form('save_planning'),
+    form('save_switch'),
+    form('save_speed'),
+    cardWithAction('db_retention'),
+    form('save_vpn'),
+    cardWithAction('credentials'),
+  ].forEach(el => move(left, el));
+
+  [
+    form('sidecar'),
+    form('proxy_credentials'),
+    cardWithForm('form-pull-network'),
+    cardWithForm('form-post-switch'),
+    cardWithForm('form-pause-bench'),
+    cardWithAction('notifications'),
+  ].forEach(el => move(right, el));
+})();
+</script>
+
+</div>
 
 {% endblock %}
 
@@ -1043,3 +1104,4 @@ function triggerNow() {
   <span>â¤ï¸</span>
 </footer>
 {% endblock %}
+
