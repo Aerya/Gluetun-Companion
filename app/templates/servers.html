@@ -19,6 +19,53 @@
   </div>
 </div>
 
+{# ── Filters + sort bar ─────────────────────────────────────────────────── #}
+<form method="get" class="row g-2 mb-3 align-items-end">
+  <div class="col-auto">
+    <input type="text" name="q" class="form-control form-control-sm"
+           value="{{ q }}" placeholder="{{ t.srv_search_ph }}" style="width:180px">
+  </div>
+  {% if filter_types | length > 1 %}
+  <div class="col-auto">
+    <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="" {{ 'selected' if not type_filter }}>{{ t.srv_filter_all_types }}</option>
+      {% for ft in filter_types %}
+      <option value="{{ ft }}" {{ 'selected' if type_filter == ft }}>{{ filter_vars.get(ft, ft) }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="col-auto">
+    <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="avg_dl"  {{ 'selected' if sort == 'avg_dl'  }}>{{ t.srv_sort_avg_dl }}</option>
+      <option value="avg_ul"  {{ 'selected' if sort == 'avg_ul'  }}>{{ t.srv_sort_avg_ul }}</option>
+      <option value="max_dl"  {{ 'selected' if sort == 'max_dl'  }}>{{ t.srv_sort_max_dl }}</option>
+      <option value="latency" {{ 'selected' if sort == 'latency' }}>{{ t.srv_sort_latency }}</option>
+      <option value="name"    {{ 'selected' if sort == 'name'    }}>{{ t.srv_sort_name }}</option>
+    </select>
+  </div>
+  <div class="col-auto d-flex align-items-center gap-1">
+    <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.hist_date_from }}</label>
+    <input type="date" name="from_date" class="form-control form-control-sm"
+           value="{{ from_date }}" style="width:145px">
+  </div>
+  <div class="col-auto d-flex align-items-center gap-1">
+    <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.hist_date_to }}</label>
+    <input type="date" name="to_date" class="form-control form-control-sm"
+           value="{{ to_date }}" style="width:145px">
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-funnel-fill"></i>
+    </button>
+  </div>
+  {% if q or type_filter or from_date or to_date or sort != 'avg_dl' %}
+  <div class="col-auto">
+    <a href="{{ url_for('main.servers') }}" class="btn btn-sm btn-outline-secondary">✕</a>
+  </div>
+  {% endif %}
+</form>
+
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover mb-0">

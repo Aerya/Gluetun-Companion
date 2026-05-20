@@ -4,6 +4,37 @@
 {% block content %}
 <h5 class="mb-3"><i class="bi bi-arrow-left-right"></i> {{ t.sw_title }}</h5>
 
+{# ── Date filters ──────────────────────────────────────────────────────── #}
+<form method="get" class="row g-2 mb-3 align-items-end">
+  <div class="col-auto">
+    <select name="status_filter" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value=""     {{ 'selected' if not status_filter }}>{{ t.sw_filter_all }}</option>
+      <option value="ok"   {{ 'selected' if status_filter == 'ok' }}>{{ t.sw_filter_ok }}</option>
+      <option value="fail" {{ 'selected' if status_filter == 'fail' }}>{{ t.sw_filter_fail }}</option>
+    </select>
+  </div>
+  <div class="col-auto d-flex align-items-center gap-1">
+    <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.hist_date_from }}</label>
+    <input type="date" name="from_date" class="form-control form-control-sm"
+           value="{{ from_date }}" style="width:145px">
+  </div>
+  <div class="col-auto d-flex align-items-center gap-1">
+    <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.hist_date_to }}</label>
+    <input type="date" name="to_date" class="form-control form-control-sm"
+           value="{{ to_date }}" style="width:145px">
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-funnel-fill"></i>
+    </button>
+  </div>
+  {% if from_date or to_date or status_filter %}
+  <div class="col-auto">
+    <a href="{{ url_for('main.switches') }}" class="btn btn-sm btn-outline-secondary">✕</a>
+  </div>
+  {% endif %}
+</form>
+
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover mb-0">

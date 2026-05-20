@@ -173,11 +173,52 @@ def dashboard():
 # Servers
 # ---------------------------------------------------------------------------
 
+_SERVERS_SORT = {
+    'avg_dl':  'avg_dl  DESC NULLS LAST, s.name',
+    'avg_ul':  'avg_ul  DESC NULLS LAST, s.name',
+    'max_dl':  'max_dl  DESC NULLS LAST, s.name',
+    'latency': 'avg_lat ASC  NULLS LAST, s.name',
+    'name':    's.name ASC',
+}
+
 @bp.route('/servers')
 @login_required
 def servers():
+    sort        = request.args.get('sort', 'avg_dl')
+    type_filter = request.args.get('type', '').strip()
+    q           = request.args.get('q',    '').strip()
+    from_date   = request.args.get('from_date', '').strip()
+    to_date     = request.args.get('to_date',   '').strip()
+
+    if sort not in _SERVERS_SORT:
+        sort = 'avg_dl'
+    order_sql = _SERVERS_SORT[sort]
+
+    where_parts: list[str] = []
+    having_parts: list[str] = []
+    params: list = []
+
+    if type_filter:
+        where_parts.append('s.filter_type = ?')
+        params.append(type_filter)
+    if q:
+        where_parts.append('s.name LIKE ?')
+        params.append(f'%{q}%')
+
+    having_params: list = []
+    if from_date:
+        having_parts.append("DATE(MAX(st.tested_at)) >= ?")
+        having_params.append(from_date)
+    if to_date:
+        having_parts.append("DATE(MAX(st.tested_at)) <= ?")
+        having_params.append(to_date)
+    params.extend(having_params)
+
+    where_sql  = ('WHERE '  + ' AND '.join(where_parts))  if where_parts  else ''
+    having_sql = ('HAVING ' + ' AND '.join(having_parts)) if having_parts else ''
+
     with get_db() as db:
-        rows = db.execute('''
+        rows = db.execute(f'''
             SELECT
                 s.id, s.name, s.filter_type, s.enabled,
                 s.consecutive_failures, s.created_at,
@@ -194,12 +235,24 @@ def servers():
                  WHERE server_name=s.name AND success=1 ORDER BY tested_at DESC LIMIT 1) AS last_ipv6
             FROM servers s
             LEFT JOIN speed_tests st ON st.server_name = s.name
+            {where_sql}
             GROUP BY s.id
-            ORDER BY avg_dl DESC NULLS LAST, s.name
-        ''').fetchall()
+            {having_sql}
+            ORDER BY {order_sql}
+        ''', params).fetchall()
+        filter_types = [r['filter_type'] for r in db.execute(
+            'SELECT DISTINCT filter_type FROM servers ORDER BY filter_type'
+        ).fetchall()]
+
     existing_names = [r['name'] for r in rows if r['filter_type'] == 'name']
-    return render_template('servers.html', servers=rows, filter_labels=FILTER_LABELS, filter_vars=FILTER_VARS,
-                           existing_names=existing_names)
+    return render_template(
+        'servers.html', servers=rows,
+        filter_labels=FILTER_LABELS, filter_vars=FILTER_VARS,
+        existing_names=existing_names,
+        sort=sort, type_filter=type_filter, q=q,
+        from_date=from_date, to_date=to_date,
+        filter_types=filter_types,
+    )
 
 
 @bp.route('/servers/import', methods=['POST'])
@@ -492,11 +545,32 @@ def history_export():
 @bp.route('/switches')
 @login_required
 def switches():
+    from_date     = request.args.get('from_date',     '').strip()
+    to_date       = request.args.get('to_date',       '').strip()
+    status_filter = request.args.get('status_filter', '')
+
+    where_parts: list[str] = []
+    params: list = []
+    if from_date:
+        where_parts.append("DATE(switched_at) >= ?")
+        params.append(from_date)
+    if to_date:
+        where_parts.append("DATE(switched_at) <= ?")
+        params.append(to_date)
+    if status_filter == 'ok':
+        where_parts.append("success = 1")
+    elif status_filter == 'fail':
+        where_parts.append("success = 0")
+    where_sql = ('WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
+
     with get_db() as db:
         rows = db.execute(
-            'SELECT * FROM switches ORDER BY switched_at DESC LIMIT 150'
+            f'SELECT * FROM switches {where_sql} ORDER BY switched_at DESC LIMIT 500',
+            params,
         ).fetchall()
-    return render_template('switches.html', switches=rows)
+    return render_template('switches.html', switches=rows,
+                           from_date=from_date, to_date=to_date,
+                           status_filter=status_filter)
 
 
 # ---------------------------------------------------------------------------
