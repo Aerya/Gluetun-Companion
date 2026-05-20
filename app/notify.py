@@ -82,14 +82,15 @@ def _discord_payload(
             'inline': False,
         })
 
+    author: dict = {'name': t['notif_footer'], 'icon_url': _LOGO_URL}
+    if companion_url:
+        author['url'] = companion_url
     embed: dict = {
+        'author': author,
         'title':  t['notif_title'],
         'color':  color,
         'fields': fields,
-        'footer': {'text': t['notif_footer']},
     }
-    if companion_url:
-        embed['url'] = companion_url
     payload: dict = {
         'username':   'Gluetun Companion',
         'avatar_url': _LOGO_URL,
@@ -238,14 +239,15 @@ def send_already_best_notification(
                 fields.append({'name': 'IPv4', 'value': ipv4, 'inline': True})
             if ipv6:
                 fields.append({'name': 'IPv6', 'value': ipv6, 'inline': True})
+            author: dict = {'name': t['notif_footer'], 'icon_url': _LOGO_URL}
+            if companion_url:
+                author['url'] = companion_url
             embed: dict = {
+                'author': author,
                 'title':  title,
                 'color':  0x58a6ff,   # blue — no change
                 'fields': fields,
-                'footer': {'text': t['notif_footer']},
             }
-            if companion_url:
-                embed['url'] = companion_url
             payload: dict = {
                 'username':   'Gluetun Companion',
                 'avatar_url': _LOGO_URL,
