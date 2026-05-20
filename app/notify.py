@@ -11,6 +11,13 @@ from .i18n import get_translations
 logger = logging.getLogger(__name__)
 
 
+def _footer_text(base: str, companion_url: str | None) -> str:
+    """Build footer text: 'Gluetun Companion' or 'Gluetun Companion — https://...'"""
+    if companion_url:
+        return f'{base} — {companion_url}'
+    return base
+
+
 def _discord_payload(
     from_server: str | None,
     to_server: str,
@@ -22,6 +29,8 @@ def _discord_payload(
     reason: str,
     t: dict,
     companion_url: str | None = None,
+    updated_images: list[str] | None = None,
+    qc_info: dict | None = None,
 ) -> dict:
     gain = (to_mbps - from_mbps) if (from_mbps and to_mbps) else None
     color = 0x3fb950  # green
@@ -49,14 +58,33 @@ def _discord_payload(
     if connect_secs is not None:
         fields.append({'name': t['notif_field_connect'], 'value': f'{connect_secs:.0f} s', 'inline': True})
 
+    # Quick check triggered info
+    if qc_info and qc_info.get('current_dl') is not None and qc_info.get('last_dl'):
+        sign = '−' if qc_info['current_dl'] < qc_info['last_dl'] else '+'
+        fields.append({
+            'name': t.get('notif_qc_triggered_field', 'Quick check'),
+            'value': (
+                f'`{qc_info["server"]}` — '
+                f'{qc_info["current_dl"]:.1f} Mbps '
+                f'({sign}{qc_info["diff_pct"]:.1f}% vs {qc_info["last_dl"]:.1f} Mbps)'
+            ),
+            'inline': False,
+        })
+
+    # Updated images
+    if updated_images:
+        fields.append({
+            'name': t.get('notif_updated_images', 'Images mises à jour'),
+            'value': '\n'.join(f'`{img}`' for img in updated_images),
+            'inline': False,
+        })
+
     embed: dict = {
         'title':  t['notif_title'],
         'color':  color,
         'fields': fields,
-        'footer': {'text': t['notif_footer']},
+        'footer': {'text': _footer_text(t['notif_footer'], companion_url)},
     }
-    if companion_url:
-        embed['url'] = companion_url
     return {'embeds': [embed]}
 
 
@@ -71,6 +99,8 @@ def _text_body(
     reason: str,
     t: dict,
     companion_url: str | None = None,
+    updated_images: list[str] | None = None,
+    qc_info: dict | None = None,
 ) -> str:
     gain = (to_mbps - from_mbps) if (from_mbps and to_mbps) else None
 
@@ -85,8 +115,26 @@ def _text_body(
         lines.append(f'{t["notif_text_ip"]} : {ip}')
     if connect_secs is not None:
         lines.append(f'{t["notif_text_connect"]} : {connect_secs:.0f} s')
+
+    # Quick check triggered info
+    if qc_info and qc_info.get('current_dl') is not None and qc_info.get('last_dl'):
+        sign = '−' if qc_info['current_dl'] < qc_info['last_dl'] else '+'
+        lines.append(
+            f'{t.get("notif_qc_triggered_field", "Quick check")} : '
+            f'{qc_info["server"]} — '
+            f'{qc_info["current_dl"]:.1f} Mbps '
+            f'({sign}{qc_info["diff_pct"]:.1f}% vs {qc_info["last_dl"]:.1f} Mbps)'
+        )
+
+    # Updated images
+    if updated_images:
+        lines.append(
+            f'{t.get("notif_updated_images", "Images mises à jour")} : '
+            + ', '.join(updated_images)
+        )
+
     if companion_url:
-        lines.append(f'{t.get("notif_open_dashboard", "Dashboard")} : {companion_url}')
+        lines.append(companion_url)
     return '\n'.join(lines)
 
 
@@ -182,10 +230,8 @@ def send_already_best_notification(
                 'title':  title,
                 'color':  0x58a6ff,   # blue — no change
                 'fields': fields,
-                'footer': {'text': t['notif_footer']},
+                'footer': {'text': _footer_text(t['notif_footer'], companion_url)},
             }
-            if companion_url:
-                embed['url'] = companion_url
             payload = {'embeds': [embed]}
             resp = requests.post(discord_url.strip(), json=payload, timeout=10)
             resp.raise_for_status()
@@ -208,7 +254,7 @@ def send_already_best_notification(
                 ip = ipv4 + (f' / {ipv6}' if ipv6 else '')
                 lines.append(f'{t.get("notif_text_ip", "IP")} : {ip}')
             if companion_url:
-                lines.append(f'{t.get("notif_open_dashboard", "Dashboard")} : {companion_url}')
+                lines.append(companion_url)
             ap.notify(
                 title=t.get('notif_already_best_apprise_title', 'Already optimal — Gluetun Companion'),
                 body='\n'.join(lines),
@@ -233,6 +279,8 @@ def send_switch_notification(
     apprise_urls: str | None = None,
     lang: str = 'fr',
     companion_url: str | None = None,
+    updated_images: list[str] | None = None,
+    qc_info: dict | None = None,
 ):
     if not discord_url and not apprise_urls:
         return
@@ -245,6 +293,8 @@ def send_switch_notification(
                 from_server, to_server, from_mbps, to_mbps,
                 connect_secs, to_ipv4, to_ipv6, reason, t,
                 companion_url=companion_url,
+                updated_images=updated_images,
+                qc_info=qc_info,
             )
             resp = requests.post(discord_url.strip(), json=payload, timeout=10)
             resp.raise_for_status()
@@ -264,6 +314,8 @@ def send_switch_notification(
                 from_server, to_server, from_mbps, to_mbps,
                 connect_secs, to_ipv4, to_ipv6, reason, t,
                 companion_url=companion_url,
+                updated_images=updated_images,
+                qc_info=qc_info,
             )
             ap.notify(title=t['notif_apprise_title'], body=body)
             logger.info('Apprise notification sent')

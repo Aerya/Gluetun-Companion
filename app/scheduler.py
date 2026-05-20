@@ -83,7 +83,7 @@ def _test_one_server(
     # VPN is up — recreate services that lost their network namespace
     # (compose_dir/project let us use `docker compose up` with the already-
     # mounted path rather than the container-inaccessible host-label path)
-    restarted = restart_network_dependents(container, compose_dir, project)
+    restarted, _ = restart_network_dependents(container, compose_dir, project)
     if restarted:
         logger.info('Recreated network dependents: %s', ', '.join(restarted))
     # NOTE: post_switch_containers are intentionally NOT restarted here.
@@ -321,7 +321,7 @@ def _quick_check(
     max_retries: int,
     timeout_secs: int,
     threshold_pct: float,
-) -> tuple[bool, str | None, float | None]:
+) -> tuple[bool, str | None, float | None, float | None]:
     """
     Test only the currently active server without touching Gluetun.
 
@@ -329,8 +329,9 @@ def _quick_check(
                    real Gluetun is never restarted.
     Proxy mode   : tests directly via the existing proxy — no server switch.
 
-    Returns (within_threshold, server_name, current_dl_mbps).
+    Returns (within_threshold, server_name, current_dl_mbps, last_dl_mbps).
     within_threshold=True → full benchmark can be skipped.
+    last_dl_mbps is None when no prior result exists.
     """
     from .database import get_db
     from .gluetun import get_current_filters
@@ -354,7 +355,7 @@ def _quick_check(
 
     if not row:
         logger.info('Quick check: no previous result for %s — running full benchmark', server_name)
-        return False, server_name, None
+        return False, server_name, None, None
 
     last_dl = row['download_mbps']
     logger.info('Quick check: testing %s (last known: %.1f Mbps, threshold: ±%.0f%%)',
@@ -388,7 +389,7 @@ def _quick_check(
 
     if current_dl is None:
         logger.warning('Quick check: test failed — running full benchmark')
-        return False, server_name, None
+        return False, server_name, None, last_dl
 
     # ── Compare ───────────────────────────────────────────────────────────
     diff_pct = abs(current_dl - last_dl) / last_dl * 100 if last_dl > 0 else 100.0
@@ -401,7 +402,7 @@ def _quick_check(
         if within else
         f'outside ±{threshold_pct:.0f}% — running full benchmark',
     )
-    return within, server_name, current_dl
+    return within, server_name, current_dl, last_dl
 
 
 def _test_server_with_retry(
@@ -557,9 +558,10 @@ def _do_benchmark(app):
     # no VPN restarts, no disruption.
     quick_check_mode      = get_setting('quick_check_mode', '0') == '1'
     quick_check_threshold = float(get_setting('quick_check_threshold', '15'))
+    qc_info: dict | None = None   # populated if quick check fails and triggers full bench
     if quick_check_mode:
         logger.info('Quick check mode enabled (threshold ±%.0f%%) — testing current server first', quick_check_threshold)
-        qc_passed, qc_server, qc_dl = _quick_check(
+        qc_passed, qc_server, qc_dl, qc_last_dl = _quick_check(
             container=container,
             proxy_host=proxy_host, proxy_port=proxy_port,
             proxy_user=proxy_user, proxy_pass=proxy_pass,
@@ -578,6 +580,15 @@ def _do_benchmark(app):
             set_setting('benchmark_running', '0')
             set_setting('benchmark_current_server', '')
             return
+        elif qc_dl is not None and qc_last_dl:
+            # Quick check ran but deviation too large → full benchmark triggered
+            diff_pct = abs(qc_dl - qc_last_dl) / qc_last_dl * 100
+            qc_info = {
+                'server':     qc_server,
+                'current_dl': qc_dl,
+                'last_dl':    qc_last_dl,
+                'diff_pct':   diff_pct,
+            }
 
     # Containers to pause before benchmark and restart after
     # (e.g. torrent clients that would distort speed measurements)
@@ -660,10 +671,13 @@ def _do_benchmark(app):
             from_mbps = from_result['dl'] if from_result else None
 
             if best_label != from_label:
+                updated_images: list[str] = []
                 if pull_gluetun:
                     from .gluetun import pull_image
                     ok_p, upd, img = pull_image(container)
                     logger.info('Gluetun pull: %s — %s', img, 'updated' if upd else 'up to date' if ok_p else 'failed')
+                    if upd:
+                        updated_images.append(img)
                 ok, err = switch_server(
                     best['server'], best['filter_type'], container, compose_dir, project
                 )
@@ -672,18 +686,20 @@ def _do_benchmark(app):
                         proxy_host, proxy_port, timeout=wait_secs,
                         proxy_user=proxy_user, proxy_password=proxy_pass,
                     )
-                    restarted = restart_network_dependents(
+                    restarted, net_updated = restart_network_dependents(
                         container, compose_dir, project,
                         exclude=pause_exclude, pull_set=pull_network_set,
                     )
+                    updated_images.extend(net_updated)
                     if restarted:
                         logger.info('Recreated network dependents: %s', ', '.join(restarted))
                     _post_switch = _json.loads(get_setting('post_switch_containers', '[]'))
                     if _post_switch:
-                        _restarted2 = restart_containers_in_order(
+                        _restarted2, ps_updated = restart_containers_in_order(
                             _post_switch, compose_dir, project,
                             exclude=pause_exclude, pull_set=pull_post_switch_set,
                         )
+                        updated_images.extend(ps_updated)
                         logger.info(
                             'Post-switch containers: %d/%d recreated',
                             len(_restarted2), len(_post_switch),
@@ -722,6 +738,8 @@ def _do_benchmark(app):
                         apprise_urls=get_setting('apprise_urls') or None,
                         lang=get_setting('ui_lang', 'fr'),
                         companion_url=get_setting('companion_url') or None,
+                        updated_images=updated_images or None,
+                        qc_info=qc_info,
                     )
             else:
                 logger.info('Already on best: %s', best_label)

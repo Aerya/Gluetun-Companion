@@ -280,7 +280,7 @@ def restart_network_dependents(
     compose_project: str = '',
     exclude: set[str] | None = None,
     pull_set: set[str] | None = None,
-) -> list[str]:
+) -> tuple[list[str], list[str]]:
     """
     Find and recreate every container whose NetworkMode references
     ``container_name`` (i.e. ``network_mode: service:<container_name>`` in
@@ -298,9 +298,10 @@ def restart_network_dependents(
     ``exclude`` — container names to skip (e.g. those paused before the
     benchmark; they will be restarted separately at benchmark end).
 
-    Returns the list of successfully recreated container names.
+    Returns (restarted_names, updated_image_names).
     """
     restarted: list[str] = []
+    updated_imgs: list[str] = []
     exclude_set = set(exclude) if exclude else set()
     try:
         client = docker.from_env()
@@ -330,13 +331,15 @@ def restart_network_dependents(
                     if pull_set and c.name in pull_set:
                         ok, updated, img = pull_image(c.name)
                         logger.info('  pull %s: %s%s', img, 'updated' if updated else 'up to date', '' if ok else ' (failed)')
+                        if updated:
+                            updated_imgs.append(img)
                     _compose_recreate(c.name, compose_dir, compose_project)
                     restarted.append(c.name)
                 except Exception as exc:
                     logger.warning('Failed to recreate %s: %s', c.name, exc)
     except Exception as exc:
         logger.warning('restart_network_dependents: %s', exc)
-    return restarted
+    return restarted, updated_imgs
 
 
 def stop_containers(container_names: list[str]) -> list[str]:
@@ -493,7 +496,7 @@ def restart_containers_in_order(
     delay_secs: float = 3.0,
     exclude: set[str] | None = None,
     pull_set: set[str] | None = None,
-) -> list[str]:
+) -> tuple[list[str], list[str]]:
     """
     Recreate Docker containers one by one in the specified order, with a short
     pause between each.  Intended to be called after a VPN server switch so
@@ -510,16 +513,17 @@ def restart_containers_in_order(
     ``exclude`` — container names to skip (e.g. those paused before the
     benchmark; they will be restarted separately at benchmark end).
 
-    Returns the list of container names that were successfully recreated.
+    Returns (restarted_names, updated_image_names).
     """
     restarted: list[str] = []
+    updated_imgs: list[str] = []
     exclude_set = set(exclude) if exclude else set()
     names = [
         n.strip() for n in container_names
         if n and n.strip() and n.strip() not in exclude_set
     ]
     if not names:
-        return restarted
+        return restarted, updated_imgs
     logger.info('Post-switch restart: will recreate %d container(s): %s', len(names), ', '.join(names))
     for idx, name in enumerate(names):
         logger.info('Post-switch recreate [%d/%d]: %s …', idx + 1, len(names), name)
@@ -527,6 +531,8 @@ def restart_containers_in_order(
             if pull_set and name in pull_set:
                 ok, updated, img = pull_image(name)
                 logger.info('  pull %s: %s%s', img, 'updated' if updated else 'up to date', '' if ok else ' (failed)')
+                if updated:
+                    updated_imgs.append(img)
             _compose_recreate(name, compose_dir, compose_project)
             restarted.append(name)
             logger.info('Post-switch recreate [%d/%d]: %s OK', idx + 1, len(names), name)
@@ -534,7 +540,7 @@ def restart_containers_in_order(
             logger.warning('Post-switch recreate [%d/%d]: %s FAILED — %s', idx + 1, len(names), name, exc)
         if delay_secs > 0 and idx < len(names) - 1:
             time.sleep(delay_secs)
-    return restarted
+    return restarted, updated_imgs
 
 
 # ---------------------------------------------------------------------------

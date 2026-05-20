@@ -314,6 +314,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_already_best_field': 'Serveur actif',
         'notif_already_best_apprise_title': 'Déjà optimal — Gluetun Companion',
         'notif_open_dashboard':     'Ouvrir le tableau de bord',
+        'notif_updated_images':     'Images mises à jour',
+        'notif_qc_triggered_field': 'Vérification rapide',
 
         # ── Quick check ──
         'set_quick_check_label':     'Vérification rapide avant benchmark',
@@ -633,6 +635,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_already_best_field': 'Active server',
         'notif_already_best_apprise_title': 'Already optimal — Gluetun Companion',
         'notif_open_dashboard':     'Open dashboard',
+        'notif_updated_images':     'Updated images',
+        'notif_qc_triggered_field': 'Quick check',
 
         # ── Quick check ──
         'set_quick_check_label':     'Quick check before benchmark',
