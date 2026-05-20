@@ -141,8 +141,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'hist_sort_dl_desc':   'DL ↓',
         'hist_sort_dl_asc':    'DL ↑',
         'hist_col_method':     'Méthode',
+        'hist_timeline_title': 'Évolution dans le temps',
         'chart_avg':        'Moy.',
         'chart_max':        'Max',
+        'chart_range':      'Plage (min → max)',
+        'chart_avg_dl':     'DL moy.',
+        'chart_avg_ul':     'UL moy.',
 
         # ── Switches ──
         'sw_title':        'Historique des bascules de serveur',
@@ -467,8 +471,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'hist_sort_dl_desc':   'DL ↓',
         'hist_sort_dl_asc':    'DL ↑',
         'hist_col_method':     'Method',
+        'hist_timeline_title': 'Performance over time',
         'chart_avg':        'Avg.',
         'chart_max':        'Max',
+        'chart_range':      'Range (min → max)',
+        'chart_avg_dl':     'Avg DL',
+        'chart_avg_ul':     'Avg UL',
 
         # ── Switches ──
         'sw_title':         'Server switch history',

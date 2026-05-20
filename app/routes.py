@@ -434,6 +434,16 @@ def history():
         server_names = [r['server_name'] for r in db.execute(
             'SELECT DISTINCT server_name FROM speed_tests ORDER BY server_name'
         ).fetchall()]
+        # Chronological data for timeline chart (only when a server is selected)
+        timeline_data = []
+        if server_filter:
+            timeline_data = db.execute('''
+                SELECT tested_at, download_mbps, upload_mbps
+                FROM speed_tests
+                WHERE server_name = ? AND success = 1
+                ORDER BY tested_at ASC
+                LIMIT 200
+            ''', (server_filter,)).fetchall()
 
     pages = max(1, (total + _HISTORY_PER_PAGE - 1) // _HISTORY_PER_PAGE)
     return render_template(
@@ -443,6 +453,7 @@ def history():
         sort=sort, server_filter=server_filter, method_filter=method_filter,
         from_date=from_date, to_date=to_date,
         server_names=server_names,
+        timeline_data=timeline_data,
     )
 
 

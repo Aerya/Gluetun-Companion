@@ -4,13 +4,27 @@
 {% block content %}
 <h5 class="mb-3"><i class="bi bi-graph-up"></i> {{ t.hist_title }}</h5>
 
-{% if per_server %}
+{% if server_filter and timeline_data %}
+{# ── Timeline chart (server filtered) ─────────────────────────────────── #}
+<div class="card mb-4 p-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <span class="fw-semibold">
+      <i class="bi bi-graph-up text-success"></i> {{ t.hist_timeline_title }} — <code>{{ server_filter }}</code>
+    </span>
+    <small class="text-muted">{{ timeline_data | length }} {{ t.hist_tests }}</small>
+  </div>
+  <div style="position:relative; height:200px">
+    <canvas id="chartTimeline"></canvas>
+  </div>
+</div>
+
+{% elif per_server %}
+{# ── Floating bar chart (all servers) ─────────────────────────────────── #}
 <div class="row g-3 mb-4">
-  {# Mini stat cards per server #}
   {% for s in per_server[:6] %}
   <div class="col-6 col-md-4 col-xl-2">
     <div class="card p-3 h-100">
-      <div class="text-muted" style="font-size:.7rem;text-transform:uppercase">{{ s.server_name }}</div>
+      <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ s.server_name }}">{{ s.server_name }}</div>
       {% set cls = 'speed-good' if s.avg_dl > 50 else ('speed-ok' if s.avg_dl > 15 else 'speed-bad') %}
       <div class="fw-bold {{ cls }}" style="font-size:1.25rem">{{ s.avg_dl }} Mbps</div>
       <div class="text-muted" style="font-size:.75rem">{{ t.hist_avg }} · {{ s.cnt }} {{ t.hist_tests }}</div>
@@ -26,7 +40,7 @@
   <div class="fw-semibold mb-2">
     <i class="bi bi-bar-chart-fill text-success"></i> {{ t.hist_comparison }}
   </div>
-  <div style="position:relative; height:{{ [per_server|length * 42, 120]|max }}px">
+  <div style="position:relative; height:{{ [[per_server|length * 36, 120]|max, 480]|min }}px">
     <canvas id="chartAvg"></canvas>
   </div>
 </div>
@@ -196,34 +210,96 @@
 {% endblock %}
 
 {% block scripts %}
-{% if per_server %}
 <script>
-const labels   = [{% for s in per_server %}'{{ s.server_name }}',{% endfor %}];
-const avgData  = [{% for s in per_server %}{{ s.avg_dl or 0 }},{% endfor %}];
-const maxData  = [{% for s in per_server %}{{ s.max_dl or 0 }},{% endfor %}];
+// ── Theme-aware chart colors ─────────────────────────────────────────────
+const _isDark  = document.documentElement.getAttribute('data-bs-theme') !== 'light';
+const _cGrid   = _isDark ? 'rgba(48,54,61,.8)'  : 'rgba(0,0,0,.07)';
+const _cTick   = _isDark ? '#8b949e' : '#666';
+const _cLabel  = _isDark ? '#c9d1d9' : '#333';
+
+{% if server_filter and timeline_data %}
+// ── Timeline chart (server filtered) ────────────────────────────────────
+const _tlLabels = [{% for r in timeline_data %}'{{ r.tested_at[5:16] }}',{% endfor %}];
+const _tlDl     = [{% for r in timeline_data %}{{ r.download_mbps or 'null' }},{% endfor %}];
+const _tlUl     = [{% for r in timeline_data %}{{ r.upload_mbps or 'null' }},{% endfor %}];
+const _hasUl    = _tlUl.some(v => v !== null);
+
+new Chart(document.getElementById('chartTimeline'), {
+  type: 'line',
+  data: {
+    labels: _tlLabels,
+    datasets: [
+      {
+        label: '{{ t.chart_avg_dl }}',
+        data: _tlDl,
+        borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,.12)',
+        fill: true, tension: 0.3,
+        pointRadius: 2, pointHoverRadius: 6, borderWidth: 2,
+        spanGaps: true,
+      },
+      ...(_hasUl ? [{
+        label: '{{ t.chart_avg_ul }}',
+        data: _tlUl,
+        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,.0)',
+        fill: false, tension: 0.3,
+        pointRadius: 2, pointHoverRadius: 6, borderWidth: 2,
+        borderDash: [5, 3],
+        spanGaps: true,
+      }] : []),
+    ],
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { grid: { color: _cGrid }, ticks: { color: _cTick, maxTicksLimit: 10, font: { size: 11 } } },
+      y: { beginAtZero: true, grid: { color: _cGrid },
+           ticks: { color: _cTick, callback: v => v + ' Mbps', maxTicksLimit: 5 } },
+    },
+    plugins: {
+      legend: { position: 'bottom', labels: { color: _cLabel, boxWidth: 12, padding: 12 } },
+      tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ' : ' + (ctx.parsed.y?.toFixed(1) ?? '—') + ' Mbps' } },
+    },
+  },
+});
+
+{% elif per_server %}
+// ── Floating bar chart (all servers, min→max range + avg) ────────────────
+const _labels  = [{% for s in per_server %}'{{ s.server_name }}',{% endfor %}];
+const _rangeData = [{% for s in per_server %}[{{ s.min_dl or 0 }}, {{ s.max_dl or 0 }}],{% endfor %}];
+const _avgDl   = [{% for s in per_server %}{{ s.avg_dl or 0 }},{% endfor %}];
+const _avgUl   = [{% for s in per_server %}{{ s.avg_ul or 0 }},{% endfor %}];
 
 new Chart(document.getElementById('chartAvg'), {
   type: 'bar',
   data: {
-    labels,
+    labels: _labels,
     datasets: [
       {
-        label: '{{ t.chart_avg }}',
-        data: avgData,
-        backgroundColor: 'rgba(63,185,80,.7)',
-        borderColor: '#3fb950',
+        label: '{{ t.chart_range }}',
+        data: _rangeData,
+        backgroundColor: 'rgba(63,185,80,.22)',
+        borderColor: 'rgba(63,185,80,.5)',
         borderWidth: 1,
-        borderRadius: 4,
-        maxBarThickness: 20,
+        borderRadius: 3,
+        maxBarThickness: 28,
       },
       {
-        label: '{{ t.chart_max }}',
-        data: maxData,
-        backgroundColor: 'rgba(88,166,255,.35)',
+        label: '{{ t.chart_avg_dl }}',
+        data: _avgDl,
+        backgroundColor: 'rgba(63,185,80,.85)',
+        borderColor: '#3fb950',
+        borderWidth: 1,
+        borderRadius: 3,
+        maxBarThickness: 10,
+      },
+      {
+        label: '{{ t.chart_avg_ul }}',
+        data: _avgUl,
+        backgroundColor: 'rgba(88,166,255,.6)',
         borderColor: '#58a6ff',
         borderWidth: 1,
-        borderRadius: 4,
-        maxBarThickness: 20,
+        borderRadius: 3,
+        maxBarThickness: 10,
       },
     ]
   },
@@ -234,32 +310,32 @@ new Chart(document.getElementById('chartAvg'), {
     scales: {
       x: {
         beginAtZero: true,
-        grid: { color: 'rgba(48,54,61,.8)' },
-        ticks: {
-          color: '#8b949e',
-          callback: v => v + ' Mbps',
-          maxTicksLimit: 6,
-        },
+        grid: { color: _cGrid },
+        ticks: { color: _cTick, callback: v => v + ' Mbps', maxTicksLimit: 6 },
       },
       y: {
         grid: { display: false },
-        ticks: { color: '#c9d1d9', font: { size: 12 } },
+        ticks: { color: _cLabel, font: { size: 12 } },
       },
     },
     plugins: {
-      legend: {
-        position: 'bottom',
-        labels: { color: '#c9d1d9', boxWidth: 12, padding: 16 },
-      },
+      legend: { position: 'bottom', labels: { color: _cLabel, boxWidth: 12, padding: 14 } },
       tooltip: {
-        callbacks: { label: ctx => ' ' + ctx.dataset.label + ' : ' + ctx.parsed.x.toFixed(1) + ' Mbps' },
+        callbacks: {
+          label: ctx => {
+            if (ctx.datasetIndex === 0) {
+              const v = ctx.raw;
+              return ` Plage DL : ${Array.isArray(v) ? v[0] + ' → ' + v[1] : v} Mbps`;
+            }
+            return ` ${ctx.dataset.label} : ${ctx.parsed.x.toFixed(1)} Mbps`;
+          }
+        },
       },
     },
   },
 });
-</script>
 {% endif %}
-<script>
+
 document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
 </script>
 {% endblock %}

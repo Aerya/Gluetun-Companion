@@ -79,10 +79,17 @@
 {% if sparkline_dl %}
 <div class="card mb-4 p-3">
   <div class="d-flex justify-content-between align-items-center mb-2">
-    <span class="fw-semibold"><i class="bi bi-activity text-info"></i> {{ t.dash_sparkline_title }} <code>{{ sparkline_server }}</code></span>
-    <small class="text-muted">{{ sparkline_dl|length }} {{ t.dash_sparkline_tests }}</small>
+    <span class="fw-semibold">
+      <i class="bi bi-activity text-info"></i> {{ t.dash_sparkline_title }} <code>{{ sparkline_server }}</code>
+    </span>
+    <div class="d-flex align-items-center gap-2">
+      <span class="badge bg-success" style="font-size:.8rem">
+        ↓ {{ '%.1f'|format(sparkline_dl | last) }} Mbps
+      </span>
+      <small class="text-muted">{{ sparkline_dl|length }} {{ t.dash_sparkline_tests }}</small>
+    </div>
   </div>
-  <div style="position:relative;height:120px">
+  <div style="position:relative;height:180px">
     <canvas id="chartSparkline"></canvas>
   </div>
 </div>
@@ -95,8 +102,8 @@
     <span class="fw-semibold"><i class="bi bi-bar-chart-fill text-success"></i> {{ t.dash_avg_speed_title }}</span>
     <small class="text-muted">{{ t.dash_avg_speed_note }}</small>
   </div>
-  {# height = 42px per bar, min 120px #}
-  <div style="position:relative; height:{{ [server_stats|length * 42, 120]|max }}px">
+  {# height = 42px per bar pair, min 120px, max 420px #}
+  <div style="position:relative; height:{{ [[server_stats|length * 42, 120]|max, 420]|min }}px">
     <canvas id="chartServers"></canvas>
   </div>
 </div>
@@ -196,6 +203,12 @@ const _msgRunning = '{{ t.dash_running }}';
 const _msgRunNow  = '{{ t.dash_run_now }}';
 const _msgAlready = '{{ t.dash_already_running }}';
 
+// ── Theme-aware chart colors ─────────────────────────────────────────────
+const _isDark   = document.documentElement.getAttribute('data-bs-theme') !== 'light';
+const _cGrid    = _isDark ? 'rgba(48,54,61,.8)'  : 'rgba(0,0,0,.07)';
+const _cTick    = _isDark ? '#8b949e' : '#666';
+const _cLabel   = _isDark ? '#c9d1d9' : '#333';
+
 // ── Live status polling ──────────────────────────────────────────────────
 function pollStatus() {
   fetch('{{ url_for("main.api_status") }}')
@@ -250,14 +263,17 @@ new Chart(document.getElementById('chartSparkline'), {
         label: 'Download',
         data: [{% for v in sparkline_dl %}{{ v }},{% endfor %}],
         borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,.12)',
-        fill: true, tension: 0.3, pointRadius: 3, borderWidth: 2,
+        fill: true, tension: 0.35,
+        pointRadius: 3, pointHoverRadius: 6, borderWidth: 2,
       },
       {% if sparkline_ul | select | list %}
       {
         label: 'Upload',
         data: [{% for v in sparkline_ul %}{{ v if v else 'null' }},{% endfor %}],
-        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,.08)',
-        fill: false, tension: 0.3, pointRadius: 3, borderWidth: 2,
+        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,.0)',
+        fill: false, tension: 0.35,
+        pointRadius: 3, pointHoverRadius: 6, borderWidth: 2,
+        borderDash: [5, 3],
         spanGaps: true,
       },
       {% endif %}
@@ -266,33 +282,44 @@ new Chart(document.getElementById('chartSparkline'), {
   options: {
     responsive: true, maintainAspectRatio: false,
     scales: {
-      x: { grid: { color: 'rgba(48,54,61,.8)' }, ticks: { color: '#8b949e', maxTicksLimit: 8, font: { size: 11 } } },
-      y: { beginAtZero: true, grid: { color: 'rgba(48,54,61,.8)' },
-           ticks: { color: '#8b949e', callback: v => v + ' Mbps', maxTicksLimit: 5 } },
+      x: { grid: { color: _cGrid }, ticks: { color: _cTick, maxTicksLimit: 8, font: { size: 11 } } },
+      y: { beginAtZero: true, grid: { color: _cGrid },
+           ticks: { color: _cTick, callback: v => v + ' Mbps', maxTicksLimit: 5 } },
     },
     plugins: {
-      legend: { position: 'bottom', labels: { color: '#c9d1d9', boxWidth: 12, padding: 12 } },
-      tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ' : ' + ctx.parsed.y?.toFixed(1) + ' Mbps' } },
+      legend: { position: 'bottom', labels: { color: _cLabel, boxWidth: 12, padding: 12 } },
+      tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ' : ' + (ctx.parsed.y?.toFixed(1) ?? '—') + ' Mbps' } },
     },
   },
 });
 {% endif %}
 
-// ── Chart ────────────────────────────────────────────────────────────────
+// ── Chart servers (avg + max DL) ─────────────────────────────────────────
 {% if server_stats %}
 new Chart(document.getElementById('chartServers'), {
   type: 'bar',
   data: {
     labels: [{% for s in server_stats %}'{{ s.server_name }}',{% endfor %}],
-    datasets: [{
-      label: '{{ t.chart_mbps_avg }}',
-      data: [{% for s in server_stats %}{{ s.avg_dl or 0 }},{% endfor %}],
-      backgroundColor: 'rgba(63,185,80,.7)',
-      borderColor: '#3fb950',
-      borderWidth: 1,
-      borderRadius: 4,
-      maxBarThickness: 32,
-    }]
+    datasets: [
+      {
+        label: '{{ t.chart_avg }}',
+        data: [{% for s in server_stats %}{{ s.avg_dl or 0 }},{% endfor %}],
+        backgroundColor: 'rgba(63,185,80,.75)',
+        borderColor: '#3fb950',
+        borderWidth: 1,
+        borderRadius: 4,
+        maxBarThickness: 20,
+      },
+      {
+        label: '{{ t.chart_max }}',
+        data: [{% for s in server_stats %}{{ s.max_dl or 0 }},{% endfor %}],
+        backgroundColor: 'rgba(88,166,255,.35)',
+        borderColor: '#58a6ff',
+        borderWidth: 1,
+        borderRadius: 4,
+        maxBarThickness: 20,
+      },
+    ]
   },
   options: {
     indexAxis: 'y',
@@ -301,22 +328,18 @@ new Chart(document.getElementById('chartServers'), {
     scales: {
       x: {
         beginAtZero: true,
-        grid: { color: 'rgba(48,54,61,.8)' },
-        ticks: {
-          color: '#8b949e',
-          callback: v => v + ' Mbps',
-          maxTicksLimit: 6,
-        },
+        grid: { color: _cGrid },
+        ticks: { color: _cTick, callback: v => v + ' Mbps', maxTicksLimit: 6 },
       },
       y: {
         grid: { display: false },
-        ticks: { color: '#c9d1d9', font: { size: 12 } },
+        ticks: { color: _cLabel, font: { size: 12 } },
       },
     },
     plugins: {
-      legend: { display: false },
+      legend: { position: 'bottom', labels: { color: _cLabel, boxWidth: 12, padding: 12 } },
       tooltip: {
-        callbacks: { label: ctx => ' ' + ctx.parsed.x.toFixed(1) + ' Mbps' },
+        callbacks: { label: ctx => ' ' + ctx.dataset.label + ' : ' + ctx.parsed.x.toFixed(1) + ' Mbps' },
       },
     },
   },
