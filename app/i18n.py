@@ -155,8 +155,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'sw_col_ip':       'IP après bascule',
         'sw_col_gain':     'Gain débit',
         'sw_col_connect':  'Connexion',
-        'sw_col_reason':   'Raison',
-        'sw_reason_auto':  'Auto (meilleur)',
+        'sw_col_reason':   'Déclencheur',
+        'sw_reason_auto':  'Auto',
         'sw_reason_manual':'Manuel',
         'sw_empty':        'Aucune bascule enregistrée.',
 
@@ -485,8 +485,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'sw_col_ip':        'IP after switch',
         'sw_col_gain':      'Speed gain',
         'sw_col_connect':   'Connection',
-        'sw_col_reason':    'Reason',
-        'sw_reason_auto':   'Auto (best)',
+        'sw_col_reason':    'Trigger',
+        'sw_reason_auto':   'Auto',
         'sw_reason_manual': 'Manual',
         'sw_empty':         'No switches recorded.',
 
