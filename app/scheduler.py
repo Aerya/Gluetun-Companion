@@ -316,29 +316,16 @@ def _quick_check(
     proxy_port: int,
     proxy_user: str | None,
     proxy_pass: str | None,
-    compose_dir: str,
-    compose_project: str,
-    sidecar_mode: bool,
-    sidecar_image: str,
-    sidecar_port: int,
-    wait_secs: int,
-    sidecar_method: str,
-    sidecar_iperf_fallback: str,
-    sidecar_proxy_fallback: bool,
     dl_duration: float,
     dl_streams: int,
     dl_samples: int,
     warmup: float,
-    max_retries: int,
-    timeout_secs: int,
     threshold_pct: float,
 ) -> tuple[bool, str | None, float | None, float | None]:
     """
-    Test only the currently active server without touching Gluetun.
-
-    Sidecar mode : spins up a test container with the current server config —
-                   real Gluetun is never restarted.
-    Proxy mode   : tests directly via the existing proxy — no server switch.
+    Test the current VPN connection speed via the Gluetun HTTP proxy — always,
+    regardless of sidecar_mode.  No container spin-up, no VPN reconnection,
+    completes in a few seconds.
 
     Returns (within_threshold, server_name, current_dl_mbps, last_dl_mbps).
     within_threshold=True → full benchmark can be skipped.
@@ -351,7 +338,7 @@ def _quick_check(
     filters = get_current_filters(container)
     if not filters:
         logger.info('Quick check: cannot read current server from Gluetun — running full benchmark')
-        return False, None, None
+        return False, None, None, None
 
     filter_type = next(iter(filters))
     server_name = filters[filter_type].split(',')[0].strip()
@@ -369,37 +356,17 @@ def _quick_check(
         return False, server_name, None, None
 
     last_dl = row['download_mbps']
-    logger.info('Quick check: testing %s (last known: %.1f Mbps, threshold: ±%.0f%%)',
+    logger.info('Quick check: testing %s via proxy (last known: %.1f Mbps, threshold: ±%.0f%%)',
                 server_name, last_dl, threshold_pct)
 
-    # ── Run test ──────────────────────────────────────────────────────────
-    current_dl: float | None = None
-
-    if sidecar_mode:
-        result = _test_server_sidecar_with_retry(
-            server_name, filter_type,
-            container, sidecar_image, proxy_host, sidecar_port,
-            wait_secs, dl_duration, dl_streams,
-            1, timeout_secs,          # max 1 retry for quick check
-            sidecar_method, sidecar_iperf_fallback,
-        )
-        if result is None and sidecar_proxy_fallback:
-            logger.info('Quick check: sidecar failed — falling back to direct proxy test')
-            current_dl = _test_direct_proxy(
-                proxy_host, proxy_port, proxy_user, proxy_pass,
-                dl_duration, dl_samples, warmup, dl_streams,
-            )
-        elif result:
-            current_dl = result['dl']
-    else:
-        # Proxy mode: test via existing connection — no restart
-        current_dl = _test_direct_proxy(
-            proxy_host, proxy_port, proxy_user, proxy_pass,
-            dl_duration, dl_samples, warmup, dl_streams,
-        )
+    # ── Test via existing Gluetun HTTP proxy — fast, no container ────────
+    current_dl = _test_direct_proxy(
+        proxy_host, proxy_port, proxy_user, proxy_pass,
+        dl_duration, dl_samples, warmup, dl_streams,
+    )
 
     if current_dl is None:
-        logger.warning('Quick check: test failed — running full benchmark')
+        logger.warning('Quick check: proxy test failed — running full benchmark')
         return False, server_name, None, last_dl
 
     # ── Compare ───────────────────────────────────────────────────────────
@@ -577,14 +544,8 @@ def _do_benchmark(app):
             container=container,
             proxy_host=proxy_host, proxy_port=proxy_port,
             proxy_user=proxy_user, proxy_pass=proxy_pass,
-            compose_dir=compose_dir, compose_project=project,
-            sidecar_mode=sidecar_mode, sidecar_image=sidecar_image,
-            sidecar_port=sidecar_port, wait_secs=wait_secs,
-            sidecar_method=sidecar_method,
-            sidecar_iperf_fallback=sidecar_iperf_fallback,
-            sidecar_proxy_fallback=sidecar_proxy_fallback,
             dl_duration=dl_duration, dl_streams=dl_streams, dl_samples=dl_samples,
-            warmup=warmup, max_retries=max_retries, timeout_secs=timeout_secs,
+            warmup=warmup,
             threshold_pct=quick_check_threshold,
         )
         if qc_passed:
