@@ -367,7 +367,7 @@ def _quick_check(
         result = _test_server_sidecar_with_retry(
             server_name, filter_type,
             container, sidecar_image, proxy_host, sidecar_port,
-            max(1, max_retries), dl_duration, dl_streams,
+            wait_secs, dl_duration, dl_streams,
             1, timeout_secs,          # max 1 retry for quick check
             sidecar_method, sidecar_iperf_fallback,
         )
