@@ -272,6 +272,138 @@ def _test_one_server_sidecar(
         cleanup_test_containers(sidecar_image)
 
 
+def _test_direct_proxy(
+    proxy_host: str,
+    proxy_port: int,
+    proxy_user: str | None,
+    proxy_pass: str | None,
+    dl_duration: float,
+    dl_samples: int,
+    warmup: float,
+    dl_streams: int,
+) -> float | None:
+    """
+    Test download speed via the existing proxy without any server switch.
+    Used for quick check in proxy mode (Gluetun never restarted).
+    Returns median download Mbps, or None on failure.
+    """
+    from .speedtest import test_download
+    try:
+        dl_median, _ = test_download(
+            proxy_host, proxy_port,
+            duration=dl_duration, samples=dl_samples, warmup=warmup, streams=dl_streams,
+            proxy_user=proxy_user, proxy_password=proxy_pass,
+        )
+        return dl_median
+    except Exception as exc:
+        logger.warning('Quick check direct proxy test failed: %s', exc)
+        return None
+
+
+def _quick_check(
+    container: str,
+    proxy_host: str,
+    proxy_port: int,
+    proxy_user: str | None,
+    proxy_pass: str | None,
+    compose_dir: str,
+    compose_project: str,
+    sidecar_mode: bool,
+    sidecar_image: str,
+    sidecar_port: int,
+    sidecar_method: str,
+    sidecar_iperf_fallback: str,
+    sidecar_proxy_fallback: bool,
+    dl_duration: float,
+    dl_streams: int,
+    dl_samples: int,
+    warmup: float,
+    max_retries: int,
+    timeout_secs: int,
+    threshold_pct: float,
+) -> tuple[bool, str | None, float | None]:
+    """
+    Test only the currently active server without touching Gluetun.
+
+    Sidecar mode : spins up a test container with the current server config —
+                   real Gluetun is never restarted.
+    Proxy mode   : tests directly via the existing proxy — no server switch.
+
+    Returns (within_threshold, server_name, current_dl_mbps).
+    within_threshold=True → full benchmark can be skipped.
+    """
+    from .database import get_db
+    from .gluetun import get_current_filters
+
+    # ── Identify current server ───────────────────────────────────────────
+    filters = get_current_filters(container)
+    if not filters:
+        logger.info('Quick check: cannot read current server from Gluetun — running full benchmark')
+        return False, None, None
+
+    filter_type = next(iter(filters))
+    server_name = filters[filter_type].split(',')[0].strip()
+
+    # ── Last known speed ──────────────────────────────────────────────────
+    with get_db() as db:
+        row = db.execute(
+            'SELECT download_mbps FROM speed_tests '
+            'WHERE server_name=? AND success=1 ORDER BY tested_at DESC LIMIT 1',
+            (server_name,),
+        ).fetchone()
+
+    if not row:
+        logger.info('Quick check: no previous result for %s — running full benchmark', server_name)
+        return False, server_name, None
+
+    last_dl = row['download_mbps']
+    logger.info('Quick check: testing %s (last known: %.1f Mbps, threshold: ±%.0f%%)',
+                server_name, last_dl, threshold_pct)
+
+    # ── Run test ──────────────────────────────────────────────────────────
+    current_dl: float | None = None
+
+    if sidecar_mode:
+        result = _test_server_sidecar_with_retry(
+            server_name, filter_type,
+            container, sidecar_image, proxy_host, sidecar_port,
+            max(1, max_retries), dl_duration, dl_streams,
+            1, timeout_secs,          # max 1 retry for quick check
+            sidecar_method, sidecar_iperf_fallback,
+        )
+        if result is None and sidecar_proxy_fallback:
+            logger.info('Quick check: sidecar failed — falling back to direct proxy test')
+            current_dl = _test_direct_proxy(
+                proxy_host, proxy_port, proxy_user, proxy_pass,
+                dl_duration, dl_samples, warmup, dl_streams,
+            )
+        elif result:
+            current_dl = result['dl']
+    else:
+        # Proxy mode: test via existing connection — no restart
+        current_dl = _test_direct_proxy(
+            proxy_host, proxy_port, proxy_user, proxy_pass,
+            dl_duration, dl_samples, warmup, dl_streams,
+        )
+
+    if current_dl is None:
+        logger.warning('Quick check: test failed — running full benchmark')
+        return False, server_name, None
+
+    # ── Compare ───────────────────────────────────────────────────────────
+    diff_pct = abs(current_dl - last_dl) / last_dl * 100 if last_dl > 0 else 100.0
+    within   = diff_pct <= threshold_pct
+
+    logger.info(
+        'Quick check: %s — current %.1f Mbps / last %.1f Mbps (Δ%.1f%%) → %s',
+        server_name, current_dl, last_dl, diff_pct,
+        f'within ±{threshold_pct:.0f}% — skipping full benchmark'
+        if within else
+        f'outside ±{threshold_pct:.0f}% — running full benchmark',
+    )
+    return within, server_name, current_dl
+
+
 def _test_server_with_retry(
     server_name: str,
     filter_type: str,
@@ -391,10 +523,61 @@ def _do_benchmark(app):
     set_setting('benchmark_running', '1')
     cycle_start = time.time()
 
-    # These are needed in the finally block, so define them before try.
+    # These are needed in the finally block (and before quick check), so define early.
     container   = app.config['GLUETUN_CONTAINER']
     compose_dir = app.config['COMPOSE_DIR']
     project     = app.config.get('COMPOSE_PROJECT', '')
+    proxy_host  = app.config['GLUETUN_HOST']
+    proxy_port  = app.config['GLUETUN_PROXY_PORT']
+
+    # Read all benchmark settings up front (needed for quick check and main loop)
+    wait_secs      = int(get_setting('connection_wait_seconds', '45'))
+    auto_sw        = get_setting('auto_switch', '1') == '1'
+    pull_gluetun   = get_setting('pull_gluetun', '0') == '1'
+    proxy_user     = get_setting('proxy_username', '') or None
+    proxy_pass     = get_setting('proxy_password', '') or None
+    dl_duration    = float(get_setting('speedtest_duration', '8'))
+    dl_samples     = int(get_setting('speedtest_samples', '3'))
+    lat_samples    = min(dl_samples, 3)
+    max_retries    = int(get_setting('speedtest_retries', '2'))
+    timeout_secs   = int(get_setting('server_timeout_secs', '300'))
+    auto_exclude   = int(get_setting('auto_exclude_failures', '5'))
+    warmup         = 2.0 if get_setting('speedtest_warmup', '1') == '1' else 0.0
+    dl_streams     = int(get_setting('speedtest_streams', '4'))
+    sidecar_mode          = get_setting('sidecar_mode', '1') == '1'
+    sidecar_image         = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
+    sidecar_port          = int(get_setting('sidecar_port', '8766'))
+    sidecar_method        = get_setting('sidecar_speedtest_method', 'dual')
+    sidecar_iperf_fallback = get_setting('sidecar_iperf_fallback', '1')
+    sidecar_proxy_fallback = get_setting('sidecar_proxy_fallback', '0') == '1'
+
+    # ── Quick check (before pausing containers) ──────────────────────────────
+    # Test only the current server.  If its speed is within ±N% of the last
+    # known result, skip the full benchmark entirely — no containers paused,
+    # no VPN restarts, no disruption.
+    quick_check_mode      = get_setting('quick_check_mode', '0') == '1'
+    quick_check_threshold = float(get_setting('quick_check_threshold', '15'))
+    if quick_check_mode:
+        logger.info('Quick check mode enabled (threshold ±%.0f%%) — testing current server first', quick_check_threshold)
+        qc_passed, qc_server, qc_dl = _quick_check(
+            container=container,
+            proxy_host=proxy_host, proxy_port=proxy_port,
+            proxy_user=proxy_user, proxy_pass=proxy_pass,
+            compose_dir=compose_dir, compose_project=project,
+            sidecar_mode=sidecar_mode, sidecar_image=sidecar_image,
+            sidecar_port=sidecar_port, sidecar_method=sidecar_method,
+            sidecar_iperf_fallback=sidecar_iperf_fallback,
+            sidecar_proxy_fallback=sidecar_proxy_fallback,
+            dl_duration=dl_duration, dl_streams=dl_streams, dl_samples=dl_samples,
+            warmup=warmup, max_retries=max_retries, timeout_secs=timeout_secs,
+            threshold_pct=quick_check_threshold,
+        )
+        if qc_passed:
+            duration_secs = round(time.time() - cycle_start, 1)
+            logger.info('=== Quick check passed (%.0fs) — full benchmark skipped ===', duration_secs)
+            set_setting('benchmark_running', '0')
+            set_setting('benchmark_current_server', '')
+            return
 
     # Containers to pause before benchmark and restart after
     # (e.g. torrent clients that would distort speed measurements)
@@ -416,29 +599,6 @@ def _do_benchmark(app):
     logger.info('=== Benchmark cycle started ===')
 
     try:
-        proxy_host  = app.config['GLUETUN_HOST']
-        proxy_port  = app.config['GLUETUN_PROXY_PORT']
-
-        wait_secs      = int(get_setting('connection_wait_seconds', '45'))
-        auto_sw        = get_setting('auto_switch', '1') == '1'
-        pull_gluetun   = get_setting('pull_gluetun', '0') == '1'
-        proxy_user     = get_setting('proxy_username', '') or None
-        proxy_pass     = get_setting('proxy_password', '') or None
-        dl_duration    = float(get_setting('speedtest_duration', '8'))
-        dl_samples     = int(get_setting('speedtest_samples', '3'))
-        lat_samples    = min(dl_samples, 3)
-        max_retries    = int(get_setting('speedtest_retries', '2'))
-        timeout_secs   = int(get_setting('server_timeout_secs', '300'))
-        auto_exclude   = int(get_setting('auto_exclude_failures', '5'))
-        warmup         = 2.0 if get_setting('speedtest_warmup', '1') == '1' else 0.0
-        dl_streams     = int(get_setting('speedtest_streams', '4'))
-        sidecar_mode          = get_setting('sidecar_mode', '1') == '1'
-        sidecar_image         = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
-        sidecar_port          = int(get_setting('sidecar_port', '8766'))
-        sidecar_method        = get_setting('sidecar_speedtest_method', 'dual')
-        sidecar_iperf_fallback = get_setting('sidecar_iperf_fallback', '1')
-        sidecar_proxy_fallback = get_setting('sidecar_proxy_fallback', '0') == '1'
-
         with get_db() as db:
             servers = db.execute(
                 'SELECT name, filter_type FROM servers WHERE enabled = 1 ORDER BY name'

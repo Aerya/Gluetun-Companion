@@ -48,7 +48,8 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Pause during benchmark** — list of containers (torrent, Usenet…) stopped before the benchmark starts and automatically restarted when it ends, even on error
 - **Gluetun network containers (auto-managed)** — all containers using `network_mode: service:gluetun` are detected and restarted automatically after each switch
 - **Containers to restart after switch** — only for containers routing through Gluetun's HTTP/SOCKS5 proxy (ports 8118/8388); ordered list (drag & drop)
-- **Automatic Docker image updates** — at switch time, Companion can update images before restarting containers: Gluetun itself, auto-managed network containers, post-switch containers and benchmark-paused containers; togglable per container from Settings
+- **Automatic Docker image updates** *(option)* — at switch time, Companion can update images before restarting containers: Gluetun itself, auto-managed network containers, post-switch containers and benchmark-paused containers; togglable per container from Settings
+- **Quick check before benchmark** *(option)* — tests only the current server before each cycle; if speed is within ±N% of the last known result, the full benchmark is skipped entirely — no containers paused, no VPN restarts; triggers the full benchmark only when performance drifts significantly
 - **Automatic benchmarking** every X hours — download, upload and latency per server; automatic cycle can be disabled (manual trigger only)
 - **Sidecar mode** (default) — a `gluetun-companion-test` container clones the real Gluetun config for each server; `gluetun-companion-sidecar` measures speed via **Ookla + librespeed in parallel** (dual mode, default), Ookla only, librespeed only, or iperf3 directly inside the VPN tunnel; your main Gluetun is never restarted during testing
 - **Multi-source results** — Ookla, librespeed and iperf3 speeds stored separately and displayed in the dashboard and history
@@ -246,6 +247,19 @@ On **Servers → + Add an AirVPN server**: a modal loads live data from the [Air
 - **By country** — collapsible sections per country with flag emoji, 🏆 **Best** badge on the least-loaded server, "Select all" button per country
 
 Servers already in the database are grayed out with their checkbox disabled. Multi-select, one-click add.
+
+### Quick check before benchmark *(option)*
+
+Enable via **Settings → Scheduling & Benchmark → Quick check before benchmark**.
+
+When enabled, each cycle starts with a speed test of the **currently active server only** — before stopping any containers or restarting Gluetun:
+
+- **Within threshold (default ±15%)**: the full benchmark is skipped. No containers are stopped, Gluetun is not restarted, no VPN interruption. Cycle completes in seconds.
+- **Outside threshold**: the full benchmark runs normally — all servers are tested, the best one is selected.
+
+This is ideal for frequent scheduling intervals (e.g. every 2–3 hours) where you want a sanity check without the cost of a full benchmark every time.
+
+> The threshold is configurable (1–100 %). A value of 15 means: if the current speed is between 85 % and 115 % of the last known result, the full benchmark is skipped.
 
 ### Automatic cycle vs manual trigger
 

@@ -48,7 +48,8 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Pause pendant le benchmark** — liste de containers (torrents, Usenet…) stoppés avant le début du benchmark et relancés automatiquement à la fin, même en cas d'erreur
 - **Containers réseau Gluetun (auto-gérés)** — tous les containers en `network_mode: service:gluetun` sont détectés et relancés automatiquement après chaque bascule
 - **Containers à redémarrer après bascule** — uniquement pour les containers utilisant le proxy HTTP/SOCKS5 de Gluetun (ports 8118/8388) ; liste ordonnée (glisser-déposer)
-- **Mise à jour automatique des images Docker** — au moment de la bascule, Companion peut mettre à jour les images avant de relancer les containers : Gluetun lui-même, les containers réseau auto-gérés, les containers à redémarrer après bascule et les containers en pause pendant le benchmark ; activable individuellement par container depuis les Paramètres
+- **Mise à jour automatique des images Docker** *(option)* — au moment de la bascule, Companion peut mettre à jour les images avant de relancer les containers : Gluetun lui-même, les containers réseau auto-gérés, les containers à redémarrer après bascule et les containers en pause pendant le benchmark ; activable individuellement par container depuis les Paramètres
+- **Vérification rapide avant benchmark** *(option)* — teste uniquement le serveur actif avant chaque cycle ; si le débit est dans la plage ±N% par rapport au dernier résultat connu, le benchmark complet est ignoré — aucun container stoppé, aucun redémarrage VPN ; déclenche le benchmark complet uniquement si les performances dérivent significativement
 - **Benchmark automatique** toutes les X heures — download, upload et latence par serveur ; cycle automatique désactivable (déclenchement manuel uniquement)
 - **Mode Sidecar** (défaut) — un container `gluetun-companion-test` clone la config réelle de Gluetun pour chaque serveur ; `gluetun-companion-sidecar` mesure le débit via **Ookla + librespeed en parallèle** (mode dual, défaut), Ookla seul, librespeed seul ou iperf3 directement dans le tunnel VPN ; votre Gluetun principal n'est jamais relancé pendant les tests
 - **Résultats multi-sources** — les vitesses Ookla, librespeed et iperf3 sont stockées séparément et affichées dans le dashboard et l'historique
@@ -246,6 +247,19 @@ Sur **Serveurs → + Ajouter un serveur AirVPN** : un modal charge les données 
 - **Par pays** — sections collapsibles par pays avec flag emoji, badge 🏆 **Best** sur le serveur le moins chargé, bouton "Sélectionner tous" par pays
 
 Les serveurs déjà dans la base sont grisés et leur case à cocher est désactivée. Sélection multiple, ajout en un clic.
+
+### Vérification rapide avant benchmark *(option)*
+
+Activer via **Paramètres → Planification & Benchmark → Vérification rapide avant benchmark**.
+
+Lorsque cette option est activée, chaque cycle commence par un test de débit sur le **serveur actuellement actif uniquement** — avant de stopper des containers ou de relancer Gluetun :
+
+- **Dans la plage (défaut ±15 %)** : le benchmark complet est ignoré. Aucun container n'est stoppé, Gluetun n'est pas relancé, aucune interruption VPN. Le cycle se termine en quelques secondes.
+- **Hors plage** : le benchmark complet se lance normalement — tous les serveurs sont testés, le meilleur est sélectionné.
+
+Idéal pour des intervalles fréquents (ex. toutes les 2–3 h) où l'on veut un contrôle rapide sans le coût d'un benchmark complet à chaque fois.
+
+> La tolérance est configurable (1–100 %). Une valeur de 15 signifie : si le débit actuel est compris entre 85 % et 115 % du dernier résultat connu, le benchmark complet est ignoré.
 
 ### Cycle automatique vs déclenchement manuel
 

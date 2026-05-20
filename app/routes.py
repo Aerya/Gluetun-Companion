@@ -503,6 +503,12 @@ def settings():
             set_setting('auto_switch',             '1' if request.form.get('auto_switch') else '0')
             set_setting('auto_benchmark',          '1' if request.form.get('auto_benchmark') else '0')
             set_setting('pull_gluetun',            '1' if request.form.get('pull_gluetun') else '0')
+            set_setting('quick_check_mode',        '1' if request.form.get('quick_check_mode') else '0')
+            try:
+                qct = float(request.form.get('quick_check_threshold', '15'))
+                set_setting('quick_check_threshold', str(max(1.0, min(qct, 100.0))))
+            except ValueError:
+                pass
             set_setting('connection_wait_seconds', request.form.get('wait_secs', '45'))
             set_setting('speedtest_samples',       request.form.get('speedtest_samples', '3'))
             set_setting('speedtest_duration',      request.form.get('speedtest_duration', '8'))
@@ -598,6 +604,8 @@ def settings():
         'pull_post_switch_containers':  set(json.loads(get_setting('pull_post_switch_containers', '[]'))),
         'pull_pause_bench_containers':  set(json.loads(get_setting('pull_pause_bench_containers', '[]'))),
         'pull_network_containers':      set(json.loads(get_setting('pull_network_containers', '[]'))),
+        'quick_check_mode':             get_setting('quick_check_mode', '0'),
+        'quick_check_threshold':        get_setting('quick_check_threshold', '15'),
     }
     return render_template(
         'settings.html',

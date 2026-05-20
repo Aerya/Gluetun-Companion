@@ -151,6 +151,34 @@
           {{ t.set_pull_gluetun_hint | safe }}
         </div>
 
+        <hr class="my-3">
+
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="quick_check_mode" class="form-check-input"
+                 id="quick_check_mode" {{ 'checked' if cfg.quick_check_mode == '1' }}
+                 onchange="toggleQuickCheck(this.checked)">
+          <label class="form-check-label fw-semibold" for="quick_check_mode">
+            {{ t.set_quick_check_label }}
+          </label>
+        </div>
+        <div class="form-text text-muted mb-2" style="font-size:.78rem">
+          {{ t.set_quick_check_hint | safe }}
+        </div>
+        <div id="quick-check-threshold-group" class="mb-3 ps-1"
+             style="{{ '' if cfg.quick_check_mode == '1' else 'opacity:.45;pointer-events:none' }}">
+          <label class="form-label form-label-sm mb-1">{{ t.set_quick_check_threshold_label }}</label>
+          <div class="input-group" style="max-width:160px">
+            <input type="number" name="quick_check_threshold" class="form-control form-control-sm"
+                   value="{{ cfg.quick_check_threshold }}" min="1" max="100" step="1">
+            <span class="input-group-text text-muted">%</span>
+          </div>
+          <div class="form-text text-muted" style="font-size:.75rem">
+            {{ t.set_quick_check_threshold_hint }}
+          </div>
+        </div>
+
+        <hr class="my-3">
+
         <div class="mb-4 form-check form-switch">
           <input type="checkbox" name="auto_switch" class="form-check-input"
                  id="auto_switch" {{ 'checked' if cfg.auto_sw == '1' }}>
@@ -834,6 +862,17 @@ function toggleAutoBenchmark(enabled) {
 }
 // Apply on page load
 toggleAutoBenchmark(document.getElementById('auto_benchmark').checked);
+
+// ── Quick check toggle ────────────────────────────────────────────────────
+function toggleQuickCheck(enabled) {
+  const group = document.getElementById('quick-check-threshold-group');
+  if (group) {
+    group.style.opacity      = enabled ? '' : '0.45';
+    group.style.pointerEvents = enabled ? '' : 'none';
+  }
+}
+// Apply on page load
+toggleQuickCheck(document.getElementById('quick_check_mode').checked);
 
 // ── Benchmark trigger ─────────────────────────────────────────────────────
 function triggerNow() {
