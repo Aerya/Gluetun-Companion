@@ -265,7 +265,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Post-switch containers ──
         'set_post_switch_title':   'Containers à redémarrer après bascule',
-        'set_post_switch_hint':    '⚠️ Uniquement pour les containers qui passent par le <strong>proxy HTTP/SOCKS5</strong> de Gluetun (ports 8118/8388). Les containers utilisant <code>network_mode: service:gluetun</code> sont déjà relancés automatiquement par Companion — inutile de les ajouter ici. Le container Gluetun lui-même est également géré automatiquement.',
+        'set_post_switch_hint':    '⚠️ Uniquement pour les containers qui passent par le <strong>proxy HTTP/SOCKS5</strong> de Gluetun. Les containers utilisant <code>network_mode: service:gluetun</code> sont déjà relancés automatiquement par Companion — inutile de les ajouter ici. Le container Gluetun lui-même est également géré automatiquement.',
         'set_post_switch_add':     'Ajouter un container',
         'set_post_switch_empty':   'Aucun container configuré — cliquez sur Ajouter.',
         'set_post_switch_loading': 'Chargement des containers…',
@@ -586,7 +586,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Post-switch containers ──
         'set_post_switch_title':   'Containers to restart after switch',
-        'set_post_switch_hint':    '⚠️ Only for containers that route through Gluetun\'s <strong>HTTP/SOCKS5 proxy</strong> (ports 8118/8388). Containers using <code>network_mode: service:gluetun</code> are already restarted automatically by Companion — no need to add them here. The Gluetun container itself is also managed automatically.',
+        'set_post_switch_hint':    '⚠️ Only for containers that route through Gluetun\'s <strong>HTTP/SOCKS5 proxy</strong>. Containers using <code>network_mode: service:gluetun</code> are already restarted automatically by Companion — no need to add them here. The Gluetun container itself is also managed automatically.',
         'set_post_switch_add':     'Add a container',
         'set_post_switch_empty':   'No containers configured — click Add.',
         'set_post_switch_loading': 'Loading containers…',
