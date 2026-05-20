@@ -551,6 +551,7 @@ def _do_benchmark(app):
                         discord_url=get_setting('discord_webhook_url') or None,
                         apprise_urls=get_setting('apprise_urls') or None,
                         lang=get_setting('ui_lang', 'fr'),
+                        companion_url=get_setting('companion_url') or None,
                     )
             else:
                 logger.info('Already on best: %s', best_label)
@@ -564,6 +565,7 @@ def _do_benchmark(app):
                     discord_url=get_setting('discord_webhook_url') or None,
                     apprise_urls=get_setting('apprise_urls') or None,
                     lang=get_setting('ui_lang', 'fr'),
+                    companion_url=get_setting('companion_url') or None,
                 )
 
         duration_secs = round(time.time() - cycle_start, 1)

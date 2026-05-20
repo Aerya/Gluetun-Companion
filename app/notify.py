@@ -21,6 +21,7 @@ def _discord_payload(
     to_ipv6: str | None,
     reason: str,
     t: dict,
+    companion_url: str | None = None,
 ) -> dict:
     gain = (to_mbps - from_mbps) if (from_mbps and to_mbps) else None
     color = 0x3fb950  # green
@@ -48,14 +49,15 @@ def _discord_payload(
     if connect_secs is not None:
         fields.append({'name': t['notif_field_connect'], 'value': f'{connect_secs:.0f} s', 'inline': True})
 
-    return {
-        'embeds': [{
-            'title': t['notif_title'],
-            'color': color,
-            'fields': fields,
-            'footer': {'text': t['notif_footer']},
-        }]
+    embed: dict = {
+        'title':  t['notif_title'],
+        'color':  color,
+        'fields': fields,
+        'footer': {'text': t['notif_footer']},
     }
+    if companion_url:
+        embed['url'] = companion_url
+    return {'embeds': [embed]}
 
 
 def _text_body(
@@ -68,6 +70,7 @@ def _text_body(
     to_ipv6: str | None,
     reason: str,
     t: dict,
+    companion_url: str | None = None,
 ) -> str:
     gain = (to_mbps - from_mbps) if (from_mbps and to_mbps) else None
 
@@ -82,6 +85,8 @@ def _text_body(
         lines.append(f'{t["notif_text_ip"]} : {ip}')
     if connect_secs is not None:
         lines.append(f'{t["notif_text_connect"]} : {connect_secs:.0f} s')
+    if companion_url:
+        lines.append(f'{t.get("notif_open_dashboard", "Dashboard")} : {companion_url}')
     return '\n'.join(lines)
 
 
@@ -145,6 +150,7 @@ def send_already_best_notification(
     discord_url: str | None = None,
     apprise_urls: str | None = None,
     lang: str = 'fr',
+    companion_url: str | None = None,
 ):
     """Send a notification when the current server is already the best — no switch needed."""
     if not discord_url and not apprise_urls:
@@ -172,14 +178,15 @@ def send_already_best_notification(
                 fields.append({'name': 'IPv4', 'value': ipv4, 'inline': True})
             if ipv6:
                 fields.append({'name': 'IPv6', 'value': ipv6, 'inline': True})
-            payload = {
-                'embeds': [{
-                    'title':  title,
-                    'color':  0x58a6ff,   # blue — no change
-                    'fields': fields,
-                    'footer': {'text': t['notif_footer']},
-                }]
+            embed: dict = {
+                'title':  title,
+                'color':  0x58a6ff,   # blue — no change
+                'fields': fields,
+                'footer': {'text': t['notif_footer']},
             }
+            if companion_url:
+                embed['url'] = companion_url
+            payload = {'embeds': [embed]}
             resp = requests.post(discord_url.strip(), json=payload, timeout=10)
             resp.raise_for_status()
             logger.info('Discord already-best notification sent')
@@ -200,6 +207,8 @@ def send_already_best_notification(
             if ipv4:
                 ip = ipv4 + (f' / {ipv6}' if ipv6 else '')
                 lines.append(f'{t.get("notif_text_ip", "IP")} : {ip}')
+            if companion_url:
+                lines.append(f'{t.get("notif_open_dashboard", "Dashboard")} : {companion_url}')
             ap.notify(
                 title=t.get('notif_already_best_apprise_title', 'Already optimal — Gluetun Companion'),
                 body='\n'.join(lines),
@@ -223,6 +232,7 @@ def send_switch_notification(
     discord_url: str | None = None,
     apprise_urls: str | None = None,
     lang: str = 'fr',
+    companion_url: str | None = None,
 ):
     if not discord_url and not apprise_urls:
         return
@@ -234,6 +244,7 @@ def send_switch_notification(
             payload = _discord_payload(
                 from_server, to_server, from_mbps, to_mbps,
                 connect_secs, to_ipv4, to_ipv6, reason, t,
+                companion_url=companion_url,
             )
             resp = requests.post(discord_url.strip(), json=payload, timeout=10)
             resp.raise_for_status()
@@ -252,6 +263,7 @@ def send_switch_notification(
             body = _text_body(
                 from_server, to_server, from_mbps, to_mbps,
                 connect_secs, to_ipv4, to_ipv6, reason, t,
+                companion_url=companion_url,
             )
             ap.notify(title=t['notif_apprise_title'], body=body)
             logger.info('Apprise notification sent')

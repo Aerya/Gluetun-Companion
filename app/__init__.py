@@ -97,6 +97,28 @@ def create_app():
     def _csrf_check():
         validate_csrf()
 
+    # ── Auto-detect Companion URL (for notifications) ─────────────────────
+    # Captures request.url_root on real page hits and persists it to settings.
+    # COMPANION_URL env var overrides auto-detection.
+    # A module-level sentinel avoids a DB write on every request.
+    _detected_companion_url: list[str] = ['']   # mutable container for closure
+
+    @app.before_request
+    def _capture_companion_url():
+        from flask import request as _req
+        from .database import set_setting
+        forced = os.environ.get('COMPANION_URL', '').rstrip('/')
+        if forced:
+            url = forced
+        else:
+            # Skip background API/static calls — url_root from those may be bare
+            if _req.endpoint in (None, 'static', 'main.healthz'):
+                return
+            url = _req.url_root.rstrip('/')
+        if url and url != _detected_companion_url[0]:
+            _detected_companion_url[0] = url
+            set_setting('companion_url', url)
+
     @app.context_processor
     def inject_i18n():
         lang = session.get('lang', 'fr')

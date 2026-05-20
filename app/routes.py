@@ -314,6 +314,7 @@ def manual_switch(server_id):
             discord_url=get_setting('discord_webhook_url') or None,
             apprise_urls=get_setting('apprise_urls') or None,
             lang=lang,
+            companion_url=get_setting('companion_url') or None,
         )
         flash_t('flash_switched', 'success', to=to_label)
     else:

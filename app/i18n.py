@@ -304,6 +304,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_already_best_title': 'Déjà sur le meilleur serveur',
         'notif_already_best_field': 'Serveur actif',
         'notif_already_best_apprise_title': 'Déjà optimal — Gluetun Companion',
+        'notif_open_dashboard':     'Ouvrir le tableau de bord',
     },
 
     'en': {
@@ -607,6 +608,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_already_best_title': 'Already on the best server',
         'notif_already_best_field': 'Active server',
         'notif_already_best_apprise_title': 'Already optimal — Gluetun Companion',
+        'notif_open_dashboard':     'Open dashboard',
     },
 }
 
