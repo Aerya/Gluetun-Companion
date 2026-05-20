@@ -8,11 +8,18 @@ Automatic VPN server benchmarking via [Gluetun](https://github.com/qdm12/gluetun
 
 > 🇫🇷 [Version française](README.md)
 
+<p align="center">
+
 [![Build](https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml/badge.svg?branch=main)](https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://github.com/Aerya/Gluetun-Companion/pkgs/container/gluetun-companion)
 [![arch](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-lightgrey)](#)
 [![i18n](https://img.shields.io/badge/i18n-FR%20%7C%20EN-informational)](README.md)
 [![Gluetun compatible](https://img.shields.io/badge/Gluetun-compatible-0d1117?logo=github&logoColor=white)](https://github.com/qdm12/gluetun)
+[![AirVPN](https://img.shields.io/badge/AirVPN-compatible-1a7a3d?logoColor=white)](https://airvpn.org/?referred_by=483746)
+[![Discord](https://img.shields.io/badge/Discord-webhook-5865F2?logo=discord&logoColor=white)](https://discord.com/developers/docs/resources/webhook)
+[![Apprise](https://img.shields.io/badge/Apprise-compatible-3d85c8?logo=python&logoColor=white)](https://github.com/caronc/apprise)
+
+</p>
 
 > **Using it? Liking it? [⭐ Drop a star!](https://github.com/Aerya/Gluetun-Companion/stargazers)** — takes two seconds.
 

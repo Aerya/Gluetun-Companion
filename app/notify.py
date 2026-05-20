@@ -29,8 +29,6 @@ def _discord_payload(
     elif gain is None:
         color = 0x58a6ff  # blue / neutral
 
-    reason_label = t['notif_reason_auto'] if reason == 'auto_best' else t['notif_reason_manual']
-
     fields = [
         {'name': t['notif_field_from'], 'value': f'`{from_server}`' if from_server else '—', 'inline': True},
         {'name': t['notif_field_to'],   'value': f'`{to_server}`', 'inline': True},
@@ -49,7 +47,6 @@ def _discord_payload(
         fields.append({'name': 'IPv6', 'value': to_ipv6, 'inline': True})
     if connect_secs is not None:
         fields.append({'name': t['notif_field_connect'], 'value': f'{connect_secs:.0f} s', 'inline': True})
-    fields.append({'name': t['notif_field_reason'], 'value': reason_label, 'inline': False})
 
     return {
         'embeds': [{
@@ -73,7 +70,6 @@ def _text_body(
     t: dict,
 ) -> str:
     gain = (to_mbps - from_mbps) if (from_mbps and to_mbps) else None
-    reason_label = t['notif_reason_auto_short'] if reason == 'auto_best' else t['notif_reason_manual_short']
 
     lines = [f'🔄 {from_server or "?"} → {to_server}']
     if from_mbps is not None and to_mbps is not None:
@@ -86,7 +82,6 @@ def _text_body(
         lines.append(f'{t["notif_text_ip"]} : {ip}')
     if connect_secs is not None:
         lines.append(f'{t["notif_text_connect"]} : {connect_secs:.0f} s')
-    lines.append(f'{t["notif_text_reason"]} : {reason_label}')
     return '\n'.join(lines)
 
 
