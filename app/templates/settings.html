@@ -23,6 +23,7 @@
       </h6>
       <form method="post">
         <input type="hidden" name="action" value="save">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 
         <div class="mb-3" id="interval-group">
           <label class="form-label">{{ t.set_interval_label }}</label>
@@ -171,6 +172,7 @@
 
       <form method="post">
         <input type="hidden" name="action" value="sidecar">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 
         <div class="mb-3 form-check form-switch">
           <input type="checkbox" name="sidecar_mode" class="form-check-input"
@@ -266,6 +268,7 @@
 
       <form method="post" id="form-post-switch">
         <input type="hidden" name="action" value="post_switch">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 
         <div id="post-switch-list" class="d-flex flex-column gap-2 mb-3">
           {# existing rows injected by JS on load #}
@@ -299,6 +302,7 @@
 
       <form method="post" id="form-pause-bench">
         <input type="hidden" name="action" value="pause_bench">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 
         <div id="pause-bench-list" class="d-flex flex-column gap-2 mb-3">
           <div id="pause-bench-placeholder" class="text-muted small fst-italic
@@ -329,6 +333,7 @@
       </h6>
       <form method="post">
         <input type="hidden" name="action" value="db_retention">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
           <label class="form-label">{{ t.set_retention_label }}</label>
           <div class="input-group" style="max-width:200px">
@@ -352,6 +357,7 @@
       <p class="text-muted small mb-3">{{ t.set_proxy_hint | safe }}</p>
       <form method="post">
         <input type="hidden" name="action" value="proxy_credentials">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 
         <div class="row g-2 mb-3">
           <div class="col">
@@ -390,6 +396,7 @@
       </h6>
       <form method="post">
         <input type="hidden" name="action" value="notifications">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 
         <div class="mb-3">
           <label class="form-label">
@@ -443,6 +450,7 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
       </h6>
       <form method="post">
         <input type="hidden" name="action" value="credentials">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 
         <div class="mb-3">
           <label class="form-label">{{ t.set_username }}</label>
@@ -669,8 +677,8 @@ function testNotif(target) {
 function toggleAutoBenchmark(enabled) {
   const group = document.getElementById('interval-group');
   if (group) {
-    group.style.opacity = enabled ? '' : '0.45';
-    group.querySelectorAll('input').forEach(el => el.disabled = !enabled);
+    group.style.opacity      = enabled ? '' : '0.45';
+    group.style.pointerEvents = enabled ? '' : 'none';
   }
 }
 // Apply on page load

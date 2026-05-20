@@ -154,8 +154,10 @@ def switch_server(
     # Build environment block: set target var, blank-out all others
     env_lines = ''
     for label, var in FILTER_VARS.items():
-        value = filter_value if var == env_var else ''
-        env_lines += f'      {var}: "{value}"\n'
+        raw   = filter_value if var == env_var else ''
+        # Sanitise against YAML injection: strip newlines, escape backslash and quote
+        safe  = raw.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '').replace('\r', '')
+        env_lines += f'      {var}: "{safe}"\n'
 
     override = (
         f'services:\n'

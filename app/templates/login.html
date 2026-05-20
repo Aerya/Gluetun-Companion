@@ -40,6 +40,7 @@
   {% endwith %}
 
   <form method="post" autocomplete="on">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
     <div class="mb-3">
       <label class="form-label small">{{ t.login_username }}</label>
       <input type="text" name="username" class="form-control" autofocus required>

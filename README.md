@@ -261,6 +261,16 @@ Dans **Paramètres → Planification & Benchmark** : le cycle automatique peut �
 
 ---
 
+## Sécurité
+
+- **CSRF** — Toutes les actions POST (formulaires et AJAX) sont protégées par un token CSRF via session serveur. L'en-tête `X-CSRF-Token` est injecté automatiquement sur chaque `fetch` non-GET grâce à un intercepteur JavaScript.
+- **XSS** — Les données issues d'API tierces (AirVPN) injectées dans le DOM via `innerHTML` sont systématiquement échappées par une fonction `_esc()` (HTML entity encoding). Les handlers d'événements sur éléments dynamiques utilisent `addEventListener` plutôt que des attributs `onchange` inline.
+- **SECRET_KEY** — L'application refuse de démarrer si `SECRET_KEY` est absente ou égale à la valeur par défaut. Génère une clé sécurisée avec : `openssl rand -hex 32`.
+- **Injection YAML** — La valeur du filtre de serveur est assainie avant écriture dans `docker-compose.override.yml` (retours à la ligne supprimés, guillemets et backslashs échappés).
+- **Socket Docker** — En mode sidecar, le socket Docker est exposé. L'utilisation de [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) est recommandée pour limiter l'accès au strict nécessaire (voir la section dédiée ci-dessus).
+
+---
+
 ## Crédits
 
 Merci à **[qdm12](https://github.com/qdm12/gluetun)** pour Gluetun, sans lequel ce projet n'existerait pas.

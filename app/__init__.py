@@ -61,7 +61,16 @@ def create_app():
         template_folder='templates',
         static_folder=os.path.join(os.path.dirname(__file__), '..', 'assets'),
     )
-    app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-me')
+
+    secret_key = os.environ.get('SECRET_KEY', '')
+    if not secret_key or secret_key == 'dev-secret-change-me':
+        import sys
+        logging.getLogger(__name__).critical(
+            'SECRET_KEY is not set or uses the default value. '
+            'Generate one with: openssl rand -hex 32'
+        )
+        sys.exit(1)
+    app.secret_key = secret_key
 
     app.config['DATA_DIR']         = os.environ.get('DATA_DIR', '/data')
     app.config['DB_PATH']          = os.path.join(app.config['DATA_DIR'], 'companion.db')
@@ -80,6 +89,13 @@ def create_app():
     set_setting('benchmark_current_server', '')
 
     app.jinja_env.filters['localtime'] = _utc_to_local
+
+    from .csrf import generate_csrf, validate_csrf
+    app.jinja_env.globals['csrf_token'] = generate_csrf
+
+    @app.before_request
+    def _csrf_check():
+        validate_csrf()
 
     @app.context_processor
     def inject_i18n():

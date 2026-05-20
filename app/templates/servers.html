@@ -6,6 +6,7 @@
   <h5 class="mb-0"><i class="bi bi-hdd-network"></i> {{ t.srv_title }}</h5>
   <div class="d-flex gap-2">
     <form method="post" action="{{ url_for('main.import_servers') }}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-outline-info btn-sm fw-semibold"
               title="{{ t.srv_import_title }}">
         <i class="bi bi-download"></i> {{ t.srv_import }}
@@ -81,6 +82,7 @@
                   action="{{ url_for('main.test_server_now', server_id=s.id) }}"
                   class="d-inline"
                   onsubmit="return confirm('{{ t.srv_confirm_test_a }} {{ s.name }} {{ t.srv_confirm_test_b }}')">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-outline-info btn-sm" title="{{ t.srv_test_now }}">
                 <i class="bi bi-speedometer2"></i>
               </button>
@@ -90,6 +92,7 @@
                   action="{{ url_for('main.manual_switch', server_id=s.id) }}"
                   class="d-inline"
                   onsubmit="return confirm('{{ t.srv_confirm_switch_a }} {{ filter_vars.get(s.filter_type) }}={{ s.name }} {{ t.srv_confirm_switch_b }}')">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-success btn-sm" title="{{ t.srv_switch_now }}">
                 <i class="bi bi-arrow-right-circle-fill"></i>
               </button>
@@ -98,6 +101,7 @@
             <form method="post"
                   action="{{ url_for('main.toggle_server', server_id=s.id) }}"
                   class="d-inline">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-outline-secondary btn-sm"
                       title="{{ t.srv_enable if not s.enabled else t.srv_disable }}">
                 <i class="bi bi-toggle-{{ 'off' if not s.enabled else 'on text-success' }}"></i>
@@ -108,6 +112,7 @@
                   action="{{ url_for('main.delete_server', server_id=s.id) }}"
                   class="d-inline"
                   onsubmit="return confirm('{{ t.srv_confirm_delete_a }} {{ s.name }} {{ t.srv_confirm_delete_b }}')">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-outline-danger btn-sm" title="{{ t.srv_delete }}">
                 <i class="bi bi-trash3"></i>
               </button>
@@ -243,6 +248,16 @@
 
 {% block scripts %}
 <script>
+// ── HTML escape helper (prevents XSS in innerHTML) ────────────────────────
+function _esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── AirVPN picker ─────────────────────────────────────────────────────────
 const _existingServers = new Set({{ existing_names | tojson }});
 const _t = {
@@ -353,30 +368,40 @@ function _renderServersTab(servers) {
   const tbody = document.getElementById('airvpn-servers-tbody');
   tbody.innerHTML = '';
   for (const s of servers) {
-    const exists = _existingServers.has(s.name);
+    const exists  = _existingServers.has(s.name);
     const healthy = s.health === 'ok';
     const tr = document.createElement('tr');
     tr.dataset.name    = s.name.toLowerCase();
     tr.dataset.country = s.country.toLowerCase();
     if (exists) tr.classList.add('opacity-50');
-    tr.innerHTML = `
-      <td class="ps-3">
-        <input type="checkbox" class="form-check-input airvpn-cb" value="${s.name}"
-               ${exists ? 'disabled title="' + _t.alreadyAdded + '"' : ''}
-               onchange="airvpnToggle('${s.name}', this.checked)">
-      </td>
+
+    // Checkbox cell — built via DOM so no inline event handler with user data
+    const tdCb = document.createElement('td');
+    tdCb.className = 'ps-3';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'form-check-input airvpn-cb';
+    cb.value = s.name;   // safe: DOM property, not innerHTML
+    if (exists) { cb.disabled = true; cb.title = _t.alreadyAdded; }
+    else cb.addEventListener('change', e => airvpnToggle(s.name, e.target.checked));
+    tdCb.appendChild(cb);
+    tr.appendChild(tdCb);
+
+    // Remaining cells — user data escaped with _esc()
+    tr.insertAdjacentHTML('beforeend', `
       <td>
-        <code class="fw-semibold">${s.name}</code>
-        ${exists ? '<span class="badge bg-secondary ms-1" style="font-size:.65rem">' + _t.alreadyAdded + '</span>' : ''}
+        <code class="fw-semibold">${_esc(s.name)}</code>
+        ${exists ? '<span class="badge bg-secondary ms-1" style="font-size:.65rem">' + _esc(_t.alreadyAdded) + '</span>' : ''}
       </td>
-      <td><span title="${s.country}">${_flag(s.country_code)} <small>${s.country}</small></span></td>
-      <td><small class="text-muted">${s.location}</small></td>
+      <td><span title="${_esc(s.country)}">${_flag(s.country_code)} <small>${_esc(s.country)}</small></span></td>
+      <td><small class="text-muted">${_esc(s.location)}</small></td>
       <td>${_loadBar(s.load)}</td>
-      <td><small class="text-muted">${s.users}</small></td>
+      <td><small class="text-muted">${_esc(String(s.users))}</small></td>
       <td>${healthy
         ? '<i class="bi bi-check-circle-fill text-success"></i>'
-        : '<i class="bi bi-exclamation-triangle-fill text-warning" style="cursor:help" data-bs-toggle="tooltip" data-bs-placement="left" data-bs-title="' + _t.healthErr + '"></i>'}</td>
-    `;
+        : '<i class="bi bi-exclamation-triangle-fill text-warning" style="cursor:help" data-bs-toggle="tooltip" data-bs-placement="left" data-bs-title="' + _esc(_t.healthErr) + '"></i>'}</td>
+    `);
+
     if (!exists) {
       tr.style.cursor = 'pointer';
       tr.addEventListener('click', e => {
@@ -407,9 +432,9 @@ function _renderCountriesTab(countries) {
     summary.className = 'px-3 py-2 d-flex align-items-center gap-2 user-select-none';
     summary.style.cursor = 'pointer';
     summary.innerHTML = `
-      <span class="fw-semibold">${_flag(c.country_code)} ${c.country}</span>
-      <span class="badge bg-secondary">${c.server_count}</span>
-      ${c.best ? `<span class="ms-auto text-muted small"><i class="bi bi-trophy-fill text-warning me-1"></i>${_t.best}: <code>${c.best}</code></span>` : ''}
+      <span class="fw-semibold">${_flag(c.country_code)} ${_esc(c.country)}</span>
+      <span class="badge bg-secondary">${_esc(String(c.server_count))}</span>
+      ${c.best ? `<span class="ms-auto text-muted small"><i class="bi bi-trophy-fill text-warning me-1"></i>${_esc(_t.best)}: <code>${_esc(c.best)}</code></span>` : ''}
     `;
     wrap.appendChild(summary);
 
@@ -424,16 +449,25 @@ function _renderCountriesTab(countries) {
       row.dataset.name    = s.name.toLowerCase();
       row.dataset.country = c.country.toLowerCase();
       if (!exists) row.style.cursor = 'pointer';
-      row.innerHTML = `
-        <input type="checkbox" class="form-check-input airvpn-cb flex-shrink-0" value="${s.name}"
-               ${exists ? 'disabled' : ''}
-               onchange="airvpnToggle('${s.name}', this.checked)">
-        <code class="flex-shrink-0">${s.name}</code>
-        ${isBest ? `<span class="badge bg-warning text-dark flex-shrink-0"><i class="bi bi-trophy-fill me-1"></i>${_t.best}</span>` : ''}
-        ${exists ? `<span class="badge bg-secondary flex-shrink-0" style="font-size:.65rem">${_t.alreadyAdded}</span>` : ''}
+
+      // Checkbox — built via DOM so no inline event handler with user data
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'form-check-input airvpn-cb flex-shrink-0';
+      cb.value = s.name;   // safe: DOM property
+      if (exists) cb.disabled = true;
+      else cb.addEventListener('change', e => airvpnToggle(s.name, e.target.checked));
+      row.appendChild(cb);
+
+      // Remaining content escaped
+      row.insertAdjacentHTML('beforeend', `
+        <code class="flex-shrink-0">${_esc(s.name)}</code>
+        ${isBest ? `<span class="badge bg-warning text-dark flex-shrink-0"><i class="bi bi-trophy-fill me-1"></i>${_esc(_t.best)}</span>` : ''}
+        ${exists ? `<span class="badge bg-secondary flex-shrink-0" style="font-size:.65rem">${_esc(_t.alreadyAdded)}</span>` : ''}
         <div class="flex-grow-1">${_loadBar(s.load)}</div>
-        <small class="text-muted flex-shrink-0">${s.users} users</small>
-      `;
+        <small class="text-muted flex-shrink-0">${_esc(String(s.users))} users</small>
+      `);
+
       if (!exists) {
         row.addEventListener('click', e => {
           if (e.target.closest('input')) return;
