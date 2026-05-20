@@ -338,9 +338,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Quick check ──
         'set_quick_check_label':     'Vérification rapide avant benchmark',
-        'set_quick_check_hint':      'Teste d\'abord le débit du serveur VPN actuellement actif. Si le débit est dans la plage ±N%, le benchmark complet est ignoré — Gluetun n\'est pas redémarré, les containers ne sont pas stoppés. Si le débit s\'écarte trop, le benchmark complet se lance normalement.',
+        'set_quick_check_hint':      'Teste d\'abord le débit du serveur VPN actuellement actif <strong>via le proxy HTTP direct</strong> — aucun container sidecar, résultat en quelques secondes. Si le débit est dans la plage ±N%, le benchmark complet est ignoré. Sinon, le benchmark complet se lance normalement.',
         'set_quick_check_threshold_label': 'Tolérance de débit',
         'set_quick_check_threshold_hint':  'Écart maximal autorisé (en %) par rapport au dernier résultat connu. Si le débit actuel est dans cette plage, le benchmark est ignoré.',
+
+        # ── Run Now hints ──
+        'dash_run_now_hint': 'Passe par le proxy HTTP — résultat en quelques secondes.',
+        'set_run_now_hint':  'Passe par le proxy HTTP — résultat en quelques secondes.',
     },
 
     'en': {
@@ -678,9 +682,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Quick check ──
         'set_quick_check_label':     'Quick check before benchmark',
-        'set_quick_check_hint':      'Tests the currently active VPN server speed first. If speed is within ±N%, the full benchmark is skipped — Gluetun is not restarted, no containers are stopped. If the speed drifts too far, the full benchmark runs normally.',
+        'set_quick_check_hint':      'Tests the currently active VPN server speed first <strong>via the HTTP proxy directly</strong> — no sidecar container, result in seconds. If speed is within ±N%, the full benchmark is skipped. Otherwise, the full benchmark runs normally.',
         'set_quick_check_threshold_label': 'Speed tolerance',
         'set_quick_check_threshold_hint':  'Maximum allowed deviation (in %) from the last known result. If current speed is within this range, the benchmark is skipped.',
+
+        # ── Run Now hints ──
+        'dash_run_now_hint': 'Uses the HTTP proxy — result in a few seconds.',
+        'set_run_now_hint':  'Uses the HTTP proxy — result in a few seconds.',
     },
 }
 

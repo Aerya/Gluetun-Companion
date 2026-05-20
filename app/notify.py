@@ -11,6 +11,9 @@ from .i18n import get_translations
 logger = logging.getLogger(__name__)
 
 
+_LOGO_URL = 'https://raw.githubusercontent.com/Aerya/Gluetun-Companion/main/assets/logo.png'
+
+
 def _footer_text(base: str, companion_url: str | None) -> str:
     """Build footer text: 'Gluetun Companion' or 'Gluetun Companion — https://...'"""
     if companion_url:
@@ -83,9 +86,16 @@ def _discord_payload(
         'title':  t['notif_title'],
         'color':  color,
         'fields': fields,
-        'footer': {'text': _footer_text(t['notif_footer'], companion_url)},
+        'footer': {'text': t['notif_footer']},
     }
-    return {'embeds': [embed]}
+    if companion_url:
+        embed['url'] = companion_url
+    payload: dict = {
+        'username':   'Gluetun Companion',
+        'avatar_url': _LOGO_URL,
+        'embeds':     [embed],
+    }
+    return payload
 
 
 def _text_body(
@@ -154,12 +164,14 @@ def send_test_notification(
     if target in ('discord', 'all') and discord_url:
         try:
             payload = {
+                'username':   'Gluetun Companion',
+                'avatar_url': _LOGO_URL,
                 'embeds': [{
-                    'title': f'✅ {t["notif_footer"]} — test',
+                    'title':       f'✅ {t["notif_footer"]} — test',
                     'description': t.get('notif_test_body', 'Notification test — OK'),
-                    'color': 0x3fb950,
-                    'footer': {'text': t['notif_footer']},
-                }]
+                    'color':       0x3fb950,
+                    'footer':      {'text': t['notif_footer']},
+                }],
             }
             resp = requests.post(discord_url.strip(), json=payload, timeout=10)
             resp.raise_for_status()
@@ -230,9 +242,15 @@ def send_already_best_notification(
                 'title':  title,
                 'color':  0x58a6ff,   # blue — no change
                 'fields': fields,
-                'footer': {'text': _footer_text(t['notif_footer'], companion_url)},
+                'footer': {'text': t['notif_footer']},
             }
-            payload = {'embeds': [embed]}
+            if companion_url:
+                embed['url'] = companion_url
+            payload: dict = {
+                'username':   'Gluetun Companion',
+                'avatar_url': _LOGO_URL,
+                'embeds':     [embed],
+            }
             resp = requests.post(discord_url.strip(), json=payload, timeout=10)
             resp.raise_for_status()
             logger.info('Discord already-best notification sent')

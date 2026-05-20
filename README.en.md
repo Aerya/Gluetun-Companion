@@ -257,6 +257,8 @@ When enabled, each cycle starts with a speed test of the **currently active serv
 - **Within threshold (default ±15%)**: the full benchmark is skipped. No containers are stopped, Gluetun is not restarted, no VPN interruption. Cycle completes in seconds.
 - **Outside threshold**: the full benchmark runs normally — all servers are tested, the best one is selected.
 
+> **Implementation**: the quick check runs **exclusively via the Gluetun HTTP proxy** — no sidecar container is created, no VPN reconnection wait. Result in 10–15 seconds.
+
 This is ideal for frequent scheduling intervals (e.g. every 2–3 hours) where you want a sanity check without the cost of a full benchmark every time.
 
 > The threshold is configurable (1–100 %). A value of 15 means: if the current speed is between 85 % and 115 % of the last known result, the full benchmark is skipped.
@@ -264,6 +266,8 @@ This is ideal for frequent scheduling intervals (e.g. every 2–3 hours) where y
 ### Automatic cycle vs manual trigger
 
 In **Settings → Scheduling & Benchmark**: the automatic cycle can be disabled via the *Enable automatic benchmark cycle* toggle. The interval field is then grayed out. The **Run a test now** button remains available at any time to trigger a benchmark manually, regardless of this setting.
+
+> **Run now** (dashboard and settings) also runs **via the HTTP proxy only** — no sidecar container, fast result in a few seconds.
 
 ---
 

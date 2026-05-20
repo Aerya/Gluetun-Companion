@@ -257,6 +257,8 @@ Lorsque cette option est activée, chaque cycle commence par un test de débit s
 - **Dans la plage (défaut ±15 %)** : le benchmark complet est ignoré. Aucun container n'est stoppé, Gluetun n'est pas relancé, aucune interruption VPN. Le cycle se termine en quelques secondes.
 - **Hors plage** : le benchmark complet se lance normalement — tous les serveurs sont testés, le meilleur est sélectionné.
 
+> **Implémentation** : la vérification rapide passe **exclusivement par le proxy HTTP** de Gluetun — aucun container sidecar créé, aucune attente de reconnexion VPN. Résultat obtenu en 10–15 secondes.
+
 Idéal pour des intervalles fréquents (ex. toutes les 2–3 h) où l'on veut un contrôle rapide sans le coût d'un benchmark complet à chaque fois.
 
 > La tolérance est configurable (1–100 %). Une valeur de 15 signifie : si le débit actuel est compris entre 85 % et 115 % du dernier résultat connu, le benchmark complet est ignoré.
@@ -264,6 +266,8 @@ Idéal pour des intervalles fréquents (ex. toutes les 2–3 h) où l'on veut un
 ### Cycle automatique vs déclenchement manuel
 
 Dans **Paramètres → Planification & Benchmark** : le cycle automatique peut être désactivé via le toggle *Activer le cycle de benchmark automatique*. Le champ intervalle est alors grisé. Le bouton **Lancer un test maintenant** reste disponible à tout moment pour déclencher un benchmark manuellement, quelle que soit cette option.
+
+> **Lancer maintenant** (dashboard et paramètres) passe également **par le proxy HTTP uniquement** — pas de container sidecar, résultat rapide en quelques secondes.
 
 ---
 
