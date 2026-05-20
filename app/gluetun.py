@@ -280,6 +280,7 @@ def restart_network_dependents(
     compose_project: str = '',
     exclude: set[str] | None = None,
     pull_set: set[str] | None = None,
+    explicit_list: list[str] | None = None,
 ) -> tuple[list[str], list[str]]:
     """
     Find and recreate every container whose NetworkMode references
@@ -298,47 +299,67 @@ def restart_network_dependents(
     ``exclude`` — container names to skip (e.g. those paused before the
     benchmark; they will be restarted separately at benchmark end).
 
+    ``explicit_list`` — when provided, use this pre-captured list instead of
+    auto-detecting.  Pass the result of ``list_network_dependents()`` called
+    *before* switching Gluetun so that containers whose NetworkMode references
+    the old Gluetun container ID (stored at creation time) are not missed.
+
     Returns (restarted_names, updated_image_names).
     """
     restarted: list[str] = []
     updated_imgs: list[str] = []
     exclude_set = set(exclude) if exclude else set()
-    try:
-        client = docker.from_env()
 
-        # Match by name OR by current container ID (Docker Compose stores the
-        # resolved ID at container-creation time, not the service name).
+    # Build the list of container names to restart
+    if explicit_list is not None:
+        # Use the pre-captured list (avoids missing containers with stale Gluetun IDs)
+        names_to_restart = [n for n in explicit_list if n not in exclude_set]
+        for n in explicit_list:
+            if n in exclude_set:
+                logger.info(
+                    'Skipping network-dependent %s (paused — will restart at benchmark end)', n
+                )
+    else:
+        # Auto-detect: match by current container name or ID.
+        # NOTE: this misses containers whose NetworkMode was stored with an older
+        # Gluetun container ID (before the switch).  Prefer passing explicit_list.
+        names_to_restart = []
         try:
-            gluetun = client.containers.get(container_name)
-            gluetun_id = gluetun.id
-        except Exception:
-            gluetun_id = ''
+            client = docker.from_env()
+            try:
+                gluetun    = client.containers.get(container_name)
+                gluetun_id = gluetun.id
+            except Exception:
+                gluetun_id = ''
+            name_target = f'container:{container_name}'
+            id_target   = f'container:{gluetun_id}' if gluetun_id else None
+            for c in client.containers.list(all=True):
+                mode = c.attrs['HostConfig'].get('NetworkMode', '')
+                if mode == name_target or (id_target and mode == id_target):
+                    if c.name in exclude_set:
+                        logger.info(
+                            'Skipping network-dependent %s (paused — will restart at benchmark end)',
+                            c.name,
+                        )
+                        continue
+                    names_to_restart.append(c.name)
+        except Exception as exc:
+            logger.warning('restart_network_dependents (detect): %s', exc)
 
-        name_target = f'container:{container_name}'
-        id_target   = f'container:{gluetun_id}' if gluetun_id else None
+    # Restart each container
+    for name in names_to_restart:
+        logger.info('Recreating network-dependent container: %s', name)
+        try:
+            if pull_set and name in pull_set:
+                ok, updated, img = pull_image(name)
+                logger.info('  pull %s: %s%s', img, 'updated' if updated else 'up to date', '' if ok else ' (failed)')
+                if updated:
+                    updated_imgs.append(img)
+            _compose_recreate(name, compose_dir, compose_project)
+            restarted.append(name)
+        except Exception as exc:
+            logger.warning('Failed to recreate %s: %s', name, exc)
 
-        for c in client.containers.list(all=True):
-            mode = c.attrs['HostConfig'].get('NetworkMode', '')
-            if mode == name_target or (id_target and mode == id_target):
-                if c.name in exclude_set:
-                    logger.info(
-                        'Skipping network-dependent %s (paused — will restart at benchmark end)',
-                        c.name,
-                    )
-                    continue
-                logger.info('Recreating network-dependent container: %s', c.name)
-                try:
-                    if pull_set and c.name in pull_set:
-                        ok, updated, img = pull_image(c.name)
-                        logger.info('  pull %s: %s%s', img, 'updated' if updated else 'up to date', '' if ok else ' (failed)')
-                        if updated:
-                            updated_imgs.append(img)
-                    _compose_recreate(c.name, compose_dir, compose_project)
-                    restarted.append(c.name)
-                except Exception as exc:
-                    logger.warning('Failed to recreate %s: %s', c.name, exc)
-    except Exception as exc:
-        logger.warning('restart_network_dependents: %s', exc)
     return restarted, updated_imgs
 
 

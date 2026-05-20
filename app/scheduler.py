@@ -62,12 +62,17 @@ def _test_one_server(
     from .gluetun import (
         FILTER_VARS, switch_server, wait_for_vpn, get_public_ips,
         restart_network_dependents, restart_containers_in_order,
+        list_network_dependents,
     )
     from .speedtest import test_download, test_latency, test_upload
 
     label = f"{FILTER_VARS.get(filter_type, 'SERVER_NAMES')}={server_name}"
     logger.info('Testing: %s', label)
     set_setting('benchmark_current_server', server_name)
+
+    # Capture network dependents BEFORE switching Gluetun so containers whose
+    # NetworkMode stores the old container ID (not the name) are not missed.
+    pre_switch_deps = list_network_dependents(container)
 
     ok, err = switch_server(server_name, filter_type, container, compose_dir, project)
     if not ok:
@@ -83,7 +88,8 @@ def _test_one_server(
     # VPN is up — recreate services that lost their network namespace
     # (compose_dir/project let us use `docker compose up` with the already-
     # mounted path rather than the container-inaccessible host-label path)
-    restarted, _ = restart_network_dependents(container, compose_dir, project)
+    restarted, _ = restart_network_dependents(container, compose_dir, project,
+                                               explicit_list=pre_switch_deps)
     if restarted:
         logger.info('Recreated network dependents: %s', ', '.join(restarted))
     # NOTE: post_switch_containers are intentionally NOT restarted here.
@@ -519,6 +525,7 @@ def _do_benchmark(app):
         get_public_ips, get_current_filters, format_filters,
         restart_network_dependents, restart_containers_in_order,
         stop_containers, start_stopped_containers,
+        list_network_dependents,
     )
 
     set_setting('benchmark_running', '1')
@@ -671,6 +678,10 @@ def _do_benchmark(app):
             from_mbps = from_result['dl'] if from_result else None
 
             if best_label != from_label:
+                # Capture network dependents BEFORE Gluetun is recreated so that
+                # containers whose NetworkMode stores the old container ID are not missed.
+                pre_switch_net_deps = list_network_dependents(container)
+
                 updated_images: list[str] = []
                 if pull_gluetun:
                     from .gluetun import pull_image
@@ -689,6 +700,7 @@ def _do_benchmark(app):
                     restarted, net_updated = restart_network_dependents(
                         container, compose_dir, project,
                         exclude=pause_exclude, pull_set=pull_network_set,
+                        explicit_list=pre_switch_net_deps,
                     )
                     updated_images.extend(net_updated)
                     if restarted:
