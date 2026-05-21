@@ -409,12 +409,15 @@ def start_stopped_containers(
     ``stop_containers()``.
 
     Strategy (handles both network-independent and network-dependent containers):
-    1. Try a plain ``docker start`` — works for containers from any stack that
-       don't share a network namespace with a recreated parent.
-    2. If ``docker start`` fails (e.g. the container uses
-       ``network_mode: service:<gluetun>`` and gluetun was just recreated),
-       fall back to ``docker compose up -d --force-recreate`` so Compose can
-       resolve the *current* parent container ID.
+    1. Detect containers that use ``network_mode: service:<parent>`` (stored as
+       ``NetworkMode: container:<id-or-name>``).  After the parent (Gluetun) has
+       been **recreated**, a plain ``docker start`` either errors with "no such
+       container" or silently starts then immediately exits because the stored
+       container ID is stale.  These containers go **directly** to
+       ``docker compose up -d --force-recreate`` so Compose resolves the current
+       parent ID.
+    2. All other containers: try a plain ``docker start`` first.  If that fails,
+       fall back to ``docker compose up -d --force-recreate``.
 
     Returns the list of container names that were successfully started.
     """
@@ -432,20 +435,25 @@ def start_stopped_containers(
                     if pull_set and name in pull_set:
                         ok, updated, img = pull_image(name)
                         logger.info('  pull %s: %s%s', img, 'updated' if updated else 'up to date', '' if ok else ' (failed)')
-                    try:
-                        c.start()
-                    except Exception as start_exc:
-                        # Plain start failed — likely stale network namespace after
-                        # gluetun recreation.  Try compose recreate as fallback.
-                        logger.warning(
-                            'docker start failed for %s (%s) — trying compose recreate',
-                            name, start_exc,
+                    # Containers that share a network namespace via
+                    # "network_mode: service:<parent>" are stored with
+                    # NetworkMode = "container:<id-or-name>".  After the parent
+                    # (Gluetun) has been *recreated* the old container ID is gone,
+                    # so a plain "docker start" either fails with "no such
+                    # container" or, worse, silently starts then immediately exits.
+                    # Skip straight to compose recreate for these containers.
+                    network_mode = c.attrs.get('HostConfig', {}).get('NetworkMode', '')
+                    is_net_dependent = (
+                        network_mode.startswith('container:')
+                        or network_mode.startswith('service:')
+                    )
+                    container_project = c.labels.get('com.docker.compose.project', '')
+                    if is_net_dependent:
+                        logger.info(
+                            '%s uses NetworkMode %r — using compose recreate directly '
+                            '(skipping docker start after parent recreation)',
+                            name, network_mode,
                         )
-                        # Only use the caller's compose context (Gluetun's stack) if
-                        # the container belongs to the same compose project.  If it
-                        # belongs to a different stack, let _compose_recreate read the
-                        # container's own labels so it uses the correct project dir.
-                        container_project = c.labels.get('com.docker.compose.project', '')
                         if compose_project and container_project == compose_project:
                             _compose_recreate(name, compose_dir, compose_project)
                         else:
@@ -454,6 +462,25 @@ def start_stopped_containers(
                                 name, container_project, compose_project,
                             )
                             _compose_recreate(name, '', '')
+                    else:
+                        try:
+                            c.start()
+                        except Exception as start_exc:
+                            # Plain start failed — try compose recreate as fallback.
+                            logger.warning(
+                                'docker start failed for %s (%s) — trying compose recreate',
+                                name, start_exc,
+                            )
+                            # Only use the caller's compose context (Gluetun's stack)
+                            # if the container belongs to the same compose project.
+                            if compose_project and container_project == compose_project:
+                                _compose_recreate(name, compose_dir, compose_project)
+                            else:
+                                logger.info(
+                                    '%s is in project %r (not %r) — using container labels for recreate',
+                                    name, container_project, compose_project,
+                                )
+                                _compose_recreate(name, '', '')
                 started.append(name)
                 logger.info('Started paused container: %s OK', name)
             except Exception as exc:
