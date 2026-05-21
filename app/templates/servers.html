@@ -73,6 +73,8 @@
         <tr>
           <th>{{ t.srv_col_value }}</th>
           <th>{{ t.srv_col_type }}</th>
+          <th style="min-width:130px">{{ t.srv_airvpn_col_load }}</th>
+          <th>{{ t.srv_airvpn_col_users }}</th>
           <th>{{ t.cmn_public_ip }}</th>
           <th>{{ t.srv_col_avg_dl }}</th>
           <th>{{ t.srv_col_avg_ul }}</th>
@@ -99,6 +101,18 @@
           <td>
             <small class="text-muted font-monospace">{{ filter_vars.get(s.filter_type, s.filter_type) }}</small>
           </td>
+          {# AirVPN live stats — filled by JS for name-type servers only #}
+          {% if s.filter_type == 'name' %}
+          <td class="srv-col-load" data-srv="{{ s.name }}">
+            <span class="spinner-border spinner-border-sm text-muted opacity-50" role="status"></span>
+          </td>
+          <td class="srv-col-users" data-srv="{{ s.name }}">
+            <span class="text-muted">—</span>
+          </td>
+          {% else %}
+          <td><span class="text-muted">—</span></td>
+          <td><span class="text-muted">—</span></td>
+          {% endif %}
           <td>
             <small class="text-muted font-monospace">{{ s.last_ipv4 or '—' }}
             {% if s.last_ipv6 %}<br><span style="font-size:.7rem">{{ s.last_ipv6 }}</span>{% endif %}
@@ -172,7 +186,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="10" class="text-center text-muted py-5">
+          <td colspan="12" class="text-center text-muted py-5">
             <i class="bi bi-hdd-network" style="font-size:2rem;opacity:.3"></i><br>
             {{ t.srv_empty }}<br>
             <small>{{ t.srv_empty_hint | safe }}</small>
@@ -627,5 +641,44 @@ document.getElementById('airvpn-search').addEventListener('input', function () {
     else if (!q) d.open = false;
   });
 });
+
+// ── AirVPN live stats (load + users) ─────────────────────────────────────
+let _airvpnStatsFirstLoad = true;
+
+function _refreshAirvpnStats() {
+  // On first load show spinners (already in HTML); on refresh update silently
+  fetch('{{ url_for("main.api_airvpn_servers") }}')
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(data => {
+      const map = new Map(data.servers.map(s => [s.name, s]));
+      document.querySelectorAll('td.srv-col-load[data-srv]').forEach(td => {
+        const name = td.dataset.srv;
+        const s    = map.get(name);
+        const usersTd = document.querySelector(`td.srv-col-users[data-srv="${CSS.escape(name)}"]`);
+        if (!s) {
+          td.innerHTML = '<span class="text-muted">—</span>';
+          if (usersTd) usersTd.innerHTML = '<span class="text-muted">—</span>';
+          return;
+        }
+        td.innerHTML = _loadBar(s.load)
+          + (s.health !== 'ok'
+            ? ' <i class="bi bi-exclamation-triangle-fill text-warning ms-1" style="font-size:.75rem" title="{{ t.srv_airvpn_health_err }}"></i>'
+            : '');
+        if (usersTd) usersTd.innerHTML = `<small class="text-muted">${s.users}</small>`;
+      });
+      _airvpnStatsFirstLoad = false;
+    })
+    .catch(() => {
+      if (_airvpnStatsFirstLoad) {
+        document.querySelectorAll('td.srv-col-load[data-srv]').forEach(td => {
+          td.innerHTML = '<span class="text-muted">—</span>';
+        });
+        _airvpnStatsFirstLoad = false;
+      }
+    });
+}
+
+_refreshAirvpnStats();
+setInterval(_refreshAirvpnStats, 5 * 60 * 1000);  // refresh every 5 min
 </script>
 {% endblock %}
