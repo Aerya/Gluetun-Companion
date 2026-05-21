@@ -72,8 +72,7 @@ def _discord_payload(
             'name': t.get('notif_qc_triggered_field', 'Dérive détectée'),
             'value': (
                 f'`{qc_server}` {sign}{qc_info["diff_pct"]:.0f}% '
-                f'({qc_info["current_dl"]:.0f} → {qc_info["last_dl"]:.0f} Mbps) '
-                f'→ {t.get("notif_qc_triggered_bench", "benchmark lancé")}'
+                f'({qc_info["current_dl"]:.0f} → {qc_info["last_dl"]:.0f} Mbps)'
             ),
             'inline': False,
         })
