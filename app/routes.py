@@ -18,7 +18,7 @@ from .gluetun import (
     list_docker_containers,
 )
 from .i18n import flash_t, get_t
-from .scheduler import get_next_run, reschedule, trigger_now, trigger_single_server
+from .scheduler import get_next_run, reschedule, trigger_now, trigger_quick_now, trigger_single_server
 
 bp = Blueprint('main', __name__)
 
@@ -162,6 +162,7 @@ def dashboard():
         server_stats=server_stats,
         next_run=get_next_run() if get_setting('auto_benchmark', '1') == '1' else None,
         benchmark_running=benchmark_running,
+        sidecar_mode=get_setting('sidecar_mode', '1'),
         last_cycle=last_cycle,
         sparkline_server=sparkline_server,
         sparkline_labels=sparkline_labels,
@@ -811,6 +812,17 @@ def api_trigger():
     # Set flag before starting thread so the dashboard spinner appears immediately
     set_setting('benchmark_running', '1')
     trigger_now(current_app._get_current_object())
+    return jsonify({'status': 'started'})
+
+
+@bp.route('/api/trigger_quick', methods=['POST'])
+@login_required
+def api_trigger_quick():
+    if get_setting('benchmark_running', '0') == '1':
+        return jsonify({'status': 'already_running'}), 409
+    # Set flag before starting thread so the spinner appears immediately
+    set_setting('benchmark_running', '1')
+    trigger_quick_now(current_app._get_current_object())
     return jsonify({'status': 'started'})
 
 

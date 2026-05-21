@@ -1014,6 +1014,54 @@ def trigger_now(app):
     t.start()
 
 
+def run_quick_check_now(app):
+    """Manual quick benchmark — proxy test of current server only, no VPN switch."""
+    from .database import get_setting, set_setting
+    from .gluetun import get_current_filters
+
+    with _lock:
+        set_setting('benchmark_running', '1')
+        try:
+            container  = app.config['GLUETUN_CONTAINER']
+            proxy_host = app.config['GLUETUN_HOST']
+            proxy_port = app.config['GLUETUN_PROXY_PORT']
+            proxy_user = get_setting('proxy_username', '') or None
+            proxy_pass = get_setting('proxy_password', '') or None
+            dl_duration = float(get_setting('speedtest_duration', '8'))
+            dl_samples  = int(get_setting('speedtest_samples', '3'))
+            warmup      = 2.0 if get_setting('speedtest_warmup', '1') == '1' else 0.0
+            dl_streams  = int(get_setting('speedtest_streams', '4'))
+
+            filters = get_current_filters(container)
+            if not filters:
+                logger.warning('Quick benchmark now: cannot read current server from Gluetun')
+                return
+
+            filter_type = next(iter(filters))
+            server_name = filters[filter_type].split(',')[0].strip()
+            set_setting('benchmark_current_server', server_name)
+
+            logger.info('Quick benchmark: testing %s via HTTP proxy', server_name)
+            dl = _test_direct_proxy(
+                proxy_host, proxy_port, proxy_user, proxy_pass,
+                dl_duration, dl_samples, warmup, dl_streams,
+            )
+            if dl is not None:
+                _record_test(server_name, success=True, download_mbps=dl, method='proxy_qc')
+                logger.info('Quick benchmark: %s → %.1f Mbps (saved as proxy_qc)', server_name, dl)
+            else:
+                logger.warning('Quick benchmark: proxy test failed for %s', server_name)
+        finally:
+            set_setting('benchmark_running', '0')
+            set_setting('benchmark_current_server', '')
+
+
+def trigger_quick_now(app):
+    """Manual trigger: quick proxy test of current server only, no VPN switch."""
+    t = threading.Thread(target=run_quick_check_now, args=[app], daemon=True, name='quickcheck-now')
+    t.start()
+
+
 def trigger_single_server(app, server_name: str, filter_type: str):
     t = threading.Thread(
         target=test_single_server,

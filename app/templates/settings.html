@@ -176,16 +176,19 @@
           </div>
         </div>
 
-        <div class="d-flex gap-2 mb-0">
+        <div class="d-flex gap-2 flex-wrap mb-0">
           <button type="submit" class="btn btn-sm btn-success fw-semibold">
             <i class="bi bi-save"></i> {{ t.cmn_save }}
           </button>
-          <button type="button" id="btn-trigger" class="btn btn-sm btn-outline-success" onclick="triggerNow()">
-            <i class="bi bi-play-fill"></i> {{ t.set_run_now }}
+          <button type="button" id="btn-trigger-quick" class="btn btn-sm btn-outline-info fw-semibold" onclick="triggerQuick()">
+            <i class="bi bi-lightning-charge-fill"></i> {{ t.set_run_quick }}
+          </button>
+          <button type="button" id="btn-trigger" class="btn btn-sm btn-outline-success fw-semibold" onclick="triggerNow()">
+            <i class="bi bi-play-fill"></i> {{ t.set_run_now }} ({{ 'sidecar' if cfg.sidecar_mode == '1' else 'proxy' }})
           </button>
         </div>
-        <div class="mt-1" style="font-size:.75rem;color:var(--muted)">
-          <i class="bi bi-info-circle"></i> {{ t.set_run_now_hint }}
+        <div class="mt-1" style="font-size:.75rem;color:var(--bs-secondary-color)">
+          <i class="bi bi-info-circle"></i> {{ t.set_run_quick_hint }}
         </div>
       </div>
     </form>
@@ -1106,26 +1109,47 @@ function toggleQuickCheck(enabled) {
 }
 toggleQuickCheck(document.getElementById('quick_check_mode').checked);
 
-// â”€â”€ Benchmark trigger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Benchmark triggers ───────────────────────────────────────────────────
+const _setMsgRunning  = '{{ t.set_running }}';
+const _setMsgLaunched = '{{ t.set_launched }}';
+const _setMsgFull     = '{{ t.set_run_now }} ({{ “sidecar” if cfg.sidecar_mode == “1” else “proxy” }})';
+const _setMsgQuick    = '{{ t.set_run_quick }}';
+
 function triggerNow() {
   const btn = document.getElementById('btn-trigger');
-  const msgRunning = '{{ t.set_running }}';
-  const msgLaunched = '{{ t.set_launched }}';
-  const msgDefault = '{{ t.set_run_now }}';
   btn.disabled = true;
-  fetch('{{ url_for("main.api_trigger") }}', { method: 'POST' })
+  fetch('{{ url_for(“main.api_trigger”) }}', { method: 'POST' })
     .then(r => {
       if (r.status === 409) {
-        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + msgRunning;
+        btn.innerHTML = '<i class=”bi bi-hourglass-split”></i> ' + _setMsgRunning;
         btn.classList.replace('btn-outline-success', 'btn-outline-warning');
       } else {
-        btn.innerHTML = '<i class="bi bi-check2"></i> ' + msgLaunched;
+        btn.innerHTML = '<i class=”bi bi-check2”></i> ' + _setMsgLaunched;
         btn.classList.replace('btn-outline-success', 'btn-outline-info');
       }
       setTimeout(() => {
-        btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + msgDefault;
+        btn.innerHTML = '<i class=”bi bi-play-fill”></i> ' + _setMsgFull;
         btn.classList.replace('btn-outline-warning', 'btn-outline-success');
         btn.classList.replace('btn-outline-info', 'btn-outline-success');
+        btn.disabled = false;
+      }, 3000);
+    });
+}
+
+function triggerQuick() {
+  const btn = document.getElementById('btn-trigger-quick');
+  btn.disabled = true;
+  fetch('{{ url_for(“main.api_trigger_quick”) }}', { method: 'POST' })
+    .then(r => {
+      if (r.status === 409) {
+        btn.innerHTML = '<i class=”bi bi-hourglass-split”></i> ' + _setMsgRunning;
+        btn.classList.replace('btn-outline-info', 'btn-outline-warning');
+      } else {
+        btn.innerHTML = '<i class=”bi bi-check2”></i> ' + _setMsgLaunched;
+      }
+      setTimeout(() => {
+        btn.innerHTML = '<i class=”bi bi-lightning-charge-fill”></i> ' + _setMsgQuick;
+        btn.classList.replace('btn-outline-warning', 'btn-outline-info');
         btn.disabled = false;
       }, 3000);
     });

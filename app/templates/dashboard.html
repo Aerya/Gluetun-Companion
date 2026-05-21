@@ -53,18 +53,34 @@
         {% if last_cycle.servers_tested %}&nbsp;·&nbsp;{{ last_cycle.servers_tested }} {{ t.dash_servers_tested }}{% endif %}
       </div>
       {% endif %}
-      <button class="btn btn-success btn-sm mt-2 fw-semibold"
-              id="btn-trigger"
-              onclick="triggerBenchmark()"
-              {{ 'disabled' if benchmark_running }}>
-        {% if benchmark_running %}
-        <span class="spinner-border spinner-border-sm"></span> {{ t.dash_running }}
-        {% else %}
-        <i class="bi bi-play-fill"></i> {{ t.dash_run_now }}
-        {% endif %}
-      </button>
-      <div class="mt-1" style="font-size:.72rem;color:var(--muted)">
-        <i class="bi bi-info-circle"></i> {{ t.dash_run_now_hint }}
+      <div class="d-flex gap-2 flex-wrap mt-2">
+        <div>
+          <button class="btn btn-outline-info btn-sm fw-semibold"
+                  id="btn-trigger-quick"
+                  onclick="triggerQuick()"
+                  {{ 'disabled' if benchmark_running }}>
+            {% if benchmark_running %}
+            <span class="spinner-border spinner-border-sm"></span> {{ t.dash_running }}
+            {% else %}
+            <i class="bi bi-lightning-charge-fill"></i> {{ t.dash_run_quick }}
+            {% endif %}
+          </button>
+          <div class="mt-1" style="font-size:.72rem;color:var(--bs-secondary-color)">
+            <i class="bi bi-info-circle"></i> {{ t.dash_run_quick_hint }}
+          </div>
+        </div>
+        <div>
+          <button class="btn btn-success btn-sm fw-semibold"
+                  id="btn-trigger"
+                  onclick="triggerBenchmark()"
+                  {{ 'disabled' if benchmark_running }}>
+            {% if benchmark_running %}
+            <span class="spinner-border spinner-border-sm"></span> {{ t.dash_running }}
+            {% else %}
+            <i class="bi bi-play-fill"></i> {{ t.dash_run_now }} ({{ 'sidecar' if sidecar_mode == '1' else 'proxy' }})
+            {% endif %}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -202,9 +218,10 @@
 
 {% block scripts %}
 <script>
-const _msgRunning = '{{ t.dash_running }}';
-const _msgRunNow  = '{{ t.dash_run_now }}';
-const _msgAlready = '{{ t.dash_already_running }}';
+const _msgRunning  = '{{ t.dash_running }}';
+const _msgRunNow   = '{{ t.dash_run_now }} ({{ "sidecar" if sidecar_mode == "1" else "proxy" }})';
+const _msgRunQuick = '{{ t.dash_run_quick }}';
+const _msgAlready  = '{{ t.dash_already_running }}';
 
 // ── Theme-aware chart colors ─────────────────────────────────────────────
 const _isDark   = document.documentElement.getAttribute('data-bs-theme') !== 'light';
@@ -217,18 +234,19 @@ function pollStatus() {
   fetch('{{ url_for("main.api_status") }}')
     .then(r => r.json())
     .then(d => {
-      const btn    = document.getElementById('btn-trigger');
-      const liveEl = document.getElementById('live-testing');
+      const btn      = document.getElementById('btn-trigger');
+      const btnQuick = document.getElementById('btn-trigger-quick');
+      const liveEl   = document.getElementById('live-testing');
       if (d.benchmark_running) {
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning;
+        if (btn)      { btn.disabled = true;      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning; }
+        if (btnQuick) { btnQuick.disabled = true; btnQuick.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning; }
         if (liveEl && d.current_server_testing) {
           liveEl.textContent = d.current_server_testing;
           liveEl.closest('.live-banner').classList.remove('d-none');
         }
       } else {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow;
+        if (btn)      { btn.disabled = false;      btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow; }
+        if (btnQuick) { btnQuick.disabled = false; btnQuick.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> ' + _msgRunQuick; }
         if (liveEl) liveEl.closest('.live-banner').classList.add('d-none');
       }
     })
@@ -236,7 +254,7 @@ function pollStatus() {
 }
 setInterval(pollStatus, 3000);
 
-// ── Trigger benchmark ────────────────────────────────────────────────────
+// ── Trigger full benchmark ───────────────────────────────────────────────
 function triggerBenchmark() {
   const btn = document.getElementById('btn-trigger');
   fetch('{{ url_for("main.api_trigger") }}', { method: 'POST' })
@@ -247,6 +265,26 @@ function triggerBenchmark() {
         setTimeout(() => {
           btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow;
           btn.classList.replace('btn-warning', 'btn-success');
+        }, 3000);
+        return;
+      }
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning;
+    });
+}
+
+// ── Trigger quick benchmark ──────────────────────────────────────────────
+function triggerQuick() {
+  const btn = document.getElementById('btn-trigger-quick');
+  fetch('{{ url_for("main.api_trigger_quick") }}', { method: 'POST' })
+    .then(r => {
+      if (r.status === 409) {
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + _msgAlready;
+        btn.classList.replace('btn-outline-info', 'btn-outline-warning');
+        setTimeout(() => {
+          btn.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> ' + _msgRunQuick;
+          btn.classList.replace('btn-outline-warning', 'btn-outline-info');
+          btn.disabled = false;
         }, 3000);
         return;
       }
