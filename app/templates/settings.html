@@ -110,7 +110,7 @@
   <div id="settings-source">
 
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   Main configuration â€” one form per card
+   Main configuration — one form per card
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
 <section class="settings-section">
 <div class="row g-4">
@@ -530,7 +530,7 @@
         <hr class="my-2">
 
         <div id="network-containers-loading" class="text-muted small fst-italic">
-          <span class="spinner-border spinner-border-sm me-1"></span> Chargementâ€¦
+          <span class="spinner-border spinner-border-sm me-1"></span> Chargement…
         </div>
         <div id="network-containers-list" class="d-flex flex-column gap-2 mb-3 d-none"></div>
         <div id="network-containers-empty" class="text-muted small fst-italic d-none">
@@ -654,7 +654,7 @@
           </label>
           <input type="url" name="discord_webhook_url" class="form-control"
                  value="{{ cfg.discord_webhook_url }}"
-                 placeholder="https://discord.com/api/webhooks/â€¦">
+                 placeholder="https://discord.com/api/webhooks/…">
           <div class="form-text text-muted">{{ t.set_discord_hint }}</div>
         </div>
 
@@ -818,7 +818,7 @@ function _buildContainerSelect(fieldName, selectedValue) {
   sel.className = 'form-select form-select-sm flex-grow-1';
   const blank = document.createElement('option');
   blank.value = '';
-  blank.textContent = 'â€” container â€”';
+  blank.textContent = '— container —';
   sel.appendChild(blank);
   _dockerContainers.forEach(name => {
     const opt = document.createElement('option');
