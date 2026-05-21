@@ -587,14 +587,15 @@ def settings():
 
         if action == 'save_planning':
             set_setting('test_interval_hours', request.form.get('interval', '6'))
-            set_setting('auto_benchmark',      '1' if request.form.get('auto_benchmark') else '0')
+            auto_bm = bool(request.form.get('auto_benchmark'))
+            set_setting('auto_benchmark',      '1' if auto_bm else '0')
             set_setting('quick_check_mode',    '1' if request.form.get('quick_check_mode') else '0')
             try:
                 qct = float(request.form.get('quick_check_threshold', '15'))
                 set_setting('quick_check_threshold', str(max(1.0, min(qct, 100.0))))
             except ValueError:
                 pass
-            reschedule(float(request.form.get('interval', '6')))
+            reschedule(float(request.form.get('interval', '6')), enabled=auto_bm)
             flash_t('flash_settings_saved', 'success')
 
         elif action == 'save_speed':

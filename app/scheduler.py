@@ -979,7 +979,8 @@ def start_scheduler(app):
     from .database import get_setting
 
     with app.app_context():
-        hours = float(get_setting('test_interval_hours', '6'))
+        hours   = float(get_setting('test_interval_hours', '6'))
+        enabled = get_setting('auto_benchmark', '1') == '1'
 
     _scheduler = BackgroundScheduler(daemon=True)
     _scheduler.add_job(
@@ -999,13 +1000,24 @@ def start_scheduler(app):
         misfire_grace_time=3600,
     )
     _scheduler.start()
-    logger.info('Scheduler started — benchmark every %.1f hours', hours)
+
+    if not enabled:
+        _scheduler.pause_job('benchmark')
+        logger.info('Scheduler started — automatic benchmark DISABLED (manual trigger only)')
+    else:
+        logger.info('Scheduler started — benchmark every %.1f hours', hours)
 
 
-def reschedule(hours: float):
-    if _scheduler:
-        _scheduler.reschedule_job('benchmark', trigger=IntervalTrigger(hours=hours))
+def reschedule(hours: float, enabled: bool = True):
+    if not _scheduler:
+        return
+    _scheduler.reschedule_job('benchmark', trigger=IntervalTrigger(hours=hours))
+    if enabled:
+        _scheduler.resume_job('benchmark')
         logger.info('Benchmark rescheduled to every %.1f hours', hours)
+    else:
+        _scheduler.pause_job('benchmark')
+        logger.info('Automatic benchmark disabled — job paused (%.1f h interval kept)', hours)
 
 
 def trigger_now(app):
