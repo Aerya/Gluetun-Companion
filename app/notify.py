@@ -223,13 +223,14 @@ def send_already_best_notification(
 
     t = get_translations(lang)
     title = t.get('notif_already_best_title', 'Already on best server')
+    server_label = _strip_filter(server)
 
     if discord_url:
         try:
             fields = [
                 {
                     'name':   t.get('notif_already_best_field', 'Active server'),
-                    'value':  f'`{server}`',
+                    'value':  f'`{server_label}`',
                     'inline': True,
                 },
             ]
@@ -271,7 +272,7 @@ def send_already_best_notification(
                 url = url.strip()
                 if url:
                     ap.add(url)
-            lines = [server]
+            lines = [server_label]
             if speed_mbps is not None:
                 lines.append(f'{t.get("notif_text_speed", "Speed")} : {speed_mbps:.1f} Mbps')
             if ipv4:
