@@ -441,7 +441,19 @@ def start_stopped_containers(
                             'docker start failed for %s (%s) — trying compose recreate',
                             name, start_exc,
                         )
-                        _compose_recreate(name, compose_dir, compose_project)
+                        # Only use the caller's compose context (Gluetun's stack) if
+                        # the container belongs to the same compose project.  If it
+                        # belongs to a different stack, let _compose_recreate read the
+                        # container's own labels so it uses the correct project dir.
+                        container_project = c.labels.get('com.docker.compose.project', '')
+                        if compose_project and container_project == compose_project:
+                            _compose_recreate(name, compose_dir, compose_project)
+                        else:
+                            logger.info(
+                                '%s is in project %r (not %r) — using container labels for recreate',
+                                name, container_project, compose_project,
+                            )
+                            _compose_recreate(name, '', '')
                 started.append(name)
                 logger.info('Started paused container: %s OK', name)
             except Exception as exc:

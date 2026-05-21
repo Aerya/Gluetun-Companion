@@ -140,7 +140,8 @@ def dashboard():
             sparkline_server = sname
             spark_rows = db.execute('''
                 SELECT tested_at, download_mbps, upload_mbps
-                FROM speed_tests WHERE server_name=? AND success=1
+                FROM speed_tests
+                WHERE server_name=? AND success=1 AND test_method != 'proxy_qc'
                 ORDER BY tested_at DESC LIMIT 20
             ''', (sname,)).fetchall()
             # reverse to chronological order
@@ -159,7 +160,7 @@ def dashboard():
         last_switch=last_switch,
         server_count=server_count,
         server_stats=server_stats,
-        next_run=get_next_run(),
+        next_run=get_next_run() if get_setting('auto_benchmark', '1') == '1' else None,
         benchmark_running=benchmark_running,
         last_cycle=last_cycle,
         sparkline_server=sparkline_server,
@@ -611,7 +612,6 @@ def settings():
 
         elif action == 'save_switch':
             set_setting('auto_switch',   '1' if request.form.get('auto_switch') else '0')
-            set_setting('pull_gluetun',  '1' if request.form.get('pull_gluetun') else '0')
             try:
                 wsp = float(request.form.get('weighted_score_current_pct', '65'))
                 set_setting('weighted_score_current_pct', str(max(1.0, min(wsp, 99.0))))
@@ -671,6 +671,7 @@ def settings():
             flash_t('flash_pause_bench_saved', 'success')
 
         elif action == 'pull_network':
+            set_setting('pull_gluetun', '1' if request.form.get('pull_gluetun') else '0')
             pull_list = [n.strip() for n in request.form.getlist('pull_network_containers') if n.strip()]
             set_setting('pull_network_containers', json.dumps(pull_list))
             flash_t('flash_post_switch_saved', 'success')  # reuse generic "saved" flash
@@ -807,6 +808,8 @@ def healthz():
 def api_trigger():
     if get_setting('benchmark_running', '0') == '1':
         return jsonify({'status': 'already_running'}), 409
+    # Set flag before starting thread so the dashboard spinner appears immediately
+    set_setting('benchmark_running', '1')
     trigger_now(current_app._get_current_object())
     return jsonify({'status': 'started'})
 
@@ -856,5 +859,5 @@ def api_status():
         'current_server':         format_filters(get_current_filters(cfg['GLUETUN_CONTAINER'])),
         'benchmark_running':      get_setting('benchmark_running', '0') == '1',
         'current_server_testing': get_setting('benchmark_current_server', ''),
-        'next_run':               str(get_next_run()) if get_next_run() else None,
+        'next_run':               str(get_next_run()) if (get_next_run() and get_setting('auto_benchmark', '1') == '1') else None,
     })

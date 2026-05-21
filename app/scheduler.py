@@ -504,6 +504,7 @@ def _test_server_sidecar_with_retry(
 # ---------------------------------------------------------------------------
 
 def run_benchmark(app):
+    """Scheduled entry point — respects auto_benchmark setting."""
     from .database import get_setting
     if get_setting('auto_benchmark', '1') != '1':
         logger.info('Auto benchmark disabled — skipping scheduled run')
@@ -512,7 +513,13 @@ def run_benchmark(app):
         _do_benchmark(app)
 
 
-def _do_benchmark(app):
+def run_benchmark_now(app):
+    """Manual trigger — always runs, bypasses auto_benchmark + quick check."""
+    with _lock:
+        _do_benchmark(app, skip_quick_check=True)
+
+
+def _do_benchmark(app, skip_quick_check: bool = False):
     import json as _json
     from .database import get_db, get_setting, set_setting
     from .gluetun import (
@@ -561,7 +568,7 @@ def _do_benchmark(app):
     quick_check_mode      = get_setting('quick_check_mode', '0') == '1'
     quick_check_threshold = float(get_setting('quick_check_threshold', '15'))
     qc_info: dict | None = None   # populated if quick check fails and triggers full bench
-    if quick_check_mode:
+    if quick_check_mode and not skip_quick_check:
         logger.info('Quick check mode enabled (threshold ±%.0f%%) — testing current server first', quick_check_threshold)
         qc_passed, qc_server, qc_dl, qc_last_dl = _quick_check(
             container=container,
@@ -1002,7 +1009,8 @@ def reschedule(hours: float):
 
 
 def trigger_now(app):
-    t = threading.Thread(target=run_benchmark, args=[app], daemon=True, name='benchmark-now')
+    """Manual trigger: always runs full benchmark, ignores auto_benchmark + quick check."""
+    t = threading.Thread(target=run_benchmark_now, args=[app], daemon=True, name='benchmark-now')
     t.start()
 
 
