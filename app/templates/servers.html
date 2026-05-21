@@ -85,10 +85,14 @@
       </thead>
       <tbody>
         {% for s in servers %}
-        <tr class="{{ '' if s.enabled else 'opacity-50' }}">
+        {% set is_active = active_server and s.name == active_server %}
+        <tr class="{{ '' if s.enabled else 'opacity-50' }}"
+            {% if is_active %}style="border-left:3px solid var(--bs-success)"{% endif %}>
           <td>
             <code>{{ s.name }}</code>
-            {% if not s.enabled %}
+            {% if is_active %}
+            <span class="badge bg-success ms-1" style="font-size:.7rem">{{ t.srv_active_badge }}</span>
+            {% elif not s.enabled %}
             <span class="badge bg-secondary ms-1" style="font-size:.7rem">OFF</span>
             {% endif %}
           </td>

@@ -247,6 +247,15 @@ def servers():
         ).fetchall()]
 
     existing_names = [r['name'] for r in rows if r['filter_type'] == 'name']
+
+    # Current active server — read from Gluetun (best-effort, empty string on failure)
+    try:
+        _container = current_app.config['GLUETUN_CONTAINER']
+        _filters   = get_current_filters(_container)
+        active_server = next(iter(_filters.values())).split(',')[0].strip() if _filters else ''
+    except Exception:
+        active_server = ''
+
     return render_template(
         'servers.html', servers=rows,
         filter_labels=FILTER_LABELS, filter_vars=FILTER_VARS,
@@ -254,6 +263,7 @@ def servers():
         sort=sort, type_filter=type_filter, q=q,
         from_date=from_date, to_date=to_date,
         filter_types=filter_types,
+        active_server=active_server,
     )
 
 

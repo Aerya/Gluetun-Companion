@@ -128,6 +128,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'srv_airvpn_health_ok':      'Serveur opérationnel',
         'srv_airvpn_health_err':     'Serveur signalé en erreur ou en maintenance par AirVPN — peut être indisponible',
         'srv_airvpn_health_hint':    '✅ opérationnel · ⚠️ en erreur / maintenance',
+        'srv_active_badge':          'Actif',
 
         # ── History ──
         'hist_title':       'Historique des tests de vitesse',
@@ -477,6 +478,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'srv_airvpn_health_ok':      'Server operational',
         'srv_airvpn_health_err':     'Server reported as in error or under maintenance by AirVPN — may be unavailable',
         'srv_airvpn_health_hint':    '✅ operational · ⚠️ error / maintenance',
+        'srv_active_badge':          'Active',
 
         # ── History ──
         'hist_title':       'Speed test history',
