@@ -955,7 +955,7 @@ function addPauseBenchRow(value) {
 })();
 
 // Fetch running containers then render saved rows for both lists
-fetch('{{ url_for("main.api_docker_containers") }}')
+fetch('{{ url_for('main.api_docker_containers') }}')
   .then(r => r.json())
   .then(containers => { _dockerContainers = containers; })
   .catch(() => {})
@@ -1017,7 +1017,7 @@ function testNotif(target) {
   const discordUrl  = document.querySelector('[name="discord_webhook_url"]')?.value || '';
   const appriseUrls = document.querySelector('[name="apprise_urls"]')?.value || '';
 
-  fetch('{{ url_for("main.api_notify_test") }}', {
+  fetch('{{ url_for('main.api_notify_test') }}', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ target, discord_url: discordUrl, apprise_urls: appriseUrls }),
@@ -1057,7 +1057,7 @@ function loadNetworkContainers() {
   empty.classList.add('d-none');
   list.innerHTML = '';
 
-  fetch('{{ url_for("main.api_gluetun_network_containers") }}')
+  fetch('{{ url_for('main.api_gluetun_network_containers') }}')
     .then(r => r.json())
     .then(containers => {
       loading.classList.add('d-none');
@@ -1119,7 +1119,7 @@ const _setMsgQuick    = '{{ t.set_run_quick }}';
 function triggerNow() {
   const btn = document.getElementById('btn-trigger');
   btn.disabled = true;
-  fetch('{{ url_for(“main.api_trigger”) }}', { method: 'POST' })
+  fetch('{{ url_for('main.api_trigger') }}', { method: 'POST' })
     .then(r => {
       if (r.status === 409) {
         btn.innerHTML = '<i class=”bi bi-hourglass-split”></i> ' + _setMsgRunning;
@@ -1140,7 +1140,7 @@ function triggerNow() {
 function triggerQuick() {
   const btn = document.getElementById('btn-trigger-quick');
   btn.disabled = true;
-  fetch('{{ url_for(“main.api_trigger_quick”) }}', { method: 'POST' })
+  fetch('{{ url_for('main.api_trigger_quick') }}', { method: 'POST' })
     .then(r => {
       if (r.status === 409) {
         btn.innerHTML = '<i class=”bi bi-hourglass-split”></i> ' + _setMsgRunning;
