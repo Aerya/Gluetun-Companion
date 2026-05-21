@@ -190,8 +190,14 @@
               <span class="badge" style="background:#f0ad4e;color:#000">
                 <i class="bi bi-boxes"></i> sidecar
               </span>
+            {% elif r.test_method == 'proxy_qc' %}
+              <span class="badge" style="background:#6f42c1" title="{{ t.hist_method_proxy_qc }}">
+                <i class="bi bi-hdd-network"></i> quick check
+              </span>
             {% else %}
-              <span class="badge bg-secondary">proxy</span>
+              <span class="badge bg-secondary">
+                <i class="bi bi-globe2"></i> proxy
+              </span>
             {% endif %}
           </td>
           <td>
