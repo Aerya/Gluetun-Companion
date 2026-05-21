@@ -181,7 +181,7 @@
             <i class="bi bi-save"></i> {{ t.cmn_save }}
           </button>
           <button type="button" id="btn-trigger-quick" class="btn btn-sm btn-outline-info fw-semibold" onclick="triggerQuick()">
-            <i class="bi bi-lightning-charge-fill"></i> {{ t.set_run_quick }}
+            <i class="bi bi-speedometer"></i> {{ t.set_run_quick }}
           </button>
           <button type="button" id="btn-trigger" class="btn btn-sm btn-outline-success fw-semibold" onclick="triggerNow()">
             <i class="bi bi-play-fill"></i> {{ t.set_run_now }} ({{ 'sidecar' if cfg.sidecar_mode == '1' else 'proxy' }})
@@ -1110,9 +1110,10 @@ function toggleQuickCheck(enabled) {
 toggleQuickCheck(document.getElementById('quick_check_mode').checked);
 
 // ── Benchmark triggers ───────────────────────────────────────────────────
+{% set _bench_method = 'sidecar' if cfg.sidecar_mode == '1' else 'proxy' %}
 const _setMsgRunning  = '{{ t.set_running }}';
 const _setMsgLaunched = '{{ t.set_launched }}';
-const _setMsgFull     = '{{ t.set_run_now }} ({{ “sidecar” if cfg.sidecar_mode == “1” else “proxy” }})';
+const _setMsgFull     = '{{ t.set_run_now }} ({{ _bench_method }})';
 const _setMsgQuick    = '{{ t.set_run_quick }}';
 
 function triggerNow() {
@@ -1148,7 +1149,7 @@ function triggerQuick() {
         btn.innerHTML = '<i class=”bi bi-check2”></i> ' + _setMsgLaunched;
       }
       setTimeout(() => {
-        btn.innerHTML = '<i class=”bi bi-lightning-charge-fill”></i> ' + _setMsgQuick;
+        btn.innerHTML = '<i class=”bi bi-speedometer”></i> ' + _setMsgQuick;
         btn.classList.replace('btn-outline-warning', 'btn-outline-info');
         btn.disabled = false;
       }, 3000);

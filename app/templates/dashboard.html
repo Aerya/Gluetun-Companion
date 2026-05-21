@@ -62,7 +62,7 @@
             {% if benchmark_running %}
             <span class="spinner-border spinner-border-sm"></span> {{ t.dash_running }}
             {% else %}
-            <i class="bi bi-lightning-charge-fill"></i> {{ t.dash_run_quick }}
+            <i class="bi bi-speedometer"></i> {{ t.dash_run_quick }}
             {% endif %}
           </button>
           <div class="mt-1" style="font-size:.72rem;color:var(--bs-secondary-color)">
@@ -217,9 +217,10 @@
 {% endblock %}
 
 {% block scripts %}
+{% set _bench_method = 'sidecar' if sidecar_mode == '1' else 'proxy' %}
 <script>
 const _msgRunning  = '{{ t.dash_running }}';
-const _msgRunNow   = '{{ t.dash_run_now }} ({{ "sidecar" if sidecar_mode == "1" else "proxy" }})';
+const _msgRunNow   = '{{ t.dash_run_now }} ({{ _bench_method }})';
 const _msgRunQuick = '{{ t.dash_run_quick }}';
 const _msgAlready  = '{{ t.dash_already_running }}';
 
@@ -246,7 +247,7 @@ function pollStatus() {
         }
       } else {
         if (btn)      { btn.disabled = false;      btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow; }
-        if (btnQuick) { btnQuick.disabled = false; btnQuick.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> ' + _msgRunQuick; }
+        if (btnQuick) { btnQuick.disabled = false; btnQuick.innerHTML = '<i class="bi bi-speedometer"></i> ' + _msgRunQuick; }
         if (liveEl) liveEl.closest('.live-banner').classList.add('d-none');
       }
     })
@@ -282,7 +283,7 @@ function triggerQuick() {
         btn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + _msgAlready;
         btn.classList.replace('btn-outline-info', 'btn-outline-warning');
         setTimeout(() => {
-          btn.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> ' + _msgRunQuick;
+          btn.innerHTML = '<i class="bi bi-speedometer"></i> ' + _msgRunQuick;
           btn.classList.replace('btn-outline-warning', 'btn-outline-info');
           btn.disabled = false;
         }, 3000);

@@ -50,7 +50,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Containers à redémarrer après bascule** — uniquement pour les containers utilisant le proxy HTTP/SOCKS5 de Gluetun ; liste ordonnée (glisser-déposer)
 - **Mise à jour automatique des images Docker** *(option)* — au moment de la bascule, Companion peut mettre à jour les images avant de relancer les containers : Gluetun lui-même, les containers réseau auto-gérés, les containers à redémarrer après bascule et les containers en pause pendant le benchmark ; activable individuellement par container depuis les Paramètres
 - **Vérification rapide avant benchmark** *(option)* — teste uniquement le serveur actif avant chaque cycle ; si le débit est dans la plage ±N% par rapport au dernier résultat connu, le benchmark complet est ignoré — aucun container stoppé, aucun redémarrage VPN ; déclenche le benchmark complet uniquement si les performances dérivent significativement
-- **Benchmark rapide à la demande** ⚡ — bouton disponible en permanence (dashboard et paramètres) ; teste uniquement le serveur actif via le proxy HTTP de Gluetun, résultat en quelques secondes, aucune interruption VPN, résultat sauvegardé dans l'historique
+- **Benchmark rapide à la demande** — bouton disponible en permanence (dashboard et paramètres) ; teste uniquement le serveur actif via le proxy HTTP de Gluetun, résultat en quelques secondes, aucune interruption VPN, résultat sauvegardé dans l'historique
 - **Benchmark automatique** toutes les X heures — download, upload et latence par serveur ; cycle automatique désactivable (déclenchement manuel uniquement)
 - **Mode Sidecar** (défaut) — un container `gluetun-companion-test` clone la config réelle de Gluetun pour chaque serveur ; `gluetun-companion-sidecar` mesure le débit via **Ookla + librespeed en parallèle** (mode dual, défaut), Ookla seul, librespeed seul ou iperf3 directement dans le tunnel VPN ; votre Gluetun principal n'est jamais relancé pendant les tests
 - **Résultats multi-sources** — les vitesses Ookla, librespeed et iperf3 sont stockées séparément et affichées dans le dashboard et l'historique
@@ -268,7 +268,7 @@ Idéal pour des intervalles fréquents (ex. toutes les 2–3 h) où l'on veut un
 
 Dans **Paramètres → Planification & Benchmark** : le cycle automatique peut être désactivé via le toggle *Activer le cycle de benchmark automatique*. Le champ intervalle est alors grisé. Deux boutons restent disponibles à tout moment (dashboard et paramètres) :
 
-- **Benchmark rapide** ⚡ — teste uniquement le serveur actif via le proxy HTTP de Gluetun ; résultat en quelques secondes, aucune interruption VPN, résultat sauvegardé dans l'historique (méthode `proxy_qc`).
+- **Benchmark rapide** — teste uniquement le serveur actif via le proxy HTTP de Gluetun ; résultat en quelques secondes, aucune interruption VPN, résultat sauvegardé dans l'historique (méthode `proxy_qc`).
 - **Benchmark complet** — lance un cycle complet immédiatement, quels que soient le cycle automatique et l'option *Vérification rapide*. Utilise la méthode configurée (sidecar ou proxy), label affiché entre parenthèses sur le bouton.
 
 ---
