@@ -1,8 +1,12 @@
 import csv
 import io
 import json
+import logging
+import threading
 import time
 from functools import wraps
+
+logger = logging.getLogger(__name__)
 
 from flask import (
     Blueprint, Response, current_app, flash, jsonify,
@@ -15,6 +19,7 @@ from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
     get_current_filters, format_filters,
     get_public_ip, get_vpn_status, switch_server,
+    wait_for_vpn, restart_network_dependents,
     list_docker_containers,
 )
 from .i18n import flash_t, get_t
@@ -353,10 +358,14 @@ def manual_switch(server_id):
         flash('Serveur introuvable.', 'danger')
         return redirect(url_for('main.servers'))
 
-    from_label = format_filters(get_current_filters(cfg['GLUETUN_CONTAINER']))
+    container   = cfg['GLUETUN_CONTAINER']
+    compose_dir = cfg['COMPOSE_DIR']
+    project     = cfg.get('COMPOSE_PROJECT', '')
+
+    from_label = format_filters(get_current_filters(container))
     ok, err = switch_server(
         row['name'], row['filter_type'],
-        cfg['GLUETUN_CONTAINER'], cfg['COMPOSE_DIR'], cfg.get('COMPOSE_PROJECT', ''),
+        container, compose_dir, project,
     )
     to_label = f"{FILTER_VARS[row['filter_type']]}={row['name']}"
     with get_db() as db:
@@ -382,6 +391,39 @@ def manual_switch(server_id):
             companion_url=get_setting('companion_url') or None,
         )
         flash_t('flash_switched', 'success', to=to_label)
+
+        # Recreate network-dependent containers in the background so the HTTP
+        # response isn't held open for the full VPN wait (up to ~60 s).
+        proxy_host = cfg.get('GLUETUN_HOST', 'gluetun')
+        proxy_port = int(cfg.get('GLUETUN_PROXY_PORT', 8888))
+        proxy_user = get_setting('proxy_username') or None
+        proxy_pass = get_setting('proxy_password') or None
+        wait_secs  = int(get_setting('connection_wait_seconds', '45'))
+        app        = current_app._get_current_object()
+
+        def _bg_restart():
+            with app.app_context():
+                vpn_ok, elapsed = wait_for_vpn(
+                    proxy_host, proxy_port,
+                    timeout=wait_secs,
+                    proxy_user=proxy_user,
+                    proxy_password=proxy_pass,
+                )
+                if vpn_ok:
+                    restarted, _ = restart_network_dependents(
+                        container, compose_dir, project,
+                    )
+                    logger.info(
+                        'Manual switch: VPN up in %.0fs — recreated %d network dependent(s): %s',
+                        elapsed, len(restarted), ', '.join(restarted) or 'none',
+                    )
+                else:
+                    logger.warning(
+                        'Manual switch: VPN not ready after %.0fs — network dependents NOT recreated',
+                        elapsed,
+                    )
+
+        threading.Thread(target=_bg_restart, daemon=True, name='manual-switch-net').start()
     else:
         flash_t('flash_switch_failed', 'danger', err=err)
     return redirect(url_for('main.servers'))

@@ -127,15 +127,15 @@
           <td>
             <small class="text-muted">{{ (s.last_tested | localtime | truncate(16, True, '')) if s.last_tested else t.cmn_never }}</small>
           </td>
-          <td class="text-end">
+          <td class="text-end" style="white-space:nowrap">
             {# Test now #}
             <form method="post"
                   action="{{ url_for('main.test_server_now', server_id=s.id) }}"
                   class="d-inline"
                   onsubmit="return confirm('{{ t.srv_confirm_test_a }} {{ s.name }} {{ t.srv_confirm_test_b }}')">
               <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-              <button class="btn btn-outline-info btn-sm" title="{{ t.srv_test_now }}">
-                <i class="bi bi-speedometer2"></i>
+              <button class="btn btn-outline-info btn-sm py-1 px-2" title="{{ t.srv_test_now }}">
+                <i class="bi bi-speedometer2 fs-6"></i>
               </button>
             </form>
             {# Switch #}
@@ -144,8 +144,8 @@
                   class="d-inline"
                   onsubmit="return confirm('{{ t.srv_confirm_switch_a }} {{ filter_vars.get(s.filter_type) }}={{ s.name }} {{ t.srv_confirm_switch_b }}')">
               <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-              <button class="btn btn-success btn-sm" title="{{ t.srv_switch_now }}">
-                <i class="bi bi-arrow-right-circle-fill"></i>
+              <button class="btn btn-success btn-sm py-1 px-2" title="{{ t.srv_switch_now }}">
+                <i class="bi bi-arrow-right-circle-fill fs-6"></i>
               </button>
             </form>
             {# Toggle enable #}
@@ -153,9 +153,9 @@
                   action="{{ url_for('main.toggle_server', server_id=s.id) }}"
                   class="d-inline">
               <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-              <button class="btn btn-outline-secondary btn-sm"
+              <button class="btn btn-outline-secondary btn-sm py-1 px-2"
                       title="{{ t.srv_enable if not s.enabled else t.srv_disable }}">
-                <i class="bi bi-toggle-{{ 'off' if not s.enabled else 'on text-success' }}"></i>
+                <i class="bi bi-toggle-{{ 'off' if not s.enabled else 'on text-success' }} fs-6"></i>
               </button>
             </form>
             {# Delete #}
@@ -164,8 +164,8 @@
                   class="d-inline"
                   onsubmit="return confirm('{{ t.srv_confirm_delete_a }} {{ s.name }} {{ t.srv_confirm_delete_b }}')">
               <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-              <button class="btn btn-outline-danger btn-sm" title="{{ t.srv_delete }}">
-                <i class="bi bi-trash3"></i>
+              <button class="btn btn-outline-danger btn-sm py-1 px-2" title="{{ t.srv_delete }}">
+                <i class="bi bi-trash3 fs-6"></i>
               </button>
             </form>
           </td>

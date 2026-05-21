@@ -63,6 +63,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Web UI** dark/light, FR/EN — auth, dashboard with sparkline, paginated history, charts, switches page with Mbps gain and connection time
 - **CSV export** of the full history
 - **On-demand test** of a single server from the UI without waiting for the next cycle
+- **Manual switch** to any configured server from the Servers page — Gluetun is reconfigured and `network_mode: service:gluetun` containers are recreated automatically
 - **Notifications** on every switch — Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
 - **Automatic purge** of SQLite history with configurable retention (in days)
 - **`/healthz` endpoint** unauthenticated, for Docker healthchecks
