@@ -400,10 +400,10 @@ def manual_switch(server_id):
     )
     to_label = f"{FILTER_VARS[row['filter_type']]}={row['name']}"
     with get_db() as db:
-        db.execute(
+        switch_id = db.execute(
             'INSERT INTO switches (from_server, to_server, reason, success) VALUES (?, ?, ?, ?)',
             (from_label, to_label, 'manual', int(ok)),
-        )
+        ).lastrowid
     if ok:
         flash_t('flash_switched', 'success', to=to_label)
 
@@ -435,6 +435,13 @@ def manual_switch(server_id):
                         elapsed,
                     )
                     to_ipv4, to_ipv6 = None, None
+
+                # Update the switch row with IPs and connection time now that we have them
+                with get_db() as db:
+                    db.execute(
+                        'UPDATE switches SET connect_secs=?, to_ipv4=?, to_ipv6=? WHERE id=?',
+                        (elapsed if vpn_ok else None, to_ipv4, to_ipv6, switch_id),
+                    )
 
                 from .notify import send_switch_notification
                 send_switch_notification(
