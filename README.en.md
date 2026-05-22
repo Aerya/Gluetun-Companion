@@ -54,6 +54,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **On-demand quick benchmark** — button always available (dashboard and settings); tests only the active server via the Gluetun HTTP proxy, result in seconds, no VPN interruption, result saved in history
 - **Jitter & Packet Loss** — network stability measured at every test (21 TTFB probes in proxy mode, ICMP via sidecar); 🟢/🟡/🔴 indicator on Servers page, dedicated columns in History, jitter shown in hourly patterns; factored into selection score (up to −15 % jitter / −25 % loss penalty)
 - **DNS latency** *(sidecar)* — DNS resolution time measured from inside the VPN tunnel via `dig` (4 domains in parallel, median returned); detects slow, overloaded, or hijacking resolvers; column in History, DNS shown in the Stability tooltip, data in hourly patterns
+- **Docker events listener** — daemon thread watching for Gluetun container `start` events; if Gluetun restarts on its own (crash, update, watchdog), automatically triggers a quick check after N seconds (VPN reconnect delay); if speed drift exceeds the configured threshold and auto-switch is enabled, immediately runs a full benchmark; restarts triggered by Companion itself are ignored; 5-minute cooldown between triggers
 
 **Server selection & automatic switching**
 - **Automatic switching** to the fastest server (`docker compose up -d`), based on a weighted score (configurable weight: current measurement vs exponential history); dependent services (`network_mode: service:gluetun`) are recreated automatically
@@ -287,6 +288,36 @@ When enabled, each cycle starts with a speed test of the **currently active serv
 This is ideal for frequent scheduling intervals (e.g. every 2–3 hours) where you want a sanity check without the cost of a full benchmark every time.
 
 > The threshold is configurable (1–100 %). A value of 15 means: if the current speed is between 85 % and 115 % of the last known result, the full benchmark is skipped.
+
+### Docker events listener
+
+A daemon thread starts with Companion and continuously monitors the Docker event stream filtered to the Gluetun container. On every `start` event received:
+
+```
+Docker "start" event received on the Gluetun container
+  ├─ Companion-initiated restart? (180 s suppression window)   → silently ignored
+  ├─ Cooldown active? (5 min since last trigger)               → ignored
+  ├─ Benchmark already running?                                → ignored
+  └─ OK — schedule a deferred quick check
+       1. Wait N seconds (= "Connection wait" setting)
+          to allow the VPN to reconnect
+       2. Quick check via HTTP proxy on the active server
+          ├─ VPN not ready yet (no proxy response)
+          │    → log warning, abort
+          ├─ No baseline result in the database yet
+          │    → result saved as new baseline, done
+          ├─ Speed within ±N% threshold
+          │    → log OK, done
+          └─ Drift detected (speed outside threshold)
+               ├─ Auto-switch enabled → immediate full benchmark
+               └─ Auto-switch disabled → log warning only
+```
+
+**Companion restart suppression**: when Companion switches to a server (`switch_server()`), it opens a 180-second suppression window. Any `start` event received during that window is ignored — this prevents an infinite loop where Companion would trigger a quick check after every switch it just initiated.
+
+**Badge in history**: tests triggered by a Docker event are tagged `docker_event` in the database. A dark `auto` badge appears on the corresponding row in the History page (`/history`), with an explanatory tooltip.
+
+**Requirements**: the Docker socket (or Tecnativa proxy) must be accessible from Companion, and the `GLUETUN_CONTAINER` variable must match the exact name of the Gluetun container.
 
 ### Per-server confidence score
 

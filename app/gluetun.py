@@ -44,6 +44,34 @@ FILTER_LABELS: dict[str, str] = {
 
 
 # ---------------------------------------------------------------------------
+# Companion-triggered restart suppression
+# ---------------------------------------------------------------------------
+# When Companion itself triggers a Gluetun restart (server switch), we open a
+# suppression window so the Docker event listener does not mistake it for an
+# external restart and fire a spurious quick check.
+
+_companion_lock            = threading.Lock()
+_companion_restart_until: float = 0.0
+
+
+def mark_companion_restart(suppress_secs: float = 180.0) -> None:
+    """
+    Call immediately before Companion triggers a Gluetun restart (server switch).
+    The window must cover the full ``connection_wait_seconds`` reconnect time.
+    """
+    global _companion_restart_until
+    with _companion_lock:
+        _companion_restart_until = time.time() + suppress_secs
+    logger.debug('Companion restart window set for %.0fs', suppress_secs)
+
+
+def is_companion_restart() -> bool:
+    """Return True if we are inside a Companion-triggered restart suppression window."""
+    with _companion_lock:
+        return time.time() < _companion_restart_until
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
@@ -186,6 +214,10 @@ def switch_server(
     if project:
         cmd += ['-p', project]
     cmd += ['up', '-d', service]
+
+    # Tell the Docker event listener this restart is Companion-initiated so it
+    # does not trigger a spurious quick check on the resulting 'start' event.
+    mark_companion_restart()
 
     try:
         result = subprocess.run(

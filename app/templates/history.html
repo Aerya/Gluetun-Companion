@@ -243,6 +243,12 @@
                 <i class="bi bi-globe2"></i> proxy
               </span>
             {% endif %}
+            {% if r.test_trigger == 'docker_event' %}
+              <span class="badge bg-dark ms-1" style="font-size:.65rem;cursor:help"
+                    data-bs-toggle="tooltip" title="{{ t.hist_trigger_docker }}">
+                <i class="bi bi-plugin"></i> auto
+              </span>
+            {% endif %}
           </td>
           <td>
             {% if r.success %}

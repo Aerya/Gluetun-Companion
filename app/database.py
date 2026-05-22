@@ -36,7 +36,8 @@ def init_db(db_path: str):
                 packet_loss_pct  REAL,
                 ping_min_ms      REAL,
                 ping_max_ms      REAL,
-                dns_latency_ms   REAL
+                dns_latency_ms   REAL,
+                test_trigger     TEXT
             );
 
             CREATE TABLE IF NOT EXISTS switches (
@@ -137,6 +138,7 @@ def init_db(db_path: str):
             "ALTER TABLE speed_tests ADD COLUMN ping_min_ms REAL",
             "ALTER TABLE speed_tests ADD COLUMN ping_max_ms REAL",
             "ALTER TABLE speed_tests ADD COLUMN dns_latency_ms REAL",
+            "ALTER TABLE speed_tests ADD COLUMN test_trigger TEXT",
         ]:
             try:
                 db.execute(stmt)

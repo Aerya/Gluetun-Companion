@@ -54,6 +54,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Benchmark rapide à la demande** — bouton disponible en permanence (dashboard et paramètres) ; teste uniquement le serveur actif via le proxy HTTP de Gluetun, résultat en quelques secondes, aucune interruption VPN, résultat sauvegardé dans l'historique
 - **Jitter & Packet Loss** — stabilité réseau mesurée à chaque test (21 sondes TTFB en mode proxy, ICMP via sidecar) ; indicateur 🟢/🟡/🔴 sur la page Serveurs, colonnes dédiées dans l'historique, jitter affiché dans les patterns horaires ; intégré dans le score de sélection (pénalité jusqu'à −15 % jitter / −25 % perte)
 - **Latence DNS** *(sidecar)* — mesure du temps de résolution DNS depuis l'intérieur du tunnel VPN via `dig` (4 domaines en parallèle, médiane retournée) ; détecte les résolveurs lents, surchargés ou qui interceptent les requêtes ; colonne dans l'historique, tooltip sur l'indicateur Stabilité, données dans les patterns horaires
+- **Écoute Docker events** — thread daemon qui surveille les événements `start` du container Gluetun ; si Gluetun redémarre de lui-même (crash, mise à jour, watchdog), déclenche automatiquement un quick check après N secondes (délai de reconnexion VPN) ; si la dérive de débit dépasse le seuil configuré et que la bascule automatique est activée, lance immédiatement un benchmark complet ; les redémarrages déclenchés par Companion lui-même sont ignorés ; cooldown de 5 min entre deux déclenchements
 
 **Sélection & bascule automatique**
 - **Bascule automatique** vers le meilleur serveur (`docker compose up -d`), basée sur un score pondéré (poids configurable : mesure actuelle vs historique exponentiel) ; les services dépendants (`network_mode: service:gluetun`) sont recréés automatiquement
@@ -287,6 +288,36 @@ Lorsque cette option est activée, chaque cycle commence par un test de débit s
 Idéal pour des intervalles fréquents (ex. toutes les 2–3 h) où l'on veut un contrôle rapide sans le coût d'un benchmark complet à chaque fois.
 
 > La tolérance est configurable (1–100 %). Une valeur de 15 signifie : si le débit actuel est compris entre 85 % et 115 % du dernier résultat connu, le benchmark complet est ignoré.
+
+### Écoute Docker events
+
+Un thread daemon démarre avec Companion et surveille en continu le flux d'événements Docker filtré sur le container Gluetun. À chaque événement `start` reçu :
+
+```
+Événement Docker "start" reçu sur le container Gluetun
+  ├─ Redémarrage initié par Companion ? (fenêtre de 180 s)  → ignoré silencieusement
+  ├─ Cooldown actif ? (5 min depuis le dernier déclenchement) → ignoré
+  ├─ Benchmark déjà en cours ?                               → ignoré
+  └─ OK — programmation d'un quick check différé
+       1. Attente de N secondes (= valeur « Délai de reconnexion »)
+          pour laisser le VPN se reconnecter
+       2. Quick check via le proxy HTTP sur le serveur actif
+          ├─ VPN pas encore prêt (pas de réponse proxy)
+          │    → log d'avertissement, abandon
+          ├─ Aucun résultat de référence en base
+          │    → résultat enregistré comme nouvelle référence, fin
+          ├─ Débit dans la plage ±N %
+          │    → log OK, fin
+          └─ Dérive détectée (débit hors plage)
+               ├─ Bascule auto activée → benchmark complet immédiat
+               └─ Bascule auto désactivée → log d'avertissement uniquement
+```
+
+**Suppression des redémarrages Companion** : quand Companion bascule vers un serveur (`switch_server()`), il active une fenêtre de suppression de 180 secondes. Tout événement `start` reçu pendant cette fenêtre est ignoré — ce mécanisme évite une boucle infinie où Companion déclencherait lui-même un quick check après chaque bascule qu'il vient d'initier.
+
+**Badge dans l'historique** : les tests déclenchés par un événement Docker sont marqués `docker_event` en base. Un badge sombre `auto` apparaît sur la ligne correspondante dans l'historique (`/history`), avec un tooltip explicatif.
+
+**Prérequis** : le socket Docker (ou le proxy Tecnativa) doit être accessible depuis Companion, et la variable `GLUETUN_CONTAINER` doit correspondre au nom exact du container Gluetun.
 
 ### Score de confiance par serveur
 

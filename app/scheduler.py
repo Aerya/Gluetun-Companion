@@ -10,6 +10,10 @@ logger = logging.getLogger(__name__)
 _scheduler: BackgroundScheduler | None = None
 _lock = threading.Lock()
 
+# Docker event listener state
+_last_docker_event_ts: float = 0.0   # epoch of last event-triggered quick check
+_DOCKER_EVENT_COOLDOWN = 300          # minimum seconds between two event-triggered checks
+
 
 # ---------------------------------------------------------------------------
 # Weighted score for best-server selection
@@ -396,6 +400,7 @@ def _quick_check(
     dl_samples: int,
     warmup: float,
     threshold_pct: float,
+    trigger: str | None = None,
 ) -> tuple[bool, str | None, float | None, float | None]:
     """
     Test the current VPN connection speed via the Gluetun HTTP proxy — always,
@@ -457,7 +462,8 @@ def _quick_check(
     # ── Always save the result so future quick checks have a proxy baseline ──
     # Uses a distinct method tag ('proxy_qc') so these appear separately in
     # /history without being mixed with full proxy-mode benchmark results.
-    _record_test(server_name, success=True, download_mbps=current_dl, method='proxy_qc')
+    _record_test(server_name, success=True, download_mbps=current_dl, method='proxy_qc',
+                 trigger=trigger)
 
     # ── No baseline yet → establish it, then run full benchmark ──────────
     if last_dl is None:
@@ -986,6 +992,7 @@ def _record_test(
     ping_min_ms: float | None = None,
     ping_max_ms: float | None = None,
     dns_latency_ms: float | None = None,
+    trigger: str | None = None,
 ):
     from .database import get_db
     with get_db() as db:
@@ -994,12 +1001,14 @@ def _record_test(
                (server_name, download_mbps, upload_mbps, latency_ms,
                 public_ip, public_ipv6, success, error_msg, test_method,
                 dl_ookla, ul_ookla, dl_librespeed, ul_librespeed, dl_iperf3, ul_iperf3,
-                jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms, dns_latency_ms)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms, dns_latency_ms,
+                test_trigger)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (server_name, download_mbps, upload_mbps, latency_ms,
              public_ip, public_ipv6, int(success), error, method,
              dl_ookla, ul_ookla, dl_librespeed, ul_librespeed, dl_iperf3, ul_iperf3,
-             jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms, dns_latency_ms),
+             jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms, dns_latency_ms,
+             trigger),
         )
 
 
@@ -1172,6 +1181,196 @@ def check_airvpn_new_servers(app):
     )
 
 
+# ---------------------------------------------------------------------------
+# Docker event listener — automatic quick check on Gluetun restart
+# ---------------------------------------------------------------------------
+
+def _run_event_triggered_quick_check(app):
+    """
+    Called after the Docker event listener detects an unexpected Gluetun restart.
+
+    Flow:
+      1. Run a quick proxy speed test on the current server.
+      2. Within ±threshold → log OK, no action.
+      3. Drift detected + auto-switch enabled → trigger a full benchmark so that
+         Companion can switch to a better server if Gluetun reconnected on a
+         degraded one.
+      4. No baseline yet, QC test failed, or auto-switch disabled → log and return.
+    """
+    from .database import get_setting, set_setting
+
+    if get_setting('benchmark_running', '0') == '1':
+        logger.info('Docker event QC: benchmark already running — skipping')
+        return
+
+    with _lock:
+        # Double-check inside the lock (another thread may have started a benchmark)
+        if get_setting('benchmark_running', '0') == '1':
+            logger.info('Docker event QC: benchmark started concurrently — skipping')
+            return
+
+        container   = app.config['GLUETUN_CONTAINER']
+        proxy_host  = app.config['GLUETUN_HOST']
+        proxy_port  = app.config['GLUETUN_PROXY_PORT']
+        proxy_user  = get_setting('proxy_username', '') or None
+        proxy_pass  = get_setting('proxy_password', '') or None
+        dl_duration = float(get_setting('speedtest_duration', '8'))
+        dl_samples  = int(get_setting('speedtest_samples', '3'))
+        warmup      = 2.0 if get_setting('speedtest_warmup', '1') == '1' else 0.0
+        dl_streams  = int(get_setting('speedtest_streams', '4'))
+        threshold   = float(get_setting('quick_check_threshold', '15'))
+        auto_sw     = get_setting('auto_switch', '1') == '1'
+
+        set_setting('benchmark_running', '1')
+        try:
+            within, server_name, current_dl, last_dl = _quick_check(
+                container=container,
+                proxy_host=proxy_host, proxy_port=proxy_port,
+                proxy_user=proxy_user, proxy_pass=proxy_pass,
+                dl_duration=dl_duration, dl_streams=dl_streams, dl_samples=dl_samples,
+                warmup=warmup, threshold_pct=threshold,
+                trigger='docker_event',
+            )
+        finally:
+            set_setting('benchmark_running', '0')
+            set_setting('benchmark_current_server', '')
+
+        # ── Evaluate result ────────────────────────────────────────────────
+        if current_dl is None:
+            logger.info(
+                'Docker event QC: proxy test failed for %s — VPN may still be reconnecting',
+                server_name or '?',
+            )
+            return
+
+        if last_dl is None:
+            # No prior baseline — the QC result was saved; no further action needed.
+            logger.info(
+                'Docker event QC: %s — %.1f Mbps — no baseline yet, proxy_qc saved',
+                server_name or '?', current_dl,
+            )
+            return
+
+        if within:
+            logger.info(
+                'Docker event QC: %s — %.1f Mbps — within ±%.0f%% of last %.1f Mbps — OK',
+                server_name, current_dl, threshold, last_dl,
+            )
+            return
+
+        diff_pct = abs(current_dl - last_dl) / last_dl * 100 if last_dl > 0 else 100.0
+        if not auto_sw:
+            logger.info(
+                'Docker event QC: %s — %.1f Mbps (Δ%.1f%%) — drift detected '
+                'but auto-switch disabled — no action',
+                server_name, current_dl, diff_pct,
+            )
+            return
+
+        logger.info(
+            'Docker event QC: %s — %.1f Mbps (Δ%.1f%%) — drift detected — '
+            'triggering full benchmark',
+            server_name, current_dl, diff_pct,
+        )
+        # We already hold _lock → call _do_benchmark directly (no deadlock risk)
+        _do_benchmark(app, skip_quick_check=True)
+
+
+def _docker_event_loop(app, container_name: str) -> None:
+    """
+    Daemon thread: stream Docker events and react to unexpected Gluetun restarts.
+
+    Filters:
+      - container = GLUETUN_CONTAINER
+      - event     = 'start'
+
+    Guards:
+      - is_companion_restart()  → ignore (Companion itself triggered this restart)
+      - _DOCKER_EVENT_COOLDOWN  → ignore if a check fired recently
+      - benchmark_running       → ignore if a benchmark is already in progress
+    """
+    global _last_docker_event_ts
+    from .gluetun import is_companion_restart
+
+    while True:
+        try:
+            import docker as _docker
+            client = _docker.from_env()
+            logger.info(
+                'Docker event listener: watching container "%s" for restart events',
+                container_name,
+            )
+            for event in client.events(
+                filters={'container': container_name, 'event': 'start'},
+                decode=True,
+            ):
+                if event.get('Action') != 'start':
+                    continue
+
+                # Ignore restarts triggered by Companion itself (server switch)
+                if is_companion_restart():
+                    logger.info(
+                        'Docker event: Gluetun start detected — Companion-triggered, ignoring'
+                    )
+                    continue
+
+                # Cooldown guard
+                now     = time.time()
+                elapsed = now - _last_docker_event_ts
+                if elapsed < _DOCKER_EVENT_COOLDOWN:
+                    logger.info(
+                        'Docker event: Gluetun restart detected — cooldown active '
+                        '(%.0fs remaining) — skipping',
+                        _DOCKER_EVENT_COOLDOWN - elapsed,
+                    )
+                    continue
+
+                # Benchmark already running?
+                from .database import get_setting
+                if get_setting('benchmark_running', '0') == '1':
+                    logger.info(
+                        'Docker event: Gluetun restart detected — benchmark already running — skipping'
+                    )
+                    continue
+
+                _last_docker_event_ts = now
+                logger.info(
+                    'Docker event: Gluetun restart detected — scheduling auto quick check'
+                )
+
+                def _delayed_qc(a=app):
+                    from .database import get_setting as _gs
+                    wait = int(_gs('connection_wait_seconds', '45'))
+                    logger.info(
+                        'Docker event: waiting %ds for VPN reconnect before quick check…', wait
+                    )
+                    time.sleep(wait)
+                    logger.info('Docker event: running automatic quick check now')
+                    _run_event_triggered_quick_check(a)
+
+                threading.Thread(
+                    target=_delayed_qc, daemon=True, name='docker-event-qc'
+                ).start()
+
+        except Exception as exc:
+            logger.warning(
+                'Docker event listener crashed: %s — restarting in 30s', exc
+            )
+            time.sleep(30)
+
+
+def start_docker_event_listener(app, container_name: str) -> None:
+    """Start the Docker event watcher as a background daemon thread."""
+    t = threading.Thread(
+        target=_docker_event_loop,
+        args=[app, container_name],
+        daemon=True,
+        name='docker-events',
+    )
+    t.start()
+    logger.info('Docker event listener started (watching: %s)', container_name)
+
+
 def start_scheduler(app):
     global _scheduler
     from .database import get_setting
@@ -1206,6 +1405,9 @@ def start_scheduler(app):
         misfire_grace_time=3600,
     )
     _scheduler.start()
+
+    # Docker event listener — watches Gluetun container for unexpected restarts
+    start_docker_event_listener(app, app.config['GLUETUN_CONTAINER'])
 
     if not enabled:
         _scheduler.pause_job('benchmark')
