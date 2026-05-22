@@ -678,7 +678,7 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
                    name="airvpn_new_server_notif" id="airvpn_new_server_notif"
                    {{ 'checked' if cfg.airvpn_new_server_notif == '1' }}>
             <label class="form-check-label" for="airvpn_new_server_notif">
-              <i class="bi bi-stars me-1"></i> {{ t.set_airvpn_notif_label }}
+              {{ t.set_airvpn_notif_label }}
             </label>
           </div>
           <div class="form-text text-muted">{{ t.set_airvpn_notif_hint }}</div>

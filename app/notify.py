@@ -358,6 +358,9 @@ def send_new_airvpn_servers_notification(
             }
             if mention:
                 payload['content'] = mention
+                # allowed_mentions is required for Discord to actually ping;
+                # without it the mention is rendered as plain text.
+                payload['allowed_mentions'] = {'parse': ['users', 'roles']}
             resp = requests.post(discord_url.strip(), json=payload, timeout=10)
             resp.raise_for_status()
             logger.info('Discord new-AirVPN-servers notification sent (%d server(s))', n)
