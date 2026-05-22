@@ -123,6 +123,24 @@
                data-bs-toggle="tooltip" data-bs-placement="bottom"
                title="{{ t.stab_col_tooltip }}"></i>
           </th>
+          <th>
+            {{ t.hist_col_jitter }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.75rem;cursor:help"
+               data-bs-toggle="tooltip" data-bs-placement="bottom"
+               title="{{ t.hist_col_jitter_tooltip }}"></i>
+          </th>
+          <th>
+            {{ t.hist_col_loss }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.75rem;cursor:help"
+               data-bs-toggle="tooltip" data-bs-placement="bottom"
+               title="{{ t.hist_col_loss_tooltip }}"></i>
+          </th>
+          <th>
+            {{ t.hist_col_dns }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.75rem;cursor:help"
+               data-bs-toggle="tooltip" data-bs-placement="bottom"
+               title="{{ t.hist_col_dns_tooltip }}"></i>
+          </th>
           <th>{{ t.srv_col_last_test }}</th>
           <th class="text-end">{{ t.srv_col_actions }}</th>
         </tr>
@@ -235,6 +253,33 @@
                  title="{{ _stab_tip_parts | join(' · ') }}"></i>
             {%- endif -%}
           </td>
+          {# ── Jitter avg cell ──────────────────────────────────────────── #}
+          <td>
+            {%- if _stab.n and _stab.avg_jitter is not none -%}
+              {%- set _jcls = 'text-success' if _stab.avg_jitter < 15 else ('text-warning' if _stab.avg_jitter < 50 else 'text-danger') -%}
+              <small class="{{ _jcls }}">{{ '%.1f'|format(_stab.avg_jitter) }} ms</small>
+            {%- else -%}
+              <span class="text-muted">—</span>
+            {%- endif -%}
+          </td>
+          {# ── Loss avg cell ────────────────────────────────────────────── #}
+          <td>
+            {%- if _stab.n and _stab.avg_loss is not none -%}
+              {%- set _lcls = 'text-success' if _stab.avg_loss < 1 else ('text-warning' if _stab.avg_loss < 5 else 'text-danger') -%}
+              <small class="{{ _lcls }}">{{ '%.1f'|format(_stab.avg_loss) }}%</small>
+            {%- else -%}
+              <span class="text-muted">—</span>
+            {%- endif -%}
+          </td>
+          {# ── DNS avg cell ─────────────────────────────────────────────── #}
+          <td>
+            {%- if _stab.n and _stab.avg_dns is not none -%}
+              {%- set _dcls = 'text-success' if _stab.avg_dns < 50 else ('text-warning' if _stab.avg_dns < 150 else 'text-danger') -%}
+              <small class="{{ _dcls }}">{{ '%.0f'|format(_stab.avg_dns) }} ms</small>
+            {%- else -%}
+              <span class="text-muted">—</span>
+            {%- endif -%}
+          </td>
           <td>
             <small class="text-muted">{{ (s.last_tested | localtime | truncate(16, True, '')) if s.last_tested else t.cmn_never }}</small>
           </td>
@@ -283,7 +328,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="14" class="text-center text-muted py-5">
+          <td colspan="17" class="text-center text-muted py-5">
             <i class="bi bi-hdd-network" style="font-size:2rem;opacity:.3"></i><br>
             {{ t.srv_empty }}<br>
             <small>{{ t.srv_empty_hint | safe }}</small>
