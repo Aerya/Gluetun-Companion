@@ -397,6 +397,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'hist_col_jitter_tooltip':'Écart-type de la latence — mesure la régularité de la connexion (faible = stable). Mesuré par ping ICMP (sidecar) ou HTTP (proxy).',
         'hist_col_loss':          'Perte',
         'hist_col_loss_tooltip':  'Taux de perte de paquets en % — 0 % idéal.',
+        'hist_qc_no_stability':   'Quick check — débit uniquement, pas de mesure jitter/perte.',
         'pat_jitter_label':       'Jitter moy.',
 
         # ── AirVPN new-server detection ──
@@ -809,6 +810,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'hist_col_jitter_tooltip':'Latency standard deviation — measures connection regularity (low = stable). Measured via ICMP ping (sidecar) or HTTP (proxy mode).',
         'hist_col_loss':          'Loss',
         'hist_col_loss_tooltip':  'Packet loss rate in % — 0% is ideal.',
+        'hist_qc_no_stability':   'Quick check — throughput only, no jitter/loss measurement.',
         'pat_jitter_label':       'Avg jitter',
 
         # ── AirVPN new-server detection ──

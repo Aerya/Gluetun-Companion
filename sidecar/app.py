@@ -8,6 +8,7 @@ no HTTP proxy involved.
 API
 ---
 GET  /health           → {"vpn": true, "ip": "x.x.x.x"}  (503 if VPN not up)
+
 POST /test?duration=8&streams=4&method=dual&iperf_fallback=1
                        → {
                            "download_mbps": 450.0,     # avg of succeeded sources
@@ -22,7 +23,21 @@ POST /test?duration=8&streams=4&method=dual&iperf_fallback=1
                            "dl_iperf3": null,
                            "ul_iperf3": null,
                            "ookla_server": "Paris (Bouygues)",
-                           "iperf_server": null
+                           "iperf_server": null,
+                           "jitter_ms": 2.1,           # null if ping failed
+                           "packet_loss_pct": 0.0,
+                           "ping_min_ms": 4.9,
+                           "ping_max_ms": 7.2
+                         }
+
+POST /ping?targets=1.1.1.1,8.8.8.8,9.9.9.9&count=20&interval=0.2
+                       → {
+                           "results": [
+                             {"target": "1.1.1.1", "jitter_ms": 0.5,
+                              "packet_loss_pct": 0.0, "ping_min_ms": 4.9,
+                              "ping_max_ms": 7.2},
+                             ...
+                           ]
                          }
 
 method values:
@@ -34,9 +49,11 @@ method values:
 
 import json
 import logging
+import re
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from statistics import median
 
 import requests
 from flask import Flask, jsonify, request
@@ -55,6 +72,9 @@ _IPERF3_SERVERS: list[tuple[str, int]] = [
     ('iperf.he.net',           5201),
     ('speedtest.uztelecom.uz', 5200),
 ]
+
+# ICMP ping targets — diverse ASNs for representative jitter measurement
+_PING_TARGETS = ['1.1.1.1', '8.8.8.8', '9.9.9.9']
 
 
 # ---------------------------------------------------------------------------
@@ -136,28 +156,160 @@ def test():
 
     else:  # dual
         _run_dual(duration, streams, iperf_fallback, result)
-        # Check that at least one source succeeded
         if (result['dl_ookla'] is None and result['dl_librespeed'] is None
                 and result['dl_iperf3'] is None):
             return jsonify({'error': 'all speed test sources failed'}), 503
 
-    # download_mbps / upload_mbps = best value across all sources (used for server ranking)
+    # download_mbps / upload_mbps = best value across all sources
     dl_values = [v for v in (result['dl_ookla'], result['dl_librespeed'], result['dl_iperf3']) if v]
     ul_values = [v for v in (result['ul_ookla'], result['ul_librespeed'], result['ul_iperf3']) if v]
     result['download_mbps'] = max(dl_values) if dl_values else None
     result['upload_mbps']   = max(ul_values) if ul_values else None
     result['method']        = method
-    result['latency_ms']    = _measure_latency()
 
-    try:
-        resp = requests.get(_PROBE_URL, timeout=10)
-        for line in resp.text.splitlines():
-            if line.startswith('ip='):
-                result['ip'] = line[3:].strip()
-    except Exception:
-        pass
+    # Latency + stability + public IP — run in parallel to minimise extra time
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        fut_lat  = ex.submit(_measure_latency)
+        fut_stab = ex.submit(_measure_stability, 20, 0.2)
+        fut_ip   = ex.submit(_get_public_ip)
+
+        result['latency_ms'] = fut_lat.result()
+        stability            = fut_stab.result()
+        result['ip']         = fut_ip.result()
+
+    if stability:
+        result['jitter_ms']       = stability['jitter_ms']
+        result['packet_loss_pct'] = stability['packet_loss_pct']
+        result['ping_min_ms']     = stability.get('ping_min_ms')
+        result['ping_max_ms']     = stability.get('ping_max_ms')
+        logger.info(
+            'stability → jitter=%.1f ms  loss=%.1f%%  min=%.0f ms  max=%.0f ms',
+            stability['jitter_ms'], stability['packet_loss_pct'],
+            stability.get('ping_min_ms') or 0, stability.get('ping_max_ms') or 0,
+        )
+    else:
+        result['jitter_ms'] = result['packet_loss_pct'] = None
+        result['ping_min_ms'] = result['ping_max_ms'] = None
+        logger.warning('stability measurement failed — jitter/loss not available')
 
     return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Ping endpoint
+# ---------------------------------------------------------------------------
+
+@app.route('/ping', methods=['GET', 'POST'])
+def ping_endpoint():
+    """
+    Run ICMP ping to one or more targets and return per-target jitter/loss stats.
+    Companion calls this when the /test response doesn't include stability data
+    (e.g. older sidecar image).
+
+    Params:
+      targets  — comma-separated IPs (default: 1.1.1.1,8.8.8.8,9.9.9.9)
+      count    — packets per target (default: 20, range: 5–100)
+      interval — seconds between packets (default: 0.2, range: 0.1–1.0)
+    """
+    targets_str = request.args.get('targets', ','.join(_PING_TARGETS))
+    targets     = [t.strip() for t in targets_str.split(',') if t.strip()]
+    count       = max(5, min(100, int(request.args.get('count', 20))))
+    interval    = max(0.1, min(1.0, float(request.args.get('interval', 0.2))))
+
+    if not targets:
+        return jsonify({'error': 'no targets specified'}), 400
+
+    ping_results = []
+    with ThreadPoolExecutor(max_workers=len(targets)) as ex:
+        futures = {ex.submit(_ping_target, t, count, interval): t for t in targets}
+        for fut in as_completed(futures):
+            r = fut.result()
+            if r:
+                ping_results.append(r)
+
+    return jsonify({'results': ping_results})
+
+
+# ---------------------------------------------------------------------------
+# ICMP ping helpers
+# ---------------------------------------------------------------------------
+
+def _ping_target(target: str, count: int, interval: float) -> dict | None:
+    """
+    Run `ping -c COUNT -i INTERVAL TARGET` and parse the summary line.
+
+    Returns:
+        {'target': str, 'jitter_ms': float, 'packet_loss_pct': float,
+         'ping_min_ms': float, 'ping_max_ms': float}
+    or None on failure.
+
+    jitter_ms = mdev (mean deviation) from the ping summary — a standard
+    measure of latency variability equivalent to ~0.8 × stddev.
+    """
+    timeout = count * interval + 10
+    try:
+        cmd = [
+            'ping', '-c', str(count),
+            '-i', str(interval),
+            '-W', '2',          # per-packet timeout: 2 s
+            target,
+        ]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        output = r.stdout + r.stderr
+    except Exception as exc:
+        logger.warning('ping %s failed: %s', target, exc)
+        return None
+
+    # "5 packets transmitted, 5 received, 0% packet loss"
+    m_loss = re.search(r'(\d+)%\s+packet loss', output)
+    # "rtt min/avg/max/mdev = 4.936/5.621/7.234/0.541 ms"
+    m_rtt  = re.search(
+        r'rtt min/avg/max/mdev\s*=\s*([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+)',
+        output,
+    )
+
+    if not m_loss or not m_rtt:
+        logger.warning('ping %s: could not parse output:\n%s', target, output[:300])
+        return None
+
+    loss   = float(m_loss.group(1))
+    p_min  = float(m_rtt.group(1))
+    p_max  = float(m_rtt.group(3))
+    mdev   = float(m_rtt.group(4))   # mean deviation ≈ jitter
+
+    logger.info('ping %s → jitter=%.1f ms  loss=%.0f%%  min=%.0f ms  max=%.0f ms',
+                target, mdev, loss, p_min, p_max)
+    return {
+        'target':          target,
+        'jitter_ms':       round(mdev,  1),
+        'packet_loss_pct': round(loss,  1),
+        'ping_min_ms':     round(p_min, 1),
+        'ping_max_ms':     round(p_max, 1),
+    }
+
+
+def _measure_stability(count: int = 20, interval: float = 0.2) -> dict | None:
+    """
+    Ping _PING_TARGETS in parallel and aggregate results.
+    Returns aggregated {jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms} or None.
+    """
+    results: list[dict] = []
+    with ThreadPoolExecutor(max_workers=len(_PING_TARGETS)) as ex:
+        futures = {ex.submit(_ping_target, t, count, interval): t for t in _PING_TARGETS}
+        for fut in as_completed(futures):
+            r = fut.result()
+            if r:
+                results.append(r)
+
+    if not results:
+        return None
+
+    return {
+        'jitter_ms':       round(sum(r['jitter_ms']       for r in results) / len(results), 1),
+        'packet_loss_pct': round(sum(r['packet_loss_pct'] for r in results) / len(results), 1),
+        'ping_min_ms':     round(min(r['ping_min_ms']     for r in results), 1),
+        'ping_max_ms':     round(max(r['ping_max_ms']     for r in results), 1),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +358,6 @@ def _ookla_run(duration: int) -> tuple[float | None, float | None, str | None]:
             '--accept-license', '--accept-gdpr',
             '--format=json',
         ]
-        # Ookla controls its own test duration; give generous subprocess timeout
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=duration * 3 + 120)
 
         result_obj = None
@@ -310,10 +461,10 @@ def _try_iperf3(duration: int, streams: int) -> tuple[float | None, float | None
 
 
 # ---------------------------------------------------------------------------
-# Latency
+# Latency + public IP
 # ---------------------------------------------------------------------------
 
-def _measure_latency() -> float:
+def _measure_latency() -> float | None:
     endpoints = [
         'https://www.cloudflare.com/cdn-cgi/trace',
         'https://www.google.com/generate_204',
@@ -330,8 +481,18 @@ def _measure_latency() -> float:
             values.append((time.perf_counter() - t0) * 1000)
         except Exception:
             pass
-    from statistics import median
-    return round(median(values), 1) if values else 0.0
+    return round(median(values), 1) if values else None
+
+
+def _get_public_ip() -> str | None:
+    try:
+        resp = requests.get(_PROBE_URL, timeout=10)
+        for line in resp.text.splitlines():
+            if line.startswith('ip='):
+                return line[3:].strip()
+    except Exception:
+        pass
+    return None
 
 
 if __name__ == '__main__':
