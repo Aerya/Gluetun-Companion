@@ -3,6 +3,7 @@ Switch notifications — Discord webhook and/or Apprise.
 """
 
 import logging
+import re
 
 import requests
 
@@ -12,6 +13,31 @@ logger = logging.getLogger(__name__)
 
 
 _LOGO_URL = 'https://raw.githubusercontent.com/Aerya/Gluetun-Companion/main/assets/logo.png'
+
+
+def _discord_allowed_mentions(mention: str) -> dict:
+    """
+    Build a Discord allowed_mentions object from a raw mention string.
+
+    Discord ignores parse=['users'] on webhooks in many configurations.
+    The reliable approach is to use the explicit users/roles lists.
+
+    Examples:
+      '<@416345506579611668>'   → {'users': ['416345506579611668']}
+      '<@&987654321>'           → {'roles': ['987654321']}
+      '<@123> <@&456>'         → {'users': ['123'], 'roles': ['456']}
+    """
+    user_ids = re.findall(r'<@!?(\d+)>', mention)
+    role_ids = re.findall(r'<@&(\d+)>', mention)
+    result: dict = {}
+    if user_ids:
+        result['users'] = user_ids
+    if role_ids:
+        result['roles'] = role_ids
+    # Fallback: no IDs found (e.g. @everyone/@here written as plain text)
+    if not result:
+        result['parse'] = ['users', 'roles', 'everyone']
+    return result
 
 
 def _strip_filter(label: str | None) -> str:
@@ -200,7 +226,7 @@ def send_test_notification(
             }
             if mention:
                 payload['content'] = mention
-                payload['allowed_mentions'] = {'parse': ['users', 'roles']}
+                payload['allowed_mentions'] = _discord_allowed_mentions(mention)
             resp = requests.post(discord_url.strip(), json=payload, timeout=10)
             resp.raise_for_status()
             logger.info('Discord test notification sent')
@@ -362,9 +388,7 @@ def send_new_airvpn_servers_notification(
             }
             if mention:
                 payload['content'] = mention
-                # allowed_mentions is required for Discord to actually ping;
-                # without it the mention is rendered as plain text.
-                payload['allowed_mentions'] = {'parse': ['users', 'roles']}
+                payload['allowed_mentions'] = _discord_allowed_mentions(mention)
             resp = requests.post(discord_url.strip(), json=payload, timeout=10)
             resp.raise_for_status()
             logger.info('Discord new-AirVPN-servers notification sent (%d server(s))', n)

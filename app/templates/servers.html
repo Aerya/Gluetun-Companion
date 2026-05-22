@@ -31,7 +31,6 @@
 {% if new_airvpn %}
 <div class="alert alert-info alert-dismissible fade show mb-3 d-flex align-items-center gap-2"
      id="airvpn-new-banner" role="alert">
-  <i class="bi bi-stars flex-shrink-0"></i>
   <span>
     {{ t.airvpn_new_banner.replace('{n}', new_airvpn|length|string).replace('{countries}', new_airvpn_countries) }}
     <a href="#" class="alert-link ms-1"
@@ -334,7 +333,7 @@
             <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-new"
                     id="tab-new-btn"
                     title="{{ t.airvpn_new_tab_hint }}">
-              <i class="bi bi-stars me-1"></i>{{ t.airvpn_new_tab }}
+              {{ t.airvpn_new_tab }}
               <span id="tab-new-badge" class="badge bg-warning text-dark ms-1 d-none" style="font-size:.65rem"></span>
             </button>
           </li>
@@ -696,24 +695,19 @@ function _renderCountriesTab(countries) {
 
 // ── Render "Nouveaux" tab ─────────────────────────────────────────────────
 function _renderNewTab(allServers) {
-  // New = not yet in the user's DB, sorted: tracked-new first, then alpha
-  const newServers = allServers
-    .filter(s => !_existingServers.has(s.name))
-    .sort((a, b) => {
-      const aNew = _trackedNewNames.has(a.name);
-      const bNew = _trackedNewNames.has(b.name);
-      if (aNew && !bNew) return -1;
-      if (!aNew && bNew) return  1;
-      return a.name.localeCompare(b.name);
-    });
+  // Only show servers detected by the 24h scheduler (in _trackedNewNames)
+  // and not yet added by the user — sorted alphabetically
+  const apiMap = new Map(allServers.map(s => [s.name, s]));
+  const newServers = [..._trackedNewNames]
+    .filter(name => !_existingServers.has(name) && apiMap.has(name))
+    .sort()
+    .map(name => apiMap.get(name));
 
   const tbody = document.getElementById('airvpn-new-tbody');
   const badge = document.getElementById('tab-new-badge');
 
-  // Update tab badge with count of tracked-new that are actually in the API
-  const trackedCount = newServers.filter(s => _trackedNewNames.has(s.name)).length;
-  if (trackedCount > 0) {
-    badge.textContent = '+' + trackedCount;
+  if (newServers.length > 0) {
+    badge.textContent = '+' + newServers.length;
     badge.classList.remove('d-none');
   }
 
@@ -724,7 +718,6 @@ function _renderNewTab(allServers) {
   }
 
   for (const s of newServers) {
-    const isTracked = _trackedNewNames.has(s.name);
     const tr = document.createElement('tr');
     tr.dataset.name    = s.name.toLowerCase();
     tr.dataset.country = s.country.toLowerCase();
@@ -741,10 +734,7 @@ function _renderNewTab(allServers) {
     tr.appendChild(tdCb);
 
     tr.insertAdjacentHTML('beforeend', `
-      <td>
-        <code class="fw-semibold">${_esc(s.name)}</code>
-        ${isTracked ? `<span class="badge bg-warning text-dark ms-1" style="font-size:.65rem"><i class="bi bi-stars me-1"></i>${_esc(_t.newLabel)}</span>` : ''}
-      </td>
+      <td><code class="fw-semibold">${_esc(s.name)}</code></td>
       <td><span>${_flag(s.country_code)} <small>${_esc(s.country)}</small></span></td>
       <td><small class="text-muted">${_esc(s.location)}</small></td>
       <td>${_loadBar(s.load)}</td>
