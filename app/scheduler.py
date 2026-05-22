@@ -281,12 +281,13 @@ def _test_one_server_sidecar(
         dl_iperf3     = data.get('dl_iperf3')
         ul_iperf3     = data.get('ul_iperf3')
 
-        # Stability: read from sidecar /test response (if sidecar supports it)
-        # then fall back to calling /ping separately
+        # Stability + DNS: read from sidecar /test response (if sidecar supports it)
+        # then fall back to calling /ping separately for jitter/loss
         jitter_ms       = data.get('jitter_ms')
         packet_loss_pct = data.get('packet_loss_pct')
         ping_min_ms     = data.get('ping_min_ms')
         ping_max_ms     = data.get('ping_max_ms')
+        dns_latency_ms  = data.get('dns_latency_ms')
 
         if jitter_ms is None:
             stability = run_sidecar_ping_test(sidecar_host, sidecar_port)
@@ -317,6 +318,8 @@ def _test_one_server_sidecar(
                 '    STAB jitter=%.1f ms  loss=%.1f%%',
                 jitter_ms, packet_loss_pct or 0.0,
             )
+        if dns_latency_ms is not None:
+            logger.info('    DNS  median=%.0f ms', dns_latency_ms)
 
         _record_test(
             server_name,
@@ -336,6 +339,7 @@ def _test_one_server_sidecar(
             packet_loss_pct=packet_loss_pct,
             ping_min_ms=ping_min_ms,
             ping_max_ms=ping_max_ms,
+            dns_latency_ms=dns_latency_ms,
         )
 
         return {
@@ -981,6 +985,7 @@ def _record_test(
     packet_loss_pct: float | None = None,
     ping_min_ms: float | None = None,
     ping_max_ms: float | None = None,
+    dns_latency_ms: float | None = None,
 ):
     from .database import get_db
     with get_db() as db:
@@ -989,12 +994,12 @@ def _record_test(
                (server_name, download_mbps, upload_mbps, latency_ms,
                 public_ip, public_ipv6, success, error_msg, test_method,
                 dl_ookla, ul_ookla, dl_librespeed, ul_librespeed, dl_iperf3, ul_iperf3,
-                jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms, dns_latency_ms)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (server_name, download_mbps, upload_mbps, latency_ms,
              public_ip, public_ipv6, int(success), error, method,
              dl_ookla, ul_ookla, dl_librespeed, ul_librespeed, dl_iperf3, ul_iperf3,
-             jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms),
+             jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms, dns_latency_ms),
         )
 
 

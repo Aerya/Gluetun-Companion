@@ -397,8 +397,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'hist_col_jitter_tooltip':'Écart-type de la latence — mesure la régularité de la connexion (faible = stable). Mesuré par ping ICMP (sidecar) ou HTTP (proxy).',
         'hist_col_loss':          'Perte',
         'hist_col_loss_tooltip':  'Taux de perte de paquets en % — 0 % idéal.',
-        'hist_qc_no_stability':   'Quick check — débit uniquement, pas de mesure jitter/perte.',
+        'hist_qc_no_stability':   'Quick check — débit uniquement, pas de mesure jitter/perte/DNS.',
+        'hist_col_dns':           'DNS',
+        'hist_col_dns_tooltip':   'Médiane du temps de résolution DNS mesuré depuis l\'intérieur du tunnel VPN (via dig). Détecte les résolveurs lents, surchargés ou qui interceptent les requêtes. Disponible uniquement en mode sidecar. < 50 ms = bon · 50–150 ms = moyen · > 150 ms = lent.',
+        'stab_dns':               'DNS',
         'pat_jitter_label':       'Jitter moy.',
+        'pat_dns_label':          'DNS moy.',
 
         # ── AirVPN new-server detection ──
         'airvpn_new_tab':          'Nouveaux',
@@ -810,8 +814,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'hist_col_jitter_tooltip':'Latency standard deviation — measures connection regularity (low = stable). Measured via ICMP ping (sidecar) or HTTP (proxy mode).',
         'hist_col_loss':          'Loss',
         'hist_col_loss_tooltip':  'Packet loss rate in % — 0% is ideal.',
-        'hist_qc_no_stability':   'Quick check — throughput only, no jitter/loss measurement.',
+        'hist_qc_no_stability':   'Quick check — throughput only, no jitter/loss/DNS measurement.',
+        'hist_col_dns':           'DNS',
+        'hist_col_dns_tooltip':   'Median DNS resolution time measured from inside the VPN tunnel (via dig). Detects slow, overloaded, or hijacking resolvers. Sidecar mode only. < 50 ms = good · 50–150 ms = fair · > 150 ms = slow.',
+        'stab_dns':               'DNS',
         'pat_jitter_label':       'Avg jitter',
+        'pat_dns_label':          'Avg DNS',
 
         # ── AirVPN new-server detection ──
         'airvpn_new_tab':          'New',

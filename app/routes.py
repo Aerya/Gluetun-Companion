@@ -532,10 +532,11 @@ def history_patterns():
             # datetime(tested_at, 'localtime') converts UTC→local using the system TZ env var
             raw_rows = db.execute('''
                 SELECT strftime('%H', datetime(tested_at, 'localtime')) AS hour,
-                       ROUND(AVG(download_mbps), 1)   AS avg_dl,
-                       ROUND(AVG(upload_mbps),   1)   AS avg_ul,
-                       ROUND(AVG(jitter_ms),     1)   AS avg_jitter,
+                       ROUND(AVG(download_mbps),   1) AS avg_dl,
+                       ROUND(AVG(upload_mbps),     1) AS avg_ul,
+                       ROUND(AVG(jitter_ms),       1) AS avg_jitter,
                        ROUND(AVG(packet_loss_pct), 1) AS avg_loss,
+                       ROUND(AVG(dns_latency_ms),  1) AS avg_dns,
                        COUNT(*) AS n
                 FROM speed_tests
                 WHERE server_name = ? AND success = 1 AND test_method != 'proxy_qc'
@@ -555,6 +556,7 @@ def history_patterns():
             'avg_ul':     r['avg_ul']     if r else None,
             'avg_jitter': r['avg_jitter'] if r else None,
             'avg_loss':   r['avg_loss']   if r else None,
+            'avg_dns':    r['avg_dns']    if r else None,
             'n':          r['n']          if r else 0,
         })
 

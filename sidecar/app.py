@@ -27,7 +27,8 @@ POST /test?duration=8&streams=4&method=dual&iperf_fallback=1
                            "jitter_ms": 2.1,           # null if ping failed
                            "packet_loss_pct": 0.0,
                            "ping_min_ms": 4.9,
-                           "ping_max_ms": 7.2
+                           "ping_max_ms": 7.2,
+                           "dns_latency_ms": 18.0      # null if dig unavailable
                          }
 
 POST /ping?targets=1.1.1.1,8.8.8.8,9.9.9.9&count=20&interval=0.2
@@ -167,15 +168,17 @@ def test():
     result['upload_mbps']   = max(ul_values) if ul_values else None
     result['method']        = method
 
-    # Latency + stability + public IP — run in parallel to minimise extra time
-    with ThreadPoolExecutor(max_workers=3) as ex:
+    # Latency + stability + DNS + public IP — all in parallel
+    with ThreadPoolExecutor(max_workers=4) as ex:
         fut_lat  = ex.submit(_measure_latency)
         fut_stab = ex.submit(_measure_stability, 20, 0.2)
+        fut_dns  = ex.submit(_measure_dns)
         fut_ip   = ex.submit(_get_public_ip)
 
-        result['latency_ms'] = fut_lat.result()
-        stability            = fut_stab.result()
-        result['ip']         = fut_ip.result()
+        result['latency_ms']     = fut_lat.result()
+        stability                = fut_stab.result()
+        result['dns_latency_ms'] = fut_dns.result()
+        result['ip']             = fut_ip.result()
 
     if stability:
         result['jitter_ms']       = stability['jitter_ms']
@@ -458,6 +461,45 @@ def _try_iperf3(duration: int, streams: int) -> tuple[float | None, float | None
             continue
 
     return None, None, None
+
+
+# ---------------------------------------------------------------------------
+# DNS latency
+# ---------------------------------------------------------------------------
+
+# Domains chosen to be unlikely to be blocked or short-circuited by VPN DNS
+_DNS_DOMAINS = ['google.com', 'cloudflare.com', 'github.com', 'reddit.com']
+
+
+def _measure_dns() -> float | None:
+    """
+    Measure VPN DNS latency using `dig` against the system resolver.
+    In sidecar mode the system resolver is the VPN's DNS — this detects
+    slow, filtered, or redirected DNS (abnormally fast = cached/hijacked;
+    abnormally slow = overloaded or geographically distant resolver).
+
+    Runs 4 queries in parallel; returns median resolution time in ms.
+    Returns None if dig is unavailable or all probes fail.
+    """
+    def _dig_once(domain: str) -> float | None:
+        try:
+            r = subprocess.run(
+                ['dig', domain, '+time=2', '+tries=1'],
+                capture_output=True, text=True, timeout=5,
+            )
+            m = re.search(r'Query time:\s+(\d+)\s+msec', r.stdout)
+            return float(m.group(1)) if m else None
+        except Exception:
+            return None
+
+    with ThreadPoolExecutor(max_workers=len(_DNS_DOMAINS)) as ex:
+        values = [v for v in ex.map(_dig_once, _DNS_DOMAINS) if v is not None]
+
+    if not values:
+        return None
+    result_ms = round(median(values), 1)
+    logger.info('dns → median=%.0f ms  samples=%s', result_ms, values)
+    return result_ms
 
 
 # ---------------------------------------------------------------------------

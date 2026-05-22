@@ -35,7 +35,8 @@ def init_db(db_path: str):
                 jitter_ms        REAL,
                 packet_loss_pct  REAL,
                 ping_min_ms      REAL,
-                ping_max_ms      REAL
+                ping_max_ms      REAL,
+                dns_latency_ms   REAL
             );
 
             CREATE TABLE IF NOT EXISTS switches (
@@ -135,6 +136,7 @@ def init_db(db_path: str):
             "ALTER TABLE speed_tests ADD COLUMN packet_loss_pct REAL",
             "ALTER TABLE speed_tests ADD COLUMN ping_min_ms REAL",
             "ALTER TABLE speed_tests ADD COLUMN ping_max_ms REAL",
+            "ALTER TABLE speed_tests ADD COLUMN dns_latency_ms REAL",
         ]:
             try:
                 db.execute(stmt)
@@ -248,20 +250,22 @@ def get_stability_all() -> dict[str, dict]:
 
     Returns {server_name: {'avg_jitter': float|None, 'avg_loss': float|None,
                            'avg_ping_min': float|None, 'avg_ping_max': float|None,
-                           'n': int}}
+                           'avg_dns': float|None, 'n': int}}
     """
     with get_db() as db:
         rows = db.execute('''
             SELECT
                 s.name,
                 ROUND(AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
-                               THEN st.jitter_ms END), 1)       AS avg_jitter,
+                               THEN st.jitter_ms END), 1)         AS avg_jitter,
                 ROUND(AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
-                               THEN st.packet_loss_pct END), 1) AS avg_loss,
+                               THEN st.packet_loss_pct END), 1)   AS avg_loss,
                 ROUND(AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
-                               THEN st.ping_min_ms END), 1)     AS avg_ping_min,
+                               THEN st.ping_min_ms END), 1)       AS avg_ping_min,
                 ROUND(AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
-                               THEN st.ping_max_ms END), 1)     AS avg_ping_max,
+                               THEN st.ping_max_ms END), 1)       AS avg_ping_max,
+                ROUND(AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
+                               THEN st.dns_latency_ms END), 1)    AS avg_dns,
                 COALESCE(
                     SUM(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
                               AND st.jitter_ms IS NOT NULL THEN 1 ELSE 0 END),
@@ -278,6 +282,7 @@ def get_stability_all() -> dict[str, dict]:
             'avg_loss':     r['avg_loss'],
             'avg_ping_min': r['avg_ping_min'],
             'avg_ping_max': r['avg_ping_max'],
+            'avg_dns':      r['avg_dns'],
             'n':            int(r['n'] or 0),
         }
         for r in rows

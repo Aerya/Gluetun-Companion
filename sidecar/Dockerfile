@@ -5,6 +5,7 @@ ARG TARGETARCH=amd64
 RUN apt-get update && apt-get install -y --no-install-recommends \
         iperf3 \
         iputils-ping \
+        dnsutils \
         curl \
     && case "${TARGETARCH}" in \
          amd64) LS_ARCH=linux_amd64 ; OK_ARCH=linux-x86_64 ;; \

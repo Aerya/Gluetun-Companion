@@ -129,6 +129,7 @@ const _ulData     = [{% for h in hourly_data %}{{ h.avg_ul if h.avg_ul is not no
 const _nData      = [{% for h in hourly_data %}{{ h.n }},{% endfor %}];
 const _jitterData = [{% for h in hourly_data %}{{ h.avg_jitter if h.avg_jitter is not none else 'null' }},{% endfor %}];
 const _lossData   = [{% for h in hourly_data %}{{ h.avg_loss if h.avg_loss is not none else 'null' }},{% endfor %}];
+const _dnsData    = [{% for h in hourly_data %}{{ h.avg_dns if h.avg_dns is not none else 'null' }},{% endfor %}];
 
 // ── Bar colors (relative to server's best hour) ───────────────────────────
 const _maxDl = Math.max(..._dlData.filter(v => v !== null));
@@ -150,6 +151,7 @@ const _tNoTest  = {{ t.pat_no_test | tojson }};
 const _tTests   = {{ t.pat_tests_label | tojson }};
 const _tUl      = {{ t.pat_ul_label | tojson }};
 const _tJitter  = {{ t.pat_jitter_label | tojson }};
+const _tDns     = {{ t.pat_dns_label | tojson }};
 
 // ── Chart ─────────────────────────────────────────────────────────────────
 new Chart(document.getElementById('chartPatterns'), {
@@ -191,7 +193,8 @@ new Chart(document.getElementById('chartPatterns'), {
             const dl  = ctx.parsed.y !== null   ? ctx.parsed.y.toFixed(1) + ' Mbps' : '—';
             const ul  = _ulData[i] !== null      ? ` · ${_tUl} ${_ulData[i].toFixed(1)} Mbps` : '';
             const jit = _jitterData[i] !== null  ? ` · ${_tJitter} ${_jitterData[i].toFixed(1)} ms` : '';
-            return ` ${dl}${ul}${jit} · ${n} ${_tTests}`;
+            const dns = _dnsData[i] !== null     ? ` · ${_tDns} ${_dnsData[i].toFixed(0)} ms` : '';
+            return ` ${dl}${ul}${jit}${dns} · ${n} ${_tTests}`;
           },
         },
       },
