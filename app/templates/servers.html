@@ -81,7 +81,12 @@
           <th>{{ t.srv_col_max_dl }}</th>
           <th>{{ t.srv_col_latency }}</th>
           <th>{{ t.srv_col_tests }}</th>
-          <th title="{{ t.conf_col_header }}" style="cursor:help">{{ t.conf_col_header }}</th>
+          <th>
+            {{ t.conf_col_header }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.75rem;cursor:help"
+               data-bs-toggle="tooltip" data-bs-placement="bottom"
+               title="{{ t.conf_col_tooltip }}"></i>
+          </th>
           <th>{{ t.srv_col_last_test }}</th>
           <th class="text-end">{{ t.srv_col_actions }}</th>
         </tr>
@@ -153,7 +158,7 @@
               {%- endif -%}
               {%- set _tip_parts = [_conf_lvl, _conf.nb|string ~ ' ' ~ t.conf_measure] -%}
               {%- if _conf.cv_pct is not none -%}
-                {%- set _tip_parts = _tip_parts + ['σ = ' ~ _conf.cv_pct|string ~ '%'] -%}
+                {%- set _tip_parts = _tip_parts + [t.conf_instability ~ ' ' ~ _conf.cv_pct|string ~ '%'] -%}
               {%- endif -%}
               {%- if _conf.consec > 0 -%}
                 {%- set _tip_parts = _tip_parts + [_conf.consec|string ~ ' ' ~ t.conf_failures] -%}
@@ -706,8 +711,8 @@ function _refreshAirvpnStats() {
 _refreshAirvpnStats();
 setInterval(_refreshAirvpnStats, 5 * 60 * 1000);  // refresh every 5 min
 
-// ── Confidence tooltips (static cells) ───────────────────────────────────
-document.querySelectorAll('td [data-bs-toggle="tooltip"]').forEach(el => {
+// ── Confidence tooltips (static cells + column header) ───────────────────
+document.querySelectorAll('td [data-bs-toggle="tooltip"], th [data-bs-toggle="tooltip"]').forEach(el => {
   new bootstrap.Tooltip(el, { trigger: 'hover focus' });
 });
 </script>

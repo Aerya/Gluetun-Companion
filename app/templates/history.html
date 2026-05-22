@@ -137,7 +137,7 @@
               {%- endif -%}
               {%- set _tip_parts = [_conf_lvl, _conf.nb|string ~ ' ' ~ t.conf_measure] -%}
               {%- if _conf.cv_pct is not none -%}
-                {%- set _tip_parts = _tip_parts + ['σ = ' ~ _conf.cv_pct|string ~ '%'] -%}
+                {%- set _tip_parts = _tip_parts + [t.conf_instability ~ ' ' ~ _conf.cv_pct|string ~ '%'] -%}
               {%- endif -%}
               {%- if _conf.consec > 0 -%}
                 {%- set _tip_parts = _tip_parts + [_conf.consec|string ~ ' ' ~ t.conf_failures] -%}

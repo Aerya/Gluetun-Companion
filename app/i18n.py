@@ -132,10 +132,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Confidence score ──
         'conf_col_header':   'Fiabilité',
+        'conf_col_tooltip':  '🟢 Élevée — ≥5 mesures, instabilité < 40 %. 🟡 Modérée — peu de mesures ou instabilité 40–70 %. 🔴 Faible — ≤1 mesure, instabilité > 70 % ou échecs récents. L\'instabilité mesure l\'écart-type des débits rapporté à la moyenne : faible = résultats cohérents d\'un test à l\'autre, élevée = débits très variables.',
         'conf_level_high':   'Fiabilité élevée',
         'conf_level_medium': 'Fiabilité modérée',
         'conf_level_low':    'Fiabilité faible',
         'conf_measure':      'mesure(s)',
+        'conf_instability':  'instabilité',
         'conf_failures':     'échecs consécutifs',
 
         # ── History ──
@@ -491,10 +493,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Confidence score ──
         'conf_col_header':   'Confidence',
+        'conf_col_tooltip':  '🟢 High — ≥5 measurements, variability < 40 %. 🟡 Moderate — few measurements or variability 40–70 %. 🔴 Low — ≤1 measurement, variability > 70 % or recent failures. Variability is the coefficient of variation of download speeds: low = consistent results test after test, high = very scattered speeds.',
         'conf_level_high':   'High confidence',
         'conf_level_medium': 'Moderate confidence',
         'conf_level_low':    'Low confidence',
         'conf_measure':      'measurement(s)',
+        'conf_instability':  'variability',
         'conf_failures':     'consecutive failures',
 
         # ── History ──

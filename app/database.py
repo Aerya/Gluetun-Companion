@@ -206,13 +206,13 @@ def compute_confidence_all() -> dict[str, dict]:
         stddev = math.sqrt(var) if var > 0 else 0.0
         cv_pct = round(stddev / avg * 100, 1) if avg > 0 else 0.0
 
-        # LOW — any degrading condition
-        if nb <= 1 or cv_pct > 30 or consec > 0:
+        # LOW — any degrading condition (VPN speeds vary a lot; threshold calibrated accordingly)
+        if nb <= 1 or cv_pct > 70 or consec > 0:
             level = 'LOW'
-        # HIGH — all quality conditions met
-        elif nb >= 5 and cv_pct < 15:
+        # HIGH — sufficient data AND stable results
+        elif nb >= 5 and cv_pct < 40:
             level = 'HIGH'
-        # MEDIUM — everything else (2–4 measures OR σ 15–30 %)
+        # MEDIUM — everything else (2–4 measures, OR σ between 40–70 %)
         else:
             level = 'MEDIUM'
 
