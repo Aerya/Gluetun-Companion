@@ -121,6 +121,16 @@
           <th>{{ t.cmn_upload }}</th>
           <th>{{ t.cmn_latency }}</th>
           <th>{{ t.cmn_public_ip }}</th>
+          <th>
+            {{ t.hist_col_jitter }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
+               data-bs-toggle="tooltip" title="{{ t.hist_col_jitter_tooltip }}"></i>
+          </th>
+          <th>
+            {{ t.hist_col_loss }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
+               data-bs-toggle="tooltip" title="{{ t.hist_col_loss_tooltip }}"></i>
+          </th>
           <th>{{ t.hist_col_method }}</th>
           <th>{{ t.cmn_status }}</th>
           <th>{{ t.cmn_date }}</th>
@@ -185,6 +195,18 @@
             </small>
           </td>
           <td>
+            {% if r.jitter_ms is not none %}
+              {% set jcls = 'text-success' if r.jitter_ms < 15 else ('text-warning' if r.jitter_ms < 50 else 'text-danger') %}
+              <span class="{{ jcls }}">{{ '%.1f'|format(r.jitter_ms) }} ms</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if r.packet_loss_pct is not none %}
+              {% set lcls = 'text-success' if r.packet_loss_pct < 1 else ('text-warning' if r.packet_loss_pct < 5 else 'text-danger') %}
+              <span class="{{ lcls }}">{{ '%.1f'|format(r.packet_loss_pct) }}%</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
             {% if r.test_method == 'sidecar' %}
               <span class="badge" style="background:#f0ad4e;color:#000">
                 <i class="bi bi-boxes"></i> sidecar
@@ -212,7 +234,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="8" class="text-center text-muted py-4">{{ t.hist_empty }}</td>
+          <td colspan="10" class="text-center text-muted py-4">{{ t.hist_empty }}</td>
         </tr>
         {% endfor %}
       </tbody>

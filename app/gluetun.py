@@ -841,6 +841,69 @@ def run_sidecar_test(
     return resp.json()
 
 
+def run_sidecar_ping_test(
+    host: str,
+    port: int,
+    targets: list[str] | None = None,
+    count: int = 20,
+    interval: float = 0.2,
+) -> dict | None:
+    """
+    Call the sidecar /ping endpoint to measure jitter and packet loss from
+    inside the VPN tunnel (ICMP ping to diverse IPs).
+
+    Expected sidecar response:
+        {"results": [{"target": "1.1.1.1", "avg_ms": 12.3, "jitter_ms": 2.1,
+                       "packet_loss_pct": 0.0, "ping_min_ms": 10.1, "ping_max_ms": 15.2}]}
+
+    Returns aggregated dict or None if the endpoint is unavailable (old sidecar
+    or network failure) — callers must handle None gracefully.
+    """
+    if targets is None:
+        targets = ['1.1.1.1', '8.8.8.8', '9.9.9.9']
+    url = f'http://{host}:{port}/ping'
+    timeout = count * interval * len(targets) + 30
+    try:
+        resp = requests.post(
+            url,
+            params={
+                'targets':  ','.join(targets),
+                'count':    count,
+                'interval': interval,
+            },
+            timeout=timeout,
+        )
+        if resp.status_code == 404:
+            logger.debug('Sidecar /ping not available (old image) — skipping stability test')
+            return None
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.exceptions.ConnectionError:
+        return None
+    except Exception as exc:
+        logger.warning('Sidecar ping test error: %s', exc)
+        return None
+
+    results = data.get('results', [])
+    if not results:
+        return None
+
+    jitters  = [r['jitter_ms']       for r in results if r.get('jitter_ms')       is not None]
+    losses   = [r['packet_loss_pct'] for r in results if r.get('packet_loss_pct') is not None]
+    mins_    = [r['ping_min_ms']     for r in results if r.get('ping_min_ms')      is not None]
+    maxs_    = [r['ping_max_ms']     for r in results if r.get('ping_max_ms')      is not None]
+
+    if not jitters:
+        return None
+
+    return {
+        'jitter_ms':       round(sum(jitters) / len(jitters), 1),
+        'packet_loss_pct': round(sum(losses)  / len(losses),  1) if losses else 0.0,
+        'ping_min_ms':     round(min(mins_), 1)  if mins_ else None,
+        'ping_max_ms':     round(max(maxs_), 1)  if maxs_ else None,
+    }
+
+
 def cleanup_test_containers(sidecar_image: str | None = None) -> None:
     """Stop and remove the test Gluetun and sidecar containers, then delete the sidecar image."""
     client = docker.from_env()

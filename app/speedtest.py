@@ -18,6 +18,7 @@ Multiple diverse endpoints → median returned, so one outlier doesn't dominate.
 """
 
 import logging
+import math
 import os
 import re
 import threading
@@ -50,6 +51,13 @@ LATENCY_ENDPOINTS: list[tuple[str, str]] = [
     ('Google',     'https://www.google.com/generate_204'),
     ('Hetzner-DE', 'https://fsn1-speed.hetzner.com/1MB.bin'),
     ('OVH-FR',     'https://proof.ovh.net/files/1Mb.dat'),
+]
+
+# Stability probe targets — diverse ASNs/geographies to average out path variance
+STABILITY_ENDPOINTS: list[tuple[str, str]] = [
+    ('Cloudflare', 'https://www.cloudflare.com/cdn-cgi/trace'),
+    ('Google',     'https://www.google.com/generate_204'),
+    ('Quad9',      'https://dns.quad9.net/'),
 ]
 
 # Cloudflare: request enough bytes to survive warmup + measurement at high speeds
@@ -454,3 +462,56 @@ def test_latency(
         raise RuntimeError('All latency endpoints failed')
 
     return round(median(values), 1), results
+
+
+def test_stability(
+    proxy_host: str,
+    proxy_port: int,
+    pings_per_target: int = 7,
+    proxy_user: str | None = None,
+    proxy_password: str | None = None,
+) -> dict | None:
+    """
+    Measure connection stability via rapid TTFB sampling through the proxy.
+    Uses HTTP (CONNECT tunnel) since ICMP is not forwardable through an HTTP proxy.
+
+    Runs `pings_per_target` consecutive TTFB probes against each of
+    STABILITY_ENDPOINTS (3 targets × 7 = 21 samples by default).
+
+    Returns:
+        {jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms}
+    or None if all probes failed.
+
+    Note: values reflect HTTP-over-VPN latency, not raw ICMP. Jitter is the
+    population stddev of TTFB samples. Packet-loss is HTTP-layer failures /
+    total attempts × 100.
+    """
+    px = _proxies(proxy_host, proxy_port, proxy_user, proxy_password)
+
+    all_rtts: list[float] = []
+    total_attempts = 0
+    total_failures = 0
+
+    for _label, url in STABILITY_ENDPOINTS:
+        for _ in range(pings_per_target):
+            total_attempts += 1
+            try:
+                rtt = _ttfb(url, px)
+                all_rtts.append(rtt)
+            except Exception:
+                total_failures += 1
+
+    if not all_rtts:
+        return None
+
+    avg = sum(all_rtts) / len(all_rtts)
+    variance = sum((x - avg) ** 2 for x in all_rtts) / len(all_rtts)
+    jitter = math.sqrt(variance)
+    packet_loss = (total_failures / total_attempts * 100) if total_attempts > 0 else 0.0
+
+    return {
+        'jitter_ms':       round(jitter, 1),
+        'packet_loss_pct': round(packet_loss, 1),
+        'ping_min_ms':     round(min(all_rtts), 1),
+        'ping_max_ms':     round(max(all_rtts), 1),
+    }

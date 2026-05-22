@@ -21,6 +21,8 @@ def _weighted_score(
     db,
     current_pct: float = 65.0,
     confidence_factor: float = 1.0,
+    jitter_ms: float | None = None,
+    packet_loss_pct: float | None = None,
 ) -> float:
     """
     Blend the current cycle's result with exponentially-weighted historical
@@ -29,6 +31,9 @@ def _weighted_score(
     measurement; the remainder goes to the exponential history.
     ``confidence_factor`` is a light penalty from the confidence score:
       HIGH → 1.0 (no penalty), MEDIUM → 0.95, LOW → 0.85.
+    ``jitter_ms`` and ``packet_loss_pct`` apply additional stability penalties:
+      - jitter:  up to −15 % at 150 ms
+      - loss:    up to −25 % at 10 % packet loss
     """
     rows = db.execute(
         'SELECT download_mbps FROM speed_tests '
@@ -36,12 +41,21 @@ def _weighted_score(
         (server_name,),
     ).fetchall()
     if not rows:
-        return current_dl * confidence_factor
-    w_cur  = max(0.0, min(current_pct, 100.0)) / 100.0
-    w_hist = 1.0 - w_cur
-    weights = [0.5 ** i for i in range(len(rows))]
-    hist = sum(w * r['download_mbps'] for w, r in zip(weights, rows)) / sum(weights)
-    return (w_cur * current_dl + w_hist * hist) * confidence_factor
+        base = current_dl
+    else:
+        w_cur  = max(0.0, min(current_pct, 100.0)) / 100.0
+        w_hist = 1.0 - w_cur
+        weights = [0.5 ** i for i in range(len(rows))]
+        hist = sum(w * r['download_mbps'] for w, r in zip(weights, rows)) / sum(weights)
+        base = w_cur * current_dl + w_hist * hist
+
+    # Stability penalties (optional — None means no data → no penalty)
+    jitter_factor = max(0.85, 1.0 - min(jitter_ms / 1000.0, 0.15)) \
+        if jitter_ms is not None else 1.0
+    loss_factor   = max(0.75, 1.0 - min(packet_loss_pct / 40.0, 0.25)) \
+        if (packet_loss_pct is not None and packet_loss_pct > 0) else 1.0
+
+    return base * confidence_factor * jitter_factor * loss_factor
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +90,7 @@ def _test_one_server(
         restart_network_dependents, restart_containers_in_order,
         list_network_dependents,
     )
-    from .speedtest import test_download, test_latency, test_upload
+    from .speedtest import test_download, test_latency, test_upload, test_stability
 
     label = f"{FILTER_VARS.get(filter_type, 'SERVER_NAMES')}={server_name}"
     logger.info('Testing: %s', label)
@@ -134,6 +148,22 @@ def _test_one_server(
     except Exception as exc:
         logger.warning('  Upload test failed for %s: %s', server_name, exc)
 
+    # Stability test (jitter + packet loss via HTTP TTFB sampling)
+    stability: dict | None = None
+    try:
+        stability = test_stability(
+            proxy_host, proxy_port,
+            proxy_user=proxy_user, proxy_password=proxy_pass,
+        )
+        if stability:
+            logger.info(
+                '    STAB jitter=%.1f ms  loss=%.1f%%  min=%.0f ms  max=%.0f ms',
+                stability['jitter_ms'], stability['packet_loss_pct'],
+                stability.get('ping_min_ms') or 0, stability.get('ping_max_ms') or 0,
+            )
+    except Exception as exc:
+        logger.warning('  Stability test failed for %s: %s', server_name, exc)
+
     dl_parts = '  '.join(
         f"{r['endpoint']}:{r['mbps']:.1f}" if r['mbps'] else f"{r['endpoint']}:ERR"
         for r in dl_detail
@@ -159,15 +189,21 @@ def _test_one_server(
         latency_ms=lat_median,
         public_ip=public_ip,
         public_ipv6=public_ipv6,
+        jitter_ms=stability['jitter_ms'] if stability else None,
+        packet_loss_pct=stability['packet_loss_pct'] if stability else None,
+        ping_min_ms=stability.get('ping_min_ms') if stability else None,
+        ping_max_ms=stability.get('ping_max_ms') if stability else None,
     )
 
     return {
-        'server': server_name,
-        'filter_type': filter_type,
-        'dl': dl_median,
-        'ul': ul_median,
-        'lat': lat_median,
+        'server':       server_name,
+        'filter_type':  filter_type,
+        'dl':           dl_median,
+        'ul':           ul_median,
+        'lat':          lat_median,
         'connect_secs': connect_secs,
+        'jitter_ms':       stability['jitter_ms']       if stability else None,
+        'packet_loss_pct': stability['packet_loss_pct'] if stability else None,
     }
 
 
@@ -198,7 +234,8 @@ def _test_one_server_sidecar(
     from .gluetun import (
         FILTER_VARS,
         create_test_gluetun, create_speed_sidecar, stream_sidecar_logs,
-        wait_for_sidecar, run_sidecar_test, cleanup_test_containers,
+        wait_for_sidecar, run_sidecar_test, run_sidecar_ping_test,
+        cleanup_test_containers,
     )
 
     label = f"{FILTER_VARS.get(filter_type, 'SERVER_NAMES')}={server_name}"
@@ -244,6 +281,21 @@ def _test_one_server_sidecar(
         dl_iperf3     = data.get('dl_iperf3')
         ul_iperf3     = data.get('ul_iperf3')
 
+        # Stability: read from sidecar /test response (if sidecar supports it)
+        # then fall back to calling /ping separately
+        jitter_ms       = data.get('jitter_ms')
+        packet_loss_pct = data.get('packet_loss_pct')
+        ping_min_ms     = data.get('ping_min_ms')
+        ping_max_ms     = data.get('ping_max_ms')
+
+        if jitter_ms is None:
+            stability = run_sidecar_ping_test(sidecar_host, sidecar_port)
+            if stability:
+                jitter_ms       = stability['jitter_ms']
+                packet_loss_pct = stability['packet_loss_pct']
+                ping_min_ms     = stability.get('ping_min_ms')
+                ping_max_ms     = stability.get('ping_max_ms')
+
         sources_log = []
         if dl_ookla:
             sources_log.append(f'ookla:{dl_ookla:.0f}')
@@ -260,6 +312,11 @@ def _test_one_server_sidecar(
             connect_secs,
             '  '.join(sources_log) or method,
         )
+        if jitter_ms is not None:
+            logger.info(
+                '    STAB jitter=%.1f ms  loss=%.1f%%',
+                jitter_ms, packet_loss_pct or 0.0,
+            )
 
         _record_test(
             server_name,
@@ -275,15 +332,21 @@ def _test_one_server_sidecar(
             ul_librespeed=ul_librespeed,
             dl_iperf3=dl_iperf3,
             ul_iperf3=ul_iperf3,
+            jitter_ms=jitter_ms,
+            packet_loss_pct=packet_loss_pct,
+            ping_min_ms=ping_min_ms,
+            ping_max_ms=ping_max_ms,
         )
 
         return {
-            'server':       server_name,
-            'filter_type':  filter_type,
-            'dl':           dl_median,
-            'ul':           ul_median,
-            'lat':          lat_median,
-            'connect_secs': connect_secs,
+            'server':          server_name,
+            'filter_type':     filter_type,
+            'dl':              dl_median,
+            'ul':              ul_median,
+            'lat':             lat_median,
+            'connect_secs':    connect_secs,
+            'jitter_ms':       jitter_ms,
+            'packet_loss_pct': packet_loss_pct,
         }
 
     finally:
@@ -682,6 +745,8 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                         _CONF_FACTORS.get(
                             _conf_map.get(r['server'], {}).get('level', 'MEDIUM'), 0.95
                         ),
+                        jitter_ms=r.get('jitter_ms'),
+                        packet_loss_pct=r.get('packet_loss_pct'),
                     ),
                 )
             best_label = f"{FILTER_VARS.get(best['filter_type'], 'SERVER_NAMES')}={best['server']}"
@@ -912,6 +977,10 @@ def _record_test(
     ul_librespeed: float | None = None,
     dl_iperf3: float | None = None,
     ul_iperf3: float | None = None,
+    jitter_ms: float | None = None,
+    packet_loss_pct: float | None = None,
+    ping_min_ms: float | None = None,
+    ping_max_ms: float | None = None,
 ):
     from .database import get_db
     with get_db() as db:
@@ -919,11 +988,13 @@ def _record_test(
             '''INSERT INTO speed_tests
                (server_name, download_mbps, upload_mbps, latency_ms,
                 public_ip, public_ipv6, success, error_msg, test_method,
-                dl_ookla, ul_ookla, dl_librespeed, ul_librespeed, dl_iperf3, ul_iperf3)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                dl_ookla, ul_ookla, dl_librespeed, ul_librespeed, dl_iperf3, ul_iperf3,
+                jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (server_name, download_mbps, upload_mbps, latency_ms,
              public_ip, public_ipv6, int(success), error, method,
-             dl_ookla, ul_ookla, dl_librespeed, ul_librespeed, dl_iperf3, ul_iperf3),
+             dl_ookla, ul_ookla, dl_librespeed, ul_librespeed, dl_iperf3, ul_iperf3,
+             jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms),
         )
 
 

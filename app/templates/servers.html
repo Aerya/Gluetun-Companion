@@ -118,6 +118,12 @@
                data-bs-toggle="tooltip" data-bs-placement="bottom"
                title="{{ t.conf_col_tooltip }}"></i>
           </th>
+          <th class="text-center">
+            {{ t.stab_col_header }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.75rem;cursor:help"
+               data-bs-toggle="tooltip" data-bs-placement="bottom"
+               title="{{ t.stab_col_tooltip }}"></i>
+          </th>
           <th>{{ t.srv_col_last_test }}</th>
           <th class="text-end">{{ t.srv_col_actions }}</th>
         </tr>
@@ -201,6 +207,32 @@
                  data-bs-toggle="tooltip" data-bs-placement="top" title="{{ _conf_tip }}"></i>
             {%- endif -%}
           </td>
+          {# ── Stability cell ─────────────────────────────────────────── #}
+          <td class="text-center">
+            {%- set _stab = stability.get(s.name, {}) -%}
+            {%- if _stab.n == 0 or _stab.avg_jitter is none -%}
+              <span class="text-muted" style="font-size:.75rem">—</span>
+            {%- else -%}
+              {%- if _stab.avg_jitter < 15 and (_stab.avg_loss is none or _stab.avg_loss < 1) -%}
+                {%- set _stab_cls = 'text-success' -%}
+                {%- set _stab_lbl = t.stab_tooltip_good -%}
+              {%- elif _stab.avg_jitter < 50 and (_stab.avg_loss is none or _stab.avg_loss < 5) -%}
+                {%- set _stab_cls = 'text-warning' -%}
+                {%- set _stab_lbl = t.stab_tooltip_medium -%}
+              {%- else -%}
+                {%- set _stab_cls = 'text-danger' -%}
+                {%- set _stab_lbl = t.stab_tooltip_bad -%}
+              {%- endif -%}
+              {%- set _stab_tip_parts = [_stab_lbl,
+                    t.stab_jitter ~ ' ' ~ _stab.avg_jitter|string ~ ' ms'] -%}
+              {%- if _stab.avg_loss is not none -%}
+                {%- set _stab_tip_parts = _stab_tip_parts + [t.stab_loss ~ ' ' ~ _stab.avg_loss|string ~ '%'] -%}
+              {%- endif -%}
+              <i class="bi bi-circle-fill {{ _stab_cls }}" style="font-size:.65rem;cursor:help"
+                 data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="{{ _stab_tip_parts | join(' · ') }}"></i>
+            {%- endif -%}
+          </td>
           <td>
             <small class="text-muted">{{ (s.last_tested | localtime | truncate(16, True, '')) if s.last_tested else t.cmn_never }}</small>
           </td>
@@ -249,7 +281,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="13" class="text-center text-muted py-5">
+          <td colspan="14" class="text-center text-muted py-5">
             <i class="bi bi-hdd-network" style="font-size:2rem;opacity:.3"></i><br>
             {{ t.srv_empty }}<br>
             <small>{{ t.srv_empty_hint | safe }}</small>

@@ -22,16 +22,20 @@ def init_db(db_path: str):
             );
 
             CREATE TABLE IF NOT EXISTS speed_tests (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                server_name   TEXT NOT NULL,
-                download_mbps REAL,
-                upload_mbps   REAL,
-                latency_ms    REAL,
-                public_ip     TEXT,
-                public_ipv6   TEXT,
-                success       INTEGER NOT NULL DEFAULT 0,
-                error_msg     TEXT,
-                tested_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                server_name      TEXT NOT NULL,
+                download_mbps    REAL,
+                upload_mbps      REAL,
+                latency_ms       REAL,
+                public_ip        TEXT,
+                public_ipv6      TEXT,
+                success          INTEGER NOT NULL DEFAULT 0,
+                error_msg        TEXT,
+                tested_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                jitter_ms        REAL,
+                packet_loss_pct  REAL,
+                ping_min_ms      REAL,
+                ping_max_ms      REAL
             );
 
             CREATE TABLE IF NOT EXISTS switches (
@@ -127,6 +131,10 @@ def init_db(db_path: str):
             "ALTER TABLE speed_tests ADD COLUMN ul_librespeed REAL",
             "ALTER TABLE speed_tests ADD COLUMN dl_iperf3 REAL",
             "ALTER TABLE speed_tests ADD COLUMN ul_iperf3 REAL",
+            "ALTER TABLE speed_tests ADD COLUMN jitter_ms REAL",
+            "ALTER TABLE speed_tests ADD COLUMN packet_loss_pct REAL",
+            "ALTER TABLE speed_tests ADD COLUMN ping_min_ms REAL",
+            "ALTER TABLE speed_tests ADD COLUMN ping_max_ms REAL",
         ]:
             try:
                 db.execute(stmt)
@@ -229,6 +237,51 @@ def compute_confidence_all() -> dict[str, dict]:
         result[name] = {'level': level, 'nb': nb, 'cv_pct': cv_pct, 'consec': consec}
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Stability metrics (jitter / packet loss) per server
+# ---------------------------------------------------------------------------
+
+def get_stability_all() -> dict[str, dict]:
+    """Return average stability metrics per server (proxy_qc excluded).
+
+    Returns {server_name: {'avg_jitter': float|None, 'avg_loss': float|None,
+                           'avg_ping_min': float|None, 'avg_ping_max': float|None,
+                           'n': int}}
+    """
+    with get_db() as db:
+        rows = db.execute('''
+            SELECT
+                s.name,
+                ROUND(AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
+                               THEN st.jitter_ms END), 1)       AS avg_jitter,
+                ROUND(AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
+                               THEN st.packet_loss_pct END), 1) AS avg_loss,
+                ROUND(AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
+                               THEN st.ping_min_ms END), 1)     AS avg_ping_min,
+                ROUND(AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
+                               THEN st.ping_max_ms END), 1)     AS avg_ping_max,
+                COALESCE(
+                    SUM(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
+                              AND st.jitter_ms IS NOT NULL THEN 1 ELSE 0 END),
+                    0
+                ) AS n
+            FROM servers s
+            LEFT JOIN speed_tests st ON st.server_name = s.name
+            GROUP BY s.name
+        ''').fetchall()
+
+    return {
+        r['name']: {
+            'avg_jitter':   r['avg_jitter'],
+            'avg_loss':     r['avg_loss'],
+            'avg_ping_min': r['avg_ping_min'],
+            'avg_ping_max': r['avg_ping_max'],
+            'n':            int(r['n'] or 0),
+        }
+        for r in rows
+    }
 
 
 # ---------------------------------------------------------------------------

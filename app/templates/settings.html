@@ -1038,11 +1038,12 @@ function testNotif(target) {
 
   const discordUrl  = document.querySelector('[name="discord_webhook_url"]')?.value || '';
   const appriseUrls = document.querySelector('[name="apprise_urls"]')?.value || '';
+  const mention     = document.querySelector('[name="airvpn_notify_mention"]')?.value.trim() || '';
 
   fetch('{{ url_for('main.api_notify_test') }}', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ target, discord_url: discordUrl, apprise_urls: appriseUrls }),
+    body: JSON.stringify({ target, discord_url: discordUrl, apprise_urls: appriseUrls, mention }),
   })
   .then(r => r.json().then(d => ({ ok: r.ok, d })))
   .then(({ ok, d }) => {

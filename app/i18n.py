@@ -382,6 +382,23 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'dash_run_now_hint': 'Passe par le proxy HTTP — résultat en quelques secondes.',
         'set_run_now_hint':  'Passe par le proxy HTTP — résultat en quelques secondes.',
 
+        # ── Jitter / Packet Loss ──
+        'stab_col_header':        'Stabilité',
+        'stab_col_tooltip':       'Jitter (écart-type de la latence) et taux de perte de paquets mesurés lors du dernier benchmark. Un jitter élevé ou une perte > 0 % dégrade légèrement le score de sélection.',
+        'stab_jitter':            'Jitter',
+        'stab_loss':              'Perte',
+        'stab_ping_min':          'ping min',
+        'stab_ping_max':          'ping max',
+        'stab_no_data':           'Aucune mesure de stabilité disponible',
+        'stab_tooltip_good':      'Connexion stable',
+        'stab_tooltip_medium':    'Connexion instable',
+        'stab_tooltip_bad':       'Connexion très instable',
+        'hist_col_jitter':        'Jitter',
+        'hist_col_jitter_tooltip':'Écart-type de la latence — mesure la régularité de la connexion (faible = stable). Mesuré par ping ICMP (sidecar) ou HTTP (proxy).',
+        'hist_col_loss':          'Perte',
+        'hist_col_loss_tooltip':  'Taux de perte de paquets en % — 0 % idéal.',
+        'pat_jitter_label':       'Jitter moy.',
+
         # ── AirVPN new-server detection ──
         'airvpn_new_tab':          'Nouveaux',
         'airvpn_new_tab_hint':     'Serveurs disponibles sur AirVPN mais pas encore dans votre liste',
@@ -776,6 +793,23 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ── Run Now hints ──
         'dash_run_now_hint': 'Uses the HTTP proxy — result in a few seconds.',
         'set_run_now_hint':  'Uses the HTTP proxy — result in a few seconds.',
+
+        # ── Jitter / Packet Loss ──
+        'stab_col_header':        'Stability',
+        'stab_col_tooltip':       'Jitter (latency std dev) and packet loss rate measured during the last benchmark. High jitter or loss > 0% lightly penalises the selection score.',
+        'stab_jitter':            'Jitter',
+        'stab_loss':              'Loss',
+        'stab_ping_min':          'ping min',
+        'stab_ping_max':          'ping max',
+        'stab_no_data':           'No stability data available yet',
+        'stab_tooltip_good':      'Stable connection',
+        'stab_tooltip_medium':    'Unstable connection',
+        'stab_tooltip_bad':       'Very unstable connection',
+        'hist_col_jitter':        'Jitter',
+        'hist_col_jitter_tooltip':'Latency standard deviation — measures connection regularity (low = stable). Measured via ICMP ping (sidecar) or HTTP (proxy mode).',
+        'hist_col_loss':          'Loss',
+        'hist_col_loss_tooltip':  'Packet loss rate in % — 0% is ideal.',
+        'pat_jitter_label':       'Avg jitter',
 
         # ── AirVPN new-server detection ──
         'airvpn_new_tab':          'New',

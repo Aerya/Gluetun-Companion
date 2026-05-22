@@ -69,6 +69,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Score de confiance par serveur** — indicateur 🟢/🟡/🔴 sur la page Serveurs et dans l'historique ; basé sur le nombre de mesures et la variabilité des résultats ; intégré dans le score de sélection automatique (pondération légère)
 - **Patterns horaires** (`/history/patterns`) — graphique barres 0h–23h du débit moyen par tranche horaire, coloré selon les performances relatives ; meilleure et pire heure affichées ; permet de repérer les créneaux de saturation serveur
 - **Détection de nouveaux serveurs AirVPN** *(optionnel)* — compare l'API AirVPN avec vos serveurs configurés toutes les 24 h ; bannière et badge sur la page Serveurs + onglet *Nouveaux* dans le modal d'ajout ; notification Discord/Apprise avec mention optionnelle
+- **Jitter & Packet Loss** — stabilité réseau mesurée à chaque test (21 sondes TTFB en mode proxy, ICMP via sidecar) ; indicateur 🟢/🟡/🔴 sur la page Serveurs, colonnes dédiées dans l'historique, jitter affiché dans les patterns horaires ; intégré dans le score de sélection (pénalité jusqu'à −15 % jitter / −25 % perte)
 - **Endpoint `/healthz`** non authentifié pour les healthchecks Docker
 - **Endpoint `/metrics`** au format Prometheus — débit, latence, bascules, serveur actif ; optionnellement protégé par Bearer token ; compatible Grafana
 - **Logs JSON structurés** optionnels via `LOG_JSON=1` (compatibles Loki/Grafana)
@@ -315,6 +316,31 @@ Fonctionnalité **désactivée par défaut**, uniquement pour les utilisateurs A
 Envoyée uniquement lors de la découverte de nouveaux serveurs, regroupée par pays. Champ *Mention Discord* optionnel (ex. `<@123456789>`) pour notifier un utilisateur ou un rôle.
 
 > Après 7 jours, les serveurs quittent automatiquement la liste des "nouveaux". Les serveurs ajoutés à votre liste ne s'affichent plus dans le badge/bannière.
+
+### Jitter & Packet Loss
+
+Chaque test mesure automatiquement la **stabilité** de la connexion VPN, en plus du débit.
+
+**Méthode selon le mode :**
+- **Mode proxy** — 21 sondes TTFB (Time To First Byte) réparties sur 3 cibles (Cloudflare, Google, Quad9). La variance des temps de réponse donne le jitter, les requêtes échouées donnent le taux de perte.
+- **Mode sidecar** — l'endpoint `/ping` du container sidecar effectue un ping ICMP sur les mêmes 3 cibles (20 paquets chacune). Retombe sur None si l'ancienne version du sidecar ne supporte pas `/ping`.
+
+**Métriques produites :**
+- `jitter_ms` — écart-type des temps de réponse (ms) — représente la variabilité/instabilité
+- `packet_loss_pct` — pourcentage de requêtes/paquets perdus
+- `ping_min_ms` / `ping_max_ms` — meilleur et pire temps de réponse
+
+**Surfaces UI :**
+- **Page Serveurs** — colonne *Stabilité* : point coloré 🟢 (jitter < 15 ms, perte < 1 %) / 🟡 (< 50 ms, < 5 %) / 🔴 (au-delà), tooltip avec valeurs détaillées
+- **Historique** — colonnes *Jitter* et *Perte* avec code couleur identique par ligne
+- **Patterns horaires** — le tooltip de chaque barre inclut le jitter moyen de la tranche horaire
+
+**Intégration dans le score de sélection :**
+Le score est multiplié par un facteur de pénalité cumulatif :
+- Jitter : `max(0.85, 1 − jitter_ms / 1000)` → pénalité jusqu'à −15 %
+- Perte : `max(0.75, 1 − packet_loss_pct / 40)` → pénalité jusqu'à −25 %
+
+> Un serveur rapide mais instable sera donc déclassé au profit d'un serveur légèrement moins rapide mais fiable.
 
 ### Endpoint Prometheus `/metrics`
 

@@ -177,6 +177,7 @@ def send_test_notification(
     discord_url: str | None = None,
     apprise_urls: str | None = None,
     lang: str = 'fr',
+    mention: str | None = None,
 ) -> tuple[bool, str]:
     """
     Send a test notification to Discord and/or Apprise.
@@ -197,6 +198,9 @@ def send_test_notification(
                     'footer':      {'text': t['notif_footer']},
                 }],
             }
+            if mention:
+                payload['content'] = mention
+                payload['allowed_mentions'] = {'parse': ['users', 'roles']}
             resp = requests.post(discord_url.strip(), json=payload, timeout=10)
             resp.raise_for_status()
             logger.info('Discord test notification sent')

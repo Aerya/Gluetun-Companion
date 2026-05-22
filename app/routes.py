@@ -17,6 +17,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from .database import (
     get_db, get_setting, set_setting, compute_confidence_all,
     get_new_airvpn_servers, dismiss_new_airvpn_servers,
+    get_stability_all,
 )
 from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
@@ -285,6 +286,7 @@ def servers():
         filter_types=filter_types,
         active_server=active_server,
         confidence=compute_confidence_all(),
+        stability=get_stability_all(),
         new_airvpn=new_airvpn,
         new_airvpn_names=new_airvpn_names,
         new_airvpn_countries=new_airvpn_countries,
@@ -530,8 +532,10 @@ def history_patterns():
             # datetime(tested_at, 'localtime') converts UTC→local using the system TZ env var
             raw_rows = db.execute('''
                 SELECT strftime('%H', datetime(tested_at, 'localtime')) AS hour,
-                       ROUND(AVG(download_mbps), 1) AS avg_dl,
-                       ROUND(AVG(upload_mbps),   1) AS avg_ul,
+                       ROUND(AVG(download_mbps), 1)   AS avg_dl,
+                       ROUND(AVG(upload_mbps),   1)   AS avg_ul,
+                       ROUND(AVG(jitter_ms),     1)   AS avg_jitter,
+                       ROUND(AVG(packet_loss_pct), 1) AS avg_loss,
                        COUNT(*) AS n
                 FROM speed_tests
                 WHERE server_name = ? AND success = 1 AND test_method != 'proxy_qc'
@@ -546,10 +550,12 @@ def history_patterns():
         hkey = f'{h:02d}'
         r = hours_map.get(hkey)
         hourly_data.append({
-            'hour':   hkey,
-            'avg_dl': r['avg_dl'] if r else None,
-            'avg_ul': r['avg_ul'] if r else None,
-            'n':      r['n']      if r else 0,
+            'hour':       hkey,
+            'avg_dl':     r['avg_dl']     if r else None,
+            'avg_ul':     r['avg_ul']     if r else None,
+            'avg_jitter': r['avg_jitter'] if r else None,
+            'avg_loss':   r['avg_loss']   if r else None,
+            'n':          r['n']          if r else 0,
         })
 
     measured    = [h for h in hourly_data if h['avg_dl'] is not None]
@@ -658,6 +664,7 @@ def history():
         server_names=server_names,
         timeline_data=timeline_data,
         confidence=compute_confidence_all(),
+        stability=get_stability_all(),
     )
 
 
@@ -1137,8 +1144,9 @@ def api_notify_test():
     target      = data.get('target', 'all')          # 'discord' | 'apprise' | 'all'
     discord_url = (data.get('discord_url') or '').strip() or None
     apprise_urls= (data.get('apprise_urls') or '').strip() or None
+    mention     = (data.get('mention') or '').strip() or None
     lang        = get_setting('ui_lang', 'fr')
-    ok, msg     = send_test_notification(target, discord_url, apprise_urls, lang)
+    ok, msg     = send_test_notification(target, discord_url, apprise_urls, lang, mention=mention)
     return jsonify({'ok': ok, 'msg': msg}), (200 if ok else 502)
 
 
