@@ -51,6 +51,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Multi-stream download** — N concurrent TCP connections (configurable, default: 4)
 - **Automatic benchmarking** every X hours — download, upload and latency per server; automatic cycle can be disabled (manual trigger only)
 - **Quick check before benchmark** *(option)* — tests only the current server before each cycle; if speed is within ±N% of the last known result, the full benchmark is skipped entirely — no containers paused, no VPN restarts; triggers the full benchmark only when performance drifts significantly
+- **Adaptive scheduling** *(option)* — analyses hourly speed and variance patterns to identify the best and worst benchmark windows; recommended time slots displayed in Settings; optional auto-shift: if the next cycle falls on an unfavorable hour, it is shifted up to 3 h forward to the next favorable window
 - **On-demand quick benchmark** — button always available (dashboard and settings); tests only the active server via the Gluetun HTTP proxy, result in seconds, no VPN interruption, result saved in history
 - **Jitter & Packet Loss** — network stability measured at every test (21 TTFB probes in proxy mode, ICMP via sidecar); 🟢/🟡/🔴 indicator on Servers page, dedicated columns in History, jitter shown in hourly patterns; factored into selection score (up to −15 % jitter / −25 % loss penalty)
 - **DNS latency** *(sidecar)* — DNS resolution time measured from inside the VPN tunnel via `dig` (4 domains in parallel, median returned); detects slow, overloaded, or hijacking resolvers; column in History, DNS shown in the Stability tooltip, data in hourly patterns
@@ -289,6 +290,23 @@ When enabled, each cycle starts with a speed test of the **currently active serv
 This is ideal for frequent scheduling intervals (e.g. every 2–3 hours) where you want a sanity check without the cost of a full benchmark every time.
 
 > The threshold is configurable (1–100 %). A value of 15 means: if the current speed is between 85 % and 115 % of the last known result, the full benchmark is skipped.
+
+### Adaptive scheduling *(option)*
+
+Enable via **Settings → Scheduling & Benchmark → Adaptive scheduling**.
+
+Companion analyses the test history to compute, for each hour of the day (0–23), the **average download speed** and **coefficient of variation** (CV = σ/μ). An hour with high speed and low variance is a good benchmark window — measurements are representative and reproducible there.
+
+**Score per hour** = `avg_speed × max(0, 1 − CV/100)`
+
+- 🟢 **Good window** — score ≥ 70 % of the maximum
+- 🔴 **Avoid** — score < 50 % of the maximum
+
+**Requirements**: at least 3 tests in at least 6 different hour slots. Results are displayed directly in the Settings card as soon as enough data is available.
+
+**Auto-shift** *(sub-option)*: if a scheduled cycle falls on an unfavorable hour, the benchmark is deferred by up to 3 h to the next favorable window. If none is found within that delay, the benchmark runs immediately. Once complete, the scheduler resumes its normal interval.
+
+> This option complements the automatic cycle — it does not replace it. The configured interval remains the reference; the adaptive shift only adjusts the next trigger if the hour is deemed unfavorable.
 
 ### Docker events listener
 

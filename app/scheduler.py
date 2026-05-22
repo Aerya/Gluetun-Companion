@@ -612,14 +612,88 @@ def _test_server_sidecar_with_retry(
 # Benchmark cycle
 # ---------------------------------------------------------------------------
 
+def _compute_adaptive_delay() -> int | None:
+    """Return seconds to wait before benchmarking, or None if the current hour is fine.
+
+    Reads hourly stats from the DB.  If the current local hour is already in the
+    'good_hours' bucket (or there is not enough data), returns None — run now.
+    Otherwise looks ahead up to 3 hours for the next good window and returns the
+    number of seconds until the start of that hour.  Returns None if no good window
+    is found within 3 hours (we run anyway rather than delay indefinitely).
+    """
+    from .database import get_hourly_benchmark_stats
+    from datetime import datetime, timedelta
+
+    stats = get_hourly_benchmark_stats()
+    if not stats['has_enough_data'] or not stats['good_hours']:
+        return None
+
+    current_hour = datetime.now().hour
+    if current_hour in stats['good_hours']:
+        return None  # already in a good window
+
+    now = datetime.now()
+    for delta_h in range(1, 4):  # look at the next 1, 2 and 3 hours
+        candidate_hour = (current_hour + delta_h) % 24
+        if candidate_hour in stats['good_hours']:
+            # Seconds until the start of that hour
+            candidate_dt = (now.replace(minute=0, second=0, microsecond=0)
+                            + timedelta(hours=delta_h))
+            delay = int((candidate_dt - now).total_seconds())
+            return max(delay, 60)   # at least 1 minute
+
+    return None  # no good window within 3 h → run now
+
+
+def _restore_interval_trigger() -> None:
+    """Restore the benchmark job to its configured IntervalTrigger.
+
+    Called after a benchmark completes when the job may have been switched to a
+    one-shot DateTrigger by the adaptive-scheduling logic.
+    """
+    if not _scheduler:
+        return
+    job = _scheduler.get_job('benchmark')
+    if job is None:
+        return
+    from apscheduler.triggers.date import DateTrigger
+    if isinstance(job.trigger, DateTrigger):
+        from .database import get_setting
+        hours   = float(get_setting('test_interval_hours', '6'))
+        enabled = get_setting('auto_benchmark', '1') == '1'
+        reschedule(hours, enabled)
+        logger.info('Adaptive scheduling: interval trigger restored (every %.1f h)', hours)
+
+
 def run_benchmark(app):
-    """Scheduled entry point — respects auto_benchmark setting."""
+    """Scheduled entry point — respects auto_benchmark and adaptive scheduling."""
     from .database import get_setting
     if get_setting('auto_benchmark', '1') != '1':
         logger.info('Auto benchmark disabled — skipping scheduled run')
         return
+
+    # ── Adaptive scheduling: shift to next favorable hour if needed ──────────
+    if (get_setting('adaptive_scheduling', '0') == '1'
+            and get_setting('adaptive_auto_shift', '0') == '1'):
+        delay_secs = _compute_adaptive_delay()
+        if delay_secs:
+            from apscheduler.triggers.date import DateTrigger
+            from datetime import datetime, timedelta
+            next_fire = datetime.now() + timedelta(seconds=delay_secs)
+            if _scheduler:
+                _scheduler.reschedule_job('benchmark', trigger=DateTrigger(run_date=next_fire))
+            logger.info(
+                'Adaptive scheduling: current hour is suboptimal — '
+                'benchmark shifted by %.0f min to %s',
+                delay_secs / 60, next_fire.strftime('%H:%M'),
+            )
+            return
+
     with _lock:
         _do_benchmark(app)
+
+    # Restore IntervalTrigger in case we were running from a one-shot DateTrigger
+    _restore_interval_trigger()
 
 
 def run_benchmark_now(app):

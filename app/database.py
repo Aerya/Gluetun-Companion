@@ -115,7 +115,9 @@ def init_db(db_path: str):
                 ('airvpn_new_server_notif',     '0'),
                 ('airvpn_notify_mention',       ''),
                 ('stability_weight',            '30'),
-                ('api_token',                   '');
+                ('api_token',                   ''),
+                ('adaptive_scheduling',         '0'),
+                ('adaptive_auto_shift',         '0');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [
@@ -340,6 +342,81 @@ def dismiss_new_airvpn_servers():
     """Mark all tracked new servers as dismissed (user acknowledged the banner)."""
     with get_db() as db:
         db.execute("UPDATE airvpn_new_servers SET dismissed = 1")
+
+
+def get_hourly_benchmark_stats(min_samples: int = 3) -> dict:
+    """Compute per-hour download stats for adaptive scheduling.
+
+    Returns a dict with:
+      has_enough_data  — True when ≥ 6 distinct hours have ≥ min_samples tests
+      hours            — {hour_int: {n, avg_dl, cv_pct, score}}
+      good_hours       — hours whose score ≥ 70 % of the best (sorted)
+      bad_hours        — hours whose score < 50 % of the best (sorted)
+      best_hour        — hour int with highest score, or None
+      worst_hour       — hour int with lowest score (among covered hours), or None
+
+    Hours are in local time (respects the TZ env var via SQLite 'localtime').
+    proxy_qc tests are excluded — they are not representative benchmarks.
+    """
+    with get_db() as db:
+        rows = db.execute('''
+            SELECT
+                CAST(strftime('%H', tested_at, 'localtime') AS INTEGER) AS hour,
+                COUNT(*)                                                  AS n,
+                AVG(download_mbps)                                        AS avg_dl,
+                AVG(download_mbps * download_mbps)
+                  - AVG(download_mbps) * AVG(download_mbps)              AS variance
+            FROM speed_tests
+            WHERE success = 1
+              AND test_method NOT IN ('proxy_qc')
+              AND download_mbps IS NOT NULL
+            GROUP BY hour
+            HAVING n >= ?
+            ORDER BY hour
+        ''', (min_samples,)).fetchall()
+
+    if len(rows) < 6:
+        return {
+            'has_enough_data': False,
+            'hours': {},
+            'good_hours': [],
+            'bad_hours': [],
+            'best_hour': None,
+            'worst_hour': None,
+        }
+
+    hours: dict[int, dict] = {}
+    for r in rows:
+        avg = r['avg_dl'] or 0.0
+        var = max(r['variance'] or 0.0, 0.0)
+        stddev = math.sqrt(var) if var > 0 else 0.0
+        cv_pct = round(stddev / avg * 100, 1) if avg > 0 else 100.0
+        # Score: rewards high average speed AND low variance
+        score = avg * max(0.0, 1.0 - cv_pct / 100.0)
+        hours[int(r['hour'])] = {
+            'n':      int(r['n']),
+            'avg_dl': round(avg, 1),
+            'cv_pct': cv_pct,
+            'score':  round(score, 1),
+        }
+
+    max_score = max(h['score'] for h in hours.values()) if hours else 0.0
+    min_score = min(h['score'] for h in hours.values()) if hours else 0.0
+
+    good_hours = sorted(h for h, d in hours.items() if max_score > 0 and d['score'] >= 0.70 * max_score)
+    bad_hours  = sorted(h for h, d in hours.items() if max_score > 0 and d['score'] <  0.50 * max_score)
+
+    best_hour  = max(hours, key=lambda h: hours[h]['score']) if hours else None
+    worst_hour = min(hours, key=lambda h: hours[h]['score']) if hours else None
+
+    return {
+        'has_enough_data': True,
+        'hours':      hours,
+        'good_hours': good_hours,
+        'bad_hours':  bad_hours,
+        'best_hour':  best_hour,
+        'worst_hour': worst_hour,
+    }
 
 
 def get_docker_event_counts(days: int = 30) -> dict[str, int]:

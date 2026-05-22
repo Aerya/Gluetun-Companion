@@ -373,6 +373,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_quick_check_threshold_label': 'Tolérance de débit',
         'set_quick_check_threshold_hint':  'Écart maximal autorisé (en %) par rapport au dernier résultat connu. Si le débit actuel est dans cette plage, le benchmark est ignoré.',
 
+        # ── Adaptive scheduling ──
+        'set_adaptive_title':            'Scheduling adaptatif basé sur patterns horaires',
+        'set_adaptive_label':            'Activer le scheduling adaptatif',
+        'set_adaptive_hint':             'Analyse les patterns horaires de débit et de variance pour identifier les meilleures fenêtres de benchmark. Nécessite des données historiques (au moins 3 tests dans 6 tranches horaires différentes).',
+        'set_adaptive_auto_shift_label': 'Décaler automatiquement vers la prochaine fenêtre favorable',
+        'set_adaptive_auto_shift_hint':  'Si le benchmark est planifié sur une heure défavorable (débit instable), il est décalé jusqu\'à 3 h vers la prochaine fenêtre favorable. Si aucune n\'est trouvée dans ce délai, il s\'exécute immédiatement.',
+        'set_adaptive_no_data':          'Pas encore assez de données — il faut au minimum 3 tests dans 6 tranches horaires différentes.',
+        'set_adaptive_good_hours':       'Meilleures plages (score ≥ 70 % du max)',
+        'set_adaptive_bad_hours':        'À éviter (score < 50 % du max)',
+        'set_adaptive_best':             'Meilleure heure',
+        'set_adaptive_worst':            'Pire heure',
+        'set_adaptive_h':                'h',
+
         # ── Hourly patterns ──
         'pat_title':        'Patterns horaires',
         'pat_server_label': 'Serveur',
@@ -802,6 +815,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_quick_check_hint':      'Tests the currently active VPN server speed first <strong>via the HTTP proxy directly</strong> — no sidecar container, result in seconds. If speed is within ±N%, the full benchmark is skipped. Otherwise, the full benchmark runs normally.',
         'set_quick_check_threshold_label': 'Speed tolerance',
         'set_quick_check_threshold_hint':  'Maximum allowed deviation (in %) from the last known result. If current speed is within this range, the benchmark is skipped.',
+
+        # ── Adaptive scheduling ──
+        'set_adaptive_title':            'Adaptive scheduling based on hourly patterns',
+        'set_adaptive_label':            'Enable adaptive scheduling',
+        'set_adaptive_hint':             'Analyses hourly speed and variance patterns to identify the best benchmark windows. Requires historical data (at least 3 tests in 6 different hour slots).',
+        'set_adaptive_auto_shift_label': 'Automatically shift to the next favorable window',
+        'set_adaptive_auto_shift_hint':  'If a benchmark is scheduled during an unfavorable hour (unstable speed), it is shifted up to 3 h forward to the next favorable window. If none is found within that delay, it runs immediately.',
+        'set_adaptive_no_data':          'Not enough data yet — at least 3 tests in 6 different hour slots are required.',
+        'set_adaptive_good_hours':       'Best windows (score ≥ 70 % of max)',
+        'set_adaptive_bad_hours':        'Hours to avoid (score < 50 % of max)',
+        'set_adaptive_best':             'Best hour',
+        'set_adaptive_worst':            'Worst hour',
+        'set_adaptive_h':                'h',
 
         # ── Hourly patterns ──
         'pat_title':        'Hourly patterns',

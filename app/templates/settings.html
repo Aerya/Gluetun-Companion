@@ -176,7 +176,72 @@
           </div>
         </div>
 
-        <div class="d-flex gap-2 flex-wrap mb-0">
+        <hr class="my-3">
+
+        {# ── Scheduling adaptatif ───────────────────────────────────────── #}
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="adaptive_scheduling" class="form-check-input"
+                 id="adaptive_scheduling"
+                 {{ 'checked' if cfg.adaptive_scheduling == '1' }}
+                 onchange="toggleAdaptive(this.checked)">
+          <label class="form-check-label fw-semibold" for="adaptive_scheduling">
+            {{ t.set_adaptive_title }}
+          </label>
+        </div>
+        <div class="form-text text-muted mb-2" style="font-size:.78rem">
+          {{ t.set_adaptive_hint }}
+        </div>
+
+        <div id="adaptive-options" class="ps-1"
+             style="{{ '' if cfg.adaptive_scheduling == '1' else 'opacity:.45;pointer-events:none' }}">
+
+          {# Stats horaires #}
+          <div class="mb-3">
+            {%- if adaptive_stats.has_enough_data %}
+              {%- if adaptive_stats.good_hours %}
+              <div class="mb-1 small">
+                <span class="text-success fw-semibold"><i class="bi bi-clock-fill me-1"></i>{{ t.set_adaptive_good_hours }} :</span>
+                {% for h in adaptive_stats.good_hours %}
+                  <span class="badge bg-success bg-opacity-25 text-success border border-success border-opacity-25 me-1">{{ '%02d'|format(h) }}{{ t.set_adaptive_h }}</span>
+                {% endfor %}
+              </div>
+              {%- endif %}
+              {%- if adaptive_stats.bad_hours %}
+              <div class="mb-1 small">
+                <span class="text-danger fw-semibold"><i class="bi bi-clock me-1"></i>{{ t.set_adaptive_bad_hours }} :</span>
+                {% for h in adaptive_stats.bad_hours %}
+                  <span class="badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-25 me-1">{{ '%02d'|format(h) }}{{ t.set_adaptive_h }}</span>
+                {% endfor %}
+              </div>
+              {%- endif %}
+              {%- if adaptive_stats.best_hour is not none %}
+              <div class="small text-muted">
+                {{ t.set_adaptive_best }} : <strong>{{ '%02d'|format(adaptive_stats.best_hour) }}{{ t.set_adaptive_h }}</strong>
+                ({{ adaptive_stats.hours[adaptive_stats.best_hour].avg_dl }} Mbps · CV {{ adaptive_stats.hours[adaptive_stats.best_hour].cv_pct }}%)
+                &nbsp;·&nbsp;
+                {{ t.set_adaptive_worst }} : <strong>{{ '%02d'|format(adaptive_stats.worst_hour) }}{{ t.set_adaptive_h }}</strong>
+                ({{ adaptive_stats.hours[adaptive_stats.worst_hour].avg_dl }} Mbps · CV {{ adaptive_stats.hours[adaptive_stats.worst_hour].cv_pct }}%)
+              </div>
+              {%- endif %}
+            {%- else %}
+              <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>{{ t.set_adaptive_no_data }}</span>
+            {%- endif %}
+          </div>
+
+          <div class="mb-2 form-check form-switch">
+            <input type="checkbox" name="adaptive_auto_shift" class="form-check-input"
+                   id="adaptive_auto_shift"
+                   {{ 'checked' if cfg.adaptive_auto_shift == '1' }}>
+            <label class="form-check-label" for="adaptive_auto_shift">
+              {{ t.set_adaptive_auto_shift_label }}
+            </label>
+          </div>
+          <div class="form-text text-muted mb-0" style="font-size:.75rem">
+            {{ t.set_adaptive_auto_shift_hint }}
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap mb-0 mt-3">
           <button type="submit" class="btn btn-sm btn-success fw-semibold">
             <i class="bi bi-save"></i> {{ t.cmn_save }}
           </button>
@@ -1215,6 +1280,16 @@ function toggleQuickCheck(enabled) {
   }
 }
 toggleQuickCheck(document.getElementById('quick_check_mode').checked);
+
+// ── Adaptive scheduling toggle ───────────────────────────────────────────
+function toggleAdaptive(enabled) {
+  const opts = document.getElementById('adaptive-options');
+  if (opts) {
+    opts.style.opacity       = enabled ? '' : '0.45';
+    opts.style.pointerEvents = enabled ? '' : 'none';
+  }
+}
+toggleAdaptive(document.getElementById('adaptive_scheduling').checked);
 
 // ── Benchmark triggers ───────────────────────────────────────────────────
 const _setMsgRunning  = '{{ t.set_running }}';

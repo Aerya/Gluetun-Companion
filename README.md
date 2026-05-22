@@ -51,6 +51,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Téléchargement multi-flux** — N connexions TCP simultanées (configurable, défaut : 4)
 - **Benchmark automatique** toutes les X heures — download, upload et latence par serveur ; cycle automatique désactivable (déclenchement manuel uniquement)
 - **Vérification rapide avant benchmark** *(option)* — teste uniquement le serveur actif avant chaque cycle ; si le débit est dans la plage ±N% par rapport au dernier résultat connu, le benchmark complet est ignoré — aucun container stoppé, aucun redémarrage VPN ; déclenche le benchmark complet uniquement si les performances dérivent significativement
+- **Scheduling adaptatif** *(option)* — analyse les patterns horaires de débit et de variance pour identifier les meilleures et pires fenêtres de benchmark ; affiche les plages recommandées dans les Paramètres ; option de décalage automatique : si le prochain cycle tombe sur une heure défavorable, il est décalé jusqu'à 3 h vers la prochaine fenêtre favorable
 - **Benchmark rapide à la demande** — bouton disponible en permanence (dashboard et paramètres) ; teste uniquement le serveur actif via le proxy HTTP de Gluetun, résultat en quelques secondes, aucune interruption VPN, résultat sauvegardé dans l'historique
 - **Jitter & Packet Loss** — stabilité réseau mesurée à chaque test (21 sondes TTFB en mode proxy, ICMP via sidecar) ; indicateur 🟢/🟡/🔴 sur la page Serveurs, colonnes dédiées dans l'historique, jitter affiché dans les patterns horaires ; intégré dans le score de sélection (pénalité jusqu'à −15 % jitter / −25 % perte)
 - **Latence DNS** *(sidecar)* — mesure du temps de résolution DNS depuis l'intérieur du tunnel VPN via `dig` (4 domaines en parallèle, médiane retournée) ; détecte les résolveurs lents, surchargés ou qui interceptent les requêtes ; colonne dans l'historique, tooltip sur l'indicateur Stabilité, données dans les patterns horaires
@@ -289,6 +290,23 @@ Lorsque cette option est activée, chaque cycle commence par un test de débit s
 Idéal pour des intervalles fréquents (ex. toutes les 2–3 h) où l'on veut un contrôle rapide sans le coût d'un benchmark complet à chaque fois.
 
 > La tolérance est configurable (1–100 %). Une valeur de 15 signifie : si le débit actuel est compris entre 85 % et 115 % du dernier résultat connu, le benchmark complet est ignoré.
+
+### Scheduling adaptatif *(option)*
+
+Activer via **Paramètres → Planification & Benchmark → Scheduling adaptatif**.
+
+Companion analyse l'historique des tests pour calculer, pour chaque tranche horaire (0h–23h), le **débit moyen** et le **coefficient de variation** (CV = σ/μ). Une heure avec un débit élevé et une faible variance est une bonne fenêtre de benchmark — les mesures y sont représentatives et reproductibles.
+
+**Score par heure** = `débit_moyen × max(0, 1 − CV/100)`
+
+- 🟢 **Bonne fenêtre** — score ≥ 70 % du maximum
+- 🔴 **À éviter** — score < 50 % du maximum
+
+**Prérequis** : au moins 3 tests dans au moins 6 tranches horaires différentes. Les résultats s'affichent directement dans la carte Paramètres dès que les données sont suffisantes.
+
+**Décalage automatique** *(sous-option)* : si le cycle planifié tombe sur une heure défavorable, le benchmark est décalé d'un maximum de 3 h vers la prochaine fenêtre favorable. Si aucune n'est trouvée dans ce délai, le benchmark s'exécute immédiatement. Une fois terminé, le planificateur reprend son intervalle normal.
+
+> Cette option est complémentaire du cycle automatique — elle ne le remplace pas. L'intervalle configuré reste la référence ; le décalage adaptatif n'ajuste que le prochain déclenchement si l'heure est jugée défavorable.
 
 ### Écoute Docker events
 

@@ -760,6 +760,8 @@ def settings():
                 set_setting('quick_check_threshold', str(max(1.0, min(qct, 100.0))))
             except ValueError:
                 pass
+            set_setting('adaptive_scheduling', '1' if request.form.get('adaptive_scheduling') else '0')
+            set_setting('adaptive_auto_shift', '1' if request.form.get('adaptive_auto_shift') else '0')
             reschedule(float(request.form.get('interval', '6')), enabled=auto_bm)
             flash_t('flash_settings_saved', 'success')
 
@@ -896,15 +898,20 @@ def settings():
         'pull_network_containers':      set(json.loads(get_setting('pull_network_containers', '[]'))),
         'quick_check_mode':             get_setting('quick_check_mode', '0'),
         'quick_check_threshold':        get_setting('quick_check_threshold', '15'),
+        'adaptive_scheduling':          get_setting('adaptive_scheduling', '0'),
+        'adaptive_auto_shift':          get_setting('adaptive_auto_shift', '0'),
         'weighted_score_current_pct':   get_setting('weighted_score_current_pct', '65'),
         'stability_weight':             get_setting('stability_weight', '30'),
         'api_token':                    get_setting('api_token', ''),
     }
+    from .database import get_hourly_benchmark_stats
+    adaptive_stats = get_hourly_benchmark_stats()
     return render_template(
         'settings.html',
         cfg=cfg,
         next_run=get_next_run(),
         gluetun_container=current_app.config['GLUETUN_CONTAINER'],
+        adaptive_stats=adaptive_stats,
     )
 
 
