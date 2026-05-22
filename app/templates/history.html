@@ -2,7 +2,12 @@
 {% block title %}{{ t.nav_history }} – Gluetun Companion{% endblock %}
 
 {% block content %}
-<h5 class="mb-3"><i class="bi bi-graph-up"></i> {{ t.hist_title }}</h5>
+<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+  <h5 class="mb-0"><i class="bi bi-graph-up"></i> {{ t.hist_title }}</h5>
+  <a href="{{ url_for('main.history_patterns') }}" class="btn btn-sm btn-outline-secondary ms-auto">
+    <i class="bi bi-clock-history"></i> {{ t.pat_title }}
+  </a>
+</div>
 
 {% if server_filter and timeline_data %}
 {# ── Timeline chart (server filtered) ─────────────────────────────────── #}

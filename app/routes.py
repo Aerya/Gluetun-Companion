@@ -486,6 +486,63 @@ def add_servers_bulk():
 
 
 # ---------------------------------------------------------------------------
+# History — hourly patterns
+# ---------------------------------------------------------------------------
+
+@bp.route('/history/patterns')
+@login_required
+def history_patterns():
+    server_filter = request.args.get('server', '').strip()
+
+    with get_db() as db:
+        server_names = [r['server_name'] for r in db.execute(
+            'SELECT DISTINCT server_name FROM speed_tests WHERE success=1 ORDER BY server_name'
+        ).fetchall()]
+
+        raw_rows = []
+        if server_filter:
+            # datetime(tested_at, 'localtime') converts UTC→local using the system TZ env var
+            raw_rows = db.execute('''
+                SELECT strftime('%H', datetime(tested_at, 'localtime')) AS hour,
+                       ROUND(AVG(download_mbps), 1) AS avg_dl,
+                       ROUND(AVG(upload_mbps),   1) AS avg_ul,
+                       COUNT(*) AS n
+                FROM speed_tests
+                WHERE server_name = ? AND success = 1 AND test_method != 'proxy_qc'
+                GROUP BY hour
+                ORDER BY hour
+            ''', (server_filter,)).fetchall()
+
+    # Fill all 24 hours (missing hours → null)
+    hours_map = {r['hour']: r for r in raw_rows}
+    hourly_data = []
+    for h in range(24):
+        hkey = f'{h:02d}'
+        r = hours_map.get(hkey)
+        hourly_data.append({
+            'hour':   hkey,
+            'avg_dl': r['avg_dl'] if r else None,
+            'avg_ul': r['avg_ul'] if r else None,
+            'n':      r['n']      if r else 0,
+        })
+
+    measured   = [h for h in hourly_data if h['avg_dl'] is not None]
+    has_data   = bool(measured)
+    best_hour  = max(measured, key=lambda h: h['avg_dl']) if measured else None
+    worst_hour = min(measured, key=lambda h: h['avg_dl']) if measured else None
+
+    return render_template(
+        'patterns.html',
+        server_names=server_names,
+        server_filter=server_filter,
+        hourly_data=hourly_data,
+        has_data=has_data,
+        best_hour=best_hour,
+        worst_hour=worst_hour,
+    )
+
+
+# ---------------------------------------------------------------------------
 # History
 # ---------------------------------------------------------------------------
 

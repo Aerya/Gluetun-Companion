@@ -66,6 +66,8 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Bascule manuelle** vers n'importe quel serveur configuré depuis la page Serveurs — Gluetun est reconfiguré et les containers `network_mode: service:gluetun` sont recréés automatiquement
 - **Notifications** à chaque bascule — webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
 - **Purge automatique** de l'historique SQLite configurable (rétention en jours)
+- **Score de confiance par serveur** — indicateur 🟢/🟡/🔴 sur la page Serveurs et dans l'historique ; basé sur le nombre de mesures et la variabilité des résultats ; intégré dans le score de sélection automatique (pondération légère)
+- **Patterns horaires** (`/history/patterns`) — graphique barres 0h–23h du débit moyen par tranche horaire, coloré selon les performances relatives ; meilleure et pire heure affichées ; permet de repérer les créneaux de saturation serveur
 - **Endpoint `/healthz`** non authentifié pour les healthchecks Docker
 - **Endpoint `/metrics`** au format Prometheus — débit, latence, bascules, serveur actif ; optionnellement protégé par Bearer token ; compatible Grafana
 - **Logs JSON structurés** optionnels via `LOG_JSON=1` (compatibles Loki/Grafana)
@@ -269,6 +271,30 @@ Lorsque cette option est activée, chaque cycle commence par un test de débit s
 Idéal pour des intervalles fréquents (ex. toutes les 2–3 h) où l'on veut un contrôle rapide sans le coût d'un benchmark complet à chaque fois.
 
 > La tolérance est configurable (1–100 %). Une valeur de 15 signifie : si le débit actuel est compris entre 85 % et 115 % du dernier résultat connu, le benchmark complet est ignoré.
+
+### Score de confiance par serveur
+
+Un indicateur coloré est affiché sur la page **Serveurs** (colonne *Fiabilité*) et dans l'**Historique** pour chaque serveur. Il reflète la fiabilité des mesures accumulées.
+
+| Niveau | Conditions |
+|---|---|
+| 🟢 Élevé | ≥ 5 mesures **et** variabilité < 40 % |
+| 🟡 Modéré | 2–4 mesures ou variabilité 40–70 % |
+| 🔴 Faible | ≤ 1 mesure, variabilité > 70 % ou échecs consécutifs |
+
+La **variabilité** (coefficient de variation) mesure l'écart-type des débits rapporté à la moyenne : 0 % = résultats identiques à chaque test, 100 % = résultats très dispersés. Les tests `proxy_qc` sont exclus du calcul.
+
+Le score influence légèrement la sélection automatique du meilleur serveur : HIGH × 1,0 · MEDIUM × 0,95 · LOW × 0,85 appliqués sur le score pondéré.
+
+### Vue patterns horaires (`/history/patterns`)
+
+Accessible depuis **Historique → Patterns horaires**, cette vue affiche les performances moyennes par tranche horaire (0h–23h) pour un serveur donné.
+
+- Graphique en barres colorées selon les performances relatives au maximum du serveur : 🟢 ≥ 85 % · 🟡 65–85 % · 🟠 45–65 % · 🔴 < 45 %
+- Heures en heure locale (variable d'environnement `TZ` respectée)
+- Meilleure et pire heure affichées en stat cards
+- Tests rapides (`proxy_qc`) exclus
+- Utile pour planifier les benchmarks aux créneaux les plus favorables
 
 ### Endpoint Prometheus `/metrics`
 

@@ -121,7 +121,7 @@
         ] %}
         {% for endpoint, icon, label in nav %}
         <li class="nav-item">
-          <a class="nav-link {{ 'active' if request.endpoint == endpoint }}"
+          <a class="nav-link {{ 'active' if request.endpoint == endpoint or (endpoint == 'main.history' and request.endpoint == 'main.history_patterns') }}"
              href="{{ url_for(endpoint) }}">
             <i class="bi {{ icon }}"></i> {{ label }}
           </a>

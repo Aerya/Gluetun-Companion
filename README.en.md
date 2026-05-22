@@ -66,6 +66,8 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Manual switch** to any configured server from the Servers page — Gluetun is reconfigured and `network_mode: service:gluetun` containers are recreated automatically
 - **Notifications** on every switch — Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
 - **Automatic purge** of SQLite history with configurable retention (in days)
+- **Per-server confidence score** — 🟢/🟡/🔴 indicator on the Servers page and in History; based on measurement count and result variability; factored into the automatic selection score (light weighting)
+- **Hourly patterns** (`/history/patterns`) — 0h–23h bar chart showing average speed by hour of day, color-coded by relative performance; best and worst hour displayed; helps identify server saturation windows
 - **`/healthz` endpoint** unauthenticated, for Docker healthchecks
 - **`/metrics` endpoint** in Prometheus format — throughput, latency, switches, active server; optionally protected by Bearer token; Grafana-compatible
 - **Structured JSON logs** optional via `LOG_JSON=1` (Loki/Grafana compatible)
@@ -269,6 +271,30 @@ When enabled, each cycle starts with a speed test of the **currently active serv
 This is ideal for frequent scheduling intervals (e.g. every 2–3 hours) where you want a sanity check without the cost of a full benchmark every time.
 
 > The threshold is configurable (1–100 %). A value of 15 means: if the current speed is between 85 % and 115 % of the last known result, the full benchmark is skipped.
+
+### Per-server confidence score
+
+A color indicator is shown on the **Servers** page (*Confidence* column) and in **History** for each server. It reflects how reliable the accumulated measurements are.
+
+| Level | Conditions |
+|---|---|
+| 🟢 High | ≥ 5 measurements **and** variability < 40 % |
+| 🟡 Moderate | 2–4 measurements or variability 40–70 % |
+| 🔴 Low | ≤ 1 measurement, variability > 70 % or consecutive failures |
+
+**Variability** (coefficient of variation) is the standard deviation of speeds divided by the mean: 0 % = identical results every test, 100 % = very scattered results. Quick check tests (`proxy_qc`) are excluded from the calculation.
+
+The score lightly influences automatic server selection: HIGH × 1.0 · MEDIUM × 0.95 · LOW × 0.85 applied to the weighted score.
+
+### Hourly patterns view (`/history/patterns`)
+
+Accessible from **History → Hourly patterns**, this view shows average performance by hour of day (0h–23h) for a selected server.
+
+- Bar chart color-coded by performance relative to the server's best hour: 🟢 ≥ 85 % · 🟡 65–85 % · 🟠 45–65 % · 🔴 < 45 %
+- Hours displayed in local time (respects the `TZ` environment variable)
+- Best and worst hour shown in stat cards
+- Quick checks (`proxy_qc`) excluded
+- Useful for scheduling benchmarks during peak performance windows
 
 ### Prometheus `/metrics` Endpoint
 

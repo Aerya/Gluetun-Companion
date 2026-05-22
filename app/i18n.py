@@ -360,6 +360,22 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_quick_check_threshold_label': 'Tolérance de débit',
         'set_quick_check_threshold_hint':  'Écart maximal autorisé (en %) par rapport au dernier résultat connu. Si le débit actuel est dans cette plage, le benchmark est ignoré.',
 
+        # ── Hourly patterns ──
+        'pat_title':        'Patterns horaires',
+        'pat_server_label': 'Serveur',
+        'pat_select_server':'Choisir un serveur…',
+        'pat_placeholder':  'Sélectionnez un serveur pour afficher ses performances moyennes par tranche horaire.',
+        'pat_no_data':      'Aucune donnée de benchmark pour ce serveur. Lancez un cycle complet d\'abord.',
+        'pat_chart_title':  'Débit moyen par tranche horaire',
+        'pat_hint':         'Tests rapides (proxy_qc) exclus · heures locales',
+        'pat_best_hour':    'Meilleure heure',
+        'pat_worst_hour':   'Pire heure',
+        'pat_tests_label':  'test(s)',
+        'pat_ul_label':     'UL',
+        'pat_no_test':      'Aucun test',
+        'pat_chart_tooltip':'Chaque barre représente le débit download moyen mesuré à cette heure. La couleur indique la performance relative à la meilleure heure du serveur : 🟢 ≥ 85 % · 🟡 65–85 % · 🟠 45–65 % · 🔴 < 45 %. Survolez une barre pour voir le détail (DL, UL, nombre de tests).',
+        'pat_legend_ref':   'du meilleur',
+
         # ── Run Now hints ──
         'dash_run_now_hint': 'Passe par le proxy HTTP — résultat en quelques secondes.',
         'set_run_now_hint':  'Passe par le proxy HTTP — résultat en quelques secondes.',
@@ -721,6 +737,22 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_quick_check_hint':      'Tests the currently active VPN server speed first <strong>via the HTTP proxy directly</strong> — no sidecar container, result in seconds. If speed is within ±N%, the full benchmark is skipped. Otherwise, the full benchmark runs normally.',
         'set_quick_check_threshold_label': 'Speed tolerance',
         'set_quick_check_threshold_hint':  'Maximum allowed deviation (in %) from the last known result. If current speed is within this range, the benchmark is skipped.',
+
+        # ── Hourly patterns ──
+        'pat_title':        'Hourly patterns',
+        'pat_server_label': 'Server',
+        'pat_select_server':'Choose a server…',
+        'pat_placeholder':  'Select a server to view its average speed by hour of day.',
+        'pat_no_data':      'No benchmark data for this server. Run a full cycle first.',
+        'pat_chart_title':  'Average speed by hour of day',
+        'pat_hint':         'Quick checks (proxy_qc) excluded · local time',
+        'pat_best_hour':    'Best hour',
+        'pat_worst_hour':   'Worst hour',
+        'pat_tests_label':  'test(s)',
+        'pat_ul_label':     'UL',
+        'pat_no_test':      'No test',
+        'pat_chart_tooltip':'Each bar shows the average download speed measured at that hour. Color reflects performance relative to the server\'s best hour: 🟢 ≥ 85 % · 🟡 65–85 % · 🟠 45–65 % · 🔴 < 45 %. Hover a bar to see details (DL, UL, test count).',
+        'pat_legend_ref':   'of best',
 
         # ── Run Now hints ──
         'dash_run_now_hint': 'Uses the HTTP proxy — result in a few seconds.',
