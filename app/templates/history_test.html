@@ -1,0 +1,483 @@
+{% extends 'base.html' %}
+{% block title %}{{ t.nav_history }} TEST – Gluetun Companion{% endblock %}
+
+{% block content %}
+{# ── Draft banner ─────────────────────────────────────────────────────────── #}
+<div class="alert alert-warning py-1 px-3 mb-3 d-flex align-items-center gap-2" style="font-size:.8rem">
+  <i class="bi bi-flask"></i>
+  <span><strong>Mise en page test</strong> — <a href="{{ url_for('main.history') }}" class="alert-link">← Version stable</a></span>
+</div>
+
+{# ── Header + Patterns toggle ──────────────────────────────────────────────── #}
+<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+  <h5 class="mb-0"><i class="bi bi-graph-up"></i> {{ t.hist_title }}</h5>
+  <div class="ms-auto d-flex gap-2">
+    {% if adaptive_stats.has_enough_data %}
+    <button class="btn btn-sm btn-outline-info"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#patternsPanel"
+            aria-expanded="{% if server_filter %}true{% else %}false{% endif %}">
+      <i class="bi bi-clock-history"></i> Patterns horaires
+      {% if adaptive_stats.best_hour is not none %}
+        <span class="badge bg-success ms-1">{{ '%02d'|format(adaptive_stats.best_hour) }}h</span>
+      {% endif %}
+    </button>
+    {% endif %}
+    <a href="{{ url_for('main.history_patterns') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-bar-chart-steps"></i> {{ t.pat_title }}
+    </a>
+  </div>
+</div>
+
+{# ── Inline Patterns panel (Bootstrap Collapse) ──────────────────────────── #}
+{% if adaptive_stats.has_enough_data %}
+<div class="collapse {% if server_filter %}show{% endif %}" id="patternsPanel">
+  <div class="card mb-4 p-3">
+    <div class="d-flex justify-content-between align-items-start mb-3">
+      <div>
+        <span class="fw-semibold"><i class="bi bi-clock-history text-info"></i> Patterns horaires (heure locale)</span>
+        <div class="mt-1" style="font-size:.78rem;color:var(--muted)">
+          Meilleure fenêtre :
+          <strong class="text-success">{{ '%02d'|format(adaptive_stats.best_hour) }}h</strong>
+          ({{ adaptive_stats.hours[adaptive_stats.best_hour].avg_dl }} Mbps · CV {{ adaptive_stats.hours[adaptive_stats.best_hour].cv_pct }}%)
+          &nbsp;·&nbsp;
+          Pire :
+          <strong class="text-danger">{{ '%02d'|format(adaptive_stats.worst_hour) }}h</strong>
+          ({{ adaptive_stats.hours[adaptive_stats.worst_hour].avg_dl }} Mbps)
+        </div>
+      </div>
+      <div class="d-flex flex-wrap gap-1 text-end">
+        {% for h in adaptive_stats.good_hours %}
+          <span class="badge" style="background:rgba(63,185,80,.15);color:#3fb950;border:1px solid #3fb950">{{ '%02d'|format(h) }}h</span>
+        {% endfor %}
+        {% for h in adaptive_stats.bad_hours %}
+          <span class="badge" style="background:rgba(248,81,73,.1);color:#f85149;border:1px solid #f85149">{{ '%02d'|format(h) }}h</span>
+        {% endfor %}
+      </div>
+    </div>
+    {# SVG 24h bar chart #}
+    {%- set ns = namespace(max_score=0.01) -%}
+    {%- for h, d in adaptive_stats.hours.items() -%}
+      {%- if d.score > ns.max_score -%}{%- set ns.max_score = d.score -%}{%- endif -%}
+    {%- endfor -%}
+    <div style="overflow-x:auto">
+      <svg viewBox="0 0 504 64" preserveAspectRatio="none" style="width:100%;height:64px;display:block">
+        {%- for i in range(24) -%}
+          {%- if i in adaptive_stats.hours -%}
+            {%- set d = adaptive_stats.hours[i] -%}
+            {%- set bar_h = ((d.score / ns.max_score) * 48)|int -%}
+            {%- set bar_y = 48 - bar_h -%}
+            {%- set is_good = i in adaptive_stats.good_hours -%}
+            {%- set is_bad  = i in adaptive_stats.bad_hours -%}
+            {%- set color = '#3fb950' if is_good else ('#f85149' if is_bad else '#58a6ff') -%}
+            <rect x="{{ i * 21 }}" y="{{ bar_y }}" width="18" height="{{ bar_h }}"
+                  fill="{{ color }}" opacity="0.8" rx="2">
+              <title>{{ '%02d'|format(i) }}h — {{ d.avg_dl }} Mbps · CV {{ d.cv_pct }}% · {{ d.n }} tests</title>
+            </rect>
+          {%- else -%}
+            <rect x="{{ i * 21 }}" y="46" width="18" height="2"
+                  fill="currentColor" opacity="0.12" rx="1">
+              <title>{{ '%02d'|format(i) }}h — pas de données</title>
+            </rect>
+          {%- endif -%}
+          <text x="{{ i * 21 + 9 }}" y="62" text-anchor="middle"
+                font-size="7" fill="currentColor" opacity="0.4">{{ '%02d'|format(i) }}</text>
+        {%- endfor -%}
+      </svg>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if server_filter and timeline_data %}
+{# ── Timeline chart (server filtered) ─────────────────────────────────────── #}
+<div class="card mb-4 p-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <span class="fw-semibold">
+      <i class="bi bi-graph-up text-success"></i> {{ t.hist_timeline_title }} — <code>{{ server_filter }}</code>
+    </span>
+    <small class="text-muted">{{ timeline_data | length }} {{ t.hist_tests }}</small>
+  </div>
+  <div style="position:relative; height:200px">
+    <canvas id="chartTimeline"></canvas>
+  </div>
+</div>
+
+{% elif per_server %}
+{# ── Floating bar chart (all servers) ─────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+  {% for s in per_server[:6] %}
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="card p-3 h-100">
+      <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ s.server_name }}">{{ s.server_name }}</div>
+      {% set cls = 'speed-good' if s.avg_dl > 50 else ('speed-ok' if s.avg_dl > 15 else 'speed-bad') %}
+      <div class="fw-bold {{ cls }}" style="font-size:1.25rem">{{ s.avg_dl }} Mbps</div>
+      <div class="text-muted" style="font-size:.75rem">{{ t.hist_avg }} · {{ s.cnt }} {{ t.hist_tests }}</div>
+      <div class="text-muted" style="font-size:.7rem">↓ {{ s.min_dl }} &nbsp;↑ {{ s.max_dl }} Mbps</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card mb-4 p-3">
+  <div class="fw-semibold mb-2">
+    <i class="bi bi-bar-chart-fill text-success"></i> {{ t.hist_comparison }}
+  </div>
+  <div style="position:relative; height:{{ [[per_server|length * 36, 120]|max, 480]|min }}px">
+    <canvas id="chartAvg"></canvas>
+  </div>
+</div>
+{% endif %}
+
+{# ── Filters + sort bar ──────────────────────────────────────────────────── #}
+<form method="get" class="row g-2 mb-3 align-items-end">
+  <input type="hidden" name="page" value="1">
+  <div class="col-auto">
+    <select name="server" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="" {{ 'selected' if not server_filter }}>{{ t.hist_filter_all_servers }}</option>
+      {% for name in server_names %}
+      <option value="{{ name }}" {{ 'selected' if server_filter == name }}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <select name="method" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value=""         {{ 'selected' if not method_filter }}>{{ t.hist_filter_all_methods }}</option>
+      <option value="proxy"    {{ 'selected' if method_filter == 'proxy' }}>{{ t.hist_method_proxy }}</option>
+      <option value="sidecar"  {{ 'selected' if method_filter == 'sidecar' }}>{{ t.hist_method_sidecar }}</option>
+      <option value="proxy_qc" {{ 'selected' if method_filter == 'proxy_qc' }}>{{ t.hist_method_proxy_qc }}</option>
+    </select>
+  </div>
+  <div class="col-auto">
+    <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="date_desc"  {{ 'selected' if sort == 'date_desc'  }}>{{ t.hist_sort_date_desc }}</option>
+      <option value="date_asc"   {{ 'selected' if sort == 'date_asc'   }}>{{ t.hist_sort_date_asc }}</option>
+      <option value="server_asc" {{ 'selected' if sort == 'server_asc' }}>{{ t.hist_sort_server }} A→Z</option>
+      <option value="server_desc"{{ 'selected' if sort == 'server_desc'}}>{{ t.hist_sort_server }} Z→A</option>
+      <option value="dl_desc"    {{ 'selected' if sort == 'dl_desc'    }}>{{ t.hist_sort_dl_desc }}</option>
+      <option value="dl_asc"     {{ 'selected' if sort == 'dl_asc'     }}>{{ t.hist_sort_dl_asc }}</option>
+    </select>
+  </div>
+  <div class="col-auto d-flex align-items-center gap-1">
+    <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.hist_date_from }}</label>
+    <input type="date" name="from_date" class="form-control form-control-sm"
+           value="{{ from_date }}" style="width:145px">
+  </div>
+  <div class="col-auto d-flex align-items-center gap-1">
+    <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.hist_date_to }}</label>
+    <input type="date" name="to_date" class="form-control form-control-sm"
+           value="{{ to_date }}" style="width:145px">
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-funnel-fill"></i>
+    </button>
+  </div>
+  {% if server_filter or method_filter or sort != 'date_desc' or from_date or to_date %}
+  <div class="col-auto">
+    <a href="{{ url_for('main.history_test') }}" class="btn btn-sm btn-outline-secondary">✕</a>
+  </div>
+  {% endif %}
+</form>
+
+{# ── Results table ──────────────────────────────────────────────────────── #}
+<div class="card">
+  <div class="card-header py-2 d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-table"></i> {{ t.hist_all_tests }}
+      <small class="text-muted ms-2">{{ total }} {{ t.hist_entries }}</small>
+    </span>
+    <a href="{{ url_for('main.history_export') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-download"></i> {{ t.hist_export_csv }}
+    </a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0" style="font-size:.875rem">
+      <thead>
+        <tr>
+          <th>{{ t.cmn_server }}</th>
+          <th>{{ t.cmn_download }}</th>
+          <th>{{ t.cmn_upload }}</th>
+          <th>{{ t.cmn_latency }}</th>
+          <th>{{ t.cmn_public_ip }}</th>
+          <th>
+            {{ t.hist_col_jitter }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
+               data-bs-toggle="tooltip" title="{{ t.hist_col_jitter_tooltip }}"></i>
+          </th>
+          <th>
+            {{ t.hist_col_loss }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
+               data-bs-toggle="tooltip" title="{{ t.hist_col_loss_tooltip }}"></i>
+          </th>
+          <th>
+            {{ t.hist_col_dns }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
+               data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}"></i>
+          </th>
+          <th>{{ t.hist_col_method }}</th>
+          <th>{{ t.cmn_status }}</th>
+          <th>{{ t.cmn_date }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in tests %}
+        <tr>
+          <td>
+            <code>{{ r.server_name }}</code>
+            {%- set _conf = confidence.get(r.server_name) -%}
+            {%- if _conf and _conf.nb >= 7 -%}
+              {%- if _conf.level == 'HIGH' -%}
+                {%- set _conf_lvl = t.conf_level_high -%}{%- set _conf_cls = 'text-success' -%}
+              {%- elif _conf.level == 'MEDIUM' -%}
+                {%- set _conf_lvl = t.conf_level_medium -%}{%- set _conf_cls = 'text-warning' -%}
+              {%- else -%}
+                {%- set _conf_lvl = t.conf_level_low -%}{%- set _conf_cls = 'text-danger' -%}
+              {%- endif -%}
+              {%- set _tip_parts = [_conf_lvl, _conf.nb|string ~ ' ' ~ t.conf_measure] -%}
+              {%- if _conf.cv_pct is not none -%}
+                {%- set _tip_parts = _tip_parts + [t.conf_instability ~ ' ' ~ _conf.cv_pct|string ~ '%'] -%}
+              {%- endif -%}
+              {%- if _conf.consec > 0 -%}
+                {%- set _tip_parts = _tip_parts + [_conf.consec|string ~ ' ' ~ t.conf_failures] -%}
+              {%- endif -%}
+              <i class="bi bi-circle-fill {{ _conf_cls }}"
+                 style="font-size:.55rem;cursor:help;vertical-align:middle;margin-left:.2rem"
+                 data-bs-toggle="tooltip" title="{{ _tip_parts | join(' · ') }}"></i>
+            {%- endif -%}
+          </td>
+          <td>
+            {% if r.download_mbps %}
+              {% set cls = 'speed-good' if r.download_mbps > 50 else ('speed-ok' if r.download_mbps > 15 else 'speed-bad') %}
+              <span class="fw-semibold {{ cls }}">{{ '%.1f'|format(r.download_mbps) }} Mbps</span>
+              {% if r.dl_ookla or r.dl_librespeed or r.dl_iperf3 %}
+              <div style="font-size:.7rem;color:var(--muted);line-height:1.6;margin-top:2px">
+                {% if r.dl_ookla %}<span>Ookla {{ '%.0f'|format(r.dl_ookla) }}</span>{% endif %}
+                {% if r.dl_librespeed %}<span class="ms-1">LibreSpeed {{ '%.0f'|format(r.dl_librespeed) }}</span>{% endif %}
+                {% if r.dl_iperf3 %}<span class="ms-1">iPerf3 {{ '%.0f'|format(r.dl_iperf3) }}</span>{% endif %}
+              </div>
+              {% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if r.upload_mbps %}
+              <span class="text-info">{{ '%.1f'|format(r.upload_mbps) }} Mbps</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ ('%.0f ms'|format(r.latency_ms)) if r.latency_ms else '—' }}</td>
+          <td>
+            <small class="text-muted font-monospace">{{ r.public_ip or '—' }}
+            {% if r.public_ipv6 %}<br><span style="font-size:.7rem">{{ r.public_ipv6 }}</span>{% endif %}
+            </small>
+          </td>
+          <td>
+            {% if r.jitter_ms is not none %}
+              {% set jcls = 'text-success' if r.jitter_ms < 15 else ('text-warning' if r.jitter_ms < 50 else 'text-danger') %}
+              <span class="{{ jcls }}">{{ '%.1f'|format(r.jitter_ms) }} ms</span>
+            {% elif r.test_method == 'proxy_qc' %}
+              <span class="text-muted" style="cursor:help"
+                    data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">—</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if r.packet_loss_pct is not none %}
+              {% set lcls = 'text-success' if r.packet_loss_pct < 1 else ('text-warning' if r.packet_loss_pct < 5 else 'text-danger') %}
+              <span class="{{ lcls }}">{{ '%.1f'|format(r.packet_loss_pct) }}%</span>
+            {% elif r.test_method == 'proxy_qc' %}
+              <span class="text-muted" style="cursor:help"
+                    data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">—</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if r.dns_latency_ms is not none %}
+              {% set dcls = 'text-success' if r.dns_latency_ms < 50 else ('text-warning' if r.dns_latency_ms < 150 else 'text-danger') %}
+              <span class="{{ dcls }}">{{ '%.0f'|format(r.dns_latency_ms) }} ms</span>
+            {% elif r.test_method == 'proxy_qc' %}
+              <span class="text-muted" style="cursor:help"
+                    data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">—</span>
+            {% elif r.test_method != 'sidecar' %}
+              <span class="text-muted" style="cursor:help"
+                    data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}">—</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if r.test_method == 'sidecar' %}
+              <span class="badge" style="background:#f0ad4e;color:#000">
+                <i class="bi bi-boxes"></i> sidecar
+              </span>
+            {% elif r.test_method == 'proxy_qc' %}
+              <span class="badge" style="background:#6f42c1" title="{{ t.hist_method_proxy_qc }}">
+                <i class="bi bi-hdd-network"></i> quick check
+              </span>
+            {% else %}
+              <span class="badge bg-secondary">
+                <i class="bi bi-globe2"></i> proxy
+              </span>
+            {% endif %}
+            {% if r.test_trigger == 'docker_event' %}
+              <span class="badge bg-dark ms-1" style="font-size:.65rem;cursor:help"
+                    data-bs-toggle="tooltip" title="{{ t.hist_trigger_docker }}">
+                <i class="bi bi-plugin"></i> auto
+              </span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.success %}
+              <span class="badge bg-success">OK</span>
+            {% else %}
+              <span class="badge bg-danger"
+                    data-bs-toggle="tooltip"
+                    title="{{ r.error_msg or t.cmn_unknown_error }}">{{ t.cmn_failure }}</span>
+            {% endif %}
+          </td>
+          <td><small class="text-muted">{{ r.tested_at | localtime | truncate(16, True, '') }}</small></td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="11" class="text-center text-muted py-4">{{ t.hist_empty }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if pages > 1 %}
+{%- set pg_args = {'sort': sort, 'server': server_filter, 'method': method_filter, 'from_date': from_date, 'to_date': to_date} %}
+<nav class="mt-3 d-flex justify-content-center">
+  <ul class="pagination pagination-sm mb-0">
+    <li class="page-item {{ 'disabled' if page == 1 }}">
+      <a class="page-link" href="{{ url_for('main.history_test', page=page-1, **pg_args) }}">‹</a>
+    </li>
+    {% for p in range(1, pages+1) %}
+      {% if p == page or p == 1 or p == pages or (p >= page-2 and p <= page+2) %}
+        <li class="page-item {{ 'active' if p == page }}">
+          <a class="page-link" href="{{ url_for('main.history_test', page=p, **pg_args) }}">{{ p }}</a>
+        </li>
+      {% elif p == page-3 or p == page+3 %}
+        <li class="page-item disabled"><span class="page-link">…</span></li>
+      {% endif %}
+    {% endfor %}
+    <li class="page-item {{ 'disabled' if page == pages }}">
+      <a class="page-link" href="{{ url_for('main.history_test', page=page+1, **pg_args) }}">›</a>
+    </li>
+  </ul>
+</nav>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const _isDark = document.documentElement.getAttribute('data-bs-theme') !== 'light';
+const _cGrid  = _isDark ? 'rgba(48,54,61,.8)'  : 'rgba(0,0,0,.07)';
+const _cTick  = _isDark ? '#8b949e' : '#666';
+const _cLabel = _isDark ? '#c9d1d9' : '#333';
+
+{% if server_filter and timeline_data %}
+const _tlLabels = [{% for r in timeline_data %}'{{ r.tested_at[5:16] }}',{% endfor %}];
+const _tlDl     = [{% for r in timeline_data %}{{ r.download_mbps or 'null' }},{% endfor %}];
+const _tlUl     = [{% for r in timeline_data %}{{ r.upload_mbps or 'null' }},{% endfor %}];
+const _hasUl    = _tlUl.some(v => v !== null);
+
+new Chart(document.getElementById('chartTimeline'), {
+  type: 'line',
+  data: {
+    labels: _tlLabels,
+    datasets: [
+      {
+        label: '{{ t.chart_avg_dl }}',
+        data: _tlDl,
+        borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,.12)',
+        fill: true, tension: 0.3,
+        pointRadius: 2, pointHoverRadius: 6, borderWidth: 2,
+        spanGaps: true,
+      },
+      ...(_hasUl ? [{
+        label: '{{ t.chart_avg_ul }}',
+        data: _tlUl,
+        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,.0)',
+        fill: false, tension: 0.3,
+        pointRadius: 2, pointHoverRadius: 6, borderWidth: 2,
+        borderDash: [5, 3],
+        spanGaps: true,
+      }] : []),
+    ],
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { grid: { color: _cGrid }, ticks: { color: _cTick, maxTicksLimit: 10, font: { size: 11 } } },
+      y: { beginAtZero: true, grid: { color: _cGrid },
+           ticks: { color: _cTick, callback: v => v + ' Mbps', maxTicksLimit: 5 } },
+    },
+    plugins: {
+      legend: { position: 'bottom', labels: { color: _cLabel, boxWidth: 12, padding: 12 } },
+      tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ' : ' + (ctx.parsed.y?.toFixed(1) ?? '—') + ' Mbps' } },
+    },
+  },
+});
+
+{% elif per_server %}
+const _labels    = [{% for s in per_server %}'{{ s.server_name }}',{% endfor %}];
+const _rangeData = [{% for s in per_server %}[{{ s.min_dl or 0 }}, {{ s.max_dl or 0 }}],{% endfor %}];
+const _avgDl     = [{% for s in per_server %}{{ s.avg_dl or 0 }},{% endfor %}];
+const _avgUl     = [{% for s in per_server %}{{ s.avg_ul or 0 }},{% endfor %}];
+
+new Chart(document.getElementById('chartAvg'), {
+  type: 'bar',
+  data: {
+    labels: _labels,
+    datasets: [
+      {
+        label: '{{ t.chart_range }}',
+        data: _rangeData,
+        backgroundColor: 'rgba(63,185,80,.22)',
+        borderColor: 'rgba(63,185,80,.5)',
+        borderWidth: 1, borderRadius: 3, maxBarThickness: 28,
+      },
+      {
+        label: '{{ t.chart_avg_dl }}',
+        data: _avgDl,
+        backgroundColor: 'rgba(63,185,80,.85)',
+        borderColor: '#3fb950',
+        borderWidth: 1, borderRadius: 3, maxBarThickness: 10,
+      },
+      {
+        label: '{{ t.chart_avg_ul }}',
+        data: _avgUl,
+        backgroundColor: 'rgba(88,166,255,.6)',
+        borderColor: '#58a6ff',
+        borderWidth: 1, borderRadius: 3, maxBarThickness: 10,
+      },
+    ]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: { beginAtZero: true, grid: { color: _cGrid },
+           ticks: { color: _cTick, callback: v => v + ' Mbps', maxTicksLimit: 6 } },
+      y: { grid: { display: false }, ticks: { color: _cLabel, font: { size: 12 } } },
+    },
+    plugins: {
+      legend: { position: 'bottom', labels: { color: _cLabel, boxWidth: 12, padding: 14 } },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            if (ctx.datasetIndex === 0) {
+              const v = ctx.raw;
+              return ` Plage DL : ${Array.isArray(v) ? v[0] + ' → ' + v[1] : v} Mbps`;
+            }
+            return ` ${ctx.dataset.label} : ${ctx.parsed.x.toFixed(1)} Mbps`;
+          }
+        },
+      },
+    },
+  },
+});
+{% endif %}
+
+document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+</script>
+{% endblock %}
