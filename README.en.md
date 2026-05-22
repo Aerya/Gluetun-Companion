@@ -68,6 +68,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Automatic purge** of SQLite history with configurable retention (in days)
 - **Per-server confidence score** — 🟢/🟡/🔴 indicator on the Servers page and in History; based on measurement count and result variability; factored into the automatic selection score (light weighting)
 - **Hourly patterns** (`/history/patterns`) — 0h–23h bar chart showing average speed by hour of day, color-coded by relative performance; best and worst hour displayed; helps identify server saturation windows
+- **New AirVPN server detection** *(optional)* — compares the AirVPN API with your configured servers every 24 h; badge and dismissable banner on the Servers page + *New* tab in the add modal; Discord/Apprise notification with optional mention
 - **`/healthz` endpoint** unauthenticated, for Docker healthchecks
 - **`/metrics` endpoint** in Prometheus format — throughput, latency, switches, active server; optionally protected by Bearer token; Grafana-compatible
 - **Structured JSON logs** optional via `LOG_JSON=1` (Loki/Grafana compatible)
@@ -295,6 +296,25 @@ Accessible from **History → Hourly patterns**, this view shows average perform
 - Best and worst hour shown in stat cards
 - Quick checks (`proxy_qc`) excluded
 - Useful for scheduling benchmarks during peak performance windows
+
+### New AirVPN server detection
+
+**Disabled by default**, AirVPN users only. Enable in **Settings → Notifications**.
+
+**How it works:**
+1. Every 24 h, Companion fetches the server list from `airvpn.org/api/status/`
+2. It identifies which countries your configured (name-type) servers belong to
+3. Any new server that appears in one of those countries is stored in the database for 7 days
+
+**UI surfaces:**
+- **Badge** `+N` on the *Add an AirVPN server* button (Servers page)
+- **Dismissable banner** at the top of the Servers page: *"3 new servers available in your countries (NL, FR)"* with a link to the modal
+- **New tab** in the add modal: lists all AirVPN servers not yet in your list (⭐ *New* badge on automatically detected ones); unified search filter
+
+**Discord/Apprise notification:**
+Sent only when new servers are discovered, grouped by country. Optional *Discord mention* field (e.g. `<@123456789>`) to ping a user or role.
+
+> After 7 days, servers leave the "new" list automatically. Servers you add to your list no longer appear in the badge/banner.
 
 ### Prometheus `/metrics` Endpoint
 

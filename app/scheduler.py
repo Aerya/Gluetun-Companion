@@ -994,6 +994,108 @@ def purge_old_tests(app):
         logger.info('DB purge: removed %d speed_tests older than %d days', deleted, days)
 
 
+def check_airvpn_new_servers(app):
+    """
+    Compare AirVPN API server list with user's configured servers.
+    Store newly discovered servers (in the same countries) in airvpn_new_servers.
+    Send Discord/Apprise notification when truly new entries are found.
+    No-op when airvpn_new_server_notif == '0'.
+    """
+    from .database import (
+        get_db, get_setting,
+        upsert_new_airvpn_servers, purge_old_new_airvpn_servers,
+    )
+
+    if get_setting('airvpn_new_server_notif', '0') != '1':
+        return
+
+    # Purge stale entries first
+    purge_old_new_airvpn_servers()
+
+    # Fetch AirVPN API
+    try:
+        import requests as _req
+        resp = _req.get(
+            'https://airvpn.org/api/status/',
+            headers={'User-Agent': 'Gluetun-Companion/1.0'},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+    except Exception as exc:
+        logger.warning('AirVPN new-server check: API fetch failed: %s', exc)
+        return
+
+    # Build server → metadata map from API
+    api_servers: dict[str, dict] = {}
+    for s in raw.get('servers', []):
+        name = s.get('public_name', '').strip()
+        if name:
+            api_servers[name] = s
+
+    # Get our configured servers (name-type only)
+    with get_db() as db:
+        my_names = {r['name'] for r in db.execute(
+            "SELECT name FROM servers WHERE filter_type = 'name'"
+        ).fetchall()}
+
+    if not my_names:
+        logger.info('AirVPN new-server check: no name-type servers configured — skipping')
+        return
+
+    # Determine countries of our configured servers via API
+    my_countries: set[str] = set()
+    for name in my_names:
+        if name in api_servers:
+            country = api_servers[name].get('country_name', '').strip()
+            if country:
+                my_countries.add(country)
+
+    if not my_countries:
+        logger.info('AirVPN new-server check: none of our servers matched the AirVPN API — skipping')
+        return
+
+    # Find new servers in those countries (not already configured)
+    candidates: list[dict] = []
+    for name, s in api_servers.items():
+        country = s.get('country_name', '').strip()
+        if name not in my_names and country in my_countries:
+            candidates.append({
+                'name':         name,
+                'country':      country,
+                'country_code': (s.get('country_code') or '').lower(),
+            })
+
+    if not candidates:
+        logger.info('AirVPN new-server check: no new servers found in known countries (%s)',
+                    ', '.join(sorted(my_countries)))
+        return
+
+    # Persist — only truly new insertions trigger a notification
+    newly_added = upsert_new_airvpn_servers(candidates)
+
+    if not newly_added:
+        logger.info('AirVPN new-server check: %d candidate(s) already tracked — no notification',
+                    len(candidates))
+        return
+
+    logger.info(
+        'AirVPN new-server check: %d new server(s) detected — %s',
+        len(newly_added),
+        ', '.join(s['name'] for s in newly_added),
+    )
+
+    from .notify import send_new_airvpn_servers_notification
+    send_new_airvpn_servers_notification(
+        new_servers=newly_added,
+        discord_url=get_setting('discord_webhook_url') or None,
+        apprise_urls=get_setting('apprise_urls') or None,
+        lang=get_setting('ui_lang', 'fr'),
+        mention=get_setting('airvpn_notify_mention', '').strip() or None,
+        companion_url=get_setting('companion_url') or None,
+    )
+
+
 def start_scheduler(app):
     global _scheduler
     from .database import get_setting
@@ -1016,6 +1118,14 @@ def start_scheduler(app):
         trigger=IntervalTrigger(hours=24),
         args=[app],
         id='db_purge',
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
+        check_airvpn_new_servers,
+        trigger=IntervalTrigger(hours=24),
+        args=[app],
+        id='airvpn_check',
         replace_existing=True,
         misfire_grace_time=3600,
     )

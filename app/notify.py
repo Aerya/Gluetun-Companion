@@ -310,6 +310,83 @@ def send_already_best_notification(
             logger.warning('Apprise already-best notification failed: %s', exc)
 
 
+def send_new_airvpn_servers_notification(
+    new_servers: list[dict],
+    discord_url: str | None = None,
+    apprise_urls: str | None = None,
+    lang: str = 'fr',
+    mention: str | None = None,
+    companion_url: str | None = None,
+):
+    """Notify when new AirVPN servers are available in the user's countries."""
+    if not discord_url and not apprise_urls:
+        return
+    if not new_servers:
+        return
+
+    t = get_translations(lang)
+    n = len(new_servers)
+    title = t.get('airvpn_notif_title', '🆕 Nouveaux serveurs AirVPN')
+
+    # Group by country for display
+    countries_seen: dict[str, list[str]] = {}
+    for s in new_servers:
+        countries_seen.setdefault(s['country'], []).append(s['name'])
+
+    if discord_url:
+        try:
+            fields = []
+            for country, names in countries_seen.items():
+                fields.append({
+                    'name':   country,
+                    'value':  '\n'.join(f'`{nm}`' for nm in names),
+                    'inline': True,
+                })
+            author: dict = {'name': t['notif_footer'], 'icon_url': _LOGO_URL}
+            if companion_url:
+                author['url'] = companion_url
+            embed: dict = {
+                'author': author,
+                'title':  title,
+                'color':  0x3fb950,
+                'fields': fields,
+            }
+            payload: dict = {
+                'username':   'Gluetun Companion',
+                'avatar_url': _LOGO_URL,
+                'embeds':     [embed],
+            }
+            if mention:
+                payload['content'] = mention
+            resp = requests.post(discord_url.strip(), json=payload, timeout=10)
+            resp.raise_for_status()
+            logger.info('Discord new-AirVPN-servers notification sent (%d server(s))', n)
+        except Exception as exc:
+            logger.warning('Discord new-AirVPN-servers notification failed: %s', exc)
+
+    if apprise_urls:
+        try:
+            import apprise as _apprise
+            ap = _apprise.Apprise()
+            for url in apprise_urls.splitlines():
+                url = url.strip()
+                if url:
+                    ap.add(url)
+            lines = []
+            if mention:
+                lines.append(mention)
+            for country, names in countries_seen.items():
+                lines.append(f'{country}: {", ".join(names)}')
+            if companion_url:
+                lines.append(companion_url)
+            ap.notify(title=title, body='\n'.join(lines))
+            logger.info('Apprise new-AirVPN-servers notification sent (%d server(s))', n)
+        except ImportError:
+            logger.warning('Apprise not installed — add "apprise" to requirements.txt')
+        except Exception as exc:
+            logger.warning('Apprise new-AirVPN-servers notification failed: %s', exc)
+
+
 def send_switch_notification(
     from_server: str | None,
     to_server: str,

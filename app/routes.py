@@ -14,7 +14,10 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .database import get_db, get_setting, set_setting, compute_confidence_all
+from .database import (
+    get_db, get_setting, set_setting, compute_confidence_all,
+    get_new_airvpn_servers, dismiss_new_airvpn_servers,
+)
 from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
     get_current_filters, format_filters,
@@ -261,6 +264,18 @@ def servers():
     except Exception:
         active_server = ''
 
+    # AirVPN new-server data (banner + badge) — only if feature enabled
+    new_airvpn: list[dict] = []
+    new_airvpn_names: list[str] = []
+    new_airvpn_countries = ''
+    if get_setting('airvpn_new_server_notif', '0') == '1':
+        new_airvpn = get_new_airvpn_servers()
+        new_airvpn_names = [s['name'] for s in new_airvpn]
+        # Build a sorted, deduplicated country-code list for the banner (e.g. "NL, FR")
+        cc_set = {(s['country_code'].upper() if s['country_code'] else s['country'])
+                  for s in new_airvpn}
+        new_airvpn_countries = ', '.join(sorted(cc_set))
+
     return render_template(
         'servers.html', servers=rows,
         filter_labels=FILTER_LABELS, filter_vars=FILTER_VARS,
@@ -270,6 +285,9 @@ def servers():
         filter_types=filter_types,
         active_server=active_server,
         confidence=compute_confidence_all(),
+        new_airvpn=new_airvpn,
+        new_airvpn_names=new_airvpn_names,
+        new_airvpn_countries=new_airvpn_countries,
     )
 
 
@@ -458,6 +476,14 @@ def test_server_now(server_id):
     )
     flash_t('flash_test_started', 'info', name=row['name'])
     return redirect(url_for('main.servers'))
+
+
+@bp.route('/api/airvpn-new-servers/dismiss', methods=['POST'])
+@login_required
+def api_airvpn_dismiss():
+    """Mark all tracked new AirVPN servers as dismissed (user closed the banner)."""
+    dismiss_new_airvpn_servers()
+    return jsonify({'status': 'ok'})
 
 
 @bp.route('/servers/add-bulk', methods=['POST'])
@@ -753,8 +779,10 @@ def settings():
             flash_t('flash_retention_saved', 'success')
 
         elif action == 'notifications':
-            set_setting('discord_webhook_url', request.form.get('discord_webhook_url', '').strip())
-            set_setting('apprise_urls',        request.form.get('apprise_urls', '').strip())
+            set_setting('discord_webhook_url',    request.form.get('discord_webhook_url', '').strip())
+            set_setting('apprise_urls',           request.form.get('apprise_urls', '').strip())
+            set_setting('airvpn_new_server_notif','1' if request.form.get('airvpn_new_server_notif') else '0')
+            set_setting('airvpn_notify_mention',  request.form.get('airvpn_notify_mention', '').strip())
             flash_t('flash_notifications_saved', 'success')
 
         elif action == 'credentials':
@@ -819,8 +847,10 @@ def settings():
         'speedtest_warmup':      get_setting('speedtest_warmup', '1'),
         'speedtest_streams':     get_setting('speedtest_streams', '4'),
         'db_retention_days':     get_setting('db_retention_days', '30'),
-        'discord_webhook_url':   get_setting('discord_webhook_url', ''),
-        'apprise_urls':          get_setting('apprise_urls', ''),
+        'discord_webhook_url':      get_setting('discord_webhook_url', ''),
+        'apprise_urls':             get_setting('apprise_urls', ''),
+        'airvpn_new_server_notif':  get_setting('airvpn_new_server_notif', '0'),
+        'airvpn_notify_mention':    get_setting('airvpn_notify_mention', ''),
         'sidecar_mode':             get_setting('sidecar_mode', '1'),
         'sidecar_image':            get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest'),
         'sidecar_port':             get_setting('sidecar_port', '8766'),

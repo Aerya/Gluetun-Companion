@@ -12,12 +12,38 @@
         <i class="bi bi-download"></i> {{ t.srv_import }}
       </button>
     </form>
-    <button class="btn btn-success btn-sm fw-semibold"
-            data-bs-toggle="modal" data-bs-target="#airvpnModal">
+    <button class="btn btn-success btn-sm fw-semibold position-relative"
+            data-bs-toggle="modal" data-bs-target="#airvpnModal"
+            id="btn-add-airvpn">
       <i class="bi bi-plus-lg"></i> {{ t.srv_add_airvpn }}
+      {% if new_airvpn %}
+      <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark"
+            style="font-size:.65rem"
+            title="{{ t.airvpn_new_badge_title }}">
+        +{{ new_airvpn | length }}
+      </span>
+      {% endif %}
     </button>
   </div>
 </div>
+
+{# ── Bannière nouveaux serveurs AirVPN ─────────────────────────────────────── #}
+{% if new_airvpn %}
+<div class="alert alert-info alert-dismissible fade show mb-3 d-flex align-items-center gap-2"
+     id="airvpn-new-banner" role="alert">
+  <i class="bi bi-stars flex-shrink-0"></i>
+  <span>
+    {{ t.airvpn_new_banner.replace('{n}', new_airvpn|length|string).replace('{countries}', new_airvpn_countries) }}
+    <a href="#" class="alert-link ms-1"
+       onclick="document.getElementById('btn-add-airvpn').click();return false">
+      {{ t.airvpn_new_banner_link }}
+    </a>
+  </span>
+  <button type="button" class="btn-close ms-auto flex-shrink-0"
+          data-bs-dismiss="alert"
+          onclick="airvpnDismissBanner()"></button>
+</div>
+{% endif %}
 
 {# ── Filters + sort bar ─────────────────────────────────────────────────── #}
 <form method="get" class="row g-2 mb-3 align-items-end">
@@ -272,6 +298,14 @@
               <i class="bi bi-geo-alt me-1"></i>{{ t.srv_airvpn_tab_countries }}
             </button>
           </li>
+          <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-new"
+                    id="tab-new-btn"
+                    title="{{ t.airvpn_new_tab_hint }}">
+              <i class="bi bi-stars me-1"></i>{{ t.airvpn_new_tab }}
+              <span id="tab-new-badge" class="badge bg-warning text-dark ms-1 d-none" style="font-size:.65rem"></span>
+            </button>
+          </li>
         </ul>
       </div>
 
@@ -325,6 +359,31 @@
             <div id="airvpn-countries-list" style="max-height:420px; overflow-y:auto"></div>
           </div>
 
+          {# ── Nouveaux tab ─────────────────────────────────────────────── #}
+          <div class="tab-pane fade" id="tab-new">
+            <div style="max-height:420px; overflow-y:auto">
+              <table class="table table-hover table-sm mb-0 align-middle">
+                <thead class="sticky-top" style="z-index:1">
+                  <tr>
+                    <th class="ps-3" style="width:36px"></th>
+                    <th>{{ t.srv_airvpn_col_server }}</th>
+                    <th>{{ t.filter_label_country }}</th>
+                    <th>{{ t.srv_airvpn_col_location }}</th>
+                    <th style="min-width:130px">{{ t.srv_airvpn_col_load }}</th>
+                    <th>{{ t.srv_airvpn_col_users }}</th>
+                  </tr>
+                </thead>
+                <tbody id="airvpn-new-tbody">
+                  <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                      <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
         </div>{# /tab-content #}
       </div>{# /modal-body #}
 
@@ -361,7 +420,8 @@ function _esc(str) {
 }
 
 // ── AirVPN picker ─────────────────────────────────────────────────────────
-const _existingServers = new Set({{ existing_names | tojson }});
+const _existingServers  = new Set({{ existing_names | tojson }});
+const _trackedNewNames  = new Set({{ new_airvpn_names | tojson }});
 const _t = {
   best:          {{ t.srv_airvpn_best | tojson }},
   selected:      {{ t.srv_airvpn_selected | tojson }},
@@ -370,6 +430,8 @@ const _t = {
   selectCountry: {{ t.srv_airvpn_select_country | tojson }},
   healthOk:      {{ t.srv_airvpn_health_ok | tojson }},
   healthErr:     {{ t.srv_airvpn_health_err | tojson }},
+  newLabel:      {{ t.airvpn_new_label | tojson }},
+  newEmpty:      {{ t.airvpn_new_empty | tojson }},
 };
 
 let _airvpnData     = null;
@@ -428,6 +490,7 @@ document.getElementById('airvpnModal').addEventListener('show.bs.modal', () => {
       _applySortUI();
       _renderServersTab(_sortedServers());
       _renderCountriesTab(data.countries);
+      _renderNewTab(data.servers);
       document.getElementById('airvpn-loading').classList.add('d-none');
       document.getElementById('airvpn-tab-content').classList.remove('d-none');
     })
@@ -599,6 +662,78 @@ function _renderCountriesTab(countries) {
   }
 }
 
+// ── Render "Nouveaux" tab ─────────────────────────────────────────────────
+function _renderNewTab(allServers) {
+  // New = not yet in the user's DB, sorted: tracked-new first, then alpha
+  const newServers = allServers
+    .filter(s => !_existingServers.has(s.name))
+    .sort((a, b) => {
+      const aNew = _trackedNewNames.has(a.name);
+      const bNew = _trackedNewNames.has(b.name);
+      if (aNew && !bNew) return -1;
+      if (!aNew && bNew) return  1;
+      return a.name.localeCompare(b.name);
+    });
+
+  const tbody = document.getElementById('airvpn-new-tbody');
+  const badge = document.getElementById('tab-new-badge');
+
+  // Update tab badge with count of tracked-new that are actually in the API
+  const trackedCount = newServers.filter(s => _trackedNewNames.has(s.name)).length;
+  if (trackedCount > 0) {
+    badge.textContent = '+' + trackedCount;
+    badge.classList.remove('d-none');
+  }
+
+  tbody.innerHTML = '';
+  if (newServers.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">${_esc(_t.newEmpty)}</td></tr>`;
+    return;
+  }
+
+  for (const s of newServers) {
+    const isTracked = _trackedNewNames.has(s.name);
+    const tr = document.createElement('tr');
+    tr.dataset.name    = s.name.toLowerCase();
+    tr.dataset.country = s.country.toLowerCase();
+    tr.style.cursor = 'pointer';
+
+    const tdCb = document.createElement('td');
+    tdCb.className = 'ps-3';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'form-check-input airvpn-cb';
+    cb.value = s.name;
+    cb.addEventListener('change', e => airvpnToggle(s.name, e.target.checked));
+    tdCb.appendChild(cb);
+    tr.appendChild(tdCb);
+
+    tr.insertAdjacentHTML('beforeend', `
+      <td>
+        <code class="fw-semibold">${_esc(s.name)}</code>
+        ${isTracked ? `<span class="badge bg-warning text-dark ms-1" style="font-size:.65rem"><i class="bi bi-stars me-1"></i>${_esc(_t.newLabel)}</span>` : ''}
+      </td>
+      <td><span>${_flag(s.country_code)} <small>${_esc(s.country)}</small></span></td>
+      <td><small class="text-muted">${_esc(s.location)}</small></td>
+      <td>${_loadBar(s.load)}</td>
+      <td><small class="text-muted">${_esc(String(s.users))}</small></td>
+    `);
+
+    tr.addEventListener('click', e => {
+      if (e.target.closest('input')) return;
+      const c = tr.querySelector('input');
+      c.checked = !c.checked;
+      airvpnToggle(s.name, c.checked);
+    });
+    tbody.appendChild(tr);
+  }
+}
+
+// ── Dismiss new-servers banner ────────────────────────────────────────────
+function airvpnDismissBanner() {
+  fetch('{{ url_for("main.api_airvpn_dismiss") }}', { method: 'POST' }).catch(() => {});
+}
+
 // ── Toggle selection ──────────────────────────────────────────────────────
 function airvpnToggle(name, checked) {
   if (checked) _airvpnSelected.add(name);
@@ -659,6 +794,12 @@ document.getElementById('airvpn-search').addEventListener('input', function () {
 
   // Servers tab rows
   document.querySelectorAll('#airvpn-servers-tbody tr').forEach(tr => {
+    const hit = !q || tr.dataset.name?.includes(q) || tr.dataset.country?.includes(q);
+    tr.classList.toggle('d-none', !hit);
+  });
+
+  // New tab rows
+  document.querySelectorAll('#airvpn-new-tbody tr[data-name]').forEach(tr => {
     const hit = !q || tr.dataset.name?.includes(q) || tr.dataset.country?.includes(q);
     tr.classList.toggle('d-none', !hit);
   });

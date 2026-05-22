@@ -68,6 +68,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Purge automatique** de l'historique SQLite configurable (rétention en jours)
 - **Score de confiance par serveur** — indicateur 🟢/🟡/🔴 sur la page Serveurs et dans l'historique ; basé sur le nombre de mesures et la variabilité des résultats ; intégré dans le score de sélection automatique (pondération légère)
 - **Patterns horaires** (`/history/patterns`) — graphique barres 0h–23h du débit moyen par tranche horaire, coloré selon les performances relatives ; meilleure et pire heure affichées ; permet de repérer les créneaux de saturation serveur
+- **Détection de nouveaux serveurs AirVPN** *(optionnel)* — compare l'API AirVPN avec vos serveurs configurés toutes les 24 h ; bannière et badge sur la page Serveurs + onglet *Nouveaux* dans le modal d'ajout ; notification Discord/Apprise avec mention optionnelle
 - **Endpoint `/healthz`** non authentifié pour les healthchecks Docker
 - **Endpoint `/metrics`** au format Prometheus — débit, latence, bascules, serveur actif ; optionnellement protégé par Bearer token ; compatible Grafana
 - **Logs JSON structurés** optionnels via `LOG_JSON=1` (compatibles Loki/Grafana)
@@ -295,6 +296,25 @@ Accessible depuis **Historique → Patterns horaires**, cette vue affiche les pe
 - Meilleure et pire heure affichées en stat cards
 - Tests rapides (`proxy_qc`) exclus
 - Utile pour planifier les benchmarks aux créneaux les plus favorables
+
+### Détection de nouveaux serveurs AirVPN
+
+Fonctionnalité **désactivée par défaut**, uniquement pour les utilisateurs AirVPN. Activable dans **Paramètres → Notifications**.
+
+**Logique :**
+1. Toutes les 24 h, Companion récupère la liste AirVPN via `airvpn.org/api/status/`
+2. Il compare avec les serveurs configurés (type `name`) pour déterminer quels pays vous utilisez
+3. Si un nouveau serveur apparaît dans un de ces pays, il est stocké dans la base pendant 7 jours
+
+**Surfaces UI :**
+- **Badge** `+N` sur le bouton *Ajouter un serveur AirVPN* (page Serveurs)
+- **Bannière dismissable** en haut de la page Serveurs : *« 3 nouveaux serveurs disponibles dans vos pays (NL, FR) »* avec lien vers le modal
+- **Onglet Nouveaux** dans le modal d'ajout : liste de tous les serveurs AirVPN pas encore dans votre liste (badge ⭐ *Nouveau* sur ceux qui ont été détectés automatiquement) ; filtre de recherche unifié
+
+**Notification Discord/Apprise :**
+Envoyée uniquement lors de la découverte de nouveaux serveurs, regroupée par pays. Champ *Mention Discord* optionnel (ex. `<@123456789>`) pour notifier un utilisateur ou un rôle.
+
+> Après 7 jours, les serveurs quittent automatiquement la liste des "nouveaux". Les serveurs ajoutés à votre liste ne s'affichent plus dans le badge/bannière.
 
 ### Endpoint Prometheus `/metrics`
 

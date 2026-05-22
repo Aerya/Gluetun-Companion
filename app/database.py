@@ -62,6 +62,14 @@ def init_db(db_path: str):
                 value TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS airvpn_new_servers (
+                name          TEXT PRIMARY KEY,
+                country       TEXT NOT NULL DEFAULT '',
+                country_code  TEXT NOT NULL DEFAULT '',
+                first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                dismissed     INTEGER NOT NULL DEFAULT 0
+            );
+
             INSERT OR IGNORE INTO settings (key, value) VALUES
                 ('test_interval_hours',      '6'),
                 ('admin_username',           'admin'),
@@ -97,7 +105,9 @@ def init_db(db_path: str):
                 ('pull_network_containers',     '[]'),
                 ('quick_check_mode',            '0'),
                 ('quick_check_threshold',       '15'),
-                ('weighted_score_current_pct',  '65');
+                ('weighted_score_current_pct',  '65'),
+                ('airvpn_new_server_notif',     '0'),
+                ('airvpn_notify_mention',       '');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [
@@ -219,3 +229,61 @@ def compute_confidence_all() -> dict[str, dict]:
         result[name] = {'level': level, 'nb': nb, 'cv_pct': cv_pct, 'consec': consec}
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# AirVPN new-server detection helpers
+# ---------------------------------------------------------------------------
+
+def get_new_airvpn_servers() -> list[dict]:
+    """Return non-dismissed new AirVPN servers seen in the last 7 days
+    that are not yet in the user's servers table."""
+    with get_db() as db:
+        rows = db.execute("""
+            SELECT n.name, n.country, n.country_code, n.first_seen_at
+            FROM airvpn_new_servers n
+            WHERE n.dismissed = 0
+              AND n.first_seen_at >= datetime('now', '-7 days')
+              AND n.name NOT IN (
+                  SELECT name FROM servers WHERE filter_type = 'name'
+              )
+            ORDER BY n.first_seen_at DESC
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
+def upsert_new_airvpn_servers(servers: list[dict]) -> list[dict]:
+    """Insert newly discovered servers (INSERT OR IGNORE).
+    Returns only the truly newly inserted entries.
+    Also cleans up entries that have since been added to the servers table."""
+    newly_added: list[dict] = []
+    with get_db() as db:
+        for s in servers:
+            cur = db.execute(
+                "INSERT OR IGNORE INTO airvpn_new_servers (name, country, country_code)"
+                " VALUES (?, ?, ?)",
+                (s['name'], s['country'], s['country_code']),
+            )
+            if cur.rowcount:
+                newly_added.append(s)
+        # Clean up servers that have been added by the user in the meantime
+        db.execute("""
+            DELETE FROM airvpn_new_servers
+            WHERE name IN (SELECT name FROM servers WHERE filter_type = 'name')
+        """)
+    return newly_added
+
+
+def dismiss_new_airvpn_servers():
+    """Mark all tracked new servers as dismissed (user acknowledged the banner)."""
+    with get_db() as db:
+        db.execute("UPDATE airvpn_new_servers SET dismissed = 1")
+
+
+def purge_old_new_airvpn_servers():
+    """Remove entries older than 7 days — they are no longer 'new'."""
+    with get_db() as db:
+        db.execute(
+            "DELETE FROM airvpn_new_servers"
+            " WHERE first_seen_at < datetime('now', '-7 days')"
+        )

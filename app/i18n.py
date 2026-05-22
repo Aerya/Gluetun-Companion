@@ -381,6 +381,21 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ── Run Now hints ──
         'dash_run_now_hint': 'Passe par le proxy HTTP — résultat en quelques secondes.',
         'set_run_now_hint':  'Passe par le proxy HTTP — résultat en quelques secondes.',
+
+        # ── AirVPN new-server detection ──
+        'airvpn_new_tab':          'Nouveaux',
+        'airvpn_new_tab_hint':     'Serveurs disponibles sur AirVPN mais pas encore dans votre liste',
+        'airvpn_new_badge_title':  'Nouveau serveur détecté dans vos pays — cliquez pour voir',
+        'airvpn_new_banner':       '{n} nouveau(x) serveur(s) AirVPN disponible(s) dans vos pays ({countries})',
+        'airvpn_new_banner_link':  'Voir dans le modal',
+        'airvpn_new_label':        'Nouveau',
+        'airvpn_new_empty':        'Aucun nouveau serveur — tout est déjà dans votre liste.',
+        'airvpn_notif_title':      '🆕 Nouveaux serveurs AirVPN',
+        'set_airvpn_notif_label':  'Notifier les nouveaux serveurs AirVPN dans mes pays',
+        'set_airvpn_notif_hint':   'Compare l\'API AirVPN avec vos serveurs configurés toutes les 24 h. Notifie par Discord/Apprise si un nouveau serveur apparaît dans un pays déjà utilisé.',
+        'set_airvpn_mention_label':'Mention Discord (optionnel)',
+        'set_airvpn_mention_hint': 'ID Discord à mentionner dans la notification (ex. <code>&lt;@123456789&gt;</code> ou <code>&lt;@&amp;ROLE_ID&gt;</code>). Laisser vide pour ne pas mentionner.',
+        'flash_airvpn_dismissed':  'Nouveaux serveurs ignorés.',
     },
 
     'en': {
@@ -761,6 +776,21 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ── Run Now hints ──
         'dash_run_now_hint': 'Uses the HTTP proxy — result in a few seconds.',
         'set_run_now_hint':  'Uses the HTTP proxy — result in a few seconds.',
+
+        # ── AirVPN new-server detection ──
+        'airvpn_new_tab':          'New',
+        'airvpn_new_tab_hint':     'Servers available on AirVPN but not yet in your list',
+        'airvpn_new_badge_title':  'New server detected in your countries — click to view',
+        'airvpn_new_banner':       '{n} new AirVPN server(s) available in your countries ({countries})',
+        'airvpn_new_banner_link':  'View in modal',
+        'airvpn_new_label':        'New',
+        'airvpn_new_empty':        'No new servers — everything is already in your list.',
+        'airvpn_notif_title':      '🆕 New AirVPN servers',
+        'set_airvpn_notif_label':  'Notify about new AirVPN servers in my countries',
+        'set_airvpn_notif_hint':   'Compares the AirVPN API with your configured servers every 24 h. Sends a Discord/Apprise notification when a new server appears in a country you already use.',
+        'set_airvpn_mention_label':'Discord mention (optional)',
+        'set_airvpn_mention_hint': 'Discord ID to mention in the notification (e.g. <code>&lt;@123456789&gt;</code> or <code>&lt;@&amp;ROLE_ID&gt;</code>). Leave blank to skip.',
+        'flash_airvpn_dismissed':  'New servers dismissed.',
     },
 }
 
