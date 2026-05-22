@@ -36,6 +36,9 @@ services:
       - GLUETUN_CONTAINER=gluetun-airvpn   # nom exact du service dans le compose Gluetun
       - COMPOSE_DIR=/compose
       - DOCKER_HOST=tcp://socket-proxy:2375
+      # Optionnel : protéger /metrics par un Bearer token.
+      # Laisser vide (ou non défini) pour un accès libre — standard pour les scrapes Prometheus internes.
+      # - METRICS_TOKEN=votre-token-secret
     networks:
       - companion-net
     depends_on:
@@ -43,3 +46,16 @@ services:
 
 networks:
   companion-net:
+
+# ── Prometheus scrape config (add to your prometheus.yml) ─────────────────
+#
+# scrape_configs:
+#   - job_name: gluetun-companion
+#     static_configs:
+#       - targets: ['gluetun-companion:8765']
+#     # If METRICS_TOKEN is set:
+#     # bearer_token: your-secret-token
+#
+# Grafana: add Prometheus as data source, then query e.g.:
+#   gluetun_companion_server_avg_dl_mbps
+#   gluetun_companion_server_active == 1

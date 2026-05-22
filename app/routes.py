@@ -867,6 +867,154 @@ def healthz():
         return jsonify({'status': 'error', 'db': str(exc)}), 500
 
 
+@bp.route('/metrics')
+def metrics():
+    """
+    Prometheus metrics endpoint.
+    Unauthenticated by default — set METRICS_TOKEN env var to require
+    an 'Authorization: Bearer <token>' header.
+    """
+    token = current_app.config.get('METRICS_TOKEN', '')
+    if token:
+        auth = request.headers.get('Authorization', '')
+        if auth != f'Bearer {token}':
+            return Response(
+                'Unauthorized\n',
+                status=401,
+                headers={'WWW-Authenticate': 'Bearer realm="metrics"'},
+            )
+
+    def _esc(v: str) -> str:
+        """Escape a Prometheus label value."""
+        return str(v).replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+
+    lines: list[str] = []
+
+    def _metric(name: str, help_text: str, type_: str,
+                samples: list[tuple[dict, object]]) -> None:
+        lines.append(f'# HELP {name} {help_text}')
+        lines.append(f'# TYPE {name} {type_}')
+        for labels, value in samples:
+            if value is None:
+                continue
+            if labels:
+                lstr = ','.join(f'{k}="{_esc(v)}"' for k, v in labels.items())
+                lines.append(f'{name}{{{lstr}}} {value}')
+            else:
+                lines.append(f'{name} {value}')
+
+    # ── DB queries ─────────────────────────────────────────────────────────
+    with get_db() as db:
+        server_rows = db.execute('''
+            SELECT
+                s.name,
+                s.enabled,
+                s.consecutive_failures,
+                ROUND(AVG(CASE WHEN st.success=1
+                               AND (st.test_method IS NULL OR st.test_method != 'proxy_qc')
+                               THEN st.download_mbps END), 2) AS avg_dl,
+                ROUND(AVG(CASE WHEN st.success=1
+                               AND (st.test_method IS NULL OR st.test_method != 'proxy_qc')
+                               THEN st.upload_mbps END), 2)   AS avg_ul,
+                ROUND(AVG(CASE WHEN st.success=1
+                               AND (st.test_method IS NULL OR st.test_method != 'proxy_qc')
+                               THEN st.latency_ms END), 2)    AS avg_lat,
+                COUNT(st.id)                                        AS total_tests,
+                SUM(CASE WHEN st.success=0 THEN 1 ELSE 0 END)      AS failed_tests
+            FROM servers s
+            LEFT JOIN speed_tests st ON st.server_name = s.name
+            GROUP BY s.id
+            ORDER BY s.name
+        ''').fetchall()
+
+        sw = db.execute('''
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN success=1 THEN 1 ELSE 0 END)  AS successful,
+                MAX(strftime('%s', switched_at))             AS last_ts
+            FROM switches
+        ''').fetchone()
+
+    # ── Active server (best-effort) ────────────────────────────────────────
+    active_server = ''
+    try:
+        _filters = get_current_filters(current_app.config['GLUETUN_CONTAINER'])
+        active_server = next(iter(_filters.values())).split(',')[0].strip() if _filters else ''
+    except Exception:
+        pass
+
+    bm_running = int(get_setting('benchmark_running', '0') == '1')
+
+    # ── Per-server gauges ──────────────────────────────────────────────────
+    _metric('gluetun_companion_server_avg_dl_mbps',
+            'Average download speed in Mbps (full benchmarks only, proxy_qc excluded)',
+            'gauge',
+            [({'server': r['name']}, r['avg_dl']) for r in server_rows])
+
+    _metric('gluetun_companion_server_avg_ul_mbps',
+            'Average upload speed in Mbps (full benchmarks only, proxy_qc excluded)',
+            'gauge',
+            [({'server': r['name']}, r['avg_ul']) for r in server_rows])
+
+    _metric('gluetun_companion_server_avg_latency_ms',
+            'Average latency in milliseconds (full benchmarks only, proxy_qc excluded)',
+            'gauge',
+            [({'server': r['name']}, r['avg_lat']) for r in server_rows])
+
+    _metric('gluetun_companion_server_test_count',
+            'Total number of speed tests recorded for this server',
+            'gauge',
+            [({'server': r['name']}, r['total_tests']) for r in server_rows])
+
+    _metric('gluetun_companion_server_failure_count',
+            'Total number of failed speed tests for this server',
+            'gauge',
+            [({'server': r['name']}, r['failed_tests'] or 0) for r in server_rows])
+
+    _metric('gluetun_companion_server_consecutive_failures',
+            'Current consecutive failure count (reset to 0 on success)',
+            'gauge',
+            [({'server': r['name']}, r['consecutive_failures']) for r in server_rows])
+
+    _metric('gluetun_companion_server_enabled',
+            '1 if the server is enabled for benchmarking, 0 if disabled',
+            'gauge',
+            [({'server': r['name']}, 1 if r['enabled'] else 0) for r in server_rows])
+
+    _metric('gluetun_companion_server_active',
+            '1 if this is the currently active Gluetun server, 0 otherwise',
+            'gauge',
+            [({'server': r['name']}, 1 if r['name'] == active_server else 0)
+             for r in server_rows])
+
+    # ── Global counters / gauges ───────────────────────────────────────────
+    _metric('gluetun_companion_switches_total',
+            'Total number of VPN server switches recorded (successful + failed)',
+            'counter',
+            [({}, sw['total'] or 0)])
+
+    _metric('gluetun_companion_switches_success_total',
+            'Total number of successful VPN server switches',
+            'counter',
+            [({}, sw['successful'] or 0)])
+
+    _metric('gluetun_companion_benchmark_running',
+            '1 if a benchmark cycle is currently in progress, 0 otherwise',
+            'gauge',
+            [({}, bm_running)])
+
+    if sw['last_ts']:
+        _metric('gluetun_companion_last_switch_timestamp_seconds',
+                'Unix timestamp of the most recent VPN server switch',
+                'gauge',
+                [({}, int(sw['last_ts']))])
+
+    return Response(
+        '\n'.join(lines) + '\n',
+        mimetype='text/plain; version=0.0.4; charset=utf-8',
+    )
+
+
 @bp.route('/api/trigger', methods=['POST'])
 @login_required
 def api_trigger():

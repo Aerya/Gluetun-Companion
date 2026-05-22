@@ -79,6 +79,8 @@ def create_app():
     app.config['GLUETUN_CONTAINER'] = os.environ.get('GLUETUN_CONTAINER', 'gluetun-airvpn')
     app.config['COMPOSE_DIR']      = os.environ.get('COMPOSE_DIR', '/compose')
     app.config['COMPOSE_PROJECT']  = os.environ.get('COMPOSE_PROJECT', '')
+    # Optional Bearer token for /metrics — leave empty to allow open access (standard Prometheus)
+    app.config['METRICS_TOKEN']    = os.environ.get('METRICS_TOKEN', '')
 
     os.makedirs(app.config['DATA_DIR'], exist_ok=True)
     init_db(app.config['DB_PATH'])
@@ -112,7 +114,7 @@ def create_app():
             url = forced
         else:
             # Skip background API/static calls — url_root from those may be bare
-            if _req.endpoint in (None, 'static', 'main.healthz'):
+            if _req.endpoint in (None, 'static', 'main.healthz', 'main.metrics'):
                 return
             url = _req.url_root.rstrip('/')
         if url and url != _detected_companion_url[0]:

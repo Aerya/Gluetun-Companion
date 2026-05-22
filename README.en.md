@@ -67,6 +67,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Notifications** on every switch — Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
 - **Automatic purge** of SQLite history with configurable retention (in days)
 - **`/healthz` endpoint** unauthenticated, for Docker healthchecks
+- **`/metrics` endpoint** in Prometheus format — throughput, latency, switches, active server; optionally protected by Bearer token; Grafana-compatible
 - **Structured JSON logs** optional via `LOG_JSON=1` (Loki/Grafana compatible)
 - **SQLite database** (WAL) — no external dependencies
 
@@ -133,6 +134,9 @@ services:
       - GLUETUN_CONTAINER=gluetun-airvpn   # exact name of your Gluetun container
       - COMPOSE_DIR=/compose
       - DOCKER_HOST=tcp://socket-proxy:2375
+      # Optional: protect /metrics with a Bearer token.
+      # Leave unset (or empty) for open access — standard for internal Prometheus scrapes.
+      # - METRICS_TOKEN=your-secret-token
     networks:
       - companion-net
     depends_on:
@@ -172,6 +176,7 @@ Open **http://localhost:8765** — first login: enter the credentials you want (
 | `COMPOSE_DIR` | `/compose` | Path (inside the container) to the Gluetun compose directory |
 | `DATA_DIR` | `/data` | SQLite database directory |
 | `DOCKER_HOST` | *(local socket)* | Set to `tcp://socket-proxy:2375` when using the Tecnativa socket proxy |
+| `METRICS_TOKEN` | *(empty)* | If set, the `/metrics` endpoint requires `Authorization: Bearer <token>`; leave empty for open access (standard for internal networks) |
 
 Benchmark parameters (streams, duration, warm-up, retry…) are configured in the UI → **Settings**.
 
@@ -264,6 +269,40 @@ When enabled, each cycle starts with a speed test of the **currently active serv
 This is ideal for frequent scheduling intervals (e.g. every 2–3 hours) where you want a sanity check without the cost of a full benchmark every time.
 
 > The threshold is configurable (1–100 %). A value of 15 means: if the current speed is between 85 % and 115 % of the last known result, the full benchmark is skipped.
+
+### Prometheus `/metrics` Endpoint
+
+The `GET /metrics` endpoint exposes key metrics in Prometheus text format, with no external dependencies.
+
+**Available metrics** (per server):
+- `gluetun_companion_server_avg_dl_mbps` — average download throughput (full benchmarks only, `proxy_qc` excluded)
+- `gluetun_companion_server_avg_ul_mbps` — average upload throughput
+- `gluetun_companion_server_avg_latency_ms` — average latency
+- `gluetun_companion_server_test_count` — total number of tests
+- `gluetun_companion_server_failure_count` — number of failed tests
+- `gluetun_companion_server_consecutive_failures` — current consecutive failures
+- `gluetun_companion_server_enabled` — 1 if enabled for benchmarking
+- `gluetun_companion_server_active` — 1 if this is the currently active Gluetun server
+
+**Global metrics**:
+- `gluetun_companion_switches_total` — total number of switches
+- `gluetun_companion_switches_success_total` — successful switches
+- `gluetun_companion_benchmark_running` — 1 if a benchmark is currently running
+- `gluetun_companion_last_switch_timestamp_seconds` — Unix timestamp of the last switch
+
+**Authentication**: open by default (standard for internal networks). Set `METRICS_TOKEN` to require a Bearer token.
+
+**Prometheus scrape config** (add to `prometheus.yml`):
+```yaml
+scrape_configs:
+  - job_name: gluetun-companion
+    static_configs:
+      - targets: ['gluetun-companion:8765']
+    # If METRICS_TOKEN is set:
+    # bearer_token: your-secret-token
+```
+
+---
 
 ### Automatic cycle vs manual trigger
 
