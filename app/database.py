@@ -1,5 +1,6 @@
-import sqlite3
+import math
 import os
+import sqlite3
 from contextlib import contextmanager
 
 _db_path = None
@@ -150,3 +151,71 @@ def set_setting(key: str, value: str):
             'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
             (key, str(value)),
         )
+
+
+def compute_confidence_all() -> dict[str, dict]:
+    """Compute confidence scores for all servers (zero migrations needed).
+
+    Returns {server_name: {'level': 'HIGH'|'MEDIUM'|'LOW', 'nb': int,
+                            'cv_pct': float|None, 'consec': int}}
+
+    Rules:
+      HIGH   — ≥ 5 successful measurements AND σ < 15 % AND 0 consecutive failures
+      MEDIUM — 2–4 measurements OR σ 15–30 %  (and no LOW condition)
+      LOW    — ≤ 1 measurement  OR σ > 30 %   OR consecutive_failures > 0
+
+    proxy_qc tests are excluded (quick checks — not representative benchmarks).
+    SQLite variance = E[x²] − E[x]² (population variance, no STDDEV function needed).
+    """
+    with get_db() as db:
+        rows = db.execute('''
+            SELECT
+                s.name,
+                COALESCE(s.consecutive_failures, 0) AS consec,
+                COALESCE(
+                    SUM(CASE WHEN st.success=1 AND st.test_method!='proxy_qc' THEN 1 ELSE 0 END),
+                    0
+                ) AS nb,
+                AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
+                         THEN st.download_mbps END) AS avg_dl,
+                (
+                    AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
+                             THEN st.download_mbps * st.download_mbps END) -
+                    AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
+                             THEN st.download_mbps END) *
+                    AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
+                             THEN st.download_mbps END)
+                ) AS variance
+            FROM servers s
+            LEFT JOIN speed_tests st ON st.server_name = s.name
+            GROUP BY s.name
+        ''').fetchall()
+
+    result: dict[str, dict] = {}
+    for r in rows:
+        name   = r['name']
+        nb     = int(r['nb'] or 0)
+        avg    = r['avg_dl'] or 0.0
+        var    = max(r['variance'] or 0.0, 0.0)
+        consec = int(r['consec'] or 0)
+
+        if nb == 0:
+            result[name] = {'level': 'LOW', 'nb': 0, 'cv_pct': None, 'consec': consec}
+            continue
+
+        stddev = math.sqrt(var) if var > 0 else 0.0
+        cv_pct = round(stddev / avg * 100, 1) if avg > 0 else 0.0
+
+        # LOW — any degrading condition
+        if nb <= 1 or cv_pct > 30 or consec > 0:
+            level = 'LOW'
+        # HIGH — all quality conditions met
+        elif nb >= 5 and cv_pct < 15:
+            level = 'HIGH'
+        # MEDIUM — everything else (2–4 measures OR σ 15–30 %)
+        else:
+            level = 'MEDIUM'
+
+        result[name] = {'level': level, 'nb': nb, 'cv_pct': cv_pct, 'consec': consec}
+
+    return result

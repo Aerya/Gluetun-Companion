@@ -14,7 +14,7 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .database import get_db, get_setting, set_setting
+from .database import get_db, get_setting, set_setting, compute_confidence_all
 from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
     get_current_filters, format_filters,
@@ -269,6 +269,7 @@ def servers():
         from_date=from_date, to_date=to_date,
         filter_types=filter_types,
         active_server=active_server,
+        confidence=compute_confidence_all(),
     )
 
 
@@ -571,6 +572,7 @@ def history():
         from_date=from_date, to_date=to_date,
         server_names=server_names,
         timeline_data=timeline_data,
+        confidence=compute_confidence_all(),
     )
 
 

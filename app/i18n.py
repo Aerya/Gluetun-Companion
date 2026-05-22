@@ -130,6 +130,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'srv_airvpn_health_hint':    '✅ opérationnel · ⚠️ en erreur / maintenance',
         'srv_active_badge':          'Actif',
 
+        # ── Confidence score ──
+        'conf_col_header':   'Fiabilité',
+        'conf_level_high':   'Fiabilité élevée',
+        'conf_level_medium': 'Fiabilité modérée',
+        'conf_level_low':    'Fiabilité faible',
+        'conf_measure':      'mesure(s)',
+        'conf_failures':     'échecs consécutifs',
+
         # ── History ──
         'hist_title':       'Historique des tests de vitesse',
         'hist_avg':         'moy.',
@@ -480,6 +488,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'srv_airvpn_health_err':     'Server reported as in error or under maintenance by AirVPN — may be unavailable',
         'srv_airvpn_health_hint':    '✅ operational · ⚠️ error / maintenance',
         'srv_active_badge':          'Active',
+
+        # ── Confidence score ──
+        'conf_col_header':   'Confidence',
+        'conf_level_high':   'High confidence',
+        'conf_level_medium': 'Moderate confidence',
+        'conf_level_low':    'Low confidence',
+        'conf_measure':      'measurement(s)',
+        'conf_failures':     'consecutive failures',
 
         # ── History ──
         'hist_title':       'Speed test history',

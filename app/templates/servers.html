@@ -81,6 +81,7 @@
           <th>{{ t.srv_col_max_dl }}</th>
           <th>{{ t.srv_col_latency }}</th>
           <th>{{ t.srv_col_tests }}</th>
+          <th title="{{ t.conf_col_header }}" style="cursor:help">{{ t.conf_col_header }}</th>
           <th>{{ t.srv_col_last_test }}</th>
           <th class="text-end">{{ t.srv_col_actions }}</th>
         </tr>
@@ -138,6 +139,30 @@
           <td>
             <small class="text-muted">{{ s.ok_tests }}/{{ s.total_tests }}</small>
           </td>
+          <td class="text-center">
+            {%- set _conf = confidence.get(s.name, {'level': 'LOW', 'nb': 0, 'cv_pct': None, 'consec': 0}) -%}
+            {%- if _conf.nb == 0 -%}
+              <span class="text-muted" style="font-size:.75rem">—</span>
+            {%- else -%}
+              {%- if _conf.level == 'HIGH' -%}
+                {%- set _conf_lvl = t.conf_level_high -%}{%- set _conf_cls = 'text-success' -%}
+              {%- elif _conf.level == 'MEDIUM' -%}
+                {%- set _conf_lvl = t.conf_level_medium -%}{%- set _conf_cls = 'text-warning' -%}
+              {%- else -%}
+                {%- set _conf_lvl = t.conf_level_low -%}{%- set _conf_cls = 'text-danger' -%}
+              {%- endif -%}
+              {%- set _tip_parts = [_conf_lvl, _conf.nb|string ~ ' ' ~ t.conf_measure] -%}
+              {%- if _conf.cv_pct is not none -%}
+                {%- set _tip_parts = _tip_parts + ['σ = ' ~ _conf.cv_pct|string ~ '%'] -%}
+              {%- endif -%}
+              {%- if _conf.consec > 0 -%}
+                {%- set _tip_parts = _tip_parts + [_conf.consec|string ~ ' ' ~ t.conf_failures] -%}
+              {%- endif -%}
+              {%- set _conf_tip = _tip_parts | join(' · ') -%}
+              <i class="bi bi-circle-fill {{ _conf_cls }}" style="font-size:.65rem;cursor:help"
+                 data-bs-toggle="tooltip" data-bs-placement="top" title="{{ _conf_tip }}"></i>
+            {%- endif -%}
+          </td>
           <td>
             <small class="text-muted">{{ (s.last_tested | localtime | truncate(16, True, '')) if s.last_tested else t.cmn_never }}</small>
           </td>
@@ -186,7 +211,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="12" class="text-center text-muted py-5">
+          <td colspan="13" class="text-center text-muted py-5">
             <i class="bi bi-hdd-network" style="font-size:2rem;opacity:.3"></i><br>
             {{ t.srv_empty }}<br>
             <small>{{ t.srv_empty_hint | safe }}</small>
@@ -680,5 +705,10 @@ function _refreshAirvpnStats() {
 
 _refreshAirvpnStats();
 setInterval(_refreshAirvpnStats, 5 * 60 * 1000);  // refresh every 5 min
+
+// ── Confidence tooltips (static cells) ───────────────────────────────────
+document.querySelectorAll('td [data-bs-toggle="tooltip"]').forEach(el => {
+  new bootstrap.Tooltip(el, { trigger: 'hover focus' });
+});
 </script>
 {% endblock %}

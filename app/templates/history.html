@@ -124,7 +124,30 @@
       <tbody>
         {% for r in tests %}
         <tr>
-          <td><code>{{ r.server_name }}</code></td>
+          <td>
+            <code>{{ r.server_name }}</code>
+            {%- set _conf = confidence.get(r.server_name) -%}
+            {%- if _conf and _conf.nb > 0 -%}
+              {%- if _conf.level == 'HIGH' -%}
+                {%- set _conf_lvl = t.conf_level_high -%}{%- set _conf_cls = 'text-success' -%}
+              {%- elif _conf.level == 'MEDIUM' -%}
+                {%- set _conf_lvl = t.conf_level_medium -%}{%- set _conf_cls = 'text-warning' -%}
+              {%- else -%}
+                {%- set _conf_lvl = t.conf_level_low -%}{%- set _conf_cls = 'text-danger' -%}
+              {%- endif -%}
+              {%- set _tip_parts = [_conf_lvl, _conf.nb|string ~ ' ' ~ t.conf_measure] -%}
+              {%- if _conf.cv_pct is not none -%}
+                {%- set _tip_parts = _tip_parts + ['σ = ' ~ _conf.cv_pct|string ~ '%'] -%}
+              {%- endif -%}
+              {%- if _conf.consec > 0 -%}
+                {%- set _tip_parts = _tip_parts + [_conf.consec|string ~ ' ' ~ t.conf_failures] -%}
+              {%- endif -%}
+              {%- set _conf_tip = _tip_parts | join(' · ') -%}
+              <i class="bi bi-circle-fill {{ _conf_cls }}"
+                 style="font-size:.55rem;cursor:help;vertical-align:middle;margin-left:.2rem"
+                 data-bs-toggle="tooltip" title="{{ _conf_tip }}"></i>
+            {%- endif -%}
+          </td>
           <td>
             {% if r.download_mbps %}
               {% set cls = 'speed-good' if r.download_mbps > 50 else ('speed-ok' if r.download_mbps > 15 else 'speed-bad') %}

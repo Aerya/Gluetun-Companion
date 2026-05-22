@@ -15,12 +15,20 @@ _lock = threading.Lock()
 # Weighted score for best-server selection
 # ---------------------------------------------------------------------------
 
-def _weighted_score(server_name: str, current_dl: float, db, current_pct: float = 65.0) -> float:
+def _weighted_score(
+    server_name: str,
+    current_dl: float,
+    db,
+    current_pct: float = 65.0,
+    confidence_factor: float = 1.0,
+) -> float:
     """
     Blend the current cycle's result with exponentially-weighted historical
     data so that a single lucky/unlucky run doesn't dominate.
     ``current_pct`` controls how much weight (0–100) goes to the current
     measurement; the remainder goes to the exponential history.
+    ``confidence_factor`` is a light penalty from the confidence score:
+      HIGH → 1.0 (no penalty), MEDIUM → 0.95, LOW → 0.85.
     """
     rows = db.execute(
         'SELECT download_mbps FROM speed_tests '
@@ -28,12 +36,12 @@ def _weighted_score(server_name: str, current_dl: float, db, current_pct: float 
         (server_name,),
     ).fetchall()
     if not rows:
-        return current_dl
+        return current_dl * confidence_factor
     w_cur  = max(0.0, min(current_pct, 100.0)) / 100.0
     w_hist = 1.0 - w_cur
     weights = [0.5 ** i for i in range(len(rows))]
     hist = sum(w * r['download_mbps'] for w, r in zip(weights, rows)) / sum(weights)
-    return w_cur * current_dl + w_hist * hist
+    return (w_cur * current_dl + w_hist * hist) * confidence_factor
 
 
 # ---------------------------------------------------------------------------
@@ -662,8 +670,20 @@ def _do_benchmark(app, skip_quick_check: bool = False):
         best_server_label: str | None = None
         if auto_sw and results:
             current_pct = float(get_setting('weighted_score_current_pct', '65'))
+            # Confidence factors — computed once for all servers (no N+1 queries)
+            from .database import compute_confidence_all as _conf_all
+            _conf_map = _conf_all()
+            _CONF_FACTORS = {'HIGH': 1.0, 'MEDIUM': 0.95, 'LOW': 0.85}
             with get_db() as db:
-                best = max(results, key=lambda r: _weighted_score(r['server'], r['dl'], db, current_pct))
+                best = max(
+                    results,
+                    key=lambda r: _weighted_score(
+                        r['server'], r['dl'], db, current_pct,
+                        _CONF_FACTORS.get(
+                            _conf_map.get(r['server'], {}).get('level', 'MEDIUM'), 0.95
+                        ),
+                    ),
+                )
             best_label = f"{FILTER_VARS.get(best['filter_type'], 'SERVER_NAMES')}={best['server']}"
             logger.info('Best (weighted): %s (%.1f Mbps current)', best_label, best['dl'])
             best_server_label = best_label
