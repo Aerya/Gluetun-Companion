@@ -42,9 +42,42 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 
 ---
 
+## Table of contents
+
+- [Compatibility](#compatibility)
+- [Features](#features)
+  - [Speed testing](#speed-testing)
+  - [Server selection & automatic switching](#server-selection--automatic-switching)
+  - [Docker container management](#docker-container-management)
+  - [AirVPN](#airvpn)
+  - [Analysis & history](#analysis--history)
+  - [UI & notifications](#ui--notifications)
+  - [Integration & infrastructure](#integration--infrastructure)
+- [Quick start](#quick-start)
+- [Environment variables](#environment-variables)
+- [How it works](#how-it-works)
+  - [Sidecar mode (default)](#sidecar-mode-default)
+  - [HTTP proxy mode (optional)](#http-proxy-mode-optional)
+  - [Quick check before benchmark](#quick-check-before-benchmark-option)
+  - [Adaptive scheduling](#adaptive-scheduling-option)
+  - [Docker events listener](#docker-events-listener)
+  - [Selection score — stability components](#selection-score--stability-components)
+  - [Per-server confidence score](#per-server-confidence-score)
+  - [Jitter & Packet Loss](#jitter--packet-loss)
+  - [Hourly patterns view](#hourly-patterns-view-historypatterns)
+  - [New AirVPN server detection](#new-airvpn-server-detection)
+  - [REST API](#rest-api)
+  - [Prometheus /metrics endpoint](#prometheus-metrics-endpoint)
+  - [Automatic cycle vs manual trigger](#automatic-cycle-vs-manual-trigger)
+- [Notes](#notes)
+- [Security](#security)
+- [Credits](#credits)
+
+---
+
 ## Features
 
-**Speed testing**
+### Speed testing
 - **Sidecar mode** (default) — a `gluetun-companion-test` container clones the real Gluetun config for each server; `gluetun-companion-sidecar` measures speed via **Ookla + librespeed in parallel** (dual mode, default), Ookla only, librespeed only, or iperf3 directly inside the VPN tunnel; your main Gluetun is never restarted during testing
 - **HTTP proxy mode** (optional) — measures speed via the Gluetun HTTP proxy with no extra containers; briefly interrupts dependent services on each server switch
 - **Multi-source results** — Ookla, librespeed and iperf3 speeds stored separately and displayed in the dashboard and history
@@ -57,35 +90,35 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **DNS latency** *(sidecar)* — DNS resolution time measured from inside the VPN tunnel via `dig` (4 domains in parallel, median returned); detects slow, overloaded, or hijacking resolvers; column in History, DNS shown in the Stability tooltip, data in hourly patterns
 - **Docker events listener** — daemon thread watching for Gluetun container `start` events; if Gluetun restarts on its own (crash, update, watchdog), automatically triggers a quick check after N seconds (VPN reconnect delay); if speed drift exceeds the configured threshold and auto-switch is enabled, immediately runs a full benchmark; restarts triggered by Companion itself are ignored; 5-minute cooldown between triggers
 
-**Server selection & automatic switching**
+### Server selection & automatic switching
 - **Automatic switching** to the fastest server (`docker compose up -d`), based on a weighted score combining current speed, exponential history, jitter, packet loss and involuntary reconnects (via Docker events); configurable *Speed vs stability* slider; dependent services (`network_mode: service:gluetun`) are recreated automatically
 - **Manual switch** to any configured server from the Servers page — Gluetun is reconfigured and `network_mode: service:gluetun` containers are recreated automatically
 - **5 filter types**: `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - Configurable **retry** per server + global timeout per server
 - **Auto-disable** a server after N consecutive failures
 
-**Docker container management**
+### Docker container management
 - **Gluetun network containers (auto-managed)** — all containers using `network_mode: service:gluetun` are detected and restarted automatically after each switch
 - **Containers to restart after switch** — only for containers routing through Gluetun's HTTP/SOCKS5 proxy; ordered list (drag & drop)
 - **Pause during benchmark** — list of containers (torrent, Usenet…) stopped before the benchmark starts and automatically restarted when it ends, even on error
 - **Automatic Docker image updates** *(option)* — at switch time, Companion can update images before restarting containers: Gluetun itself, auto-managed network containers, post-switch containers and benchmark-paused containers; togglable per container from Settings
 
-**AirVPN**
+### AirVPN
 - **Built-in AirVPN server picker** — *+ Add an AirVPN server* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), two views — full searchable list (load, users, health) and geographic distribution by country with a **Best** badge on the least-loaded server; multi-select, one-click add
 - **New AirVPN server detection** *(optional)* — compares the AirVPN API with your configured servers every 24 h; badge and dismissable banner on the Servers page + *New* tab in the add modal; Discord/Apprise notification with optional mention
 
-**Analysis & history**
+### Analysis & history
 - **Per-server confidence score** — 🟢/🟡/🔴 indicator on the Servers page and in History; based on measurement count and result variability; factored into the automatic selection score (light weighting)
 - **Hourly patterns** (`/history/patterns`) — 0h–23h bar chart showing average speed by hour of day, color-coded by relative performance; best and worst hour displayed; helps identify server saturation windows
 - **On-demand test** of a single server from the UI without waiting for the next cycle
 - **CSV export** of the full history
 
-**UI & notifications**
+### UI & notifications
 - **Web UI** dark/light, FR/EN — auth, dashboard with sparkline, paginated history, charts, switches page with Mbps gain and connection time
 - **Notifications** on every switch — Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
 - **Automatic purge** of SQLite history with configurable retention (in days)
 
-**Integration & infrastructure**
+### Integration & infrastructure
 - **`/healthz` endpoint** unauthenticated, for Docker healthchecks
 - **`/metrics` endpoint** in Prometheus format — throughput, latency, switches, active server; optionally protected by Bearer token; Grafana-compatible
 - **REST API `/api/v1/`** protected by Bearer token — VPN status, server list, history, switches, trigger full or quick benchmark; designed for Home Assistant, n8n, bash scripts

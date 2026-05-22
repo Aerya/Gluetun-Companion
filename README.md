@@ -42,9 +42,43 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 
 ---
 
+## Table des matières
+
+- [Compatibilité](#compatibilité)
+- [Fonctionnalités](#fonctionnalités)
+  - [Mesure de performances](#mesure-de-performances)
+  - [Sélection & bascule automatique](#sélection--bascule-automatique)
+  - [Gestion des containers Docker](#gestion-des-containers-docker)
+  - [AirVPN](#airvpn)
+  - [Analyse & historique](#analyse--historique)
+  - [Interface & notifications](#interface--notifications)
+  - [Intégration & infrastructure](#intégration--infrastructure)
+- [Démarrage rapide](#démarrage-rapide)
+- [Variables d'environnement](#variables-denvironnement)
+- [Fonctionnement](#fonctionnement)
+  - [Mode Sidecar (défaut)](#mode-sidecar-défaut)
+  - [Mode Proxy HTTP (optionnel)](#mode-proxy-http-optionnel)
+  - [Vérification rapide avant benchmark](#vérification-rapide-avant-benchmark-option)
+  - [Scheduling adaptatif](#scheduling-adaptatif-option)
+  - [Écoute Docker events](#écoute-docker-events)
+  - [Score de sélection — composantes de stabilité](#score-de-sélection--composantes-de-stabilité)
+  - [Score de confiance par serveur](#score-de-confiance-par-serveur)
+  - [Jitter & Packet Loss](#jitter--packet-loss)
+  - [Patterns horaires](#vue-patterns-horaires-historypatterns)
+  - [Détection nouveaux serveurs AirVPN](#détection-de-nouveaux-serveurs-airvpn)
+  - [REST API](#rest-api)
+  - [Endpoint /metrics Prometheus](#endpoint-prometheus-metrics)
+  - [Cycle automatique vs manuel](#cycle-automatique-vs-déclenchement-manuel)
+- [Notes](#notes)
+- [Sécurité](#sécurité)
+- [Crédits](#crédits)
+- [Licence](#licence)
+
+---
+
 ## Fonctionnalités
 
-**Mesure de performances**
+### Mesure de performances
 - **Mode Sidecar** (défaut) — un container `gluetun-companion-test` clone la config réelle de Gluetun pour chaque serveur ; `gluetun-companion-sidecar` mesure le débit via **Ookla + librespeed en parallèle** (mode dual, défaut), Ookla seul, librespeed seul ou iperf3 directement dans le tunnel VPN ; votre Gluetun principal n'est jamais relancé pendant les tests
 - **Mode Proxy HTTP** (optionnel) — mesure via le proxy HTTP Gluetun sans container supplémentaire ; interrompt brièvement les services dépendants à chaque bascule
 - **Résultats multi-sources** — les vitesses Ookla, librespeed et iperf3 sont stockées séparément et affichées dans le dashboard et l'historique
@@ -57,35 +91,35 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Latence DNS** *(sidecar)* — mesure du temps de résolution DNS depuis l'intérieur du tunnel VPN via `dig` (4 domaines en parallèle, médiane retournée) ; détecte les résolveurs lents, surchargés ou qui interceptent les requêtes ; colonne dans l'historique, tooltip sur l'indicateur Stabilité, données dans les patterns horaires
 - **Écoute Docker events** — thread daemon qui surveille les événements `start` du container Gluetun ; si Gluetun redémarre de lui-même (crash, mise à jour, watchdog), déclenche automatiquement un quick check après N secondes (délai de reconnexion VPN) ; si la dérive de débit dépasse le seuil configuré et que la bascule automatique est activée, lance immédiatement un benchmark complet ; les redémarrages déclenchés par Companion lui-même sont ignorés ; cooldown de 5 min entre deux déclenchements
 
-**Sélection & bascule automatique**
+### Sélection & bascule automatique
 - **Bascule automatique** vers le meilleur serveur (`docker compose up -d`), basée sur un score pondéré intégrant débit actuel, historique exponentiel, jitter, perte paquets et reconnexions involontaires (via Docker events) ; curseur *Priorité débit vs stabilité* configurable ; les services dépendants (`network_mode: service:gluetun`) sont recréés automatiquement
 - **Bascule manuelle** vers n'importe quel serveur configuré depuis la page Serveurs — Gluetun est reconfiguré et les containers `network_mode: service:gluetun` sont recréés automatiquement
 - **5 types de filtre** : `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - **Retry** configurable par serveur + timeout global par serveur
 - **Auto-désactivation** d'un serveur après N échecs consécutifs
 
-**Gestion des containers Docker**
+### Gestion des containers Docker
 - **Containers réseau Gluetun (auto-gérés)** — tous les containers en `network_mode: service:gluetun` sont détectés et relancés automatiquement après chaque bascule
 - **Containers à redémarrer après bascule** — uniquement pour les containers utilisant le proxy HTTP/SOCKS5 de Gluetun ; liste ordonnée (glisser-déposer)
 - **Pause pendant le benchmark** — liste de containers (torrents, Usenet…) stoppés avant le début du benchmark et relancés automatiquement à la fin, même en cas d'erreur
 - **Mise à jour automatique des images Docker** *(option)* — au moment de la bascule, Companion peut mettre à jour les images avant de relancer les containers : Gluetun lui-même, les containers réseau auto-gérés, les containers à redémarrer après bascule et les containers en pause pendant le benchmark ; activable individuellement par container depuis les Paramètres
 
-**AirVPN**
+### AirVPN
 - **Sélecteur de serveurs AirVPN intégré** — bouton *+ Ajouter un serveur AirVPN* sur la page Serveurs : données en direct depuis `airvpn.org/api/status/` (cache 5 min), deux vues — liste complète searchable (charge, utilisateurs, santé) et répartition géographique par pays avec badge **Best** sur le serveur le moins chargé ; ajout multi-sélection en un clic
 - **Détection de nouveaux serveurs AirVPN** *(optionnel)* — compare l'API AirVPN avec vos serveurs configurés toutes les 24 h ; bannière et badge sur la page Serveurs + onglet *Nouveaux* dans le modal d'ajout ; notification Discord/Apprise avec mention optionnelle
 
-**Analyse & historique**
+### Analyse & historique
 - **Score de confiance par serveur** — indicateur 🟢/🟡/🔴 sur la page Serveurs et dans l'historique ; basé sur le nombre de mesures et la variabilité des résultats ; intégré dans le score de sélection automatique (pondération légère)
 - **Patterns horaires** (`/history/patterns`) — graphique barres 0h–23h du débit moyen par tranche horaire, coloré selon les performances relatives ; meilleure et pire heure affichées ; permet de repérer les créneaux de saturation serveur
 - **Test unitaire** d'un serveur depuis l'UI sans attendre le prochain cycle
 - **Export CSV** de l'historique complet
 
-**Interface & notifications**
+### Interface & notifications
 - **Web UI** dark/light, FR/EN — auth, dashboard avec sparkline, historique paginé, graphiques, page bascules avec gain Mbps et temps de connexion
 - **Notifications** à chaque bascule — webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
 - **Purge automatique** de l'historique SQLite configurable (rétention en jours)
 
-**Intégration & infrastructure**
+### Intégration & infrastructure
 - **Endpoint `/healthz`** non authentifié pour les healthchecks Docker
 - **Endpoint `/metrics`** au format Prometheus — débit, latence, bascules, serveur actif ; optionnellement protégé par Bearer token ; compatible Grafana
 - **REST API `/api/v1/`** protégée par Bearer token — statut VPN, liste des serveurs, historique, bascules, déclenchement benchmark complet ou rapide ; conçue pour Home Assistant, n8n, scripts bash
