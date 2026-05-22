@@ -57,7 +57,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Docker events listener** — daemon thread watching for Gluetun container `start` events; if Gluetun restarts on its own (crash, update, watchdog), automatically triggers a quick check after N seconds (VPN reconnect delay); if speed drift exceeds the configured threshold and auto-switch is enabled, immediately runs a full benchmark; restarts triggered by Companion itself are ignored; 5-minute cooldown between triggers
 
 **Server selection & automatic switching**
-- **Automatic switching** to the fastest server (`docker compose up -d`), based on a weighted score (configurable weight: current measurement vs exponential history); dependent services (`network_mode: service:gluetun`) are recreated automatically
+- **Automatic switching** to the fastest server (`docker compose up -d`), based on a weighted score combining current speed, exponential history, jitter, packet loss and involuntary reconnects (via Docker events); configurable *Speed vs stability* slider; dependent services (`network_mode: service:gluetun`) are recreated automatically
 - **Manual switch** to any configured server from the Servers page — Gluetun is reconfigured and `network_mode: service:gluetun` containers are recreated automatically
 - **5 filter types**: `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - Configurable **retry** per server + global timeout per server
@@ -332,6 +332,34 @@ A color indicator is shown on the **Servers** page (*Confidence* column) and in 
 **Variability** (coefficient of variation) is the standard deviation of speeds divided by the mean: 0 % = identical results every test, 100 % = very scattered results. Quick check tests (`proxy_qc`) are excluded from the calculation.
 
 The score lightly influences automatic server selection: HIGH × 1.0 · MEDIUM × 0.95 · LOW × 0.85 applied to the weighted score.
+
+### Selection score — stability components
+
+The final selection score now integrates **four reliability components**, all scaled by the *Speed vs stability* slider (Settings):
+
+```
+score = (w_cur × current_dl + w_hist × exp_history)
+        × confidence_factor
+        × effective_stability
+
+effective_stability = 1 − (stability_weight/100) × (1 − raw_stability)
+
+raw_stability = jitter_factor × loss_factor × reconnect_factor
+```
+
+| Component | Source | Max penalty |
+|---|---|---|
+| **Jitter** | Measured each test (jitter_ms) | −15 % at 150 ms |
+| **Packet loss** | Measured each test (packet_loss_pct) | −25 % at 10 % loss |
+| **Involuntary reconnects** | Docker events over 30 d (test_trigger=docker_event) | −10 % per reconnect, max −30 % |
+| **Confidence** (historical variance) | Coefficient of variation over last 5 tests | −15 % (LOW) · −5 % (MEDIUM) |
+
+**Speed vs stability slider** (Settings → Automatic switching):
+- **0** — speed only, all stability penalties disabled
+- **30** (default) — 30 % of the max penalties applied
+- **100** — full penalties — a 300 Mbps server with 3 involuntary reconnects + high jitter can lose up to ~40 % of its score
+
+> A 200 Mbps server with no reconnects and stable jitter will be preferred over a 300 Mbps server that disconnects every hour, as soon as `stability_weight ≥ ~20`.
 
 ### Hourly patterns view (`/history/patterns`)
 

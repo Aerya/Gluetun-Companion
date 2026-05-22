@@ -27,17 +27,35 @@ def _weighted_score(
     confidence_factor: float = 1.0,
     jitter_ms: float | None = None,
     packet_loss_pct: float | None = None,
+    reconnect_count: int = 0,
+    stability_weight: float = 30.0,
 ) -> float:
     """
     Blend the current cycle's result with exponentially-weighted historical
     data so that a single lucky/unlucky run doesn't dominate.
-    ``current_pct`` controls how much weight (0–100) goes to the current
-    measurement; the remainder goes to the exponential history.
-    ``confidence_factor`` is a light penalty from the confidence score:
-      HIGH → 1.0 (no penalty), MEDIUM → 0.95, LOW → 0.85.
-    ``jitter_ms`` and ``packet_loss_pct`` apply additional stability penalties:
-      - jitter:  up to −15 % at 150 ms
-      - loss:    up to −25 % at 10 % packet loss
+
+    ``current_pct`` (1–99) controls how much weight goes to the current
+    measurement vs. the exponential history (last 5 results).
+
+    ``confidence_factor`` — light penalty from the confidence score:
+      HIGH → 1.0 (no penalty) · MEDIUM → 0.95 · LOW → 0.85.
+
+    Stability components (each 0–1, 1 = perfect):
+      - jitter_factor     : up to −15 % at 150 ms jitter
+      - loss_factor       : up to −25 % at 10 % packet loss
+      - reconnect_factor  : up to −30 % for 3+ involuntary reconnects (−10% each)
+
+    ``stability_weight`` (0–100) scales how much the stability penalties affect
+    the final score:
+      0   → pure speed (all penalties disabled)
+      30  → default — 30 % of the max penalty is applied
+      100 → full penalty (a server with 3 reconnects + high jitter can lose ~40 %)
+
+    Formula:
+      base             = w_cur × current_dl + (1−w_cur) × exponential_hist
+      raw_stability    = jitter_factor × loss_factor × reconnect_factor
+      effective_stab   = 1 − (stability_weight/100) × (1 − raw_stability)
+      score            = base × confidence_factor × effective_stab
     """
     rows = db.execute(
         'SELECT download_mbps FROM speed_tests '
@@ -53,13 +71,23 @@ def _weighted_score(
         hist = sum(w * r['download_mbps'] for w, r in zip(weights, rows)) / sum(weights)
         base = w_cur * current_dl + w_hist * hist
 
-    # Stability penalties (optional — None means no data → no penalty)
-    jitter_factor = max(0.85, 1.0 - min(jitter_ms / 1000.0, 0.15)) \
-        if jitter_ms is not None else 1.0
-    loss_factor   = max(0.75, 1.0 - min(packet_loss_pct / 40.0, 0.25)) \
-        if (packet_loss_pct is not None and packet_loss_pct > 0) else 1.0
+    # ── Raw per-factor penalties (None → no data → no penalty) ──────────────
+    j_raw = (max(0.85, 1.0 - min(jitter_ms       / 1000.0, 0.15))
+             if jitter_ms is not None else 1.0)
+    l_raw = (max(0.75, 1.0 - min(packet_loss_pct / 40.0,   0.25))
+             if (packet_loss_pct is not None and packet_loss_pct > 0) else 1.0)
+    r_raw = (max(0.70, 1.0 - reconnect_count * 0.10)
+             if reconnect_count > 0 else 1.0)
 
-    return base * confidence_factor * jitter_factor * loss_factor
+    # ── Combined raw stability multiplier ────────────────────────────────────
+    raw_stability = j_raw * l_raw * r_raw          # e.g. 0.85 × 0.80 × 0.80 ≈ 0.54
+
+    # ── Scale by stability_weight ─────────────────────────────────────────────
+    # stab_w=0 → effective=1.0 (no penalty); stab_w=1 → effective=raw_stability
+    stab_w = max(0.0, min(stability_weight, 100.0)) / 100.0
+    effective_stab = 1.0 - stab_w * (1.0 - raw_stability)
+
+    return base * confidence_factor * effective_stab
 
 
 # ---------------------------------------------------------------------------
@@ -742,11 +770,18 @@ def _do_benchmark(app, skip_quick_check: bool = False):
 
         best_server_label: str | None = None
         if auto_sw and results:
-            current_pct = float(get_setting('weighted_score_current_pct', '65'))
-            # Confidence factors — computed once for all servers (no N+1 queries)
-            from .database import compute_confidence_all as _conf_all
-            _conf_map = _conf_all()
-            _CONF_FACTORS = {'HIGH': 1.0, 'MEDIUM': 0.95, 'LOW': 0.85}
+            current_pct      = float(get_setting('weighted_score_current_pct', '65'))
+            stability_weight = float(get_setting('stability_weight', '30'))
+            # Compute per-server metadata once (no N+1 queries)
+            from .database import (
+                compute_confidence_all  as _conf_all,
+                get_docker_event_counts as _event_counts,
+                get_setting             as _gs,
+            )
+            _conf_map      = _conf_all()
+            retention_days = int(_gs('db_retention_days', '30'))
+            _reconnect_map = _event_counts(days=retention_days)
+            _CONF_FACTORS  = {'HIGH': 1.0, 'MEDIUM': 0.95, 'LOW': 0.85}
             with get_db() as db:
                 best = max(
                     results,
@@ -757,6 +792,8 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                         ),
                         jitter_ms=r.get('jitter_ms'),
                         packet_loss_pct=r.get('packet_loss_pct'),
+                        reconnect_count=_reconnect_map.get(r['server'], 0),
+                        stability_weight=stability_weight,
                     ),
                 )
             best_label = f"{FILTER_VARS.get(best['filter_type'], 'SERVER_NAMES')}={best['server']}"

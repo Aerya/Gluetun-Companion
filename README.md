@@ -57,7 +57,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Écoute Docker events** — thread daemon qui surveille les événements `start` du container Gluetun ; si Gluetun redémarre de lui-même (crash, mise à jour, watchdog), déclenche automatiquement un quick check après N secondes (délai de reconnexion VPN) ; si la dérive de débit dépasse le seuil configuré et que la bascule automatique est activée, lance immédiatement un benchmark complet ; les redémarrages déclenchés par Companion lui-même sont ignorés ; cooldown de 5 min entre deux déclenchements
 
 **Sélection & bascule automatique**
-- **Bascule automatique** vers le meilleur serveur (`docker compose up -d`), basée sur un score pondéré (poids configurable : mesure actuelle vs historique exponentiel) ; les services dépendants (`network_mode: service:gluetun`) sont recréés automatiquement
+- **Bascule automatique** vers le meilleur serveur (`docker compose up -d`), basée sur un score pondéré intégrant débit actuel, historique exponentiel, jitter, perte paquets et reconnexions involontaires (via Docker events) ; curseur *Priorité débit vs stabilité* configurable ; les services dépendants (`network_mode: service:gluetun`) sont recréés automatiquement
 - **Bascule manuelle** vers n'importe quel serveur configuré depuis la page Serveurs — Gluetun est reconfiguré et les containers `network_mode: service:gluetun` sont recréés automatiquement
 - **5 types de filtre** : `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - **Retry** configurable par serveur + timeout global par serveur
@@ -332,6 +332,34 @@ Un indicateur coloré est affiché sur la page **Serveurs** (colonne *Fiabilité
 La **variabilité** (coefficient de variation) mesure l'écart-type des débits rapporté à la moyenne : 0 % = résultats identiques à chaque test, 100 % = résultats très dispersés. Les tests `proxy_qc` sont exclus du calcul.
 
 Le score influence légèrement la sélection automatique du meilleur serveur : HIGH × 1,0 · MEDIUM × 0,95 · LOW × 0,85 appliqués sur le score pondéré.
+
+### Score de sélection — composantes de stabilité
+
+Le score final de sélection intègre désormais **quatre composantes de fiabilité**, toutes pondérées par le curseur *Priorité débit vs stabilité* (Paramètres) :
+
+```
+score = (w_cur × débit_actuel + w_hist × historique_exp)
+        × confidence_factor
+        × effective_stability
+
+effective_stability = 1 − (stability_weight/100) × (1 − raw_stability)
+
+raw_stability = jitter_factor × loss_factor × reconnect_factor
+```
+
+| Composante | Source | Pénalité max |
+|---|---|---|
+| **Jitter** | Mesuré à chaque test (jitter_ms) | −15 % à 150 ms |
+| **Perte paquets** | Mesuré à chaque test (packet_loss_pct) | −25 % à 10 % de perte |
+| **Reconnexions involontaires** | Docker events sur 30 j (test_trigger=docker_event) | −10 % par reconnexion, max −30 % |
+| **Confiance** (variance historique) | Coefficient de variation sur les 5 derniers tests | −15 % (LOW) · −5 % (MEDIUM) |
+
+**Curseur Priorité débit vs stabilité** (Paramètres → Bascule automatique) :
+- **0** — seul le débit compte, toutes les pénalités sont désactivées
+- **30** (défaut) — 30 % des pénalités sont appliquées
+- **100** — pénalités complètes — un serveur à 300 Mbps avec 3 reconnexions involontaires + jitter élevé peut perdre jusqu'à ~40 % de score
+
+> Un serveur à 200 Mbps sans reconnexion et avec un jitter stable sera préféré à un 300 Mbps qui déconnecte toutes les heures, dès lors que `stability_weight ≥ ~20`.
 
 ### Vue patterns horaires (`/history/patterns`)
 

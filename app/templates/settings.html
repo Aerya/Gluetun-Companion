@@ -223,6 +223,22 @@
           <div class="form-text">{{ t.set_weighted_score_hint }}</div>
         </div>
 
+        <div class="mb-4 ms-4">
+          <label class="form-label small mb-1" for="stability_weight">
+            {{ t.set_stability_weight_label }}
+          </label>
+          <div class="d-flex align-items-center gap-2 mt-1" style="max-width:440px">
+            <span class="small text-muted text-nowrap">{{ t.set_stability_weight_speed }}</span>
+            <input type="range" name="stability_weight" id="stability_weight"
+                   class="form-range flex-grow-1" min="0" max="100" step="5"
+                   value="{{ cfg.stability_weight }}"
+                   oninput="document.getElementById('stability_weight_val').textContent=this.value+'%'">
+            <span class="small text-muted text-nowrap">{{ t.set_stability_weight_stab }}</span>
+            <span id="stability_weight_val" class="badge bg-secondary ms-1" style="min-width:3rem">{{ cfg.stability_weight }}%</span>
+          </div>
+          <div class="form-text">{{ t.set_stability_weight_hint }}</div>
+        </div>
+
         <div class="d-flex gap-2 mt-3 mb-0">
           <button type="submit" class="btn btn-sm btn-success fw-semibold">
             <i class="bi bi-save"></i> {{ t.cmn_save }}

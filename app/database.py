@@ -113,7 +113,8 @@ def init_db(db_path: str):
                 ('quick_check_threshold',       '15'),
                 ('weighted_score_current_pct',  '65'),
                 ('airvpn_new_server_notif',     '0'),
-                ('airvpn_notify_mention',       '');
+                ('airvpn_notify_mention',       ''),
+                ('stability_weight',            '30');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [
@@ -338,6 +339,25 @@ def dismiss_new_airvpn_servers():
     """Mark all tracked new servers as dismissed (user acknowledged the banner)."""
     with get_db() as db:
         db.execute("UPDATE airvpn_new_servers SET dismissed = 1")
+
+
+def get_docker_event_counts(days: int = 30) -> dict[str, int]:
+    """Return {server_name: count} of involuntary reconnects detected via Docker events.
+
+    A docker_event test is recorded each time the Docker event listener detects an
+    unexpected Gluetun restart and fires a quick check.  Each such event represents
+    one involuntary VPN reconnection while that server was active.
+    Only looks at the last ``days`` days (aligned with the DB retention window).
+    """
+    with get_db() as db:
+        rows = db.execute(
+            "SELECT server_name, COUNT(*) AS cnt FROM speed_tests "
+            "WHERE test_trigger = 'docker_event' "
+            "  AND tested_at >= datetime('now', ? || ' days') "
+            "GROUP BY server_name",
+            (f'-{days}',),
+        ).fetchall()
+    return {r['server_name']: int(r['cnt']) for r in rows}
 
 
 def purge_old_new_airvpn_servers():

@@ -777,6 +777,11 @@ def settings():
                 set_setting('weighted_score_current_pct', str(max(1.0, min(wsp, 99.0))))
             except ValueError:
                 pass
+            try:
+                sw = float(request.form.get('stability_weight', '30'))
+                set_setting('stability_weight', str(int(max(0.0, min(sw, 100.0)))))
+            except ValueError:
+                pass
             flash_t('flash_settings_saved', 'success')
 
         # Legacy catch-all (kept for backward compat / direct API calls)
@@ -875,6 +880,7 @@ def settings():
         'quick_check_mode':             get_setting('quick_check_mode', '0'),
         'quick_check_threshold':        get_setting('quick_check_threshold', '15'),
         'weighted_score_current_pct':   get_setting('weighted_score_current_pct', '65'),
+        'stability_weight':             get_setting('stability_weight', '30'),
     }
     return render_template(
         'settings.html',
