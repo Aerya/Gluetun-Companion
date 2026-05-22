@@ -80,8 +80,13 @@
           <th>{{ t.srv_col_avg_ul }}</th>
           <th>{{ t.srv_col_max_dl }}</th>
           <th>{{ t.srv_col_latency }}</th>
-          <th>{{ t.srv_col_tests }}</th>
           <th>
+            {{ t.srv_col_tests }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.75rem;cursor:help"
+               data-bs-toggle="tooltip" data-bs-placement="bottom"
+               title="{{ t.srv_col_tests_tooltip }}"></i>
+          </th>
+          <th class="text-center">
             {{ t.conf_col_header }}
             <i class="bi bi-info-circle text-muted ms-1" style="font-size:.75rem;cursor:help"
                data-bs-toggle="tooltip" data-bs-placement="bottom"
