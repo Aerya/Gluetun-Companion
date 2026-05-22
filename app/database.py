@@ -114,7 +114,8 @@ def init_db(db_path: str):
                 ('weighted_score_current_pct',  '65'),
                 ('airvpn_new_server_notif',     '0'),
                 ('airvpn_notify_mention',       ''),
-                ('stability_weight',            '30');
+                ('stability_weight',            '30'),
+                ('api_token',                   '');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [

@@ -116,6 +116,9 @@ def create_app():
             # Skip background API/static calls — url_root from those may be bare
             if _req.endpoint in (None, 'static', 'main.healthz', 'main.metrics'):
                 return
+            # Skip REST API calls — they carry no browser context
+            if _req.path.startswith('/api/v1/'):
+                return
             url = _req.url_root.rstrip('/')
         if url and url != _detected_companion_url[0]:
             _detected_companion_url[0] = url
@@ -128,6 +131,9 @@ def create_app():
 
     from .routes import bp
     app.register_blueprint(bp)
+
+    from .api import api_bp
+    app.register_blueprint(api_bp)
 
     from .scheduler import start_scheduler
     start_scheduler(app)

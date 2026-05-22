@@ -761,6 +761,72 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 
     <div class="card p-4 mb-4">
 
+      {# REST API #}
+      <h6 class="fw-bold mb-3 text-primary">
+        <i class="bi bi-code-slash"></i> {{ t.set_api_title }}
+      </h6>
+
+      <form method="post">
+        <input type="hidden" name="action" value="save_api_token">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+
+        <div class="mb-3">
+          <label class="form-label small mb-1">{{ t.set_api_token_label }}</label>
+
+          {%- if cfg.api_token %}
+          <div class="mb-2">
+            <span class="badge bg-success me-2"><i class="bi bi-check-circle"></i> {{ t.set_api_token_active }}</span>
+          </div>
+          <div class="input-group mb-2" style="max-width:520px">
+            <input type="text" class="form-control form-control-sm font-monospace"
+                   id="api_token_display" value="{{ cfg.api_token }}" readonly
+                   style="font-size:.8rem">
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    onclick="navigator.clipboard.writeText('{{ cfg.api_token }}').then(()=>{this.innerHTML='<i class=\'bi bi-check\'>'; setTimeout(()=>{this.innerHTML='<i class=\'bi bi-clipboard\'>';},1200);})"
+                    title="Copier">
+              <i class="bi bi-clipboard"></i>
+            </button>
+          </div>
+          {%- else %}
+          <div class="mb-2">
+            <span class="badge bg-secondary me-2"><i class="bi bi-x-circle"></i> {{ t.set_api_token_inactive }}</span>
+          </div>
+          {%- endif %}
+
+          <div class="d-flex gap-2">
+            <button type="submit" name="api_token_action" value="generate"
+                    class="btn btn-sm btn-primary">
+              <i class="bi bi-arrow-repeat"></i> {{ t.set_api_token_generate }}
+            </button>
+            {% if cfg.api_token %}
+            <button type="submit" name="api_token_action" value="clear"
+                    class="btn btn-sm btn-outline-danger">
+              <i class="bi bi-x-lg"></i> {{ t.set_api_token_clear }}
+            </button>
+            {% endif %}
+          </div>
+          <div class="form-text mt-2">{{ t.set_api_token_hint | safe }}</div>
+        </div>
+      </form>
+
+      <hr class="my-3">
+
+      <p class="small fw-semibold mb-2"><i class="bi bi-list-ul me-1"></i>{{ t.set_api_endpoints }}</p>
+      <table class="table table-sm table-borderless small mb-0" style="font-size:.8rem">
+        <tbody>
+          <tr><td class="text-nowrap"><span class="badge bg-success">GET</span></td><td class="font-monospace">/api/v1/status</td><td class="text-muted">Statut VPN, serveur actif, benchmark en cours</td></tr>
+          <tr><td class="text-nowrap"><span class="badge bg-success">GET</span></td><td class="font-monospace">/api/v1/servers</td><td class="text-muted">Liste des serveurs avec statistiques</td></tr>
+          <tr><td class="text-nowrap"><span class="badge bg-success">GET</span></td><td class="font-monospace">/api/v1/history</td><td class="text-muted">Historique des tests <code class="text-muted">?limit=50&amp;server=…</code></td></tr>
+          <tr><td class="text-nowrap"><span class="badge bg-success">GET</span></td><td class="font-monospace">/api/v1/switches</td><td class="text-muted">Historique des bascules <code class="text-muted">?limit=20</code></td></tr>
+          <tr><td class="text-nowrap"><span class="badge bg-warning text-dark">POST</span></td><td class="font-monospace">/api/v1/benchmark/trigger</td><td class="text-muted">Déclencher un benchmark complet</td></tr>
+          <tr><td class="text-nowrap"><span class="badge bg-warning text-dark">POST</span></td><td class="font-monospace">/api/v1/benchmark/trigger-quick</td><td class="text-muted">Déclencher un benchmark rapide</td></tr>
+        </tbody>
+      </table>
+
+    </div>
+
+    <div class="card p-4 mb-4">
+
       {# Web UI credentials #}
       <h6 class="fw-bold mb-3 text-warning">
         <i class="bi bi-person-lock"></i> {{ t.set_credentials_title }}
@@ -816,6 +882,7 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
     form('save_speed'),
     cardWithAction('db_retention'),
     form('save_vpn'),
+    cardWithAction('save_api_token'),
     cardWithAction('credentials'),
   ].forEach(el => move(left, el));
 

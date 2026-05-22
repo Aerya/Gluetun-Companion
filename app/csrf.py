@@ -27,6 +27,9 @@ def validate_csrf() -> None:
     # /healthz is unauthenticated and has no session
     if request.endpoint == 'main.healthz':
         return
+    # REST API uses Bearer token auth — no session/CSRF needed
+    if request.path.startswith('/api/v1/'):
+        return
 
     token = session.get('_csrf_token')
     submitted = (

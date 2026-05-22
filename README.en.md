@@ -87,6 +87,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 **Integration & infrastructure**
 - **`/healthz` endpoint** unauthenticated, for Docker healthchecks
 - **`/metrics` endpoint** in Prometheus format — throughput, latency, switches, active server; optionally protected by Bearer token; Grafana-compatible
+- **REST API `/api/v1/`** protected by Bearer token — VPN status, server list, history, switches, trigger full or quick benchmark; designed for Home Assistant, n8n, bash scripts
 - **Structured JSON logs** optional via `LOG_JSON=1` (Loki/Grafana compatible)
 - **SQLite database** (WAL) — no external dependencies
 
@@ -448,6 +449,48 @@ scrape_configs:
 ```
 
 ---
+
+### REST API
+
+The API is **disabled by default**. To enable it: **Settings → REST API → Generate a new token**.
+
+**Authentication**: all requests must include the header:
+```
+Authorization: Bearer <your-token>
+```
+
+**Available endpoints:**
+
+| Method | URL | Description |
+|---|---|---|
+| `GET` | `/api/v1/status` | Active server, VPN state, benchmark running, next cycle |
+| `GET` | `/api/v1/servers` | Full server list with average speed, jitter, confidence |
+| `GET` | `/api/v1/history` | Test history (`?limit=50&offset=0&server=Castor`) |
+| `GET` | `/api/v1/switches` | Switch history (`?limit=20`) |
+| `POST` | `/api/v1/benchmark/trigger` | Trigger a full benchmark (async, HTTP 202) |
+| `POST` | `/api/v1/benchmark/trigger-quick` | Trigger a quick proxy test (async, HTTP 202) |
+
+**curl examples:**
+```bash
+# Status
+curl -H "Authorization: Bearer <token>" http://localhost:8765/api/v1/status
+
+# Trigger a benchmark
+curl -X POST -H "Authorization: Bearer <token>" http://localhost:8765/api/v1/benchmark/trigger
+
+# Last 10 tests for server Castor
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:8765/api/v1/history?limit=10&server=Castor"
+```
+
+**Response codes:**
+- `200` — success (GET)
+- `202` — trigger accepted (POST)
+- `401` — invalid or missing token
+- `403` — API disabled (no token configured)
+- `409` — a benchmark is already running (POST trigger)
+
+> POST triggers return immediately — the benchmark runs in the background. Poll `GET /api/v1/status` to track progress (`benchmark_running`).
 
 ### Automatic cycle vs manual trigger
 

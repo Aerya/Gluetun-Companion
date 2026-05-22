@@ -87,6 +87,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 **Intégration & infrastructure**
 - **Endpoint `/healthz`** non authentifié pour les healthchecks Docker
 - **Endpoint `/metrics`** au format Prometheus — débit, latence, bascules, serveur actif ; optionnellement protégé par Bearer token ; compatible Grafana
+- **REST API `/api/v1/`** protégée par Bearer token — statut VPN, liste des serveurs, historique, bascules, déclenchement benchmark complet ou rapide ; conçue pour Home Assistant, n8n, scripts bash
 - **Logs JSON structurés** optionnels via `LOG_JSON=1` (compatibles Loki/Grafana)
 - **Base de données SQLite** (WAL) — aucune dépendance externe
 
@@ -448,6 +449,48 @@ scrape_configs:
 ```
 
 ---
+
+### REST API
+
+L'API est **désactivée par défaut**. Pour l'activer : **Paramètres → REST API → Générer un nouveau token**.
+
+**Authentification** : toutes les requêtes doivent inclure l'en-tête :
+```
+Authorization: Bearer <votre-token>
+```
+
+**Endpoints disponibles :**
+
+| Méthode | URL | Description |
+|---|---|---|
+| `GET` | `/api/v1/status` | Serveur actif, état VPN, benchmark en cours, prochain cycle |
+| `GET` | `/api/v1/servers` | Liste complète des serveurs avec débit moyen, jitter, fiabilité |
+| `GET` | `/api/v1/history` | Historique des tests (`?limit=50&offset=0&server=Castor`) |
+| `GET` | `/api/v1/switches` | Historique des bascules (`?limit=20`) |
+| `POST` | `/api/v1/benchmark/trigger` | Déclencher un benchmark complet (asynchrone, HTTP 202) |
+| `POST` | `/api/v1/benchmark/trigger-quick` | Déclencher un test rapide proxy (asynchrone, HTTP 202) |
+
+**Exemples curl :**
+```bash
+# Statut
+curl -H "Authorization: Bearer <token>" http://localhost:8765/api/v1/status
+
+# Déclencher un benchmark
+curl -X POST -H "Authorization: Bearer <token>" http://localhost:8765/api/v1/benchmark/trigger
+
+# Historique des 10 derniers tests du serveur Castor
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:8765/api/v1/history?limit=10&server=Castor"
+```
+
+**Codes de retour :**
+- `200` — succès (GET)
+- `202` — déclenchement accepté (POST trigger)
+- `401` — token invalide ou absent
+- `403` — API désactivée (aucun token configuré)
+- `409` — un benchmark est déjà en cours (POST trigger)
+
+> Les POST triggers retournent immédiatement — le benchmark tourne en arrière-plan. Utilisez `GET /api/v1/status` pour suivre la progression (`benchmark_running`).
 
 ### Cycle automatique vs déclenchement manuel
 

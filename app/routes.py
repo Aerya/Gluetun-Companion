@@ -795,6 +795,16 @@ def settings():
         elif action == 'save':
             flash_t('flash_settings_saved', 'success')
 
+        elif action == 'save_api_token':
+            import secrets as _sec
+            action_type = request.form.get('api_token_action', '')
+            if action_type == 'generate':
+                new_token = _sec.token_hex(32)
+                set_setting('api_token', new_token)
+            elif action_type == 'clear':
+                set_setting('api_token', '')
+            flash_t('flash_settings_saved', 'success')
+
         elif action == 'db_retention':
             set_setting('db_retention_days', request.form.get('db_retention_days', '30'))
             flash_t('flash_retention_saved', 'success')
@@ -888,6 +898,7 @@ def settings():
         'quick_check_threshold':        get_setting('quick_check_threshold', '15'),
         'weighted_score_current_pct':   get_setting('weighted_score_current_pct', '65'),
         'stability_weight':             get_setting('stability_weight', '30'),
+        'api_token':                    get_setting('api_token', ''),
     }
     return render_template(
         'settings.html',
