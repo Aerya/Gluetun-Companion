@@ -151,8 +151,10 @@
           </td>
           <td class="text-center">
             {%- set _conf = confidence.get(s.name, {'level': 'LOW', 'nb': 0, 'cv_pct': None, 'consec': 0}) -%}
-            {%- if _conf.nb == 0 -%}
-              <span class="text-muted" style="font-size:.75rem">—</span>
+            {%- if _conf.nb < 7 -%}
+              <span class="text-muted" style="font-size:.75rem"
+                    {% if _conf.nb > 0 %}data-bs-toggle="tooltip" data-bs-placement="top"
+                    title="{{ _conf.nb }}/7 {{ t.conf_min_tests_hint }}"{% endif %}>—</span>
             {%- else -%}
               {%- if _conf.level == 'HIGH' -%}
                 {%- set _conf_lvl = t.conf_level_high -%}{%- set _conf_cls = 'text-success' -%}

@@ -133,7 +133,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Confidence score ──
         'conf_col_header':   'Fiabilité',
-        'conf_col_tooltip':  '🟢 Élevée — ≥5 mesures, instabilité < 40 %. 🟡 Modérée — peu de mesures ou instabilité 40–70 %. 🔴 Faible — ≤1 mesure, instabilité > 70 % ou échecs récents. L\'instabilité mesure l\'écart-type des débits rapporté à la moyenne : faible = résultats cohérents d\'un test à l\'autre, élevée = débits très variables.',
+        'conf_col_tooltip':  'Affiché à partir de 7 mesures de benchmark complètes (tests rapides exclus). 🟢 Élevée — ≥5 mesures, instabilité < 40 %. 🟡 Modérée — peu de mesures ou instabilité 40–70 %. 🔴 Faible — instabilité > 70 % ou échecs consécutifs. L\'instabilité mesure l\'écart-type des débits rapporté à la moyenne.',
+        'conf_min_tests_hint': 'mesures — indicateur disponible à partir de 7',
         'conf_level_high':   'Fiabilité élevée',
         'conf_level_medium': 'Fiabilité modérée',
         'conf_level_low':    'Fiabilité faible',
@@ -365,7 +366,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'pat_server_label': 'Serveur',
         'pat_select_server':'Choisir un serveur…',
         'pat_placeholder':  'Sélectionnez un serveur pour afficher ses performances moyennes par tranche horaire.',
-        'pat_no_data':      'Aucune donnée de benchmark pour ce serveur. Lancez un cycle complet d\'abord.',
+        'pat_no_data':           'Aucune donnée de benchmark pour ce serveur. Lancez un cycle complet d\'abord.',
+        'pat_not_enough_data':   '{n} test(s) enregistré(s) — il en faut au moins 7 pour afficher les patterns horaires.',
         'pat_chart_title':  'Débit moyen par tranche horaire',
         'pat_hint':         'Tests rapides (proxy_qc) exclus · heures locales',
         'pat_best_hour':    'Meilleure heure',
@@ -511,7 +513,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Confidence score ──
         'conf_col_header':   'Confidence',
-        'conf_col_tooltip':  '🟢 High — ≥5 measurements, variability < 40 %. 🟡 Moderate — few measurements or variability 40–70 %. 🔴 Low — ≤1 measurement, variability > 70 % or recent failures. Variability is the coefficient of variation of download speeds: low = consistent results test after test, high = very scattered speeds.',
+        'conf_col_tooltip':  'Shown from 7 complete benchmark measurements (quick checks excluded). 🟢 High — ≥5 measurements, variability < 40 %. 🟡 Moderate — few measurements or variability 40–70 %. 🔴 Low — variability > 70 % or consecutive failures. Variability is the coefficient of variation of download speeds.',
+        'conf_min_tests_hint': 'measurements — indicator available from 7',
         'conf_level_high':   'High confidence',
         'conf_level_medium': 'Moderate confidence',
         'conf_level_low':    'Low confidence',
@@ -743,7 +746,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'pat_server_label': 'Server',
         'pat_select_server':'Choose a server…',
         'pat_placeholder':  'Select a server to view its average speed by hour of day.',
-        'pat_no_data':      'No benchmark data for this server. Run a full cycle first.',
+        'pat_no_data':           'No benchmark data for this server. Run a full cycle first.',
+        'pat_not_enough_data':   '{n} test(s) recorded — at least 7 are needed to display hourly patterns.',
         'pat_chart_title':  'Average speed by hour of day',
         'pat_hint':         'Quick checks (proxy_qc) excluded · local time',
         'pat_best_hour':    'Best hour',

@@ -132,7 +132,7 @@
           <td>
             <code>{{ r.server_name }}</code>
             {%- set _conf = confidence.get(r.server_name) -%}
-            {%- if _conf and _conf.nb > 0 -%}
+            {%- if _conf and _conf.nb >= 7 -%}
               {%- if _conf.level == 'HIGH' -%}
                 {%- set _conf_lvl = t.conf_level_high -%}{%- set _conf_cls = 'text-success' -%}
               {%- elif _conf.level == 'MEDIUM' -%}

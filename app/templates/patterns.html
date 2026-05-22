@@ -39,7 +39,13 @@
 {% elif not has_data %}
 <div class="card p-5 text-center text-muted">
   <i class="bi bi-bar-chart" style="font-size:2rem;opacity:.3"></i>
-  <div class="mt-3">{{ t.pat_no_data }}</div>
+  <div class="mt-3">
+    {% if total_tests == 0 %}
+      {{ t.pat_no_data }}
+    {% else %}
+      {{ t.pat_not_enough_data.replace('{n}', total_tests|string) }}
+    {% endif %}
+  </div>
 </div>
 
 {% else %}

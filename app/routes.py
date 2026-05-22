@@ -526,10 +526,11 @@ def history_patterns():
             'n':      r['n']      if r else 0,
         })
 
-    measured   = [h for h in hourly_data if h['avg_dl'] is not None]
-    has_data   = bool(measured)
-    best_hour  = max(measured, key=lambda h: h['avg_dl']) if measured else None
-    worst_hour = min(measured, key=lambda h: h['avg_dl']) if measured else None
+    measured    = [h for h in hourly_data if h['avg_dl'] is not None]
+    total_tests = sum(h['n'] for h in hourly_data)
+    has_data    = bool(measured) and total_tests >= 7
+    best_hour   = max(measured, key=lambda h: h['avg_dl']) if has_data else None
+    worst_hour  = min(measured, key=lambda h: h['avg_dl']) if has_data else None
 
     return render_template(
         'patterns.html',
@@ -537,6 +538,7 @@ def history_patterns():
         server_filter=server_filter,
         hourly_data=hourly_data,
         has_data=has_data,
+        total_tests=total_tests,
         best_hour=best_hour,
         worst_hour=worst_hour,
     )
