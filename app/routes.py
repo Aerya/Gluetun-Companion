@@ -18,7 +18,7 @@ from .database import get_db, get_setting, set_setting
 from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
     get_current_filters, format_filters,
-    get_public_ip, get_vpn_status, switch_server,
+    get_public_ip, get_public_ips, get_vpn_status, switch_server,
     wait_for_vpn, restart_network_dependents,
     list_docker_containers,
 )
@@ -361,8 +361,18 @@ def manual_switch(server_id):
     container   = cfg['GLUETUN_CONTAINER']
     compose_dir = cfg['COMPOSE_DIR']
     project     = cfg.get('COMPOSE_PROJECT', '')
+    proxy_host  = cfg.get('GLUETUN_HOST', 'gluetun')
+    proxy_port  = int(cfg.get('GLUETUN_PROXY_PORT', 8888))
+    proxy_user  = get_setting('proxy_username') or None
+    proxy_pass  = get_setting('proxy_password') or None
+    wait_secs   = int(get_setting('connection_wait_seconds', '45'))
+    lang        = get_setting('ui_lang', 'fr')
 
     from_label = format_filters(get_current_filters(container))
+
+    # Capture the old server's IP before switching
+    from_ipv4, from_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
+
     ok, err = switch_server(
         row['name'], row['filter_type'],
         container, compose_dir, project,
@@ -373,33 +383,11 @@ def manual_switch(server_id):
             'INSERT INTO switches (from_server, to_server, reason, success) VALUES (?, ?, ?, ?)',
             (from_label, to_label, 'manual', int(ok)),
         )
-    lang = get_setting('ui_lang', 'fr')
     if ok:
-        from .notify import send_switch_notification
-        send_switch_notification(
-            from_server=from_label,
-            to_server=to_label,
-            from_mbps=None,
-            to_mbps=None,
-            connect_secs=None,
-            to_ipv4=None,
-            to_ipv6=None,
-            reason='manual',
-            discord_url=get_setting('discord_webhook_url') or None,
-            apprise_urls=get_setting('apprise_urls') or None,
-            lang=lang,
-            companion_url=get_setting('companion_url') or None,
-        )
         flash_t('flash_switched', 'success', to=to_label)
 
-        # Recreate network-dependent containers in the background so the HTTP
-        # response isn't held open for the full VPN wait (up to ~60 s).
-        proxy_host = cfg.get('GLUETUN_HOST', 'gluetun')
-        proxy_port = int(cfg.get('GLUETUN_PROXY_PORT', 8888))
-        proxy_user = get_setting('proxy_username') or None
-        proxy_pass = get_setting('proxy_password') or None
-        wait_secs  = int(get_setting('connection_wait_seconds', '45'))
-        app        = current_app._get_current_object()
+        # In the background: wait for VPN, get new IPs, recreate dependents, then notify.
+        app = current_app._get_current_object()
 
         def _bg_restart():
             with app.app_context():
@@ -417,11 +405,33 @@ def manual_switch(server_id):
                         'Manual switch: VPN up in %.0fs — recreated %d network dependent(s): %s',
                         elapsed, len(restarted), ', '.join(restarted) or 'none',
                     )
+                    to_ipv4, to_ipv6 = get_public_ips(
+                        proxy_host, proxy_port, proxy_user, proxy_pass,
+                    )
                 else:
                     logger.warning(
                         'Manual switch: VPN not ready after %.0fs — network dependents NOT recreated',
                         elapsed,
                     )
+                    to_ipv4, to_ipv6 = None, None
+
+                from .notify import send_switch_notification
+                send_switch_notification(
+                    from_server=from_label,
+                    to_server=to_label,
+                    from_mbps=None,
+                    to_mbps=None,
+                    connect_secs=elapsed if vpn_ok else None,
+                    to_ipv4=to_ipv4,
+                    to_ipv6=to_ipv6,
+                    reason='manual',
+                    discord_url=get_setting('discord_webhook_url') or None,
+                    apprise_urls=get_setting('apprise_urls') or None,
+                    lang=lang,
+                    companion_url=get_setting('companion_url') or None,
+                    from_ipv4=from_ipv4,
+                    from_ipv6=from_ipv6,
+                )
 
         threading.Thread(target=_bg_restart, daemon=True, name='manual-switch-net').start()
     else:

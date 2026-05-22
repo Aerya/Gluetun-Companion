@@ -34,6 +34,8 @@ def _discord_payload(
     companion_url: str | None = None,
     updated_images: list[str] | None = None,
     qc_info: dict | None = None,
+    from_ipv4: str | None = None,
+    from_ipv6: str | None = None,
 ) -> dict:
     gain = (to_mbps - from_mbps) if (from_mbps and to_mbps) else None
     color = 0x3fb950  # green
@@ -44,9 +46,24 @@ def _discord_payload(
 
     from_label = _strip_filter(from_server)
     to_label   = _strip_filter(to_server)
+
+    # Build "from" value: name + IP if available
+    from_value = f'`{from_label}`' if from_server else '—'
+    if from_ipv4:
+        from_value += f'\n`{from_ipv4}`'
+        if from_ipv6:
+            from_value += f'\n`{from_ipv6}`'
+
+    # Build "to" value: name + IP if available
+    to_value = f'`{to_label}`'
+    if to_ipv4:
+        to_value += f'\n`{to_ipv4}`'
+        if to_ipv6:
+            to_value += f'\n`{to_ipv6}`'
+
     fields = [
-        {'name': t['notif_field_from'], 'value': f'`{from_label}`' if from_server else '—', 'inline': True},
-        {'name': t['notif_field_to'],   'value': f'`{to_label}`', 'inline': True},
+        {'name': t['notif_field_from'], 'value': from_value, 'inline': True},
+        {'name': t['notif_field_to'],   'value': to_value,   'inline': True},
         {'name': '​', 'value': '​', 'inline': True},  # spacer
     ]
     if from_mbps is not None:
@@ -56,10 +73,7 @@ def _discord_payload(
     if gain is not None:
         sign = '+' if gain >= 0 else ''
         fields.append({'name': t['notif_field_gain'], 'value': f'{sign}{gain:.1f} Mbps', 'inline': True})
-    if to_ipv4:
-        fields.append({'name': 'IPv4', 'value': to_ipv4, 'inline': True})
-    if to_ipv6:
-        fields.append({'name': 'IPv6', 'value': to_ipv6, 'inline': True})
+    # IPs are now embedded directly in the from/to fields above.
     if connect_secs is not None:
         fields.append({'name': t['notif_field_connect'], 'value': f'{connect_secs:.0f} s', 'inline': True})
 
@@ -115,18 +129,24 @@ def _text_body(
     companion_url: str | None = None,
     updated_images: list[str] | None = None,
     qc_info: dict | None = None,
+    from_ipv4: str | None = None,
+    from_ipv6: str | None = None,
 ) -> str:
     gain = (to_mbps - from_mbps) if (from_mbps and to_mbps) else None
 
-    lines = [f'🔄 {_strip_filter(from_server) or "?"} → {_strip_filter(to_server)}']
+    from_part = _strip_filter(from_server) or '?'
+    if from_ipv4:
+        from_part += f' ({from_ipv4})'
+    to_part = _strip_filter(to_server)
+    if to_ipv4:
+        to_part += f' ({to_ipv4})'
+        if to_ipv6:
+            to_part += f' / {to_ipv6}'
+
+    lines = [f'🔄 {from_part} → {to_part}']
     if from_mbps is not None and to_mbps is not None:
         sign = '+' if gain >= 0 else ''
         lines.append(f'{t["notif_text_speed"]} : {from_mbps:.1f} → {to_mbps:.1f} Mbps ({sign}{gain:.1f})')
-    if to_ipv4:
-        ip = to_ipv4
-        if to_ipv6:
-            ip += f' / {to_ipv6}'
-        lines.append(f'{t["notif_text_ip"]} : {ip}')
     if connect_secs is not None:
         lines.append(f'{t["notif_text_connect"]} : {connect_secs:.0f} s')
 
@@ -235,7 +255,7 @@ def send_already_best_notification(
             ]
             if speed_mbps is not None:
                 fields.append({
-                    'name':   t.get('notif_field_speed_after', 'Speed'),
+                    'name':   t.get('notif_field_speed', 'Speed'),
                     'value':  f'{speed_mbps:.1f} Mbps',
                     'inline': True,
                 })
@@ -305,6 +325,8 @@ def send_switch_notification(
     companion_url: str | None = None,
     updated_images: list[str] | None = None,
     qc_info: dict | None = None,
+    from_ipv4: str | None = None,
+    from_ipv6: str | None = None,
 ):
     if not discord_url and not apprise_urls:
         return
@@ -319,6 +341,8 @@ def send_switch_notification(
                 companion_url=companion_url,
                 updated_images=updated_images,
                 qc_info=qc_info,
+                from_ipv4=from_ipv4,
+                from_ipv6=from_ipv6,
             )
             resp = requests.post(discord_url.strip(), json=payload, timeout=10)
             resp.raise_for_status()
@@ -340,6 +364,8 @@ def send_switch_notification(
                 companion_url=companion_url,
                 updated_images=updated_images,
                 qc_info=qc_info,
+                from_ipv4=from_ipv4,
+                from_ipv6=from_ipv6,
             )
             ap.notify(title=t['notif_apprise_title'], body=body)
             logger.info('Apprise notification sent')
