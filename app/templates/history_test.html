@@ -97,12 +97,12 @@
       {%- if d.score > ns.max_score -%}{%- set ns.max_score = d.score -%}{%- endif -%}
     {%- endfor -%}
     <div style="overflow-x:auto">
-      <svg viewBox="0 0 720 132" preserveAspectRatio="xMidYMid meet" style="width:100%;min-height:150px;display:block;overflow:visible">
+      <svg viewBox="0 0 720 124" preserveAspectRatio="xMidYMid meet" style="width:100%;min-height:124px;display:block;overflow:visible">
         {%- for i in range(24) -%}
           {%- if i in adaptive_stats.hours -%}
             {%- set d = adaptive_stats.hours[i] -%}
-            {%- set bar_h = ((d.score / ns.max_score) * 92)|int -%}
-            {%- set bar_y = 96 - bar_h -%}
+            {%- set bar_h = ((d.score / ns.max_score) * 68)|int -%}
+            {%- set bar_y = 76 - bar_h -%}
             {%- set is_good = i in adaptive_stats.good_hours -%}
             {%- set is_bad  = i in adaptive_stats.bad_hours -%}
             {%- set color = '#2dd4bf' if is_good else ('#fb7185' if is_bad else '#60a5fa') -%}
@@ -110,13 +110,17 @@
                   fill="{{ color }}" opacity="0.86" rx="3">
               <title>{{ '%02d'|format(i) }}h — {{ d.avg_dl }} Mbps · CV {{ d.cv_pct }}% · {{ d.n }} tests</title>
             </rect>
+            <text x="{{ i * 30 + 14 }}" y="{{ [bar_y - 4, 9]|max }}" text-anchor="middle"
+                  font-size="8.5" fill="currentColor" opacity="0.72">{{ d.avg_dl }}</text>
+            <text x="{{ i * 30 + 14 }}" y="116" text-anchor="middle"
+                  font-size="8" fill="currentColor" opacity="0.45">{{ d.n }}t</text>
           {%- else -%}
-            <rect x="{{ i * 30 + 2 }}" y="94" width="24" height="2"
+            <rect x="{{ i * 30 + 2 }}" y="74" width="24" height="2"
                   fill="currentColor" opacity="0.12" rx="1">
               <title>{{ '%02d'|format(i) }}h — pas de données</title>
             </rect>
           {%- endif -%}
-          <text x="{{ i * 30 + 14 }}" y="122" text-anchor="middle"
+          <text x="{{ i * 30 + 14 }}" y="102" text-anchor="middle"
                 font-size="11" fill="currentColor" opacity="0.55">{{ '%02d'|format(i) }}</text>
         {%- endfor -%}
       </svg>
@@ -210,7 +214,21 @@
       <i class="bi bi-funnel-fill"></i>
     </button>
   </div>
-  {% if server_filter or method_filter or sort != 'date_desc' or from_date or to_date %}
+  <div class="col-auto">
+    {% if show_failed %}
+      <input type="hidden" name="show_failed" value="1">
+      <a href="{{ url_for('main.history_test', server=server_filter, method=method_filter, sort=sort, from_date=from_date, to_date=to_date) }}"
+         class="btn btn-sm btn-danger" title="Masquer les échecs">
+        <i class="bi bi-x-circle-fill"></i> Échecs visibles
+      </a>
+    {% else %}
+      <a href="{{ url_for('main.history_test', server=server_filter, method=method_filter, sort=sort, from_date=from_date, to_date=to_date, show_failed='1') }}"
+         class="btn btn-sm btn-outline-danger" title="Afficher aussi les tests échoués">
+        <i class="bi bi-exclamation-triangle"></i> Inclure les échecs
+      </a>
+    {% endif %}
+  </div>
+  {% if server_filter or method_filter or sort != 'date_desc' or from_date or to_date or show_failed %}
   <div class="col-auto">
     <a href="{{ url_for('main.history_test') }}" class="btn btn-sm btn-outline-secondary">✕</a>
   </div>
@@ -379,7 +397,7 @@
 </div>
 
 {% if pages > 1 %}
-{%- set pg_args = {'sort': sort, 'server': server_filter, 'method': method_filter, 'from_date': from_date, 'to_date': to_date} %}
+{%- set pg_args = {'sort': sort, 'server': server_filter, 'method': method_filter, 'from_date': from_date, 'to_date': to_date, 'show_failed': '1' if show_failed else ''} %}
 <nav class="mt-3 d-flex justify-content-center">
   <ul class="pagination pagination-sm mb-0">
     <li class="page-item {{ 'disabled' if page == 1 }}">

@@ -136,7 +136,7 @@
       {% if adaptive_stats.has_enough_data and adaptive_stats.best_hour is not none %}
       <div class="mt-auto pt-2">
         <div class="p-2 rounded" style="background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.2)">
-          <div style="font-size:.72rem;color:var(--muted)">Fenêtre optimale</div>
+          <div style="font-size:.72rem;color:var(--muted)">Fenêtre optimale de benchmark</div>
           <div>
             <span class="text-success fw-semibold" style="font-size:.9rem">{{ '%02d'|format(adaptive_stats.best_hour) }}h</span>
             <span class="text-muted ms-1" style="font-size:.72rem">· {{ adaptive_stats.hours[adaptive_stats.best_hour].avg_dl }} Mbps</span>

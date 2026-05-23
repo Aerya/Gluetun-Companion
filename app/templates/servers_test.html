@@ -20,6 +20,29 @@
   .proposal-title { margin: .15rem 0 0; font-weight: 800; letter-spacing: 0; }
   .proposal-subtitle { color: var(--bs-secondary-color); font-size: .86rem; margin-top: .2rem; max-width: 820px; }
   .proposal-tabs .btn { width: 38px; height: 32px; display: inline-flex; align-items: center; justify-content: center; }
+  .server-card-metric {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 8px;
+    background: rgba(139,148,158,.07);
+    padding: .45rem .5rem;
+    min-height: 52px;
+  }
+  .server-card-metric .label {
+    color: var(--bs-secondary-color);
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .server-card-metric .value {
+    font-size: .86rem;
+    font-weight: 700;
+    margin-top: .08rem;
+  }
+  .ul-highlight {
+    color: #fbbf24;
+    background: rgba(251,191,36,.12);
+    border-color: rgba(251,191,36,.32);
+  }
   @media (max-width: 767.98px) { .proposal-head { grid-template-columns: 1fr; } }
 </style>
 <div class="proposal-head">
@@ -137,12 +160,12 @@
     {%- for h, d in adaptive_stats.hours.items() -%}
       {%- if d.score > ns.max_score -%}{%- set ns.max_score = d.score -%}{%- endif -%}
     {%- endfor -%}
-    <svg viewBox="0 0 720 132" preserveAspectRatio="xMidYMid meet" style="width:100%;min-height:150px;display:block;overflow:visible">
+    <svg viewBox="0 0 720 124" preserveAspectRatio="xMidYMid meet" style="width:100%;min-height:124px;display:block;overflow:visible">
       {%- for i in range(24) -%}
         {%- if i in adaptive_stats.hours -%}
           {%- set d = adaptive_stats.hours[i] -%}
-          {%- set bar_h = ((d.score / ns.max_score) * 92)|int -%}
-          {%- set bar_y = 96 - bar_h -%}
+          {%- set bar_h = ((d.score / ns.max_score) * 68)|int -%}
+          {%- set bar_y = 76 - bar_h -%}
           {%- set is_good = i in adaptive_stats.good_hours -%}
           {%- set is_bad  = i in adaptive_stats.bad_hours -%}
           {%- set color = '#2dd4bf' if is_good else ('#fb7185' if is_bad else '#60a5fa') -%}
@@ -150,11 +173,15 @@
                 fill="{{ color }}" opacity="0.86" rx="3">
             <title>{{ '%02d'|format(i) }}h — {{ d.avg_dl }} Mbps · CV {{ d.cv_pct }}% · {{ d.n }} tests</title>
           </rect>
+          <text x="{{ i * 30 + 14 }}" y="{{ [bar_y - 4, 9]|max }}" text-anchor="middle"
+                font-size="8.5" fill="currentColor" opacity="0.72">{{ d.avg_dl }}</text>
+          <text x="{{ i * 30 + 14 }}" y="116" text-anchor="middle"
+                font-size="8" fill="currentColor" opacity="0.45">{{ d.n }}t</text>
         {%- else -%}
-          <rect x="{{ i * 30 + 2 }}" y="94" width="24" height="2"
+          <rect x="{{ i * 30 + 2 }}" y="74" width="24" height="2"
                 fill="currentColor" opacity="0.12" rx="1"></rect>
         {%- endif -%}
-        <text x="{{ i * 30 + 14 }}" y="122" text-anchor="middle"
+        <text x="{{ i * 30 + 14 }}" y="102" text-anchor="middle"
               font-size="11" fill="currentColor" opacity="0.55">{{ '%02d'|format(i) }}</text>
       {%- endfor -%}
     </svg>
@@ -163,6 +190,27 @@
 {% endif %}
 
 {# ── Filters + sort bar ──────────────────────────────────────────────────── #}
+<form method="post" action="{{ url_for('main.api_set_profile') }}" class="mb-3 d-flex align-items-center gap-2 flex-wrap">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+  <small class="text-muted fw-semibold text-nowrap">
+    <i class="bi bi-sliders2 me-1"></i>{{ t.srv_profile_label }} :
+  </small>
+  {% for pk, pv in profiles.items() %}
+  <button type="submit" name="active_profile" value="{{ pk }}"
+          class="btn btn-sm {{ 'btn-success' if active_profile == pk else 'btn-outline-secondary' }} py-0 px-2"
+          style="font-size:.78rem"
+          title="{{ pv.hint_fr if session.get('lang','fr') == 'fr' else pv.hint_en }}">
+    {{ pv.label_fr if session.get('lang','fr') == 'fr' else pv.label_en }}
+  </button>
+  {% endfor %}
+  {% if profile_best %}
+  <span class="ms-2 text-muted" style="font-size:.75rem">
+    <i class="bi bi-trophy-fill text-warning me-1"></i>{{ t.srv_profile_best }} :
+    <code class="text-warning">{{ profile_best }}</code>
+  </span>
+  {% endif %}
+</form>
+
 <form method="get" class="row g-2 mb-3 align-items-end">
   <div class="col-auto">
     <input type="text" name="q" class="form-control form-control-sm"
@@ -261,6 +309,9 @@
               <code>{{ s.name }}</code>
               {% if is_active %}
               <span class="badge bg-success ms-1" style="font-size:.7rem">{{ t.srv_active_badge }}</span>
+              {% endif %}
+              {% if profile_best and s.name == profile_best and active_profile != 'balanced' %}
+              <span class="ms-1" title="{{ t.srv_profile_best }}">🏆</span>
               {% elif not s.enabled %}
               <span class="badge bg-secondary ms-1" style="font-size:.7rem">OFF</span>
               {% endif %}
@@ -432,6 +483,11 @@
             <div class="d-flex gap-1 flex-shrink-0 ms-2">
               {% if is_active %}
                 <span class="badge bg-success" style="font-size:.65rem">{{ t.srv_active_badge }}</span>
+              {% endif %}
+              {% if profile_best and s.name == profile_best and active_profile != 'balanced' %}
+                <span class="badge bg-warning text-dark" style="font-size:.65rem" title="{{ t.srv_profile_best }}">
+                  <i class="bi bi-trophy-fill"></i>
+                </span>
               {% elif not s.enabled %}
                 <span class="badge bg-secondary" style="font-size:.65rem">OFF</span>
               {% endif %}
@@ -496,6 +552,37 @@
                   {%- set _jcls = 'text-success' if _stab.avg_jitter < 15 else ('text-warning' if _stab.avg_jitter < 50 else 'text-danger') -%}
                   <span class="{{ _jcls }}">{{ '%.0f'|format(_stab.avg_jitter) }}ms</span>
                 {%- else -%}—{%- endif -%}
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-2 text-center mt-2">
+            <div class="col-4">
+              <div class="server-card-metric ul-highlight">
+                <div class="label">Avg UL</div>
+                <div class="value">{{ (s.avg_ul|string + ' Mbps') if s.avg_ul else '-' }}</div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="server-card-metric">
+                <div class="label">Perte</div>
+                <div class="value">
+                {%- if _stab.n and _stab.avg_loss is not none -%}
+                  {%- set _lcls = 'text-success' if _stab.avg_loss < 1 else ('text-warning' if _stab.avg_loss < 5 else 'text-danger') -%}
+                  <span class="{{ _lcls }}">{{ '%.1f'|format(_stab.avg_loss) }}%</span>
+                {%- else -%}-{%- endif -%}
+                </div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="server-card-metric">
+                <div class="label">DNS</div>
+                <div class="value">
+                {%- if _stab.n and _stab.avg_dns is not none -%}
+                  {%- set _dcls = 'text-success' if _stab.avg_dns < 50 else ('text-warning' if _stab.avg_dns < 150 else 'text-danger') -%}
+                  <span class="{{ _dcls }}">{{ '%.0f'|format(_stab.avg_dns) }}ms</span>
+                {%- else -%}-{%- endif -%}
+                </div>
               </div>
             </div>
           </div>

@@ -160,6 +160,19 @@
         <option value="fail" {{ 'selected' if status_filter == 'fail' }}>{{ t.sw_filter_fail }}</option>
       </select>
     </div>
+    <div class="col-12 col-sm-auto">
+      <label class="form-label text-muted small mb-1">{{ t.sw_col_reason }}</label>
+      <select name="reason_filter" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value="" {{ 'selected' if not reason_filter }}>Tous les déclencheurs</option>
+        {% for reason in reason_values %}
+        <option value="{{ reason }}" {{ 'selected' if reason_filter == reason }}>
+          {% if reason == 'auto_best' %}{{ t.sw_reason_auto }}
+          {% elif reason == 'manual' %}{{ t.sw_reason_manual }}
+          {% else %}{{ reason }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
     <div class="col-6 col-sm-auto">
       <label class="form-label text-muted small mb-1">{{ t.hist_date_from }}</label>
       <input type="date" name="from_date" class="form-control form-control-sm" value="{{ from_date }}">
@@ -171,7 +184,7 @@
     <div class="col-auto">
       <button type="submit" class="btn btn-sm btn-outline-info" title="Filtrer"><i class="bi bi-funnel-fill"></i></button>
     </div>
-    {% if from_date or to_date or status_filter %}
+    {% if from_date or to_date or status_filter or reason_filter %}
     <div class="col-auto">
       <a href="{{ url_for('main.switches_test') }}" class="btn btn-sm btn-outline-secondary" title="Reset"><i class="bi bi-x-lg"></i></a>
     </div>

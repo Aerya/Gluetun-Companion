@@ -840,6 +840,7 @@ def history_test():
     method_filter = request.args.get('method', '')
     from_date     = request.args.get('from_date', '').strip()
     to_date       = request.args.get('to_date',   '').strip()
+    show_failed   = request.args.get('show_failed', '') == '1'
 
     if sort not in _SORT_COLS:
         sort = 'date_desc'
@@ -847,6 +848,8 @@ def history_test():
 
     where_parts: list[str] = []
     params: list = []
+    if not show_failed:
+        where_parts.append('success = 1')
     if server_filter:
         where_parts.append('server_name = ?')
         params.append(server_filter)
@@ -899,6 +902,7 @@ def history_test():
         page=page, pages=pages, total=total,
         sort=sort, server_filter=server_filter, method_filter=method_filter,
         from_date=from_date, to_date=to_date,
+        show_failed=show_failed,
         server_names=server_names,
         timeline_data=timeline_data,
         confidence=compute_confidence_all(),
@@ -1149,6 +1153,7 @@ def switches_test():
     from_date     = request.args.get('from_date',     '').strip()
     to_date       = request.args.get('to_date',       '').strip()
     status_filter = request.args.get('status_filter', '')
+    reason_filter = request.args.get('reason_filter', '').strip()
 
     where_parts: list[str] = []
     params: list = []
@@ -1162,6 +1167,9 @@ def switches_test():
         where_parts.append("success = 1")
     elif status_filter == 'fail':
         where_parts.append("success = 0")
+    if reason_filter:
+        where_parts.append("reason = ?")
+        params.append(reason_filter)
     where_sql = ('WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
 
     with get_db() as db:
@@ -1169,6 +1177,9 @@ def switches_test():
             f'SELECT * FROM switches {where_sql} ORDER BY switched_at DESC LIMIT 500',
             params,
         ).fetchall()
+        reason_values = [r['reason'] for r in db.execute(
+            'SELECT DISTINCT reason FROM switches WHERE reason IS NOT NULL AND reason != "" ORDER BY reason'
+        ).fetchall()]
 
     total = len(rows)
     ok_count = sum(1 for r in rows if r['success'])
@@ -1187,6 +1198,8 @@ def switches_test():
         from_date=from_date,
         to_date=to_date,
         status_filter=status_filter,
+        reason_filter=reason_filter,
+        reason_values=reason_values,
         total=total,
         ok_count=ok_count,
         failed_count=failed_count,
