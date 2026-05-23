@@ -1111,11 +1111,51 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 </div>{# end notifications + maintenance row #}
 </section>
 
+</div>
+
+<script>
+(function arrangeSettingsColumns() {
+  const source = document.getElementById('settings-source');
+  const left = document.getElementById('settings-left');
+  const right = document.getElementById('settings-right');
+  if (!source || !left || !right) return;
+
+  const form = action =>
+    source.querySelector(`form:has(input[name="action"][value="${action}"])`);
+  const cardWithAction = action =>
+    source.querySelector(`.card:has(input[name="action"][value="${action}"])`);
+  const cardWithForm = id =>
+    source.querySelector(`.card:has(form#${id})`);
+  const move = (target, el) => { if (el) target.appendChild(el); };
+
+  [
+    form('save_planning'),
+    form('save_switch'),
+    form('save_speed'),
+    cardWithAction('db_retention'),
+    form('save_vpn'),
+    cardWithAction('credentials'),
+  ].forEach(el => move(left, el));
+
+  [
+    form('sidecar'),
+    form('proxy_credentials'),
+    cardWithForm('form-pull-network'),
+    cardWithForm('form-post-switch'),
+    cardWithForm('form-pause-bench'),
+    cardWithAction('notifications'),
+    cardWithAction('save_api_token'),
+  ].forEach(el => move(right, el));
+})();
+</script>
+
+</div>{# end settings-board #}
+
 {# ══════════════════════════════════════════════════════════════════════════
    Outils — Diagnostic · Export/Import · Grafana
+   (hors settings-source pour rester visible)
    ══════════════════════════════════════════════════════════════════════════ #}
-<section class="settings-section mt-2">
-<div class="row g-4">
+<div class="row g-4 mt-2">
 
   {# ── Diagnostic ───────────────────────────────────────────────────────── #}
   <div class="col-lg-4">
@@ -1190,47 +1230,6 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
       </p>
     </div>
   </div>
-
-</div>
-</section>
-
-</div>
-
-<script>
-(function arrangeSettingsColumns() {
-  const source = document.getElementById('settings-source');
-  const left = document.getElementById('settings-left');
-  const right = document.getElementById('settings-right');
-  if (!source || !left || !right) return;
-
-  const form = action =>
-    source.querySelector(`form:has(input[name="action"][value="${action}"])`);
-  const cardWithAction = action =>
-    source.querySelector(`.card:has(input[name="action"][value="${action}"])`);
-  const cardWithForm = id =>
-    source.querySelector(`.card:has(form#${id})`);
-  const move = (target, el) => { if (el) target.appendChild(el); };
-
-  [
-    form('save_planning'),
-    form('save_switch'),
-    form('save_speed'),
-    cardWithAction('db_retention'),
-    form('save_vpn'),
-    cardWithAction('credentials'),
-  ].forEach(el => move(left, el));
-
-  [
-    form('sidecar'),
-    form('proxy_credentials'),
-    cardWithForm('form-pull-network'),
-    cardWithForm('form-post-switch'),
-    cardWithForm('form-pause-bench'),
-    cardWithAction('notifications'),
-    cardWithAction('save_api_token'),
-  ].forEach(el => move(right, el));
-})();
-</script>
 
 </div>
 
