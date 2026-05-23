@@ -443,23 +443,27 @@ def manual_switch(server_id):
                         (elapsed if vpn_ok else None, to_ipv4, to_ipv6, switch_id),
                     )
 
-                from .notify import send_switch_notification
-                send_switch_notification(
-                    from_server=from_label,
-                    to_server=to_label,
-                    from_mbps=None,
-                    to_mbps=None,
-                    connect_secs=elapsed if vpn_ok else None,
-                    to_ipv4=to_ipv4,
-                    to_ipv6=to_ipv6,
-                    reason='manual',
-                    discord_url=get_setting('discord_webhook_url') or None,
-                    apprise_urls=get_setting('apprise_urls') or None,
-                    lang=lang,
-                    companion_url=get_setting('companion_url') or None,
-                    from_ipv4=from_ipv4,
-                    from_ipv6=from_ipv6,
-                )
+                if get_setting('notif_manual_switch', '0') == '1':
+                    from .notify import send_switch_notification
+                    send_switch_notification(
+                        from_server=from_label,
+                        to_server=to_label,
+                        from_mbps=None,
+                        to_mbps=None,
+                        connect_secs=elapsed if vpn_ok else None,
+                        to_ipv4=to_ipv4,
+                        to_ipv6=to_ipv6,
+                        reason='manual',
+                        discord_url=get_setting('discord_webhook_url') or None,
+                        apprise_urls=get_setting('apprise_urls') or None,
+                        lang=lang,
+                        companion_url=get_setting('companion_url') or None,
+                        from_ipv4=from_ipv4,
+                        from_ipv6=from_ipv6,
+                        mention=get_setting('notify_mention', '').strip() or None,
+                        mention_level=get_setting('notify_mention_level', 'critical'),
+                        alert_type='manual_switch',
+                    )
 
         threading.Thread(target=_bg_restart, daemon=True, name='manual-switch-net').start()
     else:
@@ -1086,7 +1090,13 @@ def settings():
             set_setting('discord_webhook_url',    request.form.get('discord_webhook_url', '').strip())
             set_setting('apprise_urls',           request.form.get('apprise_urls', '').strip())
             set_setting('airvpn_new_server_notif','1' if request.form.get('airvpn_new_server_notif') else '0')
-            set_setting('airvpn_notify_mention',  request.form.get('airvpn_notify_mention', '').strip())
+            # Per-type toggles
+            for _k in ('notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
+                       'notif_auto_exclude', 'notif_benchmark_end'):
+                set_setting(_k, '1' if request.form.get(_k) else '0')
+            # Global mention
+            set_setting('notify_mention',       request.form.get('notify_mention', '').strip())
+            set_setting('notify_mention_level', request.form.get('notify_mention_level', 'critical'))
             flash_t('flash_notifications_saved', 'success')
 
         elif action == 'credentials':
@@ -1154,7 +1164,14 @@ def settings():
         'discord_webhook_url':      get_setting('discord_webhook_url', ''),
         'apprise_urls':             get_setting('apprise_urls', ''),
         'airvpn_new_server_notif':  get_setting('airvpn_new_server_notif', '0'),
-        'airvpn_notify_mention':    get_setting('airvpn_notify_mention', ''),
+        'airvpn_notify_mention':    get_setting('airvpn_notify_mention', ''),   # legacy
+        'notif_auto_switch':        get_setting('notif_auto_switch',    '1'),
+        'notif_manual_switch':      get_setting('notif_manual_switch',  '0'),
+        'notif_already_best':       get_setting('notif_already_best',   '0'),
+        'notif_auto_exclude':       get_setting('notif_auto_exclude',   '1'),
+        'notif_benchmark_end':      get_setting('notif_benchmark_end',  '0'),
+        'notify_mention':           get_setting('notify_mention',       ''),
+        'notify_mention_level':     get_setting('notify_mention_level', 'critical'),
         'sidecar_mode':             get_setting('sidecar_mode', '1'),
         'sidecar_image':            get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest'),
         'sidecar_port':             get_setting('sidecar_port', '8766'),

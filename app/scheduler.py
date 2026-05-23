@@ -745,6 +745,18 @@ def _do_benchmark(app, skip_quick_check: bool = False):
     sidecar_iperf_fallback = get_setting('sidecar_iperf_fallback', '1')
     sidecar_proxy_fallback = get_setting('sidecar_proxy_fallback', '0') == '1'
 
+    # ── Notification settings ────────────────────────────────────────────────
+    _discord_url      = get_setting('discord_webhook_url') or None
+    _apprise_urls     = get_setting('apprise_urls') or None
+    _notif_lang       = get_setting('ui_lang', 'fr')
+    _companion_url    = get_setting('companion_url') or None
+    _mention          = get_setting('notify_mention', '').strip() or None
+    _mention_level    = get_setting('notify_mention_level', 'critical')
+    _notif_auto_sw    = get_setting('notif_auto_switch',    '1') == '1'
+    _notif_best       = get_setting('notif_already_best',   '0') == '1'
+    _notif_exclude    = get_setting('notif_auto_exclude',   '1') == '1'
+    _notif_bench_end  = get_setting('notif_benchmark_end',  '0') == '1'
+
     # ── Quick check (before pausing containers) ──────────────────────────────
     # Test only the current server.  If its speed is within ±N% of the last
     # known result, skip the full benchmark entirely — no containers paused,
@@ -841,7 +853,21 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                 results.append(result)
                 _update_consecutive_failures(row['name'], success=True, threshold=auto_exclude)
             else:
-                _update_consecutive_failures(row['name'], success=False, threshold=auto_exclude)
+                _excluded_failures = _update_consecutive_failures(
+                    row['name'], success=False, threshold=auto_exclude
+                )
+                if _excluded_failures and _notif_exclude:
+                    from .notify import send_auto_exclude_notification
+                    send_auto_exclude_notification(
+                        server=row['name'],
+                        failures=_excluded_failures,
+                        discord_url=_discord_url,
+                        apprise_urls=_apprise_urls,
+                        lang=_notif_lang,
+                        companion_url=_companion_url,
+                        mention=_mention,
+                        mention_level=_mention_level,
+                    )
 
         best_server_label: str | None = None
         if auto_sw and results:
@@ -940,7 +966,7 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                     to_ipv4=to_ipv4,
                     to_ipv6=to_ipv6,
                 )
-                if ok:
+                if ok and _notif_auto_sw:
                     from .notify import send_switch_notification
                     send_switch_notification(
                         from_server=from_label,
@@ -951,27 +977,33 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                         to_ipv4=to_ipv4,
                         to_ipv6=to_ipv6,
                         reason='auto_best',
-                        discord_url=get_setting('discord_webhook_url') or None,
-                        apprise_urls=get_setting('apprise_urls') or None,
-                        lang=get_setting('ui_lang', 'fr'),
-                        companion_url=get_setting('companion_url') or None,
+                        discord_url=_discord_url,
+                        apprise_urls=_apprise_urls,
+                        lang=_notif_lang,
+                        companion_url=_companion_url,
                         updated_images=updated_images or None,
                         qc_info=qc_info,
+                        mention=_mention,
+                        mention_level=_mention_level,
+                        alert_type='auto_switch',
                     )
             else:
                 logger.info('Already on best: %s', best_label)
-                cur_ipv4, cur_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
-                from .notify import send_already_best_notification
-                send_already_best_notification(
-                    server=best_label,
-                    speed_mbps=best['dl'],
-                    ipv4=cur_ipv4,
-                    ipv6=cur_ipv6,
-                    discord_url=get_setting('discord_webhook_url') or None,
-                    apprise_urls=get_setting('apprise_urls') or None,
-                    lang=get_setting('ui_lang', 'fr'),
-                    companion_url=get_setting('companion_url') or None,
-                )
+                if _notif_best:
+                    cur_ipv4, cur_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
+                    from .notify import send_already_best_notification
+                    send_already_best_notification(
+                        server=best_label,
+                        speed_mbps=best['dl'],
+                        ipv4=cur_ipv4,
+                        ipv6=cur_ipv6,
+                        discord_url=_discord_url,
+                        apprise_urls=_apprise_urls,
+                        lang=_notif_lang,
+                        companion_url=_companion_url,
+                        mention=_mention,
+                        mention_level=_mention_level,
+                    )
 
         duration_secs = round(time.time() - cycle_start, 1)
         logger.info('=== Benchmark cycle finished in %.0fs ===', duration_secs)
@@ -982,6 +1014,25 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                    SET finished_at=CURRENT_TIMESTAMP, duration_secs=?, servers_tested=?, best_server=?
                    WHERE id=?''',
                 (duration_secs, len(results), best_server_label, cycle_id),
+            )
+
+        if _notif_bench_end and results:
+            _best_dl = next(
+                (r['dl'] for r in results if r.get('server') == best_server_label),
+                None,
+            )
+            from .notify import send_benchmark_end_notification
+            send_benchmark_end_notification(
+                n_tested=len(results),
+                best_server=best_server_label,
+                best_dl=_best_dl,
+                duration_secs=duration_secs,
+                discord_url=_discord_url,
+                apprise_urls=_apprise_urls,
+                lang=_notif_lang,
+                companion_url=_companion_url,
+                mention=_mention,
+                mention_level=_mention_level,
             )
 
     finally:
@@ -1147,7 +1198,13 @@ def _record_switch(
         )
 
 
-def _update_consecutive_failures(server_name: str, success: bool, threshold: int):
+def _update_consecutive_failures(
+    server_name: str, success: bool, threshold: int
+) -> int | None:
+    """
+    Update the consecutive-failure counter for *server_name*.
+    Returns the failure count when the server is auto-disabled, None otherwise.
+    """
     from .database import get_db
     with get_db() as db:
         if success:
@@ -1165,10 +1222,13 @@ def _update_consecutive_failures(server_name: str, success: bool, threshold: int
                 ).fetchone()
                 if row and row['consecutive_failures'] >= threshold:
                     db.execute('UPDATE servers SET enabled=0 WHERE name=?', (server_name,))
+                    n_fail = row['consecutive_failures']
                     logger.warning(
                         'Server %s auto-disabled after %d consecutive failures',
-                        server_name, row['consecutive_failures'],
+                        server_name, n_fail,
                     )
+                    return n_fail
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -1288,7 +1348,8 @@ def check_airvpn_new_servers(app):
         discord_url=get_setting('discord_webhook_url') or None,
         apprise_urls=get_setting('apprise_urls') or None,
         lang=get_setting('ui_lang', 'fr'),
-        mention=get_setting('airvpn_notify_mention', '').strip() or None,
+        mention=get_setting('notify_mention', '').strip() or None,
+        mention_level=get_setting('notify_mention_level', 'critical'),
         companion_url=get_setting('companion_url') or None,
     )
 

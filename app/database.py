@@ -117,7 +117,14 @@ def init_db(db_path: str):
                 ('stability_weight',            '30'),
                 ('api_token',                   ''),
                 ('adaptive_scheduling',         '0'),
-                ('adaptive_auto_shift',         '0');
+                ('adaptive_auto_shift',         '0'),
+                ('notif_auto_switch',           '1'),
+                ('notif_manual_switch',         '0'),
+                ('notif_already_best',          '0'),
+                ('notif_auto_exclude',          '1'),
+                ('notif_benchmark_end',         '0'),
+                ('notify_mention',              ''),
+                ('notify_mention_level',        'critical');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [

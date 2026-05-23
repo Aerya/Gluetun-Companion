@@ -751,26 +751,115 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
           <div class="form-text text-muted">{{ t.set_apprise_hint | safe }}</div>
         </div>
 
-        {# ── AirVPN new-server detection ──────────────────────────────── #}
+        {# ── Types d'alertes ──────────────────────────────────────────── #}
         <hr class="my-3">
-        <div class="mb-2">
-          <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" role="switch"
-                   name="airvpn_new_server_notif" id="airvpn_new_server_notif"
-                   {{ 'checked' if cfg.airvpn_new_server_notif == '1' }}>
-            <label class="form-check-label" for="airvpn_new_server_notif">
-              {{ t.set_airvpn_notif_label }}
-            </label>
-          </div>
-          <div class="form-text text-muted">{{ t.set_airvpn_notif_hint }}</div>
+        <div class="mb-2 small fw-semibold text-muted text-uppercase" style="letter-spacing:.04em;font-size:.72rem">
+          <i class="bi bi-funnel me-1"></i> Types d'alertes
         </div>
+
+        <div class="d-flex flex-column gap-1 mb-3">
+          {# Critique #}
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge rounded-pill flex-shrink-0" style="background:#f85149;font-size:.65rem;min-width:4.5rem">🔴 Critique</span>
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" role="switch"
+                     name="notif_auto_exclude" id="notif_auto_exclude"
+                     {{ 'checked' if cfg.notif_auto_exclude == '1' }}>
+              <label class="form-check-label small" for="notif_auto_exclude">Serveur désactivé automatiquement</label>
+            </div>
+          </div>
+
+          {# Moyen #}
+          <div class="d-flex align-items-start gap-2 mt-1">
+            <span class="badge rounded-pill flex-shrink-0 mt-1" style="background:#d29922;font-size:.65rem;min-width:4.5rem">🟡 Moyen</span>
+            <div class="d-flex flex-column gap-1">
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       name="notif_auto_switch" id="notif_auto_switch"
+                       {{ 'checked' if cfg.notif_auto_switch == '1' }}>
+                <label class="form-check-label small" for="notif_auto_switch">Bascule automatique</label>
+              </div>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       name="airvpn_new_server_notif" id="airvpn_new_server_notif"
+                       {{ 'checked' if cfg.airvpn_new_server_notif == '1' }}>
+                <label class="form-check-label small" for="airvpn_new_server_notif">{{ t.set_airvpn_notif_label }}</label>
+              </div>
+            </div>
+          </div>
+
+          {# Info #}
+          <div class="d-flex align-items-start gap-2 mt-1">
+            <span class="badge rounded-pill flex-shrink-0 mt-1" style="background:#58a6ff;font-size:.65rem;min-width:4.5rem">🔵 Info</span>
+            <div class="d-flex flex-column gap-1">
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       name="notif_manual_switch" id="notif_manual_switch"
+                       {{ 'checked' if cfg.notif_manual_switch == '1' }}>
+                <label class="form-check-label small" for="notif_manual_switch">Bascule manuelle</label>
+              </div>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       name="notif_benchmark_end" id="notif_benchmark_end"
+                       {{ 'checked' if cfg.notif_benchmark_end == '1' }}>
+                <label class="form-check-label small" for="notif_benchmark_end">Fin de cycle benchmark</label>
+              </div>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       name="notif_already_best" id="notif_already_best"
+                       {{ 'checked' if cfg.notif_already_best == '1' }}>
+                <label class="form-check-label small" for="notif_already_best">Déjà sur le meilleur serveur</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# ── Mention Discord ───────────────────────────────────────────── #}
+        <hr class="my-3">
+        <div class="mb-2 small fw-semibold text-muted text-uppercase" style="letter-spacing:.04em;font-size:.72rem">
+          <i class="bi bi-at me-1"></i> Mention Discord
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label small text-muted mb-1">Identifiant à mentionner</label>
+          <input type="text" name="notify_mention" class="form-control form-control-sm font-monospace"
+                 value="{{ cfg.notify_mention }}"
+                 placeholder="&lt;@123456789&gt; ou &lt;@&amp;ROLE_ID&gt;"
+                 style="max-width:300px">
+          <div class="form-text" style="font-size:.74rem">
+            <code>&lt;@USER_ID&gt;</code> utilisateur · <code>&lt;@&amp;ROLE_ID&gt;</code> rôle.
+            Laisser vide pour ne jamais mentionner.
+          </div>
+        </div>
+
         <div class="mb-3">
-          <label class="form-label small text-muted">{{ t.set_airvpn_mention_label }}</label>
-          <input type="text" name="airvpn_notify_mention" class="form-control form-control-sm"
-                 value="{{ cfg.airvpn_notify_mention }}"
-                 placeholder="&lt;@123456789&gt;"
-                 style="max-width:260px;font-family:monospace">
-          <div class="form-text text-muted">{{ t.set_airvpn_mention_hint | safe }}</div>
+          <label class="form-label small text-muted mb-1">Mentionner pour les alertes</label>
+          <div class="d-flex flex-wrap gap-3">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="notify_mention_level"
+                     id="mention_critical" value="critical"
+                     {{ 'checked' if cfg.notify_mention_level in ('critical', '') }}>
+              <label class="form-check-label small" for="mention_critical">
+                <span class="badge rounded-pill" style="background:#f85149;font-size:.62rem">🔴</span> Critiques seulement
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="notify_mention_level"
+                     id="mention_medium" value="medium"
+                     {{ 'checked' if cfg.notify_mention_level == 'medium' }}>
+              <label class="form-check-label small" for="mention_medium">
+                <span class="badge rounded-pill" style="background:#d29922;font-size:.62rem">🟡</span> + Moyennes
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="notify_mention_level"
+                     id="mention_all" value="all"
+                     {{ 'checked' if cfg.notify_mention_level == 'all' }}>
+              <label class="form-check-label small" for="mention_all">
+                <span class="badge rounded-pill" style="background:#58a6ff;font-size:.62rem">🔵</span> Toutes
+              </label>
+            </div>
+          </div>
         </div>
 
         <div class="d-flex flex-wrap gap-2 align-items-center">
@@ -1186,7 +1275,7 @@ function testNotif(target) {
 
   const discordUrl  = document.querySelector('[name="discord_webhook_url"]')?.value || '';
   const appriseUrls = document.querySelector('[name="apprise_urls"]')?.value || '';
-  const mention     = document.querySelector('[name="airvpn_notify_mention"]')?.value.trim() || '';
+  const mention     = document.querySelector('[name="notify_mention"]')?.value.trim() || '';
 
   fetch('{{ url_for('main.api_notify_test') }}', {
     method: 'POST',
