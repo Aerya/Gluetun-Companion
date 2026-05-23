@@ -1176,7 +1176,8 @@ def settings():
             set_setting('airvpn_new_server_notif','1' if request.form.get('airvpn_new_server_notif') else '0')
             # Per-type toggles
             for _k in ('notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
-                       'notif_auto_exclude', 'notif_benchmark_end', 'notif_benchmark_failure'):
+                       'notif_auto_exclude', 'notif_benchmark_end', 'notif_benchmark_failure',
+                       'notif_quick_check'):
                 set_setting(_k, '1' if request.form.get(_k) else '0')
             # Global mention
             set_setting('notify_mention',       request.form.get('notify_mention', '').strip())
@@ -1255,6 +1256,7 @@ def settings():
         'notif_auto_exclude':       get_setting('notif_auto_exclude',   '1'),
         'notif_benchmark_end':      get_setting('notif_benchmark_end',     '0'),
         'notif_benchmark_failure':  get_setting('notif_benchmark_failure', '1'),
+        'notif_quick_check':        get_setting('notif_quick_check',       '1'),
         'notify_mention':           get_setting('notify_mention',          ''),
         'notify_mention_level':     get_setting('notify_mention_level',    'critical'),
         'sidecar_mode':             get_setting('sidecar_mode', '1'),

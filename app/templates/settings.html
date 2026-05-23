@@ -851,6 +851,12 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
                        {{ 'checked' if cfg.notif_already_best == '1' }}>
                 <label class="form-check-label small" for="notif_already_best">Déjà sur le meilleur serveur</label>
               </div>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       name="notif_quick_check" id="notif_quick_check"
+                       {{ 'checked' if cfg.notif_quick_check == '1' }}>
+                <label class="form-check-label small" for="notif_quick_check">{{ t.notif_quick_check_label }}</label>
+              </div>
             </div>
           </div>
         </div>

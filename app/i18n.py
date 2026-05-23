@@ -372,6 +372,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_open_dashboard':     'Ouvrir le tableau de bord',
         'notif_updated_images':     'Images mises à jour',
         'notif_qc_triggered_field': 'Dérive détectée',
+        'notif_quick_check_title':        'Quick check — {server}',
+        'notif_quick_check_server':       'Serveur',
+        'notif_quick_check_baseline':     'Baseline proxy',
+        'notif_quick_check_label':        'Résultat quick check',
+        'notif_quick_check_apprise_title':'Quick check — Gluetun Companion',
 
         # ── Quick check ──
         'set_quick_check_label':     'Vérification rapide avant benchmark',
@@ -820,6 +825,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_already_best_apprise_title': 'Already optimal — Gluetun Companion',
         'notif_open_dashboard':     'Open dashboard',
         'notif_updated_images':     'Updated images',
+        'notif_quick_check_title':        'Quick check — {server}',
+        'notif_quick_check_server':       'Server',
+        'notif_quick_check_baseline':     'Proxy baseline',
+        'notif_quick_check_label':        'Quick check result',
+        'notif_quick_check_apprise_title':'Quick check — Gluetun Companion',
         'notif_qc_triggered_field': 'Drift detected',
 
         # ── Quick check ──

@@ -31,6 +31,7 @@ _SEVERITY: dict[str, str] = {
     'manual_switch':      'info',
     'already_best':       'info',
     'benchmark_end':      'info',
+    'quick_check':        'info',
 }
 
 _LEVEL_ORDER: dict[str, int] = {'critical': 0, 'medium': 1, 'info': 2}
@@ -541,6 +542,72 @@ def send_new_airvpn_servers_notification(
             logger.info('Apprise new-AirVPN-servers notification sent (%d server(s))', n)
         except Exception as exc:
             logger.warning('Apprise new-AirVPN-servers notification failed: %s', exc)
+
+
+def send_quick_check_notification(
+    server: str,
+    speed_mbps: float,
+    last_mbps: float | None,
+    ipv4: str | None,
+    ipv6: str | None,
+    discord_url: str | None = None,
+    apprise_urls: str | None = None,
+    lang: str = 'fr',
+    companion_url: str | None = None,
+    mention: str | None = None,
+    mention_level: str = 'critical',
+):
+    """Notify after a manual quick check (proxy test of current server)."""
+    if not discord_url and not apprise_urls:
+        return
+    t = get_translations(lang)
+    server_label = _strip_filter(server)
+    title = t.get('notif_quick_check_title', 'Quick check').replace('{server}', server_label)
+
+    if discord_url:
+        try:
+            fields = [
+                {'name': t.get('notif_quick_check_server', 'Serveur'),
+                 'value': f'`{server_label}`', 'inline': True},
+                {'name': t.get('notif_field_speed', 'Vitesse'),
+                 'value': f'{speed_mbps:.1f} Mbps', 'inline': True},
+            ]
+            if last_mbps is not None:
+                diff = speed_mbps - last_mbps
+                sign = '+' if diff >= 0 else ''
+                fields.append({
+                    'name':   t.get('notif_quick_check_baseline', 'Baseline'),
+                    'value':  f'{last_mbps:.1f} Mbps ({sign}{diff:.1f})',
+                    'inline': True,
+                })
+            if ipv4:
+                ip_val = ipv4 + (f'\n`{ipv6}`' if ipv6 else '')
+                fields.append({'name': 'IP', 'value': f'`{ip_val}`', 'inline': True})
+            payload = _discord_base_payload(title, 0x58a6ff, fields, t, companion_url)
+            _post_discord(discord_url, payload, mention, 'quick_check', mention_level)
+            logger.info('Discord quick-check notification sent for %s (%.1f Mbps)', server_label, speed_mbps)
+        except Exception as exc:
+            logger.warning('Discord quick-check notification failed: %s', exc)
+
+    if apprise_urls:
+        try:
+            lines = [server_label, f'{t.get("notif_text_speed", "Vitesse")} : {speed_mbps:.1f} Mbps']
+            if last_mbps is not None:
+                diff = speed_mbps - last_mbps
+                sign = '+' if diff >= 0 else ''
+                lines.append(f'{t.get("notif_quick_check_baseline", "Baseline")} : {last_mbps:.1f} Mbps ({sign}{diff:.1f})')
+            if ipv4:
+                lines.append(f'IP : {ipv4}' + (f' / {ipv6}' if ipv6 else ''))
+            if companion_url:
+                lines.append(companion_url)
+            _notify_apprise(
+                apprise_urls,
+                t.get('notif_quick_check_apprise_title', 'Quick check — Gluetun Companion'),
+                '\n'.join(lines),
+            )
+            logger.info('Apprise quick-check notification sent for %s', server_label)
+        except Exception as exc:
+            logger.warning('Apprise quick-check notification failed: %s', exc)
 
 
 def send_test_notification(

@@ -1670,7 +1670,7 @@ def trigger_now(app):
 
 def run_quick_check_now(app):
     """Manual quick benchmark — proxy test of current server only, no VPN switch."""
-    from .database import get_setting, set_setting
+    from .database import get_db, get_setting, set_setting
     from .gluetun import get_current_filters, get_public_ips
 
     with _lock:
@@ -1695,6 +1695,16 @@ def run_quick_check_now(app):
             server_name = filters[filter_type].split(',')[0].strip()
             set_setting('benchmark_current_server', server_name)
 
+            # Fetch previous proxy_qc baseline for comparison in notification
+            with get_db() as db:
+                _prev = db.execute(
+                    "SELECT download_mbps FROM speed_tests "
+                    "WHERE server_name=? AND success=1 AND test_method='proxy_qc' "
+                    "ORDER BY tested_at DESC LIMIT 1",
+                    (server_name,),
+                ).fetchone()
+            last_dl = _prev['download_mbps'] if _prev else None
+
             logger.info('Quick benchmark: testing %s via HTTP proxy', server_name)
             dl = _test_direct_proxy(
                 proxy_host, proxy_port, proxy_user, proxy_pass,
@@ -1705,6 +1715,29 @@ def run_quick_check_now(app):
                 _record_test(server_name, success=True, download_mbps=dl, method='proxy_qc',
                              public_ip=_qnow_ipv4, public_ipv6=_qnow_ipv6)
                 logger.info('Quick benchmark: %s → %.1f Mbps (saved as proxy_qc)', server_name, dl)
+
+                # ── Notification ─────────────────────────────────────────────
+                if get_setting('notif_quick_check', '1') == '1':
+                    _discord_url   = get_setting('discord_webhook_url') or None
+                    _apprise_urls  = get_setting('apprise_urls') or None
+                    _notif_lang    = get_setting('ui_lang', 'fr')
+                    _companion_url = get_setting('companion_url') or None
+                    _mention       = get_setting('notify_mention', '').strip() or None
+                    _mention_level = get_setting('notify_mention_level', 'critical')
+                    from .notify import send_quick_check_notification
+                    send_quick_check_notification(
+                        server=server_name,
+                        speed_mbps=dl,
+                        last_mbps=last_dl,
+                        ipv4=_qnow_ipv4,
+                        ipv6=_qnow_ipv6,
+                        discord_url=_discord_url,
+                        apprise_urls=_apprise_urls,
+                        lang=_notif_lang,
+                        companion_url=_companion_url,
+                        mention=_mention,
+                        mention_level=_mention_level,
+                    )
             else:
                 logger.warning('Quick benchmark: proxy test failed for %s', server_name)
         finally:
