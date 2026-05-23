@@ -127,18 +127,6 @@
           </a>
         </li>
         {% endfor %}
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {{ 'active' if request.endpoint in ['main.dash_test', 'main.servers_test', 'main.history_test', 'main.switches_test'] }}"
-             href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="bi bi-flask"></i> TEST
-          </a>
-          <ul class="dropdown-menu">
-            <li><a class="dropdown-item {{ 'active' if request.endpoint == 'main.dash_test' }}" href="{{ url_for('main.dash_test') }}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
-            <li><a class="dropdown-item {{ 'active' if request.endpoint == 'main.servers_test' }}" href="{{ url_for('main.servers_test') }}"><i class="bi bi-hdd-network"></i> Serveurs</a></li>
-            <li><a class="dropdown-item {{ 'active' if request.endpoint == 'main.history_test' }}" href="{{ url_for('main.history_test') }}"><i class="bi bi-graph-up"></i> Historique</a></li>
-            <li><a class="dropdown-item {{ 'active' if request.endpoint == 'main.switches_test' }}" href="{{ url_for('main.switches_test') }}"><i class="bi bi-arrow-left-right"></i> Switches</a></li>
-          </ul>
-        </li>
       </ul>
       <ul class="navbar-nav align-items-center gap-1">
         <li class="nav-item">

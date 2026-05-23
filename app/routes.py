@@ -99,6 +99,7 @@ def set_lang(code):
 @bp.route('/')
 @login_required
 def dashboard():
+    from .database import get_hourly_benchmark_stats
     cfg = current_app.config
     proxy_host = cfg['GLUETUN_HOST']
     proxy_port = cfg['GLUETUN_PROXY_PORT']
@@ -130,7 +131,9 @@ def dashboard():
         server_stats = db.execute('''
             SELECT server_name,
                    ROUND(AVG(download_mbps), 1) AS avg_dl,
-                   ROUND(MAX(download_mbps), 1) AS max_dl
+                   ROUND(MAX(download_mbps), 1) AS max_dl,
+                   ROUND(AVG(latency_ms),    0) AS avg_lat,
+                   COUNT(*) AS cnt
             FROM speed_tests WHERE success = 1
             GROUP BY server_name
             ORDER BY avg_dl DESC
@@ -139,6 +142,9 @@ def dashboard():
         last_cycle = db.execute(
             'SELECT * FROM benchmark_cycles ORDER BY id DESC LIMIT 1'
         ).fetchone()
+        total_tests = db.execute(
+            'SELECT COUNT(*) AS n FROM speed_tests WHERE success=1'
+        ).fetchone()['n']
 
         # Sparkline for active server (last 20 successful tests, chronological)
         sparkline_labels: list[str] = []
@@ -174,10 +180,14 @@ def dashboard():
         benchmark_running=benchmark_running,
         sidecar_mode=get_setting('sidecar_mode', '1'),
         last_cycle=last_cycle,
+        total_tests=total_tests,
         sparkline_server=sparkline_server,
         sparkline_labels=sparkline_labels,
         sparkline_dl=sparkline_dl,
         sparkline_ul=sparkline_ul,
+        adaptive_stats=get_hourly_benchmark_stats(),
+        stability=get_stability_all(),
+        confidence=compute_confidence_all(),
     )
 
 
@@ -196,6 +206,7 @@ _SERVERS_SORT = {
 @bp.route('/servers')
 @login_required
 def servers():
+    from .database import get_hourly_benchmark_stats
     sort        = request.args.get('sort', 'avg_dl')
     type_filter = request.args.get('type', '').strip()
     q           = request.args.get('q',    '').strip()
@@ -304,6 +315,7 @@ def servers():
         profile_scores=profile_scores,
         profile_best=profile_best,
         gluetun_api_port=get_setting('gluetun_api_port', '8000'),
+        adaptive_stats=get_hourly_benchmark_stats(),
     )
 
 
@@ -742,6 +754,7 @@ _SORT_COLS = {
 @bp.route('/history')
 @login_required
 def history():
+    from .database import get_hourly_benchmark_stats
     page          = max(1, request.args.get('page', 1, type=int))
     sort          = request.args.get('sort', 'date_desc')
     server_filter = request.args.get('server', '').strip()
@@ -819,6 +832,7 @@ def history():
         timeline_data=timeline_data,
         confidence=compute_confidence_all(),
         stability=get_stability_all(),
+        adaptive_stats=get_hourly_benchmark_stats(),
     )
 
 
@@ -851,330 +865,12 @@ def history_export():
 
 
 # ---------------------------------------------------------------------------
-# Draft test layouts  (/history_test · /servers_test · /dash_test)
-# ---------------------------------------------------------------------------
-
-@bp.route('/history_test')
-@login_required
-def history_test():
-    from .database import get_hourly_benchmark_stats
-    page          = max(1, request.args.get('page', 1, type=int))
-    sort          = request.args.get('sort', 'date_desc')
-    server_filter = request.args.get('server', '').strip()
-    method_filter = request.args.get('method', '')
-    from_date     = request.args.get('from_date', '').strip()
-    to_date       = request.args.get('to_date',   '').strip()
-    show_failed   = request.args.get('show_failed', '') == '1'
-
-    if sort not in _SORT_COLS:
-        sort = 'date_desc'
-    order_sql = _SORT_COLS[sort]
-
-    where_parts: list[str] = []
-    params: list = []
-    if not show_failed:
-        where_parts.append('success = 1')
-    if server_filter:
-        where_parts.append('server_name = ?')
-        params.append(server_filter)
-    if method_filter in ('proxy', 'sidecar'):
-        where_parts.append('test_method = ?')
-        params.append(method_filter)
-    if from_date:
-        where_parts.append("DATE(tested_at) >= ?")
-        params.append(from_date)
-    if to_date:
-        where_parts.append("DATE(tested_at) <= ?")
-        params.append(to_date)
-    where_sql = ('WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
-    offset = (page - 1) * _HISTORY_PER_PAGE
-
-    with get_db() as db:
-        total = db.execute(
-            f'SELECT COUNT(*) AS n FROM speed_tests {where_sql}', params
-        ).fetchone()['n']
-        tests = db.execute(
-            f'SELECT * FROM speed_tests {where_sql} ORDER BY {order_sql} LIMIT ? OFFSET ?',
-            params + [_HISTORY_PER_PAGE, offset],
-        ).fetchall()
-        per_server = db.execute('''
-            SELECT server_name,
-                   ROUND(AVG(download_mbps), 1) AS avg_dl,
-                   ROUND(MIN(download_mbps), 1) AS min_dl,
-                   ROUND(MAX(download_mbps), 1) AS max_dl,
-                   ROUND(AVG(upload_mbps),   1) AS avg_ul,
-                   COUNT(*) AS cnt
-            FROM speed_tests WHERE success = 1
-            GROUP BY server_name ORDER BY avg_dl DESC
-        ''').fetchall()
-        server_names = [r['server_name'] for r in db.execute(
-            'SELECT DISTINCT server_name FROM speed_tests ORDER BY server_name'
-        ).fetchall()]
-        timeline_data = []
-        if server_filter:
-            timeline_data = db.execute('''
-                SELECT tested_at, download_mbps, upload_mbps
-                FROM speed_tests
-                WHERE server_name = ? AND success = 1
-                ORDER BY tested_at ASC LIMIT 200
-            ''', (server_filter,)).fetchall()
-
-    pages = max(1, (total + _HISTORY_PER_PAGE - 1) // _HISTORY_PER_PAGE)
-    return render_template(
-        'history_test.html',
-        tests=tests, per_server=per_server,
-        page=page, pages=pages, total=total,
-        sort=sort, server_filter=server_filter, method_filter=method_filter,
-        from_date=from_date, to_date=to_date,
-        show_failed=show_failed,
-        server_names=server_names,
-        timeline_data=timeline_data,
-        confidence=compute_confidence_all(),
-        stability=get_stability_all(),
-        adaptive_stats=get_hourly_benchmark_stats(),
-    )
-
-
-@bp.route('/servers_test')
-@login_required
-def servers_test():
-    from .database import get_hourly_benchmark_stats
-    sort        = request.args.get('sort', 'avg_dl')
-    type_filter = request.args.get('type', '').strip()
-    q           = request.args.get('q',    '').strip()
-    from_date   = request.args.get('from_date', '').strip()
-    to_date     = request.args.get('to_date',   '').strip()
-
-    if sort not in _SERVERS_SORT:
-        sort = 'avg_dl'
-    order_sql = _SERVERS_SORT[sort]
-
-    where_parts: list[str] = []
-    having_parts: list[str] = []
-    params: list = []
-    if type_filter:
-        where_parts.append('s.filter_type = ?')
-        params.append(type_filter)
-    if q:
-        where_parts.append('s.name LIKE ?')
-        params.append(f'%{q}%')
-    having_params: list = []
-    if from_date:
-        having_parts.append("DATE(MAX(st.tested_at)) >= ?")
-        having_params.append(from_date)
-    if to_date:
-        having_parts.append("DATE(MAX(st.tested_at)) <= ?")
-        having_params.append(to_date)
-    params.extend(having_params)
-    where_sql  = ('WHERE '  + ' AND '.join(where_parts))  if where_parts  else ''
-    having_sql = ('HAVING ' + ' AND '.join(having_parts)) if having_parts else ''
-
-    with get_db() as db:
-        rows = db.execute(f'''
-            SELECT
-                s.id, s.name, s.filter_type, s.enabled,
-                s.consecutive_failures, s.created_at,
-                ROUND(AVG(CASE WHEN st.success=1 THEN st.download_mbps END), 1) AS avg_dl,
-                ROUND(AVG(CASE WHEN st.success=1 THEN st.upload_mbps   END), 1) AS avg_ul,
-                ROUND(AVG(CASE WHEN st.success=1 THEN st.latency_ms    END), 0) AS avg_lat,
-                ROUND(MAX(CASE WHEN st.success=1 THEN st.download_mbps END), 1) AS max_dl,
-                ROUND(AVG(CASE WHEN st.success=1 AND st.dl_single_mbps IS NOT NULL
-                               THEN st.dl_single_mbps END), 1)                  AS avg_dl_single,
-                MAX(st.tested_at)                                                AS last_tested,
-                COUNT(st.id)                                                     AS total_tests,
-                SUM(CASE WHEN st.success=1 THEN 1 ELSE 0 END)                   AS ok_tests,
-                (SELECT public_ip   FROM speed_tests
-                 WHERE server_name=s.name AND success=1 ORDER BY tested_at DESC LIMIT 1) AS last_ipv4,
-                (SELECT public_ipv6 FROM speed_tests
-                 WHERE server_name=s.name AND success=1 ORDER BY tested_at DESC LIMIT 1) AS last_ipv6
-            FROM servers s
-            LEFT JOIN speed_tests st ON st.server_name = s.name
-            {where_sql}
-            GROUP BY s.id
-            {having_sql}
-            ORDER BY {order_sql}
-        ''', params).fetchall()
-        filter_types = [r['filter_type'] for r in db.execute(
-            'SELECT DISTINCT filter_type FROM servers ORDER BY filter_type'
-        ).fetchall()]
-
-    existing_names = [r['name'] for r in rows if r['filter_type'] == 'name']
-
-    try:
-        _container = current_app.config['GLUETUN_CONTAINER']
-        _filters   = get_current_filters(_container)
-        active_server = next(iter(_filters.values())).split(',')[0].strip() if _filters else ''
-    except Exception:
-        active_server = ''
-
-    new_airvpn: list[dict] = []
-    new_airvpn_names: list[str] = []
-    new_airvpn_countries = ''
-    if get_setting('airvpn_new_server_notif', '0') == '1':
-        new_airvpn = get_new_airvpn_servers()
-        new_airvpn_names = [s['name'] for s in new_airvpn]
-        cc_set = {(s['country_code'].upper() if s['country_code'] else s['country'])
-                  for s in new_airvpn}
-        new_airvpn_countries = ', '.join(sorted(cc_set))
-
-    _stability = get_stability_all()
-    active_profile = get_setting('active_profile', 'balanced')
-    profile_scores = _score_servers(rows, active_profile, _stability)
-    profile_best   = max(profile_scores, key=profile_scores.get) if profile_scores else None
-
-    return render_template(
-        'servers_test.html', servers=rows,
-        filter_labels=FILTER_LABELS, filter_vars=FILTER_VARS,
-        existing_names=existing_names,
-        sort=sort, type_filter=type_filter, q=q,
-        from_date=from_date, to_date=to_date,
-        filter_types=filter_types,
-        active_server=active_server,
-        confidence=compute_confidence_all(),
-        stability=_stability,
-        new_airvpn=new_airvpn,
-        new_airvpn_names=new_airvpn_names,
-        new_airvpn_countries=new_airvpn_countries,
-        adaptive_stats=get_hourly_benchmark_stats(),
-        profiles=PROFILES,
-        active_profile=active_profile,
-        profile_scores=profile_scores,
-        profile_best=profile_best,
-        gluetun_api_port=get_setting('gluetun_api_port', '8000'),
-    )
-
-
-@bp.route('/dash_test')
-@login_required
-def dash_test():
-    from .database import get_hourly_benchmark_stats
-    cfg = current_app.config
-    proxy_host = cfg['GLUETUN_HOST']
-    proxy_port = cfg['GLUETUN_PROXY_PORT']
-    container  = cfg['GLUETUN_CONTAINER']
-    px_user    = get_setting('proxy_username') or None
-    px_pass    = get_setting('proxy_password') or None
-
-    vpn_status        = get_vpn_status(proxy_host, proxy_port, px_user, px_pass)
-    public_ip         = get_public_ip(proxy_host, proxy_port, px_user, px_pass) if vpn_status == 'running' else None
-    current_filters   = get_current_filters(container)
-    current_server    = format_filters(current_filters)
-    benchmark_running = get_setting('benchmark_running', '0') == '1'
-
-    _ALLOWED_LIMITS = {10, 20, 50}
-    recent_limit = request.args.get('limit', 10, type=int)
-    if recent_limit not in _ALLOWED_LIMITS:
-        recent_limit = 10
-
-    with get_db() as db:
-        recent_tests = db.execute(
-            'SELECT * FROM speed_tests ORDER BY tested_at DESC LIMIT ?', (recent_limit,)
-        ).fetchall()
-        last_switch = db.execute(
-            'SELECT * FROM switches ORDER BY switched_at DESC LIMIT 1'
-        ).fetchone()
-        server_count = db.execute(
-            'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'
-        ).fetchone()['n']
-        server_stats = db.execute('''
-            SELECT server_name,
-                   ROUND(AVG(download_mbps), 1) AS avg_dl,
-                   ROUND(MAX(download_mbps), 1) AS max_dl,
-                   ROUND(AVG(latency_ms),    0) AS avg_lat,
-                   COUNT(*) AS cnt
-            FROM speed_tests WHERE success = 1
-            GROUP BY server_name
-            ORDER BY avg_dl DESC
-            LIMIT 12
-        ''').fetchall()
-        last_cycle = db.execute(
-            'SELECT * FROM benchmark_cycles ORDER BY id DESC LIMIT 1'
-        ).fetchone()
-        total_tests = db.execute(
-            'SELECT COUNT(*) AS n FROM speed_tests WHERE success=1'
-        ).fetchone()['n']
-
-        sparkline_labels: list[str] = []
-        sparkline_dl: list[float] = []
-        sparkline_ul: list = []
-        sparkline_server: str | None = None
-        if current_filters:
-            sname = next(iter(current_filters.values())).split(',')[0].strip()
-            sparkline_server = sname
-            spark_rows = db.execute('''
-                SELECT tested_at, download_mbps, upload_mbps
-                FROM speed_tests
-                WHERE server_name=? AND success=1 AND test_method != 'proxy_qc'
-                ORDER BY tested_at DESC LIMIT 20
-            ''', (sname,)).fetchall()
-            for r in reversed(spark_rows):
-                sparkline_labels.append(r['tested_at'][5:16])
-                sparkline_dl.append(r['download_mbps'] or 0)
-                sparkline_ul.append(r['upload_mbps'])
-
-    return render_template(
-        'dash_test.html',
-        vpn_status=vpn_status,
-        public_ip=public_ip,
-        current_server=current_server,
-        recent_tests=recent_tests,
-        recent_limit=recent_limit,
-        last_switch=last_switch,
-        server_count=server_count,
-        server_stats=server_stats,
-        next_run=get_next_run() if get_setting('auto_benchmark', '1') == '1' else None,
-        benchmark_running=benchmark_running,
-        sidecar_mode=get_setting('sidecar_mode', '1'),
-        last_cycle=last_cycle,
-        total_tests=total_tests,
-        sparkline_server=sparkline_server,
-        sparkline_labels=sparkline_labels,
-        sparkline_dl=sparkline_dl,
-        sparkline_ul=sparkline_ul,
-        adaptive_stats=get_hourly_benchmark_stats(),
-        stability=get_stability_all(),
-        confidence=compute_confidence_all(),
-    )
-
-
-# ---------------------------------------------------------------------------
 # Switches log
 # ---------------------------------------------------------------------------
 
 @bp.route('/switches')
 @login_required
 def switches():
-    from_date     = request.args.get('from_date',     '').strip()
-    to_date       = request.args.get('to_date',       '').strip()
-    status_filter = request.args.get('status_filter', '')
-
-    where_parts: list[str] = []
-    params: list = []
-    if from_date:
-        where_parts.append("DATE(switched_at) >= ?")
-        params.append(from_date)
-    if to_date:
-        where_parts.append("DATE(switched_at) <= ?")
-        params.append(to_date)
-    if status_filter == 'ok':
-        where_parts.append("success = 1")
-    elif status_filter == 'fail':
-        where_parts.append("success = 0")
-    where_sql = ('WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
-
-    with get_db() as db:
-        rows = db.execute(
-            f'SELECT * FROM switches {where_sql} ORDER BY switched_at DESC LIMIT 500',
-            params,
-        ).fetchall()
-    return render_template('switches.html', switches=rows,
-                           from_date=from_date, to_date=to_date,
-                           status_filter=status_filter)
-
-
-@bp.route('/switches_test')
-@login_required
-def switches_test():
     from_date     = request.args.get('from_date',     '').strip()
     to_date       = request.args.get('to_date',       '').strip()
     status_filter = request.args.get('status_filter', '')
@@ -1218,7 +914,7 @@ def switches_test():
     best_gain = round(max(gains), 1) if gains else None
 
     return render_template(
-        'switches_test.html',
+        'switches.html',
         switches=rows,
         from_date=from_date,
         to_date=to_date,
@@ -1231,6 +927,8 @@ def switches_test():
         avg_gain=avg_gain,
         best_gain=best_gain,
     )
+
+
 
 
 # ---------------------------------------------------------------------------

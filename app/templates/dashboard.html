@@ -1,134 +1,242 @@
-{% extends 'base.html' %}
-{% block title %}Dashboard – Gluetun Companion{% endblock %}
+﻿{% extends 'base.html' %}
+{% block title %}{{ t.nav_dashboard }} - Gluetun Companion{% endblock %}
 
 {% block content %}
-{# ── Status bar ────────────────────────────────────────────────────────── #}
-<div class="row g-3 mb-4">
+<style>
+  .method-sidecar { background: #f6c86e; color: #111820; }
+  .method-qc { background: #8b5cf6; color: #fff; }
+  .rank-bar-track {
+    position: relative;
+    height: 14px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(139,148,158,.12);
+  }
+  .rank-bar-max,
+  .rank-bar-avg {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    border-radius: inherit;
+    max-width: 100%;
+  }
+  .rank-bar-max { background: rgba(96,165,250,.22); }
+  .rank-bar-avg { opacity: .9; }
+  .bench-count {
+    display: inline-flex;
+    justify-content: flex-end;
+    min-width: 92px;
+    color: var(--bs-secondary-color);
+    font-size: .72rem;
+    white-space: nowrap;
+  }
+  .rank-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: .75rem;
+    color: var(--bs-secondary-color);
+    font-size: .74rem;
+    white-space: nowrap;
+  }
+  .rank-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+  }
+  .rank-legend-swatch {
+    width: 18px;
+    height: 8px;
+    border-radius: 999px;
+    display: inline-block;
+  }
+  .rank-legend-avg { background: #2dd4bf; }
+  .rank-legend-max { background: rgba(96,165,250,.34); border: 1px solid rgba(96,165,250,.58); }
+</style>
 
-  <div class="col-6 col-lg-3">
-    <div class="card stat-card h-100">
-      <div class="stat-label"><i class="bi bi-wifi"></i> {{ t.dash_vpn_status }}</div>
-      <div class="stat-value">
-        <span class="dot dot-{{ vpn_status }}"></span>
-        {{ vpn_status | capitalize }}
-      </div>
-      {% if public_ip %}
-      <div class="mt-1" style="font-size:.8rem;color:var(--muted)">
-        <i class="bi bi-globe2"></i> {{ public_ip }}
-      </div>
-      {% endif %}
-    </div>
-  </div>
-
-  <div class="col-6 col-lg-3">
-    <div class="card stat-card h-100">
-      <div class="stat-label"><i class="bi bi-server"></i> {{ t.dash_active_server }}</div>
-      <div class="stat-value" style="font-size:1.15rem">
-        <code>{{ current_server or '—' }}</code>
-      </div>
-      {% if last_switch %}
-      <div class="mt-1" style="font-size:.75rem;color:var(--muted)">
-        {{ t.dash_last_switch }} {{ last_switch.switched_at | localtime | truncate(16, True, '') }}
-      </div>
-      {% endif %}
-    </div>
-  </div>
-
-  <div class="col-6 col-lg-3">
-    <div class="card stat-card h-100">
-      <div class="stat-label"><i class="bi bi-list-check"></i> {{ t.dash_active_servers }}</div>
-      <div class="stat-value">{{ server_count }}</div>
-    </div>
-  </div>
-
-  <div class="col-6 col-lg-3">
-    <div class="card stat-card h-100">
-      <div class="stat-label"><i class="bi bi-clock-history"></i> {{ t.dash_next_test }}</div>
-      <div class="stat-value" style="font-size:1rem">
-        {% if next_run %}{{ next_run.strftime('%d/%m %H:%M') }}{% else %}—{% endif %}
-      </div>
-      {% if last_cycle and last_cycle.duration_secs %}
-      <div class="mt-1" style="font-size:.75rem;color:var(--muted)">
-        {{ t.dash_last_cycle }} {{ last_cycle.duration_secs | int }} s
-        {% if last_cycle.servers_tested %}&nbsp;·&nbsp;{{ last_cycle.servers_tested }} {{ t.dash_servers_tested }}{% endif %}
-      </div>
-      {% endif %}
-      <div class="d-flex gap-2 flex-wrap mt-2">
-        <div>
-          <button class="btn btn-outline-info btn-sm fw-semibold"
-                  id="btn-trigger-quick"
-                  onclick="triggerQuick()"
-                  {{ 'disabled' if benchmark_running }}>
-            {% if benchmark_running %}
-            <span class="spinner-border spinner-border-sm"></span> {{ t.dash_running }}
-            {% else %}
-            <i class="bi bi-speedometer"></i> {{ t.dash_run_quick }}
-            {% endif %}
-          </button>
-          <div class="mt-1" style="font-size:.72rem;color:var(--bs-secondary-color)">
-            <i class="bi bi-info-circle"></i> {{ t.dash_run_quick_hint }}
-          </div>
-        </div>
-        <div>
-          <button class="btn btn-success btn-sm fw-semibold"
-                  id="btn-trigger"
-                  onclick="triggerBenchmark()"
-                  {{ 'disabled' if benchmark_running }}>
-            {% if benchmark_running %}
-            <span class="spinner-border spinner-border-sm"></span> {{ t.dash_running }}
-            {% else %}
-            <i class="bi bi-play-fill"></i> {{ t.dash_run_now }} ({{ 'sidecar' if sidecar_mode == '1' else 'proxy' }})
-            {% endif %}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-</div>
-
-{# ── Live benchmark banner ─────────────────────────────────────────────── #}
+{# â”€â”€ Live benchmark banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
 <div class="live-banner alert alert-success d-flex align-items-center gap-2 py-2 px-3 mb-3 {{ '' if benchmark_running else 'd-none' }}"
      style="font-size:.85rem">
   <span class="spinner-border spinner-border-sm flex-shrink-0"></span>
   <span>{{ t.dash_testing_server }} <strong><span id="live-testing"></span></strong></span>
 </div>
 
-{# ── Sparkline active server ───────────────────────────────────────────── #}
-{% if sparkline_dl %}
-<div class="card mb-4 p-3">
-  <div class="d-flex justify-content-between align-items-center mb-2">
-    <span class="fw-semibold">
-      <i class="bi bi-activity text-info"></i> {{ t.dash_sparkline_title }} <code>{{ sparkline_server }}</code>
-    </span>
-    <div class="d-flex align-items-center gap-2">
-      <span class="badge bg-success" style="font-size:.8rem">
-        ↓ {{ '%.1f'|format(sparkline_dl | last) }} Mbps
-      </span>
-      <small class="text-muted">{{ sparkline_dl|length }} {{ t.dash_sparkline_tests }}</small>
+{# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
+{# ROW 1 â€” VPN status + Active server + Benchmark controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
+<div class="row g-3 mb-3">
+
+  {# â”€â”€ VPN status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+  <div class="col-12 col-md-3">
+    <div class="card h-100 p-3">
+      <div class="text-muted mb-2" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
+        <i class="bi bi-wifi"></i> {{ t.dash_vpn_status }}
+      </div>
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="dot dot-{{ vpn_status }}" style="width:12px;height:12px;flex-shrink:0"></span>
+        <span class="fw-semibold" style="font-size:1rem">{{ vpn_status | capitalize }}</span>
+      </div>
+      {% if public_ip %}
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="bi bi-globe2 text-muted" style="font-size:.85rem"></i>
+        <code style="font-size:.85rem">{{ public_ip }}</code>
+      </div>
+      {% endif %}
+      <div class="d-flex align-items-center gap-2 mb-1" style="font-size:.8rem;color:var(--muted)">
+        <i class="bi bi-list-check"></i>
+        <span>{{ server_count }} {{ t.dash_active_servers }}</span>
+      </div>
+      {% if last_switch %}
+      <div style="font-size:.75rem;color:var(--muted)">
+        <i class="bi bi-arrow-left-right"></i>
+        {{ t.dash_last_switch }} {{ last_switch.switched_at | localtime | truncate(16, True, '') }}
+      </div>
+      {% endif %}
+      {% if adaptive_stats.has_enough_data and adaptive_stats.best_hour is not none %}
+      <div class="mt-auto pt-2">
+        <div class="p-2 rounded" style="background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.2)">
+          <div style="font-size:.72rem;color:var(--muted)">{{ t.dash_optimal_window }}</div>
+          <div>
+            <span class="text-success fw-semibold" style="font-size:.9rem">{{ '%02d'|format(adaptive_stats.best_hour) }}h</span>
+            <span class="text-muted ms-1" style="font-size:.72rem">Â· {{ adaptive_stats.hours[adaptive_stats.best_hour].avg_dl }} Mbps</span>
+          </div>
+        </div>
+      </div>
+      {% endif %}
     </div>
   </div>
-  <div style="position:relative;height:180px">
-    <canvas id="chartSparkline"></canvas>
-  </div>
-</div>
-{% endif %}
 
-{# ── Charts ────────────────────────────────────────────────────────────── #}
+  {# â”€â”€ Active server + Sparkline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+  <div class="col-12 col-md-5">
+    <div class="card h-100 p-3">
+      <div class="d-flex justify-content-between align-items-start mb-1">
+        <div>
+          <div class="text-muted mb-1" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
+            <i class="bi bi-server"></i> {{ t.dash_active_server }}
+          </div>
+          <code style="font-size:1rem;font-weight:600">{{ current_server or 'â€”' }}</code>
+        </div>
+        {% if sparkline_dl %}
+        <span class="badge bg-success" style="font-size:.85rem">
+          â†“ {{ '%.1f'|format(sparkline_dl | last) }} Mbps
+        </span>
+        {% endif %}
+      </div>
+      {% if sparkline_dl %}
+      <div style="position:relative;height:130px;margin-top:.5rem">
+        <canvas id="chartSparkline"></canvas>
+      </div>
+      {% else %}
+      <div class="text-muted text-center py-4" style="font-size:.85rem">
+        <i class="bi bi-bar-chart"></i> {{ t.dash_no_history }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# â”€â”€ Benchmark controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+  <div class="col-12 col-md-4">
+    <div class="card h-100 p-3">
+      <div class="text-muted mb-2" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
+        <i class="bi bi-clock-history"></i> {{ t.dash_next_test }}
+      </div>
+      {% if next_run %}
+      <div class="fw-semibold mb-1">{{ next_run.strftime('%d/%m %H:%M') }}</div>
+      {% else %}
+      <div class="text-muted mb-1">â€”</div>
+      {% endif %}
+      {% if last_cycle and last_cycle.duration_secs %}
+      <div class="text-muted mb-3" style="font-size:.75rem">
+        {{ t.dash_last_cycle }} {{ last_cycle.duration_secs | int }}s
+        {% if last_cycle.servers_tested %}&nbsp;Â·&nbsp;{{ last_cycle.servers_tested }} {{ t.dash_servers_tested }}{% endif %}
+      </div>
+      {% else %}
+      <div class="mb-3"></div>
+      {% endif %}
+
+      <div class="d-grid gap-2">
+        <button class="btn btn-outline-info btn-sm"
+                id="btn-trigger-quick" onclick="triggerQuick()"
+                {{ 'disabled' if benchmark_running }}>
+          {% if benchmark_running %}
+            <span class="spinner-border spinner-border-sm"></span> {{ t.dash_running }}
+          {% else %}
+            <i class="bi bi-speedometer"></i> {{ t.dash_run_quick }}
+          {% endif %}
+        </button>
+        <button class="btn btn-success btn-sm fw-semibold"
+                id="btn-trigger" onclick="triggerBenchmark()"
+                {{ 'disabled' if benchmark_running }}>
+          {% if benchmark_running %}
+            <span class="spinner-border spinner-border-sm"></span> {{ t.dash_running }}
+          {% else %}
+            <i class="bi bi-play-fill"></i> {{ t.dash_run_now }} ({{ 'sidecar' if sidecar_mode == '1' else 'proxy' }})
+          {% endif %}
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
+{# ROW 2 â€” Server ranking (horizontal bars, no Chart.js) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
 {% if server_stats %}
-<div class="card mb-4 p-3">
-  <div class="d-flex justify-content-between align-items-center mb-2">
-    <span class="fw-semibold"><i class="bi bi-bar-chart-fill text-success"></i> {{ t.dash_avg_speed_title }}</span>
-    <small class="text-muted">{{ t.dash_avg_speed_note }}</small>
+<div class="card mb-3">
+  <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <span class="fw-semibold" style="font-size:.9rem">
+        <i class="bi bi-bar-chart-fill text-success"></i> {{ t.dash_avg_speed_title }}
+      </span>
+      <small class="text-muted ms-2">{{ t.dash_avg_speed_note }}</small>
+    </div>
+    <div class="rank-legend" aria-label="{{ t.dash_avg_speed_title }}">
+      <span class="rank-legend-item"><span class="rank-legend-swatch rank-legend-avg"></span> {{ t.dash_chart_avg_label }}</span>
+      <span class="rank-legend-item"><span class="rank-legend-swatch rank-legend-max"></span> {{ t.dash_chart_max_label }}</span>
+    </div>
   </div>
-  {# height = 42px per bar pair, min 120px, max 420px #}
-  <div style="position:relative; height:{{ [[server_stats|length * 42, 120]|max, 420]|min }}px">
-    <canvas id="chartServers"></canvas>
+  <div class="card-body p-3">
+    {%- set ns = namespace(max_dl=0.01) -%}
+    {%- for s in server_stats -%}
+      {%- if s.avg_dl and s.avg_dl > ns.max_dl -%}{%- set ns.max_dl = s.avg_dl -%}{%- endif -%}
+    {%- endfor -%}
+    <div class="row g-2">
+      {% for s in server_stats %}
+      {%- set pct_avg = [((s.avg_dl or 0) / ns.max_dl * 100)|int, 100]|min -%}
+      {%- set pct_max = [((s.max_dl or 0) / ns.max_dl * 100)|int, 100]|min -%}
+      {%- set speed_cls = 'bg-success' if (s.avg_dl or 0) > 50 else ('bg-warning' if (s.avg_dl or 0) > 15 else 'bg-danger') -%}
+      <div class="col-12 col-xl-6">
+        <div class="d-flex align-items-center gap-2" style="min-height:28px">
+          <div class="text-truncate" style="width:130px;font-size:.8rem" title="{{ s.server_name }}">
+            <code>{{ s.server_name }}</code>
+          </div>
+          <div class="flex-grow-1 rank-bar-track">
+            {# max bar (background) #}
+            <div class="rank-bar-max" style="width:{{ pct_max }}%"></div>
+            {# avg bar (foreground) #}
+            <div class="rank-bar-avg {{ speed_cls }}" style="width:{{ pct_avg }}%"></div>
+          </div>
+          <div style="width:70px;font-size:.78rem;text-align:right">
+            {% if s.avg_dl %}
+              {%- set txt_cls = 'speed-good' if s.avg_dl > 50 else ('speed-ok' if s.avg_dl > 15 else 'speed-bad') -%}
+              <span class="fw-semibold {{ txt_cls }}">{{ s.avg_dl }}</span>
+              <span class="text-muted" style="font-size:.68rem">Mbps</span>
+            {% else %}<span class="text-muted">â€”</span>{% endif %}
+          </div>
+          <div class="bench-count" title="{{ s.cnt }} {{ t.dash_benchmark_count }}">
+            {{ s.cnt }} {{ t.dash_benchmark_count }}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
   </div>
 </div>
 {% endif %}
 
-{# ── Recent tests ──────────────────────────────────────────────────────── #}
+{# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
+{# ROW 3 â€” Recents â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
 <div class="card">
   <div class="card-header d-flex justify-content-between align-items-center py-2">
     <span><i class="bi bi-activity"></i> {{ t.dash_recent_tests }}</span>
@@ -143,11 +251,20 @@
     </div>
   </div>
   <div class="table-responsive">
-    <table class="table table-hover mb-0">
+    <table class="table table-hover mb-0" style="font-size:.85rem">
       <thead>
         <tr>
-          <th>{{ t.cmn_server }}</th><th>{{ t.cmn_download }}</th><th>{{ t.cmn_upload }}</th>
-          <th>{{ t.cmn_latency }}</th><th>{{ t.cmn_public_ip }}</th><th>{{ t.hist_col_method }}</th><th>{{ t.cmn_status }}</th><th>{{ t.cmn_date }}</th>
+          <th>{{ t.cmn_server }}</th>
+          <th>{{ t.cmn_download }}</th>
+          <th>{{ t.cmn_upload }}</th>
+          <th>{{ t.cmn_latency }}</th>
+          <th>{{ t.cmn_public_ip }}</th>
+          <th>{{ t.hist_col_jitter }}</th>
+          <th>{{ t.hist_col_loss }}</th>
+          <th>{{ t.hist_col_dns }}</th>
+          <th>{{ t.hist_col_method }}</th>
+          <th>{{ t.cmn_status }}</th>
+          <th>{{ t.cmn_date }}</th>
         </tr>
       </thead>
       <tbody>
@@ -158,46 +275,52 @@
             {% if r.download_mbps %}
               {% set cls = 'speed-good' if r.download_mbps > 50 else ('speed-ok' if r.download_mbps > 15 else 'speed-bad') %}
               <span class="fw-bold {{ cls }}">{{ '%.1f'|format(r.download_mbps) }} Mbps</span>
-              {% if r.dl_ookla or r.dl_librespeed or r.dl_iperf3 %}
-              <div style="font-size:.7rem;color:var(--muted);line-height:1.6;margin-top:2px">
-                {% if r.dl_ookla %}<span>Ookla {{ '%.0f'|format(r.dl_ookla) }}</span>{% endif %}
-                {% if r.dl_librespeed %}<span class="ms-1">LibreSpeed {{ '%.0f'|format(r.dl_librespeed) }}</span>{% endif %}
-                {% if r.dl_iperf3 %}<span class="ms-1">iPerf3 {{ '%.0f'|format(r.dl_iperf3) }}</span>{% endif %}
-              </div>
-              {% endif %}
-            {% else %}—{% endif %}
+            {% else %}â€”{% endif %}
           </td>
           <td>
             {% if r.upload_mbps %}
               <span class="text-info">{{ '%.1f'|format(r.upload_mbps) }} Mbps</span>
-              {% if r.ul_ookla or r.ul_librespeed or r.ul_iperf3 %}
-              <div style="font-size:.7rem;color:var(--muted);line-height:1.6;margin-top:2px">
-                {% if r.ul_ookla %}<span>Ookla {{ '%.0f'|format(r.ul_ookla) }}</span>{% endif %}
-                {% if r.ul_librespeed %}<span class="ms-1">LibreSpeed {{ '%.0f'|format(r.ul_librespeed) }}</span>{% endif %}
-                {% if r.ul_iperf3 %}<span class="ms-1">iPerf3 {{ '%.0f'|format(r.ul_iperf3) }}</span>{% endif %}
-              </div>
-              {% endif %}
-            {% else %}—{% endif %}
+            {% else %}â€”{% endif %}
           </td>
-          <td>{{ ('%.0f ms'|format(r.latency_ms)) if r.latency_ms else '—' }}</td>
+          <td>{{ ('%.0f ms'|format(r.latency_ms)) if r.latency_ms else 'â€”' }}</td>
           <td>
-            <small class="text-muted font-monospace">{{ r.public_ip or '—' }}
+            <small class="text-muted font-monospace">{{ r.public_ip or 'â€”' }}
             {% if r.public_ipv6 %}<br><span style="font-size:.7rem">{{ r.public_ipv6 }}</span>{% endif %}
             </small>
           </td>
           <td>
-            {% if r.test_method == 'sidecar' %}
-              <span class="badge" style="background:#f0ad4e;color:#000">
-                <i class="bi bi-boxes"></i> sidecar
-              </span>
+            {% if r.jitter_ms is not none %}
+              {% set jcls = 'text-success' if r.jitter_ms < 15 else ('text-warning' if r.jitter_ms < 50 else 'text-danger') %}
+              <span class="{{ jcls }}">{{ '%.1f'|format(r.jitter_ms) }} ms</span>
             {% elif r.test_method == 'proxy_qc' %}
-              <span class="badge" style="background:#6f42c1" title="{{ t.hist_method_proxy_qc }}">
-                <i class="bi bi-hdd-network"></i> quick check
-              </span>
+              <span class="text-muted" style="cursor:help" data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">-</span>
+            {% else %}-{% endif %}
+          </td>
+          <td>
+            {% if r.packet_loss_pct is not none %}
+              {% set lcls = 'text-success' if r.packet_loss_pct < 1 else ('text-warning' if r.packet_loss_pct < 5 else 'text-danger') %}
+              <span class="{{ lcls }}">{{ '%.1f'|format(r.packet_loss_pct) }}%</span>
+            {% elif r.test_method == 'proxy_qc' %}
+              <span class="text-muted" style="cursor:help" data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">-</span>
+            {% else %}-{% endif %}
+          </td>
+          <td>
+            {% if r.dns_latency_ms is not none %}
+              {% set dcls = 'text-success' if r.dns_latency_ms < 50 else ('text-warning' if r.dns_latency_ms < 150 else 'text-danger') %}
+              <span class="{{ dcls }}">{{ '%.0f'|format(r.dns_latency_ms) }} ms</span>
+            {% elif r.test_method == 'proxy_qc' %}
+              <span class="text-muted" style="cursor:help" data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">-</span>
+            {% elif r.test_method != 'sidecar' %}
+              <span class="text-muted" style="cursor:help" data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}">-</span>
+            {% else %}-{% endif %}
+          </td>
+          <td>
+            {% if r.test_method == 'sidecar' %}
+              <span class="badge method-sidecar"><i class="bi bi-boxes"></i> sidecar</span>
+            {% elif r.test_method == 'proxy_qc' %}
+              <span class="badge method-qc"><i class="bi bi-hdd-network"></i> quick check</span>
             {% else %}
-              <span class="badge bg-secondary">
-                <i class="bi bi-globe2"></i> proxy
-              </span>
+              <span class="badge bg-secondary"><i class="bi bi-globe2"></i> proxy</span>
             {% endif %}
           </td>
           <td>
@@ -211,9 +334,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="8" class="text-center text-muted py-4">
-            {{ t.dash_no_tests }}
-          </td>
+          <td colspan="11" class="text-center text-muted py-4">{{ t.dash_no_tests }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -230,13 +351,15 @@ const _msgRunNow   = '{{ t.dash_run_now }} ({{ _bench_method }})';
 const _msgRunQuick = '{{ t.dash_run_quick }}';
 const _msgAlready  = '{{ t.dash_already_running }}';
 
-// ── Theme-aware chart colors ─────────────────────────────────────────────
-const _isDark   = document.documentElement.getAttribute('data-bs-theme') !== 'light';
-const _cGrid    = _isDark ? 'rgba(48,54,61,.8)'  : 'rgba(0,0,0,.07)';
-const _cTick    = _isDark ? '#8b949e' : '#666';
-const _cLabel   = _isDark ? '#c9d1d9' : '#333';
+const _isDark = document.documentElement.getAttribute('data-bs-theme') !== 'light';
+const _cGrid  = _isDark ? 'rgba(48,54,61,.8)'  : 'rgba(0,0,0,.07)';
+const _cTick  = _isDark ? '#8b949e' : '#666';
+const _cLabel = _isDark ? '#c9d1d9' : '#333';
+const _chartDl = '#2dd4bf';
+const _chartDlFill = 'rgba(45,212,191,.16)';
+const _chartUl = '#fbbf24';
 
-// ── Live status polling ──────────────────────────────────────────────────
+// â”€â”€ Live status polling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function pollStatus() {
   fetch('{{ url_for("main.api_status") }}')
     .then(r => r.json())
@@ -261,7 +384,6 @@ function pollStatus() {
 }
 setInterval(pollStatus, 3000);
 
-// ── Trigger full benchmark ───────────────────────────────────────────────
 function triggerBenchmark() {
   const btn = document.getElementById('btn-trigger');
   fetch('{{ url_for("main.api_trigger") }}', { method: 'POST' })
@@ -269,10 +391,7 @@ function triggerBenchmark() {
       if (r.status === 409) {
         btn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + _msgAlready;
         btn.classList.replace('btn-success', 'btn-warning');
-        setTimeout(() => {
-          btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow;
-          btn.classList.replace('btn-warning', 'btn-success');
-        }, 3000);
+        setTimeout(() => { btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow; btn.classList.replace('btn-warning', 'btn-success'); }, 3000);
         return;
       }
       btn.disabled = true;
@@ -280,7 +399,6 @@ function triggerBenchmark() {
     });
 }
 
-// ── Trigger quick benchmark ──────────────────────────────────────────────
 function triggerQuick() {
   const btn = document.getElementById('btn-trigger-quick');
   fetch('{{ url_for("main.api_trigger_quick") }}', { method: 'POST' })
@@ -288,11 +406,7 @@ function triggerQuick() {
       if (r.status === 409) {
         btn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + _msgAlready;
         btn.classList.replace('btn-outline-info', 'btn-outline-warning');
-        setTimeout(() => {
-          btn.innerHTML = '<i class="bi bi-speedometer"></i> ' + _msgRunQuick;
-          btn.classList.replace('btn-outline-warning', 'btn-outline-info');
-          btn.disabled = false;
-        }, 3000);
+        setTimeout(() => { btn.innerHTML = '<i class="bi bi-speedometer"></i> ' + _msgRunQuick; btn.classList.replace('btn-outline-warning', 'btn-outline-info'); btn.disabled = false; }, 3000);
         return;
       }
       btn.disabled = true;
@@ -300,7 +414,7 @@ function triggerQuick() {
     });
 }
 
-// ── Sparkline active server ──────────────────────────────────────────────
+// â”€â”€ Sparkline active server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 {% if sparkline_dl %}
 new Chart(document.getElementById('chartSparkline'), {
   type: 'line',
@@ -310,19 +424,18 @@ new Chart(document.getElementById('chartSparkline'), {
       {
         label: 'Download',
         data: [{% for v in sparkline_dl %}{{ v }},{% endfor %}],
-        borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,.12)',
+        borderColor: _chartDl, backgroundColor: _chartDlFill,
         fill: true, tension: 0.35,
-        pointRadius: 3, pointHoverRadius: 6, borderWidth: 2,
+        pointRadius: 2, pointHoverRadius: 5, borderWidth: 1.5,
       },
       {% if sparkline_ul | select | list %}
       {
         label: 'Upload',
         data: [{% for v in sparkline_ul %}{{ v if v else 'null' }},{% endfor %}],
-        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,.0)',
+        borderColor: _chartUl, backgroundColor: 'rgba(251,191,36,0)',
         fill: false, tension: 0.35,
-        pointRadius: 3, pointHoverRadius: 6, borderWidth: 2,
-        borderDash: [5, 3],
-        spanGaps: true,
+        pointRadius: 2, pointHoverRadius: 5, borderWidth: 1.5,
+        borderDash: [4, 3], spanGaps: true,
       },
       {% endif %}
     ],
@@ -330,74 +443,18 @@ new Chart(document.getElementById('chartSparkline'), {
   options: {
     responsive: true, maintainAspectRatio: false,
     scales: {
-      x: { grid: { color: _cGrid }, ticks: { color: _cTick, maxTicksLimit: 8, font: { size: 11 } } },
-      y: { beginAtZero: true, grid: { color: _cGrid },
-           ticks: { color: _cTick, callback: v => v + ' Mbps', maxTicksLimit: 5 } },
+      x: { display: false },
+      y: { display: false, beginAtZero: true },
     },
     plugins: {
-      legend: { position: 'bottom', labels: { color: _cLabel, boxWidth: 12, padding: 12 } },
-      tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ' : ' + (ctx.parsed.y?.toFixed(1) ?? '—') + ' Mbps' } },
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ' : ' + (ctx.parsed.y?.toFixed(1) ?? 'â€”') + ' Mbps' } },
     },
   },
 });
 {% endif %}
 
-// ── Chart servers (avg + max DL) ─────────────────────────────────────────
-{% if server_stats %}
-new Chart(document.getElementById('chartServers'), {
-  type: 'bar',
-  data: {
-    labels: [{% for s in server_stats %}'{{ s.server_name }}',{% endfor %}],
-    datasets: [
-      {
-        label: '{{ t.chart_avg }}',
-        data: [{% for s in server_stats %}{{ s.avg_dl or 0 }},{% endfor %}],
-        backgroundColor: 'rgba(63,185,80,.75)',
-        borderColor: '#3fb950',
-        borderWidth: 1,
-        borderRadius: 4,
-        maxBarThickness: 20,
-      },
-      {
-        label: '{{ t.chart_max }}',
-        data: [{% for s in server_stats %}{{ s.max_dl or 0 }},{% endfor %}],
-        backgroundColor: 'rgba(88,166,255,.35)',
-        borderColor: '#58a6ff',
-        borderWidth: 1,
-        borderRadius: 4,
-        maxBarThickness: 20,
-      },
-    ]
-  },
-  options: {
-    indexAxis: 'y',
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      x: {
-        beginAtZero: true,
-        grid: { color: _cGrid },
-        ticks: { color: _cTick, callback: v => v + ' Mbps', maxTicksLimit: 6 },
-      },
-      y: {
-        grid: { display: false },
-        ticks: { color: _cLabel, font: { size: 12 } },
-      },
-    },
-    plugins: {
-      legend: { position: 'bottom', labels: { color: _cLabel, boxWidth: 12, padding: 12 } },
-      tooltip: {
-        callbacks: { label: ctx => ' ' + ctx.dataset.label + ' : ' + ctx.parsed.x.toFixed(1) + ' Mbps' },
-      },
-    },
-  },
-});
-{% endif %}
-
-// tooltips
-document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el =>
-  new bootstrap.Tooltip(el)
-);
+document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
 </script>
 {% endblock %}
 
@@ -408,6 +465,6 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el =>
   <a href="https://github.com/Aerya/Gluetun-Companion" target="_blank" rel="noreferrer noopener">GitHub</a>
   <a href="https://upandclear.org" target="_blank" rel="noreferrer noopener">Blog</a>
   <a href="https://ko-fi.com/upandclear" target="_blank" rel="noreferrer noopener">Ko-fi</a>
-  <span>❤️</span>
+  <span>â¤ï¸</span>
 </footer>
 {% endblock %}

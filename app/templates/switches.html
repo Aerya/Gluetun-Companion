@@ -1,90 +1,209 @@
-{% extends 'base.html' %}
-{% block title %}{{ t.nav_switches }} – Gluetun Companion{% endblock %}
+﻿{% extends 'base.html' %}
+{% block title %}{{ t.nav_switches }} - Gluetun Companion{% endblock %}
 
 {% block content %}
-<h5 class="mb-3"><i class="bi bi-arrow-left-right"></i> {{ t.sw_title }}</h5>
+<style>
+  .ops-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem;
+    align-items: end;
+    margin-bottom: 1rem;
+  }
+  .ops-title { margin: 0; font-size: 1.05rem; font-weight: 700; }
+  .ops-subtitle { color: var(--bs-secondary-color); font-size: .82rem; margin-top: .2rem; }
+  .ops-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .75rem;
+    margin-bottom: 1rem;
+  }
+  .ops-metric {
+    background: var(--bs-secondary-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 8px;
+    padding: .85rem 1rem;
+    min-height: 82px;
+  }
+  .ops-metric .label {
+    color: var(--bs-secondary-color);
+    font-size: .7rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .ops-metric .value { font-size: 1.35rem; font-weight: 750; line-height: 1.25; }
+  .ops-filter {
+    background: var(--bs-secondary-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 8px;
+    padding: .75rem;
+    margin-bottom: 1rem;
+  }
+  .ops-table { font-size: .86rem; }
+  .ops-table td, .ops-table th { vertical-align: middle; }
+  .server-flow {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) 24px minmax(120px, 1fr);
+    gap: .45rem;
+    align-items: center;
+    min-width: 300px;
+  }
+  .flow-server { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gain-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    border-radius: 999px;
+    padding: .18rem .55rem;
+    font-size: .78rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .gain-up { color: #3fb950; background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.28); }
+  .gain-down { color: #f85149; background: rgba(248,81,73,.10); border: 1px solid rgba(248,81,73,.24); }
+  .reason-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 999px;
+    padding: .18rem .55rem;
+    font-size: .76rem;
+    color: var(--bs-body-color);
+    background: var(--bs-tertiary-bg);
+  }
+  @media (max-width: 991.98px) {
+    .ops-header { grid-template-columns: 1fr; }
+    .ops-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 575.98px) {
+    .ops-strip { grid-template-columns: 1fr; }
+    .server-flow { grid-template-columns: 1fr; min-width: 180px; }
+    .server-flow .bi-arrow-right { display: none; }
+  }
+</style>
 
-{# ── Date filters ──────────────────────────────────────────────────────── #}
-<form method="get" class="row g-2 mb-3 align-items-end">
-  <div class="col-auto">
-    <select name="status_filter" class="form-select form-select-sm" onchange="this.form.submit()">
-      <option value=""     {{ 'selected' if not status_filter }}>{{ t.sw_filter_all }}</option>
-      <option value="ok"   {{ 'selected' if status_filter == 'ok' }}>{{ t.sw_filter_ok }}</option>
-      <option value="fail" {{ 'selected' if status_filter == 'fail' }}>{{ t.sw_filter_fail }}</option>
-    </select>
+
+<div class="ops-strip">
+  <div class="ops-metric">
+    <div class="label">{{ t.sw_metric_switches }}</div>
+    <div class="value">{{ total }}</div>
+    <div class="text-muted small">{{ t.sw_current_view }}</div>
   </div>
-  <div class="col-auto d-flex align-items-center gap-1">
-    <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.hist_date_from }}</label>
-    <input type="date" name="from_date" class="form-control form-control-sm"
-           value="{{ from_date }}" style="width:145px">
+  <div class="ops-metric">
+    <div class="label">{{ t.sw_success_count }}</div>
+    <div class="value text-success">{{ ok_count }}</div>
+    <div class="text-muted small">{{ failed_count }} {{ t.sw_failures_count }}</div>
   </div>
-  <div class="col-auto d-flex align-items-center gap-1">
-    <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.hist_date_to }}</label>
-    <input type="date" name="to_date" class="form-control form-control-sm"
-           value="{{ to_date }}" style="width:145px">
+  <div class="ops-metric">
+    <div class="label">{{ t.sw_avg_gain }}</div>
+    <div class="value {{ 'text-success' if avg_gain is not none and avg_gain >= 0 else 'text-danger' }}">
+      {{ ('%+.1f Mbps'|format(avg_gain)) if avg_gain is not none else '-' }}
+    </div>
+    <div class="text-muted small">{{ t.sw_avg_gain_sub }}</div>
   </div>
-  <div class="col-auto">
-    <button type="submit" class="btn btn-sm btn-outline-secondary">
-      <i class="bi bi-funnel-fill"></i>
-    </button>
+  <div class="ops-metric">
+    <div class="label">{{ t.sw_best_gain }}</div>
+    <div class="value text-success">{{ ('%+.1f Mbps'|format(best_gain)) if best_gain is not none else '-' }}</div>
+    <div class="text-muted small">{{ t.sw_best_gain_sub }}</div>
   </div>
-  {% if from_date or to_date or status_filter %}
-  <div class="col-auto">
-    <a href="{{ url_for('main.switches') }}" class="btn btn-sm btn-outline-secondary">✕</a>
+</div>
+
+<form method="get" class="ops-filter">
+  <div class="row g-2 align-items-end">
+    <div class="col-12 col-sm-auto">
+      <label class="form-label text-muted small mb-1">{{ t.cmn_status }}</label>
+      <select name="status_filter" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value=""     {{ 'selected' if not status_filter }}>{{ t.sw_filter_all }}</option>
+        <option value="ok"   {{ 'selected' if status_filter == 'ok' }}>{{ t.sw_filter_ok }}</option>
+        <option value="fail" {{ 'selected' if status_filter == 'fail' }}>{{ t.sw_filter_fail }}</option>
+      </select>
+    </div>
+    <div class="col-12 col-sm-auto">
+      <label class="form-label text-muted small mb-1">{{ t.sw_col_reason }}</label>
+      <select name="reason_filter" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value="" {{ 'selected' if not reason_filter }}>{{ t.sw_filter_all_reasons }}</option>
+        {% for reason in reason_values %}
+        <option value="{{ reason }}" {{ 'selected' if reason_filter == reason }}>
+          {% if reason == 'auto_best' %}{{ t.sw_reason_auto }}
+          {% elif reason == 'manual' %}{{ t.sw_reason_manual }}
+          {% else %}{{ reason }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-sm-auto">
+      <label class="form-label text-muted small mb-1">{{ t.hist_date_from }}</label>
+      <input type="date" name="from_date" class="form-control form-control-sm" value="{{ from_date }}">
+    </div>
+    <div class="col-6 col-sm-auto">
+      <label class="form-label text-muted small mb-1">{{ t.hist_date_to }}</label>
+      <input type="date" name="to_date" class="form-control form-control-sm" value="{{ to_date }}">
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-sm btn-outline-info" title="{{ t.ui_filter }}"><i class="bi bi-funnel-fill"></i></button>
+    </div>
+    {% if from_date or to_date or status_filter or reason_filter %}
+    <div class="col-auto">
+      <a href="{{ url_for('main.switches') }}" class="btn btn-sm btn-outline-secondary" title="{{ t.ui_reset }}"><i class="bi bi-x-lg"></i></a>
+    </div>
+    {% endif %}
   </div>
-  {% endif %}
 </form>
 
 <div class="card">
   <div class="table-responsive">
-    <table class="table table-hover mb-0">
+    <table class="table table-hover mb-0 ops-table">
       <thead>
         <tr>
-          <th>{{ t.sw_col_from }}</th><th></th><th>{{ t.sw_col_to }}</th>
-          <th>{{ t.sw_col_ip }}</th><th>{{ t.sw_col_gain }}</th>
-          <th>{{ t.sw_col_connect }}</th><th>{{ t.sw_col_reason }}</th>
-          <th>{{ t.cmn_status }}</th><th>{{ t.cmn_date }}</th>
+          <th>{{ t.sw_flow }}</th>
+          <th>{{ t.sw_col_gain }}</th>
+          <th>{{ t.sw_col_ip }}</th>
+          <th>{{ t.sw_col_connect }}</th>
+          <th>{{ t.sw_col_reason }}</th>
+          <th>{{ t.cmn_status }}</th>
+          <th>{{ t.cmn_date }}</th>
         </tr>
       </thead>
       <tbody>
         {% for s in switches %}
+        {% set has_gain = s.from_mbps is not none and s.to_mbps is not none %}
+        {% set delta = (s.to_mbps - s.from_mbps) if has_gain else none %}
         <tr>
-          <td><code class="text-muted">{{ s.from_server or '—' }}</code></td>
-          <td class="text-muted"><i class="bi bi-arrow-right"></i></td>
-          <td><code class="text-success">{{ s.to_server }}</code></td>
+          <td>
+            <div class="server-flow">
+              <code class="flow-server text-muted" title="{{ s.from_server or '-' }}">{{ s.from_server or '-' }}</code>
+              <i class="bi bi-arrow-right text-muted text-center"></i>
+              <code class="flow-server text-success" title="{{ s.to_server }}">{{ s.to_server }}</code>
+            </div>
+          </td>
+          <td>
+            {% if has_gain %}
+              <span class="gain-pill {{ 'gain-up' if delta >= 0 else 'gain-down' }}">
+                <i class="bi {{ 'bi-arrow-up-right' if delta >= 0 else 'bi-arrow-down-right' }}"></i>
+                {{ '%+.1f'|format(delta) }} Mbps
+              </span>
+              <div class="text-muted small mt-1">{{ '%.1f'|format(s.from_mbps) }} -> {{ '%.1f'|format(s.to_mbps) }}</div>
+            {% else %}
+              <span class="text-muted">-</span>
+            {% endif %}
+          </td>
           <td>
             {% if s.to_ipv4 or s.to_ipv6 %}
               <small class="text-muted font-monospace">
                 {{ s.to_ipv4 or '' }}
                 {% if s.to_ipv6 %}<br><span style="font-size:.7rem">{{ s.to_ipv6 }}</span>{% endif %}
               </small>
-            {% else %}—{% endif %}
+            {% else %}<span class="text-muted">-</span>{% endif %}
           </td>
-          <td>
-            {% if s.from_mbps and s.to_mbps %}
-              {% set delta = s.to_mbps - s.from_mbps %}
-              <span class="fw-semibold {{ 'text-success' if delta >= 0 else 'text-danger' }}">
-                {{ '%+.1f'|format(delta) }} Mbps
-              </span>
-              <br><small class="text-muted">{{ '%.1f'|format(s.from_mbps) }} → {{ '%.1f'|format(s.to_mbps) }}</small>
-            {% else %}—{% endif %}
-          </td>
-          <td>
-            {% if s.connect_secs %}
-              <small class="text-muted">{{ s.connect_secs | int }} s</small>
-            {% else %}—{% endif %}
-          </td>
+          <td>{{ (s.connect_secs | int|string ~ ' s') if s.connect_secs else '-' }}</td>
           <td>
             {% if s.reason == 'auto_best' %}
-              <span class="badge" style="background:#1f6feb">
-                {{ t.sw_reason_auto }}
-              </span>
+              <span class="reason-chip"><i class="bi bi-magic text-info"></i>{{ t.sw_reason_auto }}</span>
             {% elif s.reason == 'manual' %}
-              <span class="badge bg-warning text-dark">
-                <i class="bi bi-hand-index"></i> {{ t.sw_reason_manual }}
-              </span>
+              <span class="reason-chip"><i class="bi bi-hand-index text-warning"></i>{{ t.sw_reason_manual }}</span>
             {% else %}
-              <span class="badge bg-secondary">{{ s.reason }}</span>
+              <span class="reason-chip">{{ s.reason }}</span>
             {% endif %}
           </td>
           <td>
@@ -98,7 +217,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="9" class="text-center text-muted py-5">
+          <td colspan="7" class="text-center text-muted py-5">
             <i class="bi bi-arrow-left-right" style="font-size:2rem;opacity:.3"></i><br>
             {{ t.sw_empty }}
           </td>
