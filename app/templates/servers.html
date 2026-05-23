@@ -129,7 +129,7 @@
     {%- for h, d in adaptive_stats.hours.items() -%}
       {%- if d.score > ns.max_score -%}{%- set ns.max_score = d.score -%}{%- endif -%}
     {%- endfor -%}
-    <svg viewBox="0 0 820 92" preserveAspectRatio="xMidYMid meet" style="width:100%;height:92px;display:block;overflow:visible">
+    <svg viewBox="0 0 820 92" preserveAspectRatio="xMidYMid meet" style="width:100%;height:180px;display:block;overflow:visible">
       <text x="0" y="10" font-size="5.5" fill="currentColor" opacity="0.48">{{ t.chart_row_mbps }}</text>
       <text x="0" y="74" font-size="5.5" fill="currentColor" opacity="0.48">{{ t.chart_row_hour }}</text>
       <text x="0" y="89" font-size="5.5" fill="currentColor" opacity="0.48">{{ t.chart_row_benchmarks }}</text>
@@ -162,13 +162,12 @@
 {% endif %}
 
 {# ── Filters + sort bar ──────────────────────────────────────────────────── #}
-<form method="post" action="{{ url_for('main.api_set_profile') }}" class="mb-3 d-flex align-items-center gap-2 flex-wrap">
-  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+<div class="mb-3 d-flex align-items-center gap-2 flex-wrap" id="profilePreview">
   <small class="text-muted fw-semibold text-nowrap">
     <i class="bi bi-sliders2 me-1"></i>{{ t.srv_profile_label }} :
   </small>
   {% for pk, pv in profiles.items() %}
-  <button type="submit" name="active_profile" value="{{ pk }}"
+  <button type="button" data-profile="{{ pk }}" data-best="{{ profile_bests.get(pk) or '' }}"
           class="btn btn-sm {{ 'btn-success' if active_profile == pk else 'btn-outline-secondary' }} py-0 px-2"
           style="font-size:.78rem"
           title="{{ pv.hint_fr if session.get('lang','fr') == 'fr' else pv.hint_en }}">
@@ -178,15 +177,16 @@
   {% if profile_best %}
   <span class="ms-2 text-muted" style="font-size:.75rem">
     <i class="bi bi-trophy-fill text-warning me-1"></i>{{ t.srv_profile_best }} :
-    <code class="text-warning">{{ profile_best }}</code>
+    <code class="text-warning" id="profileBestName">{{ profile_best }}</code>
   </span>
   {% endif %}
-  <span class="ms-auto" style="font-size:.75rem">
+  <span class="ms-auto text-muted" style="font-size:.75rem">
+    {{ t.srv_profile_info }}
     <i class="bi bi-info-circle text-info"
        data-bs-toggle="tooltip" data-bs-placement="left"
        title="{{ t.srv_profile_info }}"></i>
   </span>
-</form>
+</div>
 
 <form method="get" class="row g-2 mb-3 align-items-end">
   <div class="col-auto">
@@ -270,9 +270,21 @@
                  data-bs-toggle="tooltip" data-bs-placement="bottom"
                  title="{{ t.stab_col_tooltip }}"></i>
             </th>
-            <th>{{ t.hist_col_jitter }}</th>
-            <th>{{ t.hist_col_loss }}</th>
-            <th>{{ t.hist_col_dns }}</th>
+            <th>
+              {{ t.hist_col_jitter }}
+              <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
+                 data-bs-toggle="tooltip" title="{{ t.hist_col_jitter_tooltip }}"></i>
+            </th>
+            <th>
+              {{ t.hist_col_loss }}
+              <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
+                 data-bs-toggle="tooltip" title="{{ t.hist_col_loss_tooltip }}"></i>
+            </th>
+            <th>
+              {{ t.hist_col_dns }}
+              <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
+                 data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}"></i>
+            </th>
             <th>{{ t.srv_col_last_test }}</th>
             <th class="text-end">{{ t.srv_col_actions }}</th>
           </tr>
@@ -287,7 +299,7 @@
               {% if is_active %}
               <span class="badge bg-success ms-1" style="font-size:.7rem">{{ t.srv_active_badge }}</span>
               {% endif %}
-              {% if profile_best and s.name == profile_best and active_profile != 'balanced' %}
+              {% if profile_best and s.name == profile_best %}
               <span class="ms-1 text-warning" title="{{ t.srv_profile_best }}"><i class="bi bi-trophy-fill"></i></span>
               {% elif not s.enabled %}
               <span class="badge bg-secondary ms-1" style="font-size:.7rem">OFF</span>
@@ -461,7 +473,7 @@
               {% if is_active %}
                 <span class="badge bg-success" style="font-size:.65rem">{{ t.srv_active_badge }}</span>
               {% endif %}
-              {% if profile_best and s.name == profile_best and active_profile != 'balanced' %}
+              {% if profile_best and s.name == profile_best %}
                 <span class="badge bg-warning text-dark" style="font-size:.65rem" title="{{ t.srv_profile_best }}">
                   <i class="bi bi-trophy-fill"></i>
                 </span>
@@ -520,7 +532,11 @@
               <div>{{ s.ok_tests }}/{{ s.total_tests }}</div>
             </div>
             <div class="col-4">
-              <div class="text-muted">Jitter</div>
+              <div class="text-muted">
+                {{ t.hist_col_jitter }}
+                <i class="bi bi-info-circle ms-1" style="font-size:.65rem;cursor:help"
+                   data-bs-toggle="tooltip" title="{{ t.hist_col_jitter_tooltip }}"></i>
+              </div>
               <div>
                 {%- if _stab.n and _stab.avg_jitter is not none -%}
                   {%- set _jcls = 'text-success' if _stab.avg_jitter < 15 else ('text-warning' if _stab.avg_jitter < 50 else 'text-danger') -%}
@@ -539,7 +555,11 @@
             </div>
             <div class="col-4">
               <div class="server-card-metric">
-                <div class="label">Perte</div>
+                <div class="label">
+                  {{ t.hist_col_loss }}
+                  <i class="bi bi-info-circle ms-1" style="font-size:.65rem;cursor:help"
+                     data-bs-toggle="tooltip" title="{{ t.hist_col_loss_tooltip }}"></i>
+                </div>
                 <div class="value">
                 {%- if _stab.n and _stab.avg_loss is not none -%}
                   {%- set _lcls = 'text-success' if _stab.avg_loss < 1 else ('text-warning' if _stab.avg_loss < 5 else 'text-danger') -%}
@@ -550,7 +570,11 @@
             </div>
             <div class="col-4">
               <div class="server-card-metric">
-                <div class="label">DNS</div>
+                <div class="label">
+                  {{ t.hist_col_dns }}
+                  <i class="bi bi-info-circle ms-1" style="font-size:.65rem;cursor:help"
+                     data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}"></i>
+                </div>
                 <div class="value">
                 {%- if _stab.n and _stab.avg_dns is not none -%}
                   {%- set _dcls = 'text-success' if _stab.avg_dns < 50 else ('text-warning' if _stab.avg_dns < 150 else 'text-danger') -%}
@@ -776,6 +800,18 @@
 
 {% block scripts %}
 <script>
+document.querySelectorAll('#profilePreview [data-profile]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#profilePreview [data-profile]').forEach(other => {
+      other.classList.toggle('btn-success', other === btn);
+      other.classList.toggle('btn-outline-secondary', other !== btn);
+    });
+    const best = btn.dataset.best || '-';
+    const target = document.getElementById('profileBestName');
+    if (target) target.textContent = best;
+  });
+});
+
 // ── View toggle ───────────────────────────────────────────────────────────
 function setView(v) {
   const isCards = v === 'cards';

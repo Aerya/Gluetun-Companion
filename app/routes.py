@@ -284,6 +284,10 @@ def servers():
     active_profile = get_setting('active_profile', 'balanced')
     profile_scores = _score_servers(rows, active_profile, _stability)
     profile_best   = max(profile_scores, key=profile_scores.get) if profile_scores else None
+    profile_bests = {}
+    for profile_key in PROFILES:
+        _scores = _score_servers(rows, profile_key, _stability)
+        profile_bests[profile_key] = max(_scores, key=_scores.get) if _scores else None
 
     # AirVPN new-server data (banner + badge) — only if feature enabled
     new_airvpn: list[dict] = []
@@ -314,6 +318,7 @@ def servers():
         active_profile=active_profile,
         profile_scores=profile_scores,
         profile_best=profile_best,
+        profile_bests=profile_bests,
         gluetun_api_port=get_setting('gluetun_api_port', '8000'),
         adaptive_stats=get_hourly_benchmark_stats(),
     )

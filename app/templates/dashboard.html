@@ -259,9 +259,21 @@
           <th>{{ t.cmn_upload }}</th>
           <th>{{ t.cmn_latency }}</th>
           <th>{{ t.cmn_public_ip }}</th>
-          <th>{{ t.hist_col_jitter }}</th>
-          <th>{{ t.hist_col_loss }}</th>
-          <th>{{ t.hist_col_dns }}</th>
+          <th>
+            {{ t.hist_col_jitter }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
+               data-bs-toggle="tooltip" title="{{ t.hist_col_jitter_tooltip }}"></i>
+          </th>
+          <th>
+            {{ t.hist_col_loss }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
+               data-bs-toggle="tooltip" title="{{ t.hist_col_loss_tooltip }}"></i>
+          </th>
+          <th>
+            {{ t.hist_col_dns }}
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
+               data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}"></i>
+          </th>
           <th>{{ t.hist_col_method }}</th>
           <th>{{ t.cmn_status }}</th>
           <th>{{ t.cmn_date }}</th>
