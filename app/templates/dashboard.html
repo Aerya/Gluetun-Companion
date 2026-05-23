@@ -53,7 +53,7 @@
   .rank-legend-max { background: rgba(96,165,250,.34); border: 1px solid rgba(96,165,250,.58); }
 </style>
 
-{# â”€â”€ Live benchmark banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ── Live benchmark banner ─────────────────────────────────────────────────── #}
 <div class="live-banner alert alert-success d-flex align-items-center gap-2 py-2 px-3 mb-3 {{ '' if benchmark_running else 'd-none' }}"
      style="font-size:.85rem">
   <span class="spinner-border spinner-border-sm flex-shrink-0"></span>
@@ -61,11 +61,11 @@
 </div>
 
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
-{# ROW 1 â€” VPN status + Active server + Benchmark controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ROW 1 — VPN status + Active server + Benchmark controls ───────────────── #}
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
 <div class="row g-3 mb-3">
 
-  {# â”€â”€ VPN status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+  {# ── VPN status ─────────────────────────────────────────────────────────── #}
   <div class="col-12 col-md-3">
     <div class="card h-100 p-3">
       <div class="text-muted mb-2" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
@@ -97,7 +97,7 @@
           <div style="font-size:.72rem;color:var(--muted)">{{ t.dash_optimal_window }}</div>
           <div>
             <span class="text-success fw-semibold" style="font-size:.9rem">{{ '%02d'|format(adaptive_stats.best_hour) }}h</span>
-            <span class="text-muted ms-1" style="font-size:.72rem">Â· {{ adaptive_stats.hours[adaptive_stats.best_hour].avg_dl }} Mbps</span>
+            <span class="text-muted ms-1" style="font-size:.72rem">· {{ adaptive_stats.hours[adaptive_stats.best_hour].avg_dl }} Mbps</span>
           </div>
         </div>
       </div>
@@ -105,7 +105,7 @@
     </div>
   </div>
 
-  {# â”€â”€ Active server + Sparkline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+  {# ── Active server + Sparkline ──────────────────────────────────────────── #}
   <div class="col-12 col-md-5">
     <div class="card h-100 p-3">
       <div class="d-flex justify-content-between align-items-start mb-1">
@@ -113,11 +113,11 @@
           <div class="text-muted mb-1" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
             <i class="bi bi-server"></i> {{ t.dash_active_server }}
           </div>
-          <code style="font-size:1rem;font-weight:600">{{ current_server or 'â€”' }}</code>
+          <code style="font-size:1rem;font-weight:600">{{ current_server or '—' }}</code>
         </div>
         {% if sparkline_dl %}
         <span class="badge bg-success" style="font-size:.85rem">
-          â†“ {{ '%.1f'|format(sparkline_dl | last) }} Mbps
+          ↓ {{ '%.1f'|format(sparkline_dl | last) }} Mbps
         </span>
         {% endif %}
       </div>
@@ -133,7 +133,7 @@
     </div>
   </div>
 
-  {# â”€â”€ Benchmark controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+  {# ── Benchmark controls ─────────────────────────────────────────────────── #}
   <div class="col-12 col-md-4">
     <div class="card h-100 p-3">
       <div class="text-muted mb-2" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
@@ -142,12 +142,12 @@
       {% if next_run %}
       <div class="fw-semibold mb-1">{{ next_run.strftime('%d/%m %H:%M') }}</div>
       {% else %}
-      <div class="text-muted mb-1">â€”</div>
+      <div class="text-muted mb-1">—</div>
       {% endif %}
       {% if last_cycle and last_cycle.duration_secs %}
       <div class="text-muted mb-3" style="font-size:.75rem">
         {{ t.dash_last_cycle }} {{ last_cycle.duration_secs | int }}s
-        {% if last_cycle.servers_tested %}&nbsp;Â·&nbsp;{{ last_cycle.servers_tested }} {{ t.dash_servers_tested }}{% endif %}
+        {% if last_cycle.servers_tested %}&nbsp;·&nbsp;{{ last_cycle.servers_tested }} {{ t.dash_servers_tested }}{% endif %}
       </div>
       {% else %}
       <div class="mb-3"></div>
@@ -179,7 +179,7 @@
 </div>
 
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
-{# ROW 2 â€” Server ranking (horizontal bars, no Chart.js) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ROW 2 — Server ranking (horizontal bars, no Chart.js) ─────────────────── #}
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
 {% if server_stats %}
 <div class="card mb-3">
@@ -221,7 +221,7 @@
               {%- set txt_cls = 'speed-good' if s.avg_dl > 50 else ('speed-ok' if s.avg_dl > 15 else 'speed-bad') -%}
               <span class="fw-semibold {{ txt_cls }}">{{ s.avg_dl }}</span>
               <span class="text-muted" style="font-size:.68rem">Mbps</span>
-            {% else %}<span class="text-muted">â€”</span>{% endif %}
+            {% else %}<span class="text-muted">—</span>{% endif %}
           </div>
           <div class="bench-count" title="{{ s.cnt }} {{ t.dash_benchmark_count }}">
             {{ s.cnt }} {{ t.dash_benchmark_count }}
@@ -235,7 +235,7 @@
 {% endif %}
 
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
-{# ROW 3 â€” Recents â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ROW 3 — Recents ──────────────────────────────────────────────────── #}
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
 <div class="card">
   <div class="card-header d-flex justify-content-between align-items-center py-2">
@@ -275,16 +275,16 @@
             {% if r.download_mbps %}
               {% set cls = 'speed-good' if r.download_mbps > 50 else ('speed-ok' if r.download_mbps > 15 else 'speed-bad') %}
               <span class="fw-bold {{ cls }}">{{ '%.1f'|format(r.download_mbps) }} Mbps</span>
-            {% else %}â€”{% endif %}
+            {% else %}—{% endif %}
           </td>
           <td>
             {% if r.upload_mbps %}
               <span class="text-info">{{ '%.1f'|format(r.upload_mbps) }} Mbps</span>
-            {% else %}â€”{% endif %}
+            {% else %}—{% endif %}
           </td>
-          <td>{{ ('%.0f ms'|format(r.latency_ms)) if r.latency_ms else 'â€”' }}</td>
+          <td>{{ ('%.0f ms'|format(r.latency_ms)) if r.latency_ms else '—' }}</td>
           <td>
-            <small class="text-muted font-monospace">{{ r.public_ip or 'â€”' }}
+            <small class="text-muted font-monospace">{{ r.public_ip or '—' }}
             {% if r.public_ipv6 %}<br><span style="font-size:.7rem">{{ r.public_ipv6 }}</span>{% endif %}
             </small>
           </td>
@@ -359,7 +359,7 @@ const _chartDl = '#2dd4bf';
 const _chartDlFill = 'rgba(45,212,191,.16)';
 const _chartUl = '#fbbf24';
 
-// â”€â”€ Live status polling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Live status polling ──────────────────────────────────────────────────
 function pollStatus() {
   fetch('{{ url_for("main.api_status") }}')
     .then(r => r.json())
@@ -414,7 +414,7 @@ function triggerQuick() {
     });
 }
 
-// â”€â”€ Sparkline active server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Sparkline active server ──────────────────────────────────────────────
 {% if sparkline_dl %}
 new Chart(document.getElementById('chartSparkline'), {
   type: 'line',
@@ -448,7 +448,7 @@ new Chart(document.getElementById('chartSparkline'), {
     },
     plugins: {
       legend: { display: false },
-      tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ' : ' + (ctx.parsed.y?.toFixed(1) ?? 'â€”') + ' Mbps' } },
+      tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ' : ' + (ctx.parsed.y?.toFixed(1) ?? '—') + ' Mbps' } },
     },
   },
 });

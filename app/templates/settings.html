@@ -115,10 +115,10 @@
 <section class="settings-section">
 <div class="row g-4">
 
-  {# â”€â”€ Left column â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+  {# ── Left column ─────────────────────────────────────────────────────────── #}
   <div class="col-lg-6">
 
-    {# â”€â”€ Planification & Cycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+    {# ── Planification & Cycle ──────────────────────────────────────────────── #}
     <form method="post">
       <input type="hidden" name="action" value="save_planning">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -258,7 +258,7 @@
       </div>
     </form>
 
-    {# â”€â”€ Mesure de vitesse â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+    {# ── Mesure de vitesse ──────────────────────────────────────────────────── #}
     <form method="post">
       <input type="hidden" name="action" value="save_switch">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -415,10 +415,10 @@
 
   </div>{# end left col #}
 
-  {# â”€â”€ Right column â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+  {# ── Right column ─────────────────────────────────────────────────────────── #}
   <div class="col-lg-6">
 
-    {# â”€â”€ Connexion VPN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+    {# ── Connexion VPN ──────────────────────────────────────────────────────── #}
     <form method="post">
       <input type="hidden" name="action" value="save_vpn">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -475,7 +475,7 @@
       </div>
     </form>
 
-    {# â”€â”€ Sidecar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+    {# ── Sidecar ────────────────────────────────────────────────────────────── #}
     <form method="post">
       <input type="hidden" name="action" value="sidecar">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
@@ -628,7 +628,7 @@
 
   <div class="col-lg-6">
 
-    {# â”€â”€ Gluetun network containers (auto-managed) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+    {# ── Gluetun network containers (auto-managed) ─────────────────────────── #}
     <div class="card p-4 mb-4">
       <h6 class="fw-bold mb-1 text-primary">
         <i class="bi bi-cloud-arrow-down-fill"></i> {{ t.set_network_containers_title }}
@@ -670,7 +670,7 @@
       </form>
     </div>
 
-    {# â”€â”€ Post-switch containers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+    {# ── Post-switch containers ────────────────────────────────────────────── #}
     <div class="card p-4 mb-4">
       <h6 class="fw-bold mb-1">
         <i class="bi bi-arrow-repeat text-primary"></i> {{ t.set_post_switch_title }}
@@ -711,7 +711,7 @@
 
   <div class="col-lg-6">
 
-    {# â”€â”€ Pause during benchmark â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+    {# ── Pause during benchmark ────────────────────────────────────────────── #}
     <div class="card p-4 border-danger">
       <h6 class="fw-bold mb-1 text-danger">
         <i class="bi bi-pause-circle-fill"></i> {{ t.set_pause_bench_title }}
@@ -759,7 +759,7 @@
 <section class="settings-section">
 <div class="settings-grid settings-admin">
 
-  {# â”€â”€ Notifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+  {# ── Notifications ─────────────────────────────────────────────────────── #}
   <div class="col-lg-6">
     <div class="card p-4 mb-4">
       <h6 class="fw-bold mb-3" style="color:#5865F2">
@@ -942,7 +942,7 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
     </div>
   </div>
 
-  {# â”€â”€ Maintenance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+  {# ── Maintenance ───────────────────────────────────────────────────────── #}
   <div class="col-lg-6">
     <div class="card p-4 mb-4">
 
@@ -1130,7 +1130,7 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 })();
 </script>
 <script>
-// â”€â”€ Shared: Docker container list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Shared: Docker container list ─────────────────────────────────────────
 let _dockerContainers       = [];
 const _savedContainers      = {{ cfg.post_switch_containers | tojson }};
 const _savedPauseContainers = {{ cfg.pause_bench_containers | tojson }};
@@ -1161,7 +1161,7 @@ function _buildContainerSelect(fieldName, selectedValue) {
   if (selectedValue && !_dockerContainers.includes(selectedValue)) {
     const opt = document.createElement('option');
     opt.value = selectedValue;
-    opt.textContent = selectedValue + ' (arrÃªtÃ©)';
+    opt.textContent = selectedValue + ' (arrêté)';
     opt.selected = true;
     sel.appendChild(opt);
   }
@@ -1228,7 +1228,7 @@ function addPostSwitchRow(value) {
   list.appendChild(row);
 }
 
-// â”€â”€ Pause-during-benchmark rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Pause-during-benchmark rows ───────────────────────────────────────────
 function addPauseBenchRow(value) {
   const list        = document.getElementById('pause-bench-list');
   const placeholder = document.getElementById('pause-bench-placeholder');
@@ -1264,7 +1264,7 @@ function addPauseBenchRow(value) {
   list.appendChild(row);
 }
 
-// â”€â”€ Post-switch drag-to-reorder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Post-switch drag-to-reorder ───────────────────────────────────────────
 (function initDragSort() {
   const list = document.getElementById('post-switch-list');
   let dragged = null;
@@ -1296,7 +1296,7 @@ fetch('{{ url_for('main.api_docker_containers') }}')
     _checkOverlap();
   });
 
-// â”€â”€ Overlap detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Overlap detection ─────────────────────────────────────────────────────
 function _checkOverlap() {
   const postSwitch = Array.from(
     document.querySelectorAll('#post-switch-list select[name="post_switch_containers"]')
@@ -1335,7 +1335,7 @@ function _checkOverlap() {
 document.getElementById('post-switch-list').addEventListener('change', _checkOverlap);
 document.getElementById('pause-bench-list').addEventListener('change', _checkOverlap);
 
-// â”€â”€ Notification test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Notification test ─────────────────────────────────────────────────────
 const _notifTestOk   = '{{ t.set_notif_test_ok }}';
 const _notifTestFail = '{{ t.set_notif_test_fail }}';
 
@@ -1379,7 +1379,7 @@ function testNotif(target) {
   });
 }
 
-// â”€â”€ Network containers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Network containers ────────────────────────────────────────────────────
 function loadNetworkContainers() {
   const loading = document.getElementById('network-containers-loading');
   const list    = document.getElementById('network-containers-list');
@@ -1422,7 +1422,7 @@ function loadNetworkContainers() {
 }
 document.addEventListener('DOMContentLoaded', loadNetworkContainers);
 
-// â”€â”€ Auto benchmark toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Auto benchmark toggle ─────────────────────────────────────────────────
 function toggleAutoBenchmark(enabled) {
   const group = document.getElementById('interval-group');
   if (group) {
@@ -1432,7 +1432,7 @@ function toggleAutoBenchmark(enabled) {
 }
 toggleAutoBenchmark(document.getElementById('auto_benchmark').checked);
 
-// â”€â”€ Quick check toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Quick check toggle ────────────────────────────────────────────────────
 function toggleQuickCheck(enabled) {
   const group = document.getElementById('quick-check-threshold-group');
   if (group) {

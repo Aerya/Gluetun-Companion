@@ -28,7 +28,7 @@
   }
 </style>
 
-{# â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ── Header ───────────────────────────────────────────────────────────────── #}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h5 class="mb-0"><i class="bi bi-hdd-network"></i> {{ t.srv_title }}</h5>
   <div class="d-flex gap-2 flex-wrap">
@@ -77,7 +77,7 @@
   </div>
 </div>
 
-{# â”€â”€ New AirVPN banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ── New AirVPN banner ────────────────────────────────────────────────────── #}
 {% if new_airvpn %}
 <div class="alert alert-info alert-dismissible fade show mb-3 d-flex align-items-center gap-2"
      id="airvpn-new-banner" role="alert">
@@ -93,7 +93,7 @@
 </div>
 {% endif %}
 
-{# â”€â”€ Hourly patterns panel (collapsible) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ── Hourly patterns panel (collapsible) ─────────────────────────────────── #}
 {% if adaptive_stats.has_enough_data %}
 <div class="collapse" id="patternsPanel">
   <div class="card mb-3 p-3">
@@ -103,12 +103,12 @@
         <div class="mt-1" style="font-size:.78rem;color:var(--muted)">
           {{ t.chart_best_hour }} :
           <strong class="text-success">{{ '%02d'|format(adaptive_stats.best_hour) }}h</strong>
-          Â· {{ adaptive_stats.hours[adaptive_stats.best_hour].avg_dl }} Mbps
-          Â· CV {{ adaptive_stats.hours[adaptive_stats.best_hour].cv_pct }}%
+          · {{ adaptive_stats.hours[adaptive_stats.best_hour].avg_dl }} Mbps
+          · CV {{ adaptive_stats.hours[adaptive_stats.best_hour].cv_pct }}%
           &nbsp;&nbsp;|&nbsp;&nbsp;
           {{ t.chart_worst_hour }} :
           <strong class="text-danger">{{ '%02d'|format(adaptive_stats.worst_hour) }}h</strong>
-          Â· {{ adaptive_stats.hours[adaptive_stats.worst_hour].avg_dl }} Mbps
+          · {{ adaptive_stats.hours[adaptive_stats.worst_hour].avg_dl }} Mbps
         </div>
       </div>
       <div class="d-flex flex-wrap gap-1">
@@ -143,7 +143,7 @@
           {%- set color = '#2dd4bf' if is_good else ('#fb7185' if is_bad else '#60a5fa') -%}
           <rect x="{{ 72 + i * 31 + 4 }}" y="{{ bar_y }}" width="22" height="{{ bar_h }}"
                 fill="{{ color }}" opacity="0.86" rx="3">
-            <title>{{ '%02d'|format(i) }}h â€” {{ d.avg_dl }} Mbps Â· CV {{ d.cv_pct }}% Â· {{ d.n }}s</title>
+            <title>{{ '%02d'|format(i) }}h — {{ d.avg_dl }} Mbps · CV {{ d.cv_pct }}% · {{ d.n }}s</title>
           </rect>
           <text x="{{ 72 + i * 31 + 15 }}" y="10" text-anchor="middle"
                 font-size="5.8" fill="currentColor" opacity="0.64">{{ d.avg_dl }}</text>
@@ -161,7 +161,7 @@
 </div>
 {% endif %}
 
-{# â”€â”€ Filters + sort bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ── Filters + sort bar ──────────────────────────────────────────────────── #}
 <form method="post" action="{{ url_for('main.api_set_profile') }}" class="mb-3 d-flex align-items-center gap-2 flex-wrap">
   <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
   <small class="text-muted fw-semibold text-nowrap">
@@ -224,14 +224,14 @@
   </div>
   {% if q or type_filter or from_date or to_date or sort != 'avg_dl' %}
   <div class="col-auto">
-    <a href="{{ url_for('main.servers') }}" class="btn btn-sm btn-outline-secondary">âœ•</a>
+    <a href="{{ url_for('main.servers') }}" class="btn btn-sm btn-outline-secondary">✕</a>
   </div>
   {% endif %}
 </form>
 
-{# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
-{# VUE TABLEAU â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
-{# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ────────────────────────────────────────────────────────────────────────── #}
+{# VUE TABLEAU ──────────────────────────────────────────────────────────── #}
+{# ────────────────────────────────────────────────────────────────────────── #}
 <div id="view-table">
   <div class="card">
     <div class="table-responsive">
@@ -296,14 +296,14 @@
               <span class="spinner-border spinner-border-sm text-muted opacity-50" role="status"></span>
             </td>
             <td class="srv-col-users" data-srv="{{ s.name }}">
-              <span class="text-muted">â€”</span>
+              <span class="text-muted">—</span>
             </td>
             {% else %}
-            <td><span class="text-muted">â€”</span></td>
-            <td><span class="text-muted">â€”</span></td>
+            <td><span class="text-muted">—</span></td>
+            <td><span class="text-muted">—</span></td>
             {% endif %}
             <td>
-              <small class="text-muted font-monospace">{{ s.last_ipv4 or 'â€”' }}
+              <small class="text-muted font-monospace">{{ s.last_ipv4 or '—' }}
               {% if s.last_ipv6 %}<br><span style="font-size:.7rem">{{ s.last_ipv6 }}</span>{% endif %}
               </small>
             </td>
@@ -311,18 +311,18 @@
               {% if s.avg_dl %}
                 {% set cls = 'speed-good' if s.avg_dl > 50 else ('speed-ok' if s.avg_dl > 15 else 'speed-bad') %}
                 <span class="fw-bold {{ cls }}">{{ s.avg_dl }} Mbps</span>
-              {% else %}<span class="text-muted">â€”</span>{% endif %}
+              {% else %}<span class="text-muted">—</span>{% endif %}
             </td>
             <td>
               {% if s.avg_ul %}
                 <span class="text-info">{{ s.avg_ul }} Mbps</span>
-              {% else %}<span class="text-muted">â€”</span>{% endif %}
+              {% else %}<span class="text-muted">—</span>{% endif %}
             </td>
             <td>
-              <small>{{ (s.max_dl|string + ' Mbps') if s.max_dl else 'â€”' }}</small>
+              <small>{{ (s.max_dl|string + ' Mbps') if s.max_dl else '—' }}</small>
             </td>
             <td>
-              <small>{{ (s.avg_lat|int|string + ' ms') if s.avg_lat else 'â€”' }}</small>
+              <small>{{ (s.avg_lat|int|string + ' ms') if s.avg_lat else '—' }}</small>
             </td>
             <td>
               <small class="text-muted">{{ s.ok_tests }}/{{ s.total_tests }}</small>
@@ -332,7 +332,7 @@
               {%- if _conf.nb < 7 -%}
                 <span class="text-muted" style="font-size:.75rem"
                       {% if _conf.nb > 0 %}data-bs-toggle="tooltip" data-bs-placement="top"
-                      title="{{ _conf.nb }}/7 {{ t.conf_min_tests_hint }}"{% endif %}>â€”</span>
+                      title="{{ _conf.nb }}/7 {{ t.conf_min_tests_hint }}"{% endif %}>—</span>
               {%- else -%}
                 {%- if _conf.level == 'HIGH' -%}{%- set _conf_cls = 'text-success' -%}{%- set _conf_lvl = t.conf_level_high -%}
                 {%- elif _conf.level == 'MEDIUM' -%}{%- set _conf_cls = 'text-warning' -%}{%- set _conf_lvl = t.conf_level_medium -%}
@@ -342,13 +342,13 @@
                 {%- if _conf.cv_pct is not none -%}{%- set _tip_parts = _tip_parts + [t.conf_instability ~ ' ' ~ _conf.cv_pct|string ~ '%'] -%}{%- endif -%}
                 {%- if _conf.consec > 0 -%}{%- set _tip_parts = _tip_parts + [_conf.consec|string ~ ' ' ~ t.conf_failures] -%}{%- endif -%}
                 <i class="bi bi-circle-fill {{ _conf_cls }}" style="font-size:.65rem;cursor:help"
-                   data-bs-toggle="tooltip" data-bs-placement="top" title="{{ _tip_parts | join(' Â· ') }}"></i>
+                   data-bs-toggle="tooltip" data-bs-placement="top" title="{{ _tip_parts | join(' · ') }}"></i>
               {%- endif -%}
             </td>
             <td class="text-center">
               {%- set _stab = stability.get(s.name, {}) -%}
               {%- if _stab.n == 0 or _stab.avg_jitter is none -%}
-                <span class="text-muted" style="font-size:.75rem">â€”</span>
+                <span class="text-muted" style="font-size:.75rem">—</span>
               {%- else -%}
                 {%- if _stab.avg_jitter < 15 and (_stab.avg_loss is none or _stab.avg_loss < 1) -%}
                   {%- set _stab_cls = 'text-success' -%}{%- set _stab_lbl = t.stab_tooltip_good -%}
@@ -361,7 +361,7 @@
                 {%- if _stab.avg_loss is not none -%}{%- set _stab_tip = _stab_tip + [t.stab_loss ~ ' ' ~ _stab.avg_loss|string ~ '%'] -%}{%- endif -%}
                 {%- if _stab.avg_dns is not none -%}{%- set _stab_tip = _stab_tip + [t.stab_dns ~ ' ' ~ _stab.avg_dns|string ~ ' ms'] -%}{%- endif -%}
                 <i class="bi bi-circle-fill {{ _stab_cls }}" style="font-size:.65rem;cursor:help"
-                   data-bs-toggle="tooltip" data-bs-placement="top" title="{{ _stab_tip | join(' Â· ') }}"></i>
+                   data-bs-toggle="tooltip" data-bs-placement="top" title="{{ _stab_tip | join(' · ') }}"></i>
               {%- endif -%}
             </td>
             <td>
@@ -369,19 +369,19 @@
               {%- if _stab.n and _stab.avg_jitter is not none -%}
                 {%- set _jcls = 'text-success' if _stab.avg_jitter < 15 else ('text-warning' if _stab.avg_jitter < 50 else 'text-danger') -%}
                 <small class="{{ _jcls }}">{{ '%.1f'|format(_stab.avg_jitter) }} ms</small>
-              {%- else -%}<span class="text-muted">â€”</span>{%- endif -%}
+              {%- else -%}<span class="text-muted">—</span>{%- endif -%}
             </td>
             <td>
               {%- if _stab.n and _stab.avg_loss is not none -%}
                 {%- set _lcls = 'text-success' if _stab.avg_loss < 1 else ('text-warning' if _stab.avg_loss < 5 else 'text-danger') -%}
                 <small class="{{ _lcls }}">{{ '%.1f'|format(_stab.avg_loss) }}%</small>
-              {%- else -%}<span class="text-muted">â€”</span>{%- endif -%}
+              {%- else -%}<span class="text-muted">—</span>{%- endif -%}
             </td>
             <td>
               {%- if _stab.n and _stab.avg_dns is not none -%}
                 {%- set _dcls = 'text-success' if _stab.avg_dns < 50 else ('text-warning' if _stab.avg_dns < 150 else 'text-danger') -%}
                 <small class="{{ _dcls }}">{{ '%.0f'|format(_stab.avg_dns) }} ms</small>
-              {%- else -%}<span class="text-muted">â€”</span>{%- endif -%}
+              {%- else -%}<span class="text-muted">—</span>{%- endif -%}
             </td>
             <td>
               <small class="text-muted">{{ (s.last_tested | localtime | truncate(16, True, '')) if s.last_tested else t.cmn_never }}</small>
@@ -432,9 +432,9 @@
   </div>
 </div>
 
-{# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
-{# VUE CARTES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
-{# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ────────────────────────────────────────────────────────────────────────── #}
+{# VUE CARTES ──────────────────────────────────────────────────────────── #}
+{# ────────────────────────────────────────────────────────────────────────── #}
 <div id="view-cards" class="d-none">
   {% if servers %}
   <div class="row g-3">
@@ -466,17 +466,17 @@
             </div>
           </div>
 
-          {# Speed â€” big number #}
+          {# Speed — big number #}
           {% if s.avg_dl %}
             {% set cls = 'speed-good' if s.avg_dl > 50 else ('speed-ok' if s.avg_dl > 15 else 'speed-bad') %}
             <div class="fw-bold {{ cls }}" style="font-size:1.6rem;line-height:1">
-              {{ s.avg_dl }} <span style="font-size:.75rem;font-weight:400">Mbps â†“</span>
+              {{ s.avg_dl }} <span style="font-size:.75rem;font-weight:400">Mbps ↓</span>
             </div>
             {% if s.max_dl %}
             <div class="text-muted" style="font-size:.75rem">max {{ s.max_dl }} Mbps</div>
             {% endif %}
           {% else %}
-            <div class="text-muted" style="font-size:1.4rem">â€”</div>
+            <div class="text-muted" style="font-size:1.4rem">—</div>
           {% endif %}
 
           {# Confidence + Stability badges #}
@@ -508,7 +508,7 @@
           <div class="row g-1 text-center mt-1" style="font-size:.75rem">
             <div class="col-4">
               <div class="text-muted">Latence</div>
-              <div>{{ (s.avg_lat|int|string + ' ms') if s.avg_lat else 'â€”' }}</div>
+              <div>{{ (s.avg_lat|int|string + ' ms') if s.avg_lat else '—' }}</div>
             </div>
             <div class="col-4">
               <div class="text-muted">Tests</div>
@@ -520,7 +520,7 @@
                 {%- if _stab.n and _stab.avg_jitter is not none -%}
                   {%- set _jcls = 'text-success' if _stab.avg_jitter < 15 else ('text-warning' if _stab.avg_jitter < 50 else 'text-danger') -%}
                   <span class="{{ _jcls }}">{{ '%.0f'|format(_stab.avg_jitter) }}ms</span>
-                {%- else -%}â€”{%- endif -%}
+                {%- else -%}—{%- endif -%}
               </div>
             </div>
           </div>
@@ -603,7 +603,7 @@
   {% endif %}
 </div>
 
-{# â”€â”€ AirVPN server picker modal (identical to /servers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ── AirVPN server picker modal (identical to /servers) ──────────────────── #}
 <div class="modal fade" id="discoverModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -669,7 +669,7 @@
             {{ t.srv_airvpn_modal_subtitle }}
             <a href="https://airvpn.org/?referred_by=483746" target="_blank" rel="noreferrer noopener"
                class="text-info">airvpn.org</a>
-            <span class="text-muted">Â· cache 5 min</span>
+            <span class="text-muted">· cache 5 min</span>
           </small>
         </div>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -712,11 +712,11 @@
                 <thead class="sticky-top" style="z-index:1">
                   <tr>
                     <th class="ps-3" style="width:36px"></th>
-                    <th class="airvpn-sort-th" data-col="name" style="cursor:pointer;user-select:none">{{ t.srv_airvpn_col_server }} <span class="airvpn-sort-icon" data-col="name">â‡…</span></th>
-                    <th class="airvpn-sort-th" data-col="country" style="cursor:pointer;user-select:none">{{ t.filter_label_country }} <span class="airvpn-sort-icon" data-col="country">â‡…</span></th>
+                    <th class="airvpn-sort-th" data-col="name" style="cursor:pointer;user-select:none">{{ t.srv_airvpn_col_server }} <span class="airvpn-sort-icon" data-col="name">⇅</span></th>
+                    <th class="airvpn-sort-th" data-col="country" style="cursor:pointer;user-select:none">{{ t.filter_label_country }} <span class="airvpn-sort-icon" data-col="country">⇅</span></th>
                     <th>{{ t.srv_airvpn_col_location }}</th>
-                    <th class="airvpn-sort-th" data-col="load" style="cursor:pointer;user-select:none;min-width:130px">{{ t.srv_airvpn_col_load }} <span class="airvpn-sort-icon" data-col="load">â‡…</span></th>
-                    <th class="airvpn-sort-th" data-col="users" style="cursor:pointer;user-select:none">{{ t.srv_airvpn_col_users }} <span class="airvpn-sort-icon" data-col="users">â‡…</span></th>
+                    <th class="airvpn-sort-th" data-col="load" style="cursor:pointer;user-select:none;min-width:130px">{{ t.srv_airvpn_col_load }} <span class="airvpn-sort-icon" data-col="load">⇅</span></th>
+                    <th class="airvpn-sort-th" data-col="users" style="cursor:pointer;user-select:none">{{ t.srv_airvpn_col_users }} <span class="airvpn-sort-icon" data-col="users">⇅</span></th>
                     <th title="{{ t.srv_airvpn_health_hint }}" style="cursor:help"><i class="bi bi-info-circle text-muted" style="font-size:.8rem"></i></th>
                   </tr>
                 </thead>
@@ -771,7 +771,7 @@
 
 {% block scripts %}
 <script>
-// â”€â”€ View toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── View toggle ───────────────────────────────────────────────────────────
 function setView(v) {
   const isCards = v === 'cards';
   document.getElementById('view-table').classList.toggle('d-none', isCards);
@@ -786,14 +786,14 @@ function setView(v) {
   if (saved === 'cards') setView('cards');
 })();
 
-// â”€â”€ HTML escape helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── HTML escape helper ────────────────────────────────────────────────────
 function _esc(str) {
   return String(str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// â”€â”€ AirVPN picker (same as /servers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── AirVPN picker (same as /servers) ─────────────────────────────────────
 let _discoverData = [];
 function openDiscoverModal() {
   const modal = new bootstrap.Modal(document.getElementById('discoverModal'));
@@ -938,7 +938,7 @@ function _sortedServers() {
 function _applySortUI() {
   document.querySelectorAll('.airvpn-sort-icon').forEach(el => {
     const col = el.dataset.col;
-    el.textContent = col === _sortCol ? (_sortDir === 1 ? 'â†‘' : 'â†“') : 'â‡…';
+    el.textContent = col === _sortCol ? (_sortDir === 1 ? '→' : '↓') : '⇅';
     el.style.color  = col === _sortCol ? 'var(--bs-success)' : '';
   });
 }
@@ -1115,7 +1115,7 @@ document.getElementById('airvpn-search').addEventListener('input', function(){
   document.querySelectorAll('#airvpn-countries-list details').forEach(d=>{const ctry=d.dataset.country||'';const hasV=q?(ctry.includes(q)||[...d.querySelectorAll('.country-server-row')].some(r=>!r.classList.contains('d-none'))):true;d.classList.toggle('d-none',!hasV);if(q&&hasV)d.open=true;else if(!q)d.open=false;});
 });
 
-// â”€â”€ AirVPN live stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── AirVPN live stats ─────────────────────────────────────────────────────
 let _airvpnStatsFirstLoad = true;
 function _refreshAirvpnStats() {
   fetch('{{ url_for("main.api_airvpn_servers") }}')
@@ -1125,13 +1125,13 @@ function _refreshAirvpnStats() {
       document.querySelectorAll('td.srv-col-load[data-srv]').forEach(td=>{
         const name=td.dataset.srv; const s=map.get(name);
         const utd=document.querySelector(`td.srv-col-users[data-srv="${CSS.escape(name)}"]`);
-        if(!s){td.innerHTML='<span class="text-muted">â€”</span>';if(utd)utd.innerHTML='<span class="text-muted">â€”</span>';return;}
+        if(!s){td.innerHTML='<span class="text-muted">—</span>';if(utd)utd.innerHTML='<span class="text-muted">—</span>';return;}
         td.innerHTML=_loadBar(s.load)+(s.health!=='ok'?' <i class="bi bi-exclamation-triangle-fill text-warning ms-1" style="font-size:.75rem"></i>':'');
         if(utd)utd.innerHTML=`<small class="text-muted">${s.users}</small>`;
       });
       _airvpnStatsFirstLoad=false;
     })
-    .catch(()=>{if(_airvpnStatsFirstLoad){document.querySelectorAll('td.srv-col-load[data-srv]').forEach(td=>td.innerHTML='<span class="text-muted">â€”</span>');_airvpnStatsFirstLoad=false;}});
+    .catch(()=>{if(_airvpnStatsFirstLoad){document.querySelectorAll('td.srv-col-load[data-srv]').forEach(td=>td.innerHTML='<span class="text-muted">—</span>');_airvpnStatsFirstLoad=false;}});
 }
 _refreshAirvpnStats();
 setInterval(_refreshAirvpnStats, 5*60*1000);

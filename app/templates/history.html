@@ -7,7 +7,7 @@
   .method-qc { background: #8b5cf6; color: #fff; }
 </style>
 
-{# â”€â”€ Header + Patterns toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ── Header + Patterns toggle ──────────────────────────────────────────────── #}
 <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
   <h5 class="mb-0"><i class="bi bi-graph-up"></i> {{ t.hist_title }}</h5>
   <div class="ms-auto d-flex gap-2">
@@ -29,7 +29,7 @@
   </div>
 </div>
 
-{# â”€â”€ Inline Patterns panel (Bootstrap Collapse) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ── Inline Patterns panel (Bootstrap Collapse) ──────────────────────────── #}
 {% if adaptive_stats.has_enough_data %}
 <div class="collapse {% if server_filter %}show{% endif %}" id="patternsPanel">
   <div class="card mb-4 p-3">
@@ -39,8 +39,8 @@
         <div class="mt-1" style="font-size:.78rem;color:var(--muted)">
           {{ t.chart_best_window }} :
           <strong class="text-success">{{ '%02d'|format(adaptive_stats.best_hour) }}h</strong>
-          ({{ adaptive_stats.hours[adaptive_stats.best_hour].avg_dl }} Mbps Â· CV {{ adaptive_stats.hours[adaptive_stats.best_hour].cv_pct }}%)
-          &nbsp;Â·&nbsp;
+          ({{ adaptive_stats.hours[adaptive_stats.best_hour].avg_dl }} Mbps · CV {{ adaptive_stats.hours[adaptive_stats.best_hour].cv_pct }}%)
+          &nbsp;·&nbsp;
           {{ t.chart_worst }} :
           <strong class="text-danger">{{ '%02d'|format(adaptive_stats.worst_hour) }}h</strong>
           ({{ adaptive_stats.hours[adaptive_stats.worst_hour].avg_dl }} Mbps)
@@ -75,7 +75,7 @@
             {%- set color = '#2dd4bf' if is_good else ('#fb7185' if is_bad else '#60a5fa') -%}
             <rect x="{{ 72 + i * 31 + 4 }}" y="{{ bar_y }}" width="22" height="{{ bar_h }}"
                   fill="{{ color }}" opacity="0.86" rx="3">
-              <title>{{ '%02d'|format(i) }}h â€” {{ d.avg_dl }} Mbps Â· CV {{ d.cv_pct }}% Â· {{ d.n }}s</title>
+              <title>{{ '%02d'|format(i) }}h — {{ d.avg_dl }} Mbps · CV {{ d.cv_pct }}% · {{ d.n }}s</title>
             </rect>
             <text x="{{ 72 + i * 31 + 15 }}" y="10" text-anchor="middle"
                   font-size="5.8" fill="currentColor" opacity="0.64">{{ d.avg_dl }}</text>
@@ -97,22 +97,22 @@
 {% endif %}
 
 {% if server_filter and timeline_data %}
-{# â”€â”€ Timeline chart (server filtered) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ── Timeline chart (server filtered) ─────────────────────────────────────── #}
 <div class="card mb-4 p-3">
   <div class="d-flex justify-content-between align-items-center mb-2">
     <span class="fw-semibold">
-      <i class="bi bi-graph-up text-success"></i> {{ t.hist_timeline_title }} â€” <code>{{ server_filter }}</code>
+      <i class="bi bi-graph-up text-success"></i> {{ t.hist_timeline_title }} — <code>{{ server_filter }}</code>
     </span>
     <small class="text-muted">{{ timeline_data | length }} {{ t.hist_tests }}</small>
   </div>
-  {# hauteur rÃ©duite quand le panneau patterns est visible (JS l'ajuste via data-attr) #}
+  {# hauteur réduite quand le panneau patterns est visible (JS l'ajuste via data-attr) #}
   <div id="timelineWrap" style="position:relative; height:200px">
     <canvas id="chartTimeline"></canvas>
   </div>
 </div>
 
 {% elif per_server %}
-{# â”€â”€ Floating bar chart (all servers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ── Floating bar chart (all servers) ─────────────────────────────────────── #}
 <div class="row g-3 mb-4">
   {% for s in per_server[:6] %}
   <div class="col-6 col-md-4 col-xl-2">
@@ -120,8 +120,8 @@
       <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ s.server_name }}">{{ s.server_name }}</div>
       {% set cls = 'speed-good' if s.avg_dl > 50 else ('speed-ok' if s.avg_dl > 15 else 'speed-bad') %}
       <div class="fw-bold {{ cls }}" style="font-size:1.25rem">{{ s.avg_dl }} Mbps</div>
-      <div class="text-muted" style="font-size:.75rem">{{ t.hist_avg }} Â· {{ s.cnt }} {{ t.hist_tests }}</div>
-      <div class="text-muted" style="font-size:.7rem">â†“ {{ s.min_dl }} &nbsp;â†‘ {{ s.max_dl }} Mbps</div>
+      <div class="text-muted" style="font-size:.75rem">{{ t.hist_avg }} · {{ s.cnt }} {{ t.hist_tests }}</div>
+      <div class="text-muted" style="font-size:.7rem">↓ {{ s.min_dl }} &nbsp;→ {{ s.max_dl }} Mbps</div>
     </div>
   </div>
   {% endfor %}
@@ -137,7 +137,7 @@
 </div>
 {% endif %}
 
-{# â”€â”€ Filters + sort bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ── Filters + sort bar ──────────────────────────────────────────────────── #}
 <form method="get" class="row g-2 mb-3 align-items-end">
   <input type="hidden" name="page" value="1">
   <div class="col-auto">
@@ -160,8 +160,8 @@
     <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
       <option value="date_desc"  {{ 'selected' if sort == 'date_desc'  }}>{{ t.hist_sort_date_desc }}</option>
       <option value="date_asc"   {{ 'selected' if sort == 'date_asc'   }}>{{ t.hist_sort_date_asc }}</option>
-      <option value="server_asc" {{ 'selected' if sort == 'server_asc' }}>{{ t.hist_sort_server }} Aâ†’Z</option>
-      <option value="server_desc"{{ 'selected' if sort == 'server_desc'}}>{{ t.hist_sort_server }} Zâ†’A</option>
+      <option value="server_asc" {{ ‘selected’ if sort == ‘server_asc’ }}>{{ t.hist_sort_server }} A→Z</option>
+      <option value="server_desc"{{ ‘selected’ if sort == ‘server_desc’}}>{{ t.hist_sort_server }} Z→A</option>
       <option value="dl_desc"    {{ 'selected' if sort == 'dl_desc'    }}>{{ t.hist_sort_dl_desc }}</option>
       <option value="dl_asc"     {{ 'selected' if sort == 'dl_asc'     }}>{{ t.hist_sort_dl_asc }}</option>
     </select>
@@ -197,12 +197,12 @@
   </div>
   {% if server_filter or method_filter or sort != 'date_desc' or from_date or to_date or show_failed %}
   <div class="col-auto">
-    <a href="{{ url_for('main.history') }}" class="btn btn-sm btn-outline-secondary">âœ•</a>
+    <a href="{{ url_for('main.history') }}" class="btn btn-sm btn-outline-secondary">✕</a>
   </div>
   {% endif %}
 </form>
 
-{# â”€â”€ Results table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+{# ── Results table ──────────────────────────────────────────────────────── #}
 <div class="card">
   <div class="card-header py-2 d-flex justify-content-between align-items-center">
     <span><i class="bi bi-table"></i> {{ t.hist_all_tests }}
@@ -264,7 +264,7 @@
               {%- endif -%}
               <i class="bi bi-circle-fill {{ _conf_cls }}"
                  style="font-size:.55rem;cursor:help;vertical-align:middle;margin-left:.2rem"
-                 data-bs-toggle="tooltip" title="{{ _tip_parts | join(' Â· ') }}"></i>
+                 data-bs-toggle="tooltip" title="{{ _tip_parts | join(' · ') }}"></i>
             {%- endif -%}
           </td>
           <td>
@@ -278,16 +278,16 @@
                 {% if r.dl_iperf3 %}<span class="ms-1">iPerf3 {{ '%.0f'|format(r.dl_iperf3) }}</span>{% endif %}
               </div>
               {% endif %}
-            {% else %}â€”{% endif %}
+            {% else %}—{% endif %}
           </td>
           <td>
             {% if r.upload_mbps %}
               <span class="text-info">{{ '%.1f'|format(r.upload_mbps) }} Mbps</span>
-            {% else %}â€”{% endif %}
+            {% else %}—{% endif %}
           </td>
-          <td>{{ ('%.0f ms'|format(r.latency_ms)) if r.latency_ms else 'â€”' }}</td>
+          <td>{{ ('%.0f ms'|format(r.latency_ms)) if r.latency_ms else '—' }}</td>
           <td>
-            <small class="text-muted font-monospace">{{ r.public_ip or 'â€”' }}
+            <small class="text-muted font-monospace">{{ r.public_ip or '—' }}
             {% if r.public_ipv6 %}<br><span style="font-size:.7rem">{{ r.public_ipv6 }}</span>{% endif %}
             </small>
           </td>
@@ -297,8 +297,8 @@
               <span class="{{ jcls }}">{{ '%.1f'|format(r.jitter_ms) }} ms</span>
             {% elif r.test_method == 'proxy_qc' %}
               <span class="text-muted" style="cursor:help"
-                    data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">â€”</span>
-            {% else %}â€”{% endif %}
+                    data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">—</span>
+            {% else %}—{% endif %}
           </td>
           <td>
             {% if r.packet_loss_pct is not none %}
@@ -306,8 +306,8 @@
               <span class="{{ lcls }}">{{ '%.1f'|format(r.packet_loss_pct) }}%</span>
             {% elif r.test_method == 'proxy_qc' %}
               <span class="text-muted" style="cursor:help"
-                    data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">â€”</span>
-            {% else %}â€”{% endif %}
+                    data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">—</span>
+            {% else %}—{% endif %}
           </td>
           <td>
             {% if r.dns_latency_ms is not none %}
@@ -315,11 +315,11 @@
               <span class="{{ dcls }}">{{ '%.0f'|format(r.dns_latency_ms) }} ms</span>
             {% elif r.test_method == 'proxy_qc' %}
               <span class="text-muted" style="cursor:help"
-                    data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">â€”</span>
+                    data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">—</span>
             {% elif r.test_method != 'sidecar' %}
               <span class="text-muted" style="cursor:help"
-                    data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}">â€”</span>
-            {% else %}â€”{% endif %}
+                    data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}">—</span>
+            {% else %}—{% endif %}
           </td>
           <td>
             {% if r.test_method == 'sidecar' %}
@@ -368,7 +368,7 @@
 <nav class="mt-3 d-flex justify-content-center">
   <ul class="pagination pagination-sm mb-0">
     <li class="page-item {{ 'disabled' if page == 1 }}">
-      <a class="page-link" href="{{ url_for('main.history', page=page-1, **pg_args) }}">â€¹</a>
+      <a class="page-link" href="{{ url_for('main.history', page=page-1, **pg_args) }}">‹</a>
     </li>
     {% for p in range(1, pages+1) %}
       {% if p == page or p == 1 or p == pages or (p >= page-2 and p <= page+2) %}
@@ -376,11 +376,11 @@
           <a class="page-link" href="{{ url_for('main.history', page=p, **pg_args) }}">{{ p }}</a>
         </li>
       {% elif p == page-3 or p == page+3 %}
-        <li class="page-item disabled"><span class="page-link">â€¦</span></li>
+        <li class="page-item disabled"><span class="page-link">…</span></li>
       {% endif %}
     {% endfor %}
     <li class="page-item {{ 'disabled' if page == pages }}">
-      <a class="page-link" href="{{ url_for('main.history', page=page+1, **pg_args) }}">â€º</a>
+      <a class="page-link" href="{{ url_for('main.history', page=page+1, **pg_args) }}">›</a>
     </li>
   </ul>
 </nav>
@@ -399,7 +399,7 @@ const _chartUl = '#fbbf24';
 const _chartRange = 'rgba(96,165,250,.22)';
 const _chartRangeBorder = 'rgba(96,165,250,.58)';
 
-// â”€â”€ Adaptive timeline height based on patterns panel state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Adaptive timeline height based on patterns panel state ────────────────
 (function() {
   const panel  = document.getElementById('patternsPanel');
   const wrap   = document.getElementById('timelineWrap');
@@ -452,7 +452,7 @@ new Chart(document.getElementById('chartTimeline'), {
     },
     plugins: {
       legend: { position: 'bottom', labels: { color: _cLabel, boxWidth: 12, padding: 12 } },
-      tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ' : ' + (ctx.parsed.y?.toFixed(1) ?? 'â€”') + ' Mbps' } },
+      tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ' : ' + (ctx.parsed.y?.toFixed(1) ?? '—') + ' Mbps' } },
     },
   },
 });
@@ -507,7 +507,7 @@ new Chart(document.getElementById('chartAvg'), {
           label: ctx => {
             if (ctx.datasetIndex === 0) {
               const v = ctx.raw;
-              return ` Plage DL : ${Array.isArray(v) ? v[0] + ' â†’ ' + v[1] : v} Mbps`;
+              return ` Plage DL : ${Array.isArray(v) ? v[0] + ‘ → ‘ + v[1] : v} Mbps`;
             }
             return ` ${ctx.dataset.label} : ${ctx.parsed.x.toFixed(1)} Mbps`;
           }
