@@ -160,8 +160,8 @@
     <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
       <option value="date_desc"  {{ 'selected' if sort == 'date_desc'  }}>{{ t.hist_sort_date_desc }}</option>
       <option value="date_asc"   {{ 'selected' if sort == 'date_asc'   }}>{{ t.hist_sort_date_asc }}</option>
-      <option value="server_asc" {{ ‘selected’ if sort == ‘server_asc’ }}>{{ t.hist_sort_server }} A→Z</option>
-      <option value="server_desc"{{ ‘selected’ if sort == ‘server_desc’}}>{{ t.hist_sort_server }} Z→A</option>
+      <option value="server_asc" {{ 'selected' if sort == 'server_asc' }}>{{ t.hist_sort_server }} A→Z</option>
+      <option value="server_desc"{{ 'selected' if sort == 'server_desc'}}>{{ t.hist_sort_server }} Z→A</option>
       <option value="dl_desc"    {{ 'selected' if sort == 'dl_desc'    }}>{{ t.hist_sort_dl_desc }}</option>
       <option value="dl_asc"     {{ 'selected' if sort == 'dl_asc'     }}>{{ t.hist_sort_dl_asc }}</option>
     </select>
@@ -507,7 +507,7 @@ new Chart(document.getElementById('chartAvg'), {
           label: ctx => {
             if (ctx.datasetIndex === 0) {
               const v = ctx.raw;
-              return ` Plage DL : ${Array.isArray(v) ? v[0] + ‘ → ‘ + v[1] : v} Mbps`;
+              return ` Plage DL : ${Array.isArray(v) ? v[0] + ' → ' + v[1] : v} Mbps`;
             }
             return ` ${ctx.dataset.label} : ${ctx.parsed.x.toFixed(1)} Mbps`;
           }
