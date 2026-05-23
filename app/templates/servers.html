@@ -213,6 +213,10 @@
   <div class="text-muted mt-1" style="font-size:.75rem">
     <i class="bi bi-info-circle text-info me-1"></i>{{ t.srv_profile_info }}
   </div>
+  <div id="profileMonoNote" class="d-none mt-1" style="font-size:.73rem">
+    <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+    <span class="text-warning">{{ t.srv_profile_mono }}</span>
+  </div>
 </div>
 
 <form method="get" class="row g-2 mb-3 align-items-end">
@@ -319,7 +323,7 @@
         <tbody>
           {% for s in servers %}
           {% set is_active = active_server and s.name == active_server %}
-          <tr class="{{ '' if s.enabled else 'opacity-50' }}"
+          <tr class="{{ '' if s.enabled else 'opacity-50' }}" data-srv="{{ s.name }}"
               {% if is_active %}style="border-left:3px solid var(--bs-success)"{% endif %}>
             <td>
               <code>{{ s.name }}</code>
@@ -327,7 +331,7 @@
               <span class="badge bg-success ms-1" style="font-size:.7rem">{{ t.srv_active_badge }}</span>
               {% endif %}
               {% if profile_best and s.name == profile_best %}
-              <span class="ms-1 text-warning" title="{{ t.srv_profile_best }}"><i class="bi bi-trophy-fill"></i></span>
+              <span class="ms-1 text-warning profile-trophy" title="{{ t.srv_profile_best }}"><i class="bi bi-trophy-fill"></i></span>
               {% elif not s.enabled %}
               <span class="badge bg-secondary ms-1" style="font-size:.7rem">OFF</span>
               {% endif %}
@@ -486,7 +490,7 @@
     {% set is_active = active_server and s.name == active_server %}
     {%- set _conf  = confidence.get(s.name, {'level': 'LOW', 'nb': 0, 'cv_pct': None, 'consec': 0}) -%}
     {%- set _stab  = stability.get(s.name, {}) -%}
-    <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+    <div class="col-12 col-sm-6 col-lg-4 col-xl-3" data-srv="{{ s.name }}">
       <div class="card h-100 {{ '' if s.enabled else 'opacity-50' }}"
            style="{{ 'border-left:3px solid var(--bs-success)' if is_active else '' }}">
         <div class="card-body p-3">
@@ -501,7 +505,7 @@
                 <span class="badge bg-success" style="font-size:.65rem">{{ t.srv_active_badge }}</span>
               {% endif %}
               {% if profile_best and s.name == profile_best %}
-                <span class="badge bg-warning text-dark" style="font-size:.65rem" title="{{ t.srv_profile_best }}">
+                <span class="badge bg-warning text-dark profile-trophy" style="font-size:.65rem" title="{{ t.srv_profile_best }}">
                   <i class="bi bi-trophy-fill"></i>
                 </span>
               {% elif not s.enabled %}
@@ -827,17 +831,81 @@
 
 {% block scripts %}
 <script>
-document.querySelectorAll('#profilePreview [data-profile]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#profilePreview [data-profile]').forEach(other => {
-      other.classList.toggle('btn-success', other === btn);
-      other.classList.toggle('btn-outline-secondary', other !== btn);
+// ── Profile switcher ─────────────────────────────────────────────────────
+(function() {
+  const _tBest   = {{ t.srv_profile_best | tojson }};
+  const _csrfTok = {{ csrf_token() | tojson }};
+  const _setUrl  = {{ url_for('main.api_set_profile') | tojson }};
+
+  // Detect mono-metric situation (all profiles recommend same server)
+  const allBests = [...document.querySelectorAll('#profilePreview [data-profile]')]
+                     .map(b => b.dataset.best).filter(Boolean);
+  const uniqueBests = new Set(allBests);
+  const isMono = uniqueBests.size === 1 && allBests.length > 1;
+  if (isMono) {
+    const note = document.getElementById('profileMonoNote');
+    if (note) note.classList.remove('d-none');
+  }
+
+  function _moveTrophy(best, profileKey) {
+    // Remove all existing trophies injected by JS or server
+    document.querySelectorAll('.profile-trophy').forEach(el => el.remove());
+
+    if (!best || profileKey === 'balanced') return;
+
+    // Table view trophy
+    const row = document.querySelector('#view-table tr[data-srv="' + CSS.escape(best) + '"]');
+    if (row) {
+      const td = row.querySelector('td:first-child');
+      if (td) {
+        const sp = document.createElement('span');
+        sp.className = 'ms-1 text-warning profile-trophy';
+        sp.title = _tBest;
+        sp.innerHTML = '<i class="bi bi-trophy-fill"></i>';
+        td.appendChild(sp);
+      }
+    }
+
+    // Card view trophy
+    const col = document.querySelector('#view-cards [data-srv="' + CSS.escape(best) + '"] .d-flex.gap-1');
+    if (col) {
+      const sp = document.createElement('span');
+      sp.className = 'badge bg-warning text-dark profile-trophy';
+      sp.style.fontSize = '.65rem';
+      sp.title = _tBest;
+      sp.innerHTML = '<i class="bi bi-trophy-fill"></i>';
+      col.appendChild(sp);
+    }
+  }
+
+  document.querySelectorAll('#profilePreview [data-profile]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pk   = btn.dataset.profile;
+      const best = btn.dataset.best || '';
+
+      // Update button styles
+      document.querySelectorAll('#profilePreview [data-profile]').forEach(other => {
+        other.classList.toggle('btn-success', other === btn);
+        other.classList.toggle('btn-outline-secondary', other !== btn);
+      });
+
+      // Update header text
+      const target = document.getElementById('profileBestName');
+      if (target) target.textContent = best || '—';
+
+      // Move trophy in table + cards
+      _moveTrophy(best, pk);
+
+      // Persist preference (best-effort AJAX, no page reload)
+      fetch(_setUrl, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: '_csrf_token=' + encodeURIComponent(_csrfTok)
+             + '&active_profile=' + encodeURIComponent(pk),
+      }).catch(() => {});
     });
-    const best = btn.dataset.best || '-';
-    const target = document.getElementById('profileBestName');
-    if (target) target.textContent = best;
   });
-});
+})();
 
 // ── View toggle ───────────────────────────────────────────────────────────
 function setView(v) {
