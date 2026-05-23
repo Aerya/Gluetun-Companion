@@ -440,7 +440,7 @@ def _quick_check(
     last_dl_mbps is None when no prior result exists.
     """
     from .database import get_db
-    from .gluetun import get_current_filters
+    from .gluetun import get_current_filters, get_public_ips
 
     # ── Identify current server ───────────────────────────────────────────
     filters = get_current_filters(container)
@@ -490,8 +490,9 @@ def _quick_check(
     # ── Always save the result so future quick checks have a proxy baseline ──
     # Uses a distinct method tag ('proxy_qc') so these appear separately in
     # /history without being mixed with full proxy-mode benchmark results.
+    _qc_ipv4, _qc_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
     _record_test(server_name, success=True, download_mbps=current_dl, method='proxy_qc',
-                 trigger=trigger)
+                 trigger=trigger, public_ip=_qc_ipv4, public_ipv6=_qc_ipv6)
 
     # ── No baseline yet → establish it, then run full benchmark ──────────
     if last_dl is None:
@@ -1548,7 +1549,7 @@ def trigger_now(app):
 def run_quick_check_now(app):
     """Manual quick benchmark — proxy test of current server only, no VPN switch."""
     from .database import get_setting, set_setting
-    from .gluetun import get_current_filters
+    from .gluetun import get_current_filters, get_public_ips
 
     with _lock:
         set_setting('benchmark_running', '1')
@@ -1578,7 +1579,9 @@ def run_quick_check_now(app):
                 dl_duration, dl_samples, warmup, dl_streams,
             )
             if dl is not None:
-                _record_test(server_name, success=True, download_mbps=dl, method='proxy_qc')
+                _qnow_ipv4, _qnow_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
+                _record_test(server_name, success=True, download_mbps=dl, method='proxy_qc',
+                             public_ip=_qnow_ipv4, public_ipv6=_qnow_ipv6)
                 logger.info('Quick benchmark: %s → %.1f Mbps (saved as proxy_qc)', server_name, dl)
             else:
                 logger.warning('Quick benchmark: proxy test failed for %s', server_name)
