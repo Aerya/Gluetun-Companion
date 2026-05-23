@@ -91,6 +91,16 @@ def _pnorm(vals: dict[str, float], invert: bool = False) -> dict[str, float]:
     return normed
 
 
+def _row_get(row, key: str, default=None):
+    """Return a value from dict-like rows, including sqlite3.Row."""
+    if hasattr(row, 'get'):
+        return row.get(key, default)
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return default
+
+
 def score_servers(
     rows,
     profile_key: str,
@@ -115,7 +125,7 @@ def score_servers(
     raw_lat    = {r['name']: float(r['avg_lat']                                           or 0.0) for r in rows}
     raw_jit    = {r['name']: float((stability.get(r['name']) or {}).get('avg_jitter') or 0.0) for r in rows}
     raw_loss   = {r['name']: float((stability.get(r['name']) or {}).get('avg_loss')   or 0.0) for r in rows}
-    raw_single = {r['name']: float(r.get('avg_dl_single')                                or 0.0) for r in rows}
+    raw_single = {r['name']: float(_row_get(r, 'avg_dl_single')                          or 0.0) for r in rows}
 
     n_dl     = _pnorm(raw_dl)
     n_ul     = _pnorm(raw_ul)
