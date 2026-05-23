@@ -66,6 +66,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
   - [Jitter & Packet Loss](#jitter--packet-loss)
   - [Patterns horaires](#vue-patterns-horaires-historypatterns)
   - [Détection nouveaux serveurs AirVPN](#détection-de-nouveaux-serveurs-airvpn)
+  - [Notifications contextuelles](#notifications-contextuelles)
   - [REST API](#rest-api)
   - [Endpoint /metrics Prometheus](#endpoint-prometheus-metrics)
   - [Cycle automatique vs manuel](#cycle-automatique-vs-déclenchement-manuel)
@@ -116,7 +117,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 
 ### Interface & notifications
 - **Web UI** dark/light, FR/EN — auth, dashboard avec sparkline, historique paginé, graphiques, page bascules avec gain Mbps et temps de connexion
-- **Notifications** à chaque bascule — webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
+- **Notifications contextuelles** — 6 types d'alertes configurables indépendamment (bascule auto/manuelle, auto-exclusion, benchmark sans résultat, fin de benchmark, nouveaux serveurs AirVPN) via webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…) ; sévérité 🔴/🟡/🔵 ; mention Discord globale avec seuil de sévérité configurable
 - **Purge automatique** de l'historique SQLite configurable (rétention en jours)
 
 ### Intégration & infrastructure
@@ -439,9 +440,32 @@ Fonctionnalité **désactivée par défaut**, uniquement pour les utilisateurs A
 - **Onglet Nouveaux** dans le modal d'ajout : liste de tous les serveurs AirVPN pas encore dans votre liste (badge ⭐ *Nouveau* sur ceux qui ont été détectés automatiquement) ; filtre de recherche unifié
 
 **Notification Discord/Apprise :**
-Envoyée uniquement lors de la découverte de nouveaux serveurs, regroupée par pays. Champ *Mention Discord* optionnel (ex. `<@123456789>`) pour notifier un utilisateur ou un rôle.
+Envoyée uniquement lors de la découverte de nouveaux serveurs, regroupée par pays. Utilise le champ *Mention Discord* global (voir [Notifications contextuelles](#notifications-contextuelles)).
 
 > Après 7 jours, les serveurs quittent automatiquement la liste des "nouveaux". Les serveurs ajoutés à votre liste ne s'affichent plus dans le badge/bannière.
+
+### Notifications contextuelles
+
+Companion envoie des alertes ciblées via **webhook Discord** et/ou **[Apprise](https://github.com/caronc/apprise/wiki)** selon les événements. Chaque type d'alerte est activable indépendamment dans **Paramètres → Notifications**.
+
+| Type d'alerte | Sévérité | Activé par défaut | Déclenchement |
+|---|---|---|---|
+| 🔴 Auto-exclusion serveur | Critique | ✅ | Un serveur est désactivé après N échecs consécutifs |
+| 🔴 Benchmark sans résultat | Critique | ✅ | Le cycle complet se termine sans aucun résultat valide |
+| 🟡 Bascule automatique | Moyen | ✅ | Companion bascule vers un meilleur serveur |
+| 🟡 Nouveaux serveurs AirVPN | Moyen | *(selon détection AirVPN)* | Nouveaux serveurs détectés dans vos pays |
+| 🔵 Bascule manuelle | Info | ❌ | Bascule déclenchée manuellement depuis l'UI |
+| 🔵 Fin de benchmark | Info | ❌ | Cycle de benchmark terminé avec succès |
+| 🔵 Déjà sur le meilleur | Info | ❌ | Le serveur actif est déjà le meilleur — aucun changement |
+
+**Mention Discord globale** : un seul champ `Mention Discord` (ex. `<@123456789>` pour un utilisateur, `<@&987654321>` pour un rôle) s'applique à toutes les alertes. Un seuil de sévérité est configurable :
+- **Critique uniquement** (défaut) — mention uniquement pour les alertes 🔴
+- **Moyen et critique** — mention pour 🔴 et 🟡
+- **Toutes** — mention pour toutes les alertes
+
+> La mention est injectée dans le payload Discord via `allowed_mentions` pour garantir la délivrance même sur les serveurs avec restrictions de mentions.
+
+---
 
 ### Jitter & Packet Loss
 

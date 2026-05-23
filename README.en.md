@@ -66,6 +66,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [Jitter & Packet Loss](#jitter--packet-loss)
   - [Hourly patterns view](#hourly-patterns-view-historypatterns)
   - [New AirVPN server detection](#new-airvpn-server-detection)
+  - [Contextual notifications](#contextual-notifications)
   - [REST API](#rest-api)
   - [Prometheus /metrics endpoint](#prometheus-metrics-endpoint)
   - [Automatic cycle vs manual trigger](#automatic-cycle-vs-manual-trigger)
@@ -115,7 +116,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 
 ### UI & notifications
 - **Web UI** dark/light, FR/EN — auth, dashboard with sparkline, paginated history, charts, switches page with Mbps gain and connection time
-- **Notifications** on every switch — Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…)
+- **Contextual notifications** — 6 independently-configurable alert types (auto/manual switch, auto-exclude, benchmark with no results, benchmark complete, new AirVPN servers) via Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…); severity levels 🔴/🟡/🔵; global Discord mention with configurable severity threshold
 - **Automatic purge** of SQLite history with configurable retention (in days)
 
 ### Integration & infrastructure
@@ -438,9 +439,32 @@ Accessible from **History → Hourly patterns**, this view shows average perform
 - **New tab** in the add modal: lists all AirVPN servers not yet in your list (⭐ *New* badge on automatically detected ones); unified search filter
 
 **Discord/Apprise notification:**
-Sent only when new servers are discovered, grouped by country. Optional *Discord mention* field (e.g. `<@123456789>`) to ping a user or role.
+Sent only when new servers are discovered, grouped by country. Uses the global *Discord mention* field (see [Contextual notifications](#contextual-notifications)).
 
 > After 7 days, servers leave the "new" list automatically. Servers you add to your list no longer appear in the badge/banner.
+
+### Contextual notifications
+
+Companion sends targeted alerts via **Discord webhook** and/or **[Apprise](https://github.com/caronc/apprise/wiki)** based on events. Each alert type can be toggled independently in **Settings → Notifications**.
+
+| Alert type | Severity | On by default | Trigger |
+|---|---|---|---|
+| 🔴 Server auto-exclude | Critical | ✅ | A server is disabled after N consecutive failures |
+| 🔴 Benchmark with no results | Critical | ✅ | A full cycle completes with no valid results |
+| 🟡 Automatic switch | Medium | ✅ | Companion switches to a faster server |
+| 🟡 New AirVPN servers | Medium | *(depends on AirVPN detection)* | New servers detected in your countries |
+| 🔵 Manual switch | Info | ❌ | Switch triggered manually from the UI |
+| 🔵 Benchmark complete | Info | ❌ | Benchmark cycle finished successfully |
+| 🔵 Already on best | Info | ❌ | Active server is already the best — no change |
+
+**Global Discord mention**: a single `Discord mention` field (e.g. `<@123456789>` for a user, `<@&987654321>` for a role) applies to all alerts. A severity threshold is configurable:
+- **Critical only** (default) — mention only for 🔴 alerts
+- **Medium and critical** — mention for 🔴 and 🟡
+- **All** — mention for all alerts
+
+> The mention is injected into the Discord payload via `allowed_mentions` to guarantee delivery even on servers with mention restrictions.
+
+---
 
 ### Jitter & Packet Loss
 
