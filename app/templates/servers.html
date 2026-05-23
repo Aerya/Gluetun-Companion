@@ -214,10 +214,6 @@
   <div class="text-muted mt-1" style="font-size:.75rem">
     <i class="bi bi-info-circle text-info me-1"></i>{{ t.srv_profile_info }}
   </div>
-  <div id="profileMonoNote" class="d-none mt-1" style="font-size:.73rem">
-    <i class="bi bi-exclamation-triangle text-warning me-1"></i>
-    <span class="text-warning">{{ t.srv_profile_mono }}</span>
-  </div>
 </div>
 
 <form method="get" class="row g-2 mb-3 align-items-end">
@@ -784,15 +780,7 @@
   const _csrfTok = {{ csrf_token() | tojson }};
   const _setUrl  = {{ url_for('main.api_set_profile') | tojson }};
 
-  // Detect mono-metric situation (all profiles recommend same server)
-  const allBests = [...document.querySelectorAll('#profilePreview [data-profile]')]
-                     .map(b => b.dataset.best).filter(Boolean);
-  const uniqueBests = new Set(allBests);
-  const isMono = uniqueBests.size === 1 && allBests.length > 1;
-  if (isMono) {
-    const note = document.getElementById('profileMonoNote');
-    if (note) note.classList.remove('d-none');
-  }
+
 
   function _moveTrophy(best, profileKey) {
     // Remove all existing trophies injected by JS or server
