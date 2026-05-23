@@ -752,10 +752,11 @@ def _do_benchmark(app, skip_quick_check: bool = False):
     _companion_url    = get_setting('companion_url') or None
     _mention          = get_setting('notify_mention', '').strip() or None
     _mention_level    = get_setting('notify_mention_level', 'critical')
-    _notif_auto_sw    = get_setting('notif_auto_switch',    '1') == '1'
-    _notif_best       = get_setting('notif_already_best',   '0') == '1'
-    _notif_exclude    = get_setting('notif_auto_exclude',   '1') == '1'
-    _notif_bench_end  = get_setting('notif_benchmark_end',  '0') == '1'
+    _notif_auto_sw    = get_setting('notif_auto_switch',       '1') == '1'
+    _notif_best       = get_setting('notif_already_best',      '0') == '1'
+    _notif_exclude    = get_setting('notif_auto_exclude',      '1') == '1'
+    _notif_bench_end  = get_setting('notif_benchmark_end',     '0') == '1'
+    _notif_bench_fail = get_setting('notif_benchmark_failure', '1') == '1'
 
     # ── Quick check (before pausing containers) ──────────────────────────────
     # Test only the current server.  If its speed is within ±N% of the last
@@ -868,6 +869,21 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                         mention=_mention,
                         mention_level=_mention_level,
                     )
+
+        # ── No successful result at all → notify failure ─────────────────────
+        if not results and _notif_bench_fail:
+            _fail_dur = round(time.time() - cycle_start, 1)
+            from .notify import send_benchmark_failure_notification
+            send_benchmark_failure_notification(
+                n_servers=len(servers),
+                duration_secs=_fail_dur,
+                discord_url=_discord_url,
+                apprise_urls=_apprise_urls,
+                lang=_notif_lang,
+                companion_url=_companion_url,
+                mention=_mention,
+                mention_level=_mention_level,
+            )
 
         best_server_label: str | None = None
         if auto_sw and results:

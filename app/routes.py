@@ -611,6 +611,7 @@ def history():
     method_filter = request.args.get('method', '')
     from_date     = request.args.get('from_date', '').strip()
     to_date       = request.args.get('to_date', '').strip()
+    show_failed   = request.args.get('show_failed', '') == '1'
 
     if sort not in _SORT_COLS:
         sort = 'date_desc'
@@ -618,6 +619,8 @@ def history():
 
     where_parts: list[str] = []
     params: list = []
+    if not show_failed:
+        where_parts.append('success = 1')
     if server_filter:
         where_parts.append('server_name = ?')
         params.append(server_filter)
@@ -674,6 +677,7 @@ def history():
         page=page, pages=pages, total=total,
         sort=sort, server_filter=server_filter, method_filter=method_filter,
         from_date=from_date, to_date=to_date,
+        show_failed=show_failed,
         server_names=server_names,
         timeline_data=timeline_data,
         confidence=compute_confidence_all(),
@@ -1092,7 +1096,7 @@ def settings():
             set_setting('airvpn_new_server_notif','1' if request.form.get('airvpn_new_server_notif') else '0')
             # Per-type toggles
             for _k in ('notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
-                       'notif_auto_exclude', 'notif_benchmark_end'):
+                       'notif_auto_exclude', 'notif_benchmark_end', 'notif_benchmark_failure'):
                 set_setting(_k, '1' if request.form.get(_k) else '0')
             # Global mention
             set_setting('notify_mention',       request.form.get('notify_mention', '').strip())
@@ -1169,9 +1173,10 @@ def settings():
         'notif_manual_switch':      get_setting('notif_manual_switch',  '0'),
         'notif_already_best':       get_setting('notif_already_best',   '0'),
         'notif_auto_exclude':       get_setting('notif_auto_exclude',   '1'),
-        'notif_benchmark_end':      get_setting('notif_benchmark_end',  '0'),
-        'notify_mention':           get_setting('notify_mention',       ''),
-        'notify_mention_level':     get_setting('notify_mention_level', 'critical'),
+        'notif_benchmark_end':      get_setting('notif_benchmark_end',     '0'),
+        'notif_benchmark_failure':  get_setting('notif_benchmark_failure', '1'),
+        'notify_mention':           get_setting('notify_mention',          ''),
+        'notify_mention_level':     get_setting('notify_mention_level',    'critical'),
         'sidecar_mode':             get_setting('sidecar_mode', '1'),
         'sidecar_image':            get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest'),
         'sidecar_port':             get_setting('sidecar_port', '8766'),

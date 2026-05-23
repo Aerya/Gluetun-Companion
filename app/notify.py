@@ -24,12 +24,13 @@ _LOGO_URL = 'https://raw.githubusercontent.com/Aerya/Gluetun-Companion/main/asse
 # ── Severity ──────────────────────────────────────────────────────────────────
 
 _SEVERITY: dict[str, str] = {
-    'auto_exclude':    'critical',
-    'auto_switch':     'medium',
-    'airvpn':          'medium',
-    'manual_switch':   'info',
-    'already_best':    'info',
-    'benchmark_end':   'info',
+    'auto_exclude':       'critical',
+    'benchmark_failure':  'critical',
+    'auto_switch':        'medium',
+    'airvpn':             'medium',
+    'manual_switch':      'info',
+    'already_best':       'info',
+    'benchmark_end':      'info',
 }
 
 _LEVEL_ORDER: dict[str, int] = {'critical': 0, 'medium': 1, 'info': 2}
@@ -376,6 +377,63 @@ def send_auto_exclude_notification(
             logger.info('Apprise auto-exclude notification sent for %s', server)
         except Exception as exc:
             logger.warning('Apprise auto-exclude notification failed: %s', exc)
+
+
+def send_benchmark_failure_notification(
+    n_servers: int,
+    duration_secs: float,
+    discord_url: str | None = None,
+    apprise_urls: str | None = None,
+    lang: str = 'fr',
+    companion_url: str | None = None,
+    mention: str | None = None,
+    mention_level: str = 'critical',
+):
+    """Notify when a full benchmark cycle completes with 0 successful results."""
+    if not discord_url and not apprise_urls:
+        return
+    t = get_translations(lang)
+    title = t.get('notif_benchmark_failure_title', '⚠️ Benchmark : aucun résultat')
+    dur_min = int(duration_secs // 60)
+    dur_sec = int(duration_secs % 60)
+    dur_str = f'{dur_min}m {dur_sec:02d}s' if dur_min else f'{dur_sec}s'
+
+    if discord_url:
+        try:
+            fields = [
+                {'name': t.get('notif_benchmark_failure_servers', 'Serveurs testés'),
+                 'value': str(n_servers), 'inline': True},
+                {'name': t.get('notif_benchmark_end_duration', 'Durée'),
+                 'value': dur_str, 'inline': True},
+                {'name': t.get('notif_benchmark_failure_cause', 'Cause probable'),
+                 'value': t.get('notif_benchmark_failure_hint',
+                                'Gluetun injoignable ou tous les serveurs en échec'),
+                 'inline': False},
+            ]
+            payload = _discord_base_payload(title, 0xf85149, fields, t, companion_url)
+            _post_discord(discord_url, payload, mention, 'benchmark_failure', mention_level)
+            logger.info('Discord benchmark-failure notification sent')
+        except Exception as exc:
+            logger.warning('Discord benchmark-failure notification failed: %s', exc)
+
+    if apprise_urls:
+        try:
+            lines = [
+                t.get('notif_benchmark_failure_hint',
+                      'Gluetun injoignable ou tous les serveurs en échec'),
+                f'{n_servers} serveurs · {dur_str}',
+            ]
+            if companion_url:
+                lines.append(companion_url)
+            _notify_apprise(
+                apprise_urls,
+                t.get('notif_benchmark_failure_apprise_title',
+                      'Benchmark échoué — Gluetun Companion'),
+                '\n'.join(lines),
+            )
+            logger.info('Apprise benchmark-failure notification sent')
+        except Exception as exc:
+            logger.warning('Apprise benchmark-failure notification failed: %s', exc)
 
 
 def send_benchmark_end_notification(

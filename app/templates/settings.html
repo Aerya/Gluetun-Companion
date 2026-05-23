@@ -759,13 +759,23 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 
         <div class="d-flex flex-column gap-1 mb-3">
           {# Critique #}
-          <div class="d-flex align-items-center gap-2">
-            <span class="badge rounded-pill flex-shrink-0" style="background:#f85149;font-size:.65rem;min-width:4.5rem">🔴 Critique</span>
-            <div class="form-check form-switch mb-0">
-              <input class="form-check-input" type="checkbox" role="switch"
-                     name="notif_auto_exclude" id="notif_auto_exclude"
-                     {{ 'checked' if cfg.notif_auto_exclude == '1' }}>
-              <label class="form-check-label small" for="notif_auto_exclude">Serveur désactivé automatiquement</label>
+          <div class="d-flex align-items-start gap-2">
+            <span class="badge rounded-pill flex-shrink-0 mt-1" style="background:#f85149;font-size:.65rem;min-width:4.5rem">🔴 Critique</span>
+            <div class="d-flex flex-column gap-1">
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       name="notif_auto_exclude" id="notif_auto_exclude"
+                       {{ 'checked' if cfg.notif_auto_exclude == '1' }}>
+                <label class="form-check-label small" for="notif_auto_exclude">Serveur désactivé automatiquement</label>
+              </div>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       name="notif_benchmark_failure" id="notif_benchmark_failure"
+                       {{ 'checked' if cfg.notif_benchmark_failure == '1' }}>
+                <label class="form-check-label small" for="notif_benchmark_failure">
+                  Benchmark : 0 résultat <span class="text-muted" style="font-size:.72rem">(Gluetun injoignable ?)</span>
+                </label>
+              </div>
             </div>
           </div>
 

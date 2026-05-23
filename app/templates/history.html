@@ -90,12 +90,25 @@
     <input type="date" name="to_date" class="form-control form-control-sm"
            value="{{ to_date }}" style="width:145px">
   </div>
-  <div class="col-auto">
+  <div class="col-auto d-flex align-items-center gap-2">
     <button type="submit" class="btn btn-sm btn-outline-secondary">
       <i class="bi bi-funnel-fill"></i>
     </button>
+    {# ── Show-failed toggle ── #}
+    {% if show_failed %}
+      <input type="hidden" name="show_failed" value="1">
+      <a href="{{ url_for('main.history', server=server_filter, method=method_filter, sort=sort, from_date=from_date, to_date=to_date) }}"
+         class="btn btn-sm btn-danger" title="Masquer les échecs">
+        <i class="bi bi-x-circle-fill"></i> Échecs visibles
+      </a>
+    {% else %}
+      <a href="{{ url_for('main.history', server=server_filter, method=method_filter, sort=sort, from_date=from_date, to_date=to_date, show_failed='1') }}"
+         class="btn btn-sm btn-outline-danger" title="Afficher aussi les tests échoués">
+        <i class="bi bi-exclamation-triangle"></i> Inclure les échecs
+      </a>
+    {% endif %}
   </div>
-  {% if server_filter or method_filter or sort != 'date_desc' or from_date or to_date %}
+  {% if server_filter or method_filter or sort != 'date_desc' or from_date or to_date or show_failed %}
   <div class="col-auto">
     <a href="{{ url_for('main.history') }}" class="btn btn-sm btn-outline-secondary">✕</a>
   </div>

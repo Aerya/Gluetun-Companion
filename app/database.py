@@ -123,6 +123,7 @@ def init_db(db_path: str):
                 ('notif_already_best',          '0'),
                 ('notif_auto_exclude',          '1'),
                 ('notif_benchmark_end',         '0'),
+                ('notif_benchmark_failure',     '1'),
                 ('notify_mention',              ''),
                 ('notify_mention_level',        'critical');
         ''')
