@@ -118,7 +118,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 
 ### UI & notifications
 - **Web UI** dark/light, FR/EN — auth, dashboard with sparkline, paginated history, charts, switches page with Mbps gain and connection time
-- **Automatic server discovery** — *Discover* button on the Servers page: queries the Gluetun control API (`/v1/servers`), automatically filters by the container's active filter (country, region, city, hostname…), displays available servers with checkboxes grouped by country; servers already in the database are marked; one-click import — compatible with all Gluetun VPN providers
+- **Automatic server discovery** — *Discover* button on the Servers page: queries the Gluetun control API (`/v1/vpn/settings`), automatically filters by the container's active filter (country, region, city, hostname…), displays available servers with checkboxes grouped by country; servers already in the database are marked; one-click import — compatible with all Gluetun VPN providers
 - **Contextual notifications** — 7 independently-configurable alert types (auto/manual switch, auto-exclude, benchmark with no results, benchmark complete, quick check result, new AirVPN servers) via Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…); severity levels 🔴/🟡/🔵; global Discord mention with configurable severity threshold
 - **Automatic purge** of SQLite history with configurable retention (in days)
 
@@ -327,7 +327,7 @@ ports:
 **How it works**:
 
 1. Companion reads the active filter from the Gluetun container (`SERVER_COUNTRIES=France`, `SERVER_REGIONS=…`, etc.)
-2. It queries `GET /v1/servers` on the Gluetun API
+2. It queries `GET /v1/vpn/settings` on the Gluetun API (the `/v1/servers` endpoint does not exist in Gluetun's API — Companion returns the servers currently configured in Gluetun)
 3. Results are filtered automatically (only servers matching the active filter are shown)
 4. A modal displays available servers grouped by country, with checkboxes
 5. Servers already in the database are marked — their checkbox is disabled to prevent duplicates

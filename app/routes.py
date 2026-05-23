@@ -575,7 +575,7 @@ def api_gluetun_servers():
         "error": str | null   (only when API is unreachable)
       }
     """
-    from .gluetun import fetch_gluetun_servers, get_current_filters
+    from .gluetun import fetch_gluetun_servers, fetch_gluetun_settings_names, get_current_filters
     from .database import get_db, get_setting
 
     container    = current_app.config['GLUETUN_CONTAINER']
@@ -594,6 +594,7 @@ def api_gluetun_servers():
     if api_port != 8000:
         _attempts.append((gluetun_host, 8000))
 
+    # ── Primary: /v1/servers (not in current Gluetun API, kept for future compat)
     all_servers   = None
     tried_urls: list[str] = []
     for _h, _p in _attempts:
@@ -603,6 +604,20 @@ def api_gluetun_servers():
         if all_servers is not None:
             logger.debug('api_gluetun_servers: reached API at %s', _url)
             break
+
+    # ── Fallback: /v1/vpn/settings (always available in Gluetun ≥ v3)
+    from_settings = False
+    if all_servers is None:
+        for _h, _p in _attempts:
+            all_servers = fetch_gluetun_settings_names(_h, _p)
+            if all_servers is not None:
+                from_settings = True
+                logger.info(
+                    'api_gluetun_servers: /v1/servers unavailable, '
+                    'using /v1/vpn/settings fallback — %d server(s) found',
+                    len(all_servers),
+                )
+                break
 
     if all_servers is None:
         logger.warning('api_gluetun_servers: unreachable — tried %s', tried_urls)
@@ -675,6 +690,7 @@ def api_gluetun_servers():
         'active_filter_type':  active_filter_type,
         'active_filter_value': active_filter_value,
         'error':               None,
+        'from_settings':       from_settings,
     })
 
 

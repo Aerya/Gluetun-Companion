@@ -119,7 +119,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 
 ### Interface & notifications
 - **Web UI** dark/light, FR/EN — auth, dashboard avec sparkline, historique paginé, graphiques, page bascules avec gain Mbps et temps de connexion
-- **Découverte automatique de serveurs** — bouton *Découvrir* sur la page Serveurs : interroge l'API de contrôle Gluetun (`/v1/servers`), filtre automatiquement selon le filtre actif du container (pays, région, ville, hostname…), affiche les serveurs disponibles avec cases à cocher groupées par pays ; les serveurs déjà en base sont marqués ; import en un clic — compatible avec tous les fournisseurs VPN Gluetun
+- **Découverte automatique de serveurs** — bouton *Découvrir* sur la page Serveurs : interroge l'API de contrôle Gluetun (`/v1/vpn/settings`), filtre automatiquement selon le filtre actif du container (pays, région, ville, hostname…), affiche les serveurs disponibles avec cases à cocher groupées par pays ; les serveurs déjà en base sont marqués ; import en un clic — compatible avec tous les fournisseurs VPN Gluetun
 - **Notifications contextuelles** — 7 types d'alertes configurables indépendamment (bascule auto/manuelle, auto-exclusion, benchmark sans résultat, fin de benchmark, résultat quick check, nouveaux serveurs AirVPN) via webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…) ; sévérité 🔴/🟡/🔵 ; mention Discord globale avec seuil de sévérité configurable
 - **Purge automatique** de l'historique SQLite configurable (rétention en jours)
 
@@ -328,7 +328,7 @@ ports:
 **Fonctionnement** :
 
 1. Companion lit le filtre actif depuis le container Gluetun (`SERVER_COUNTRIES=France`, `SERVER_REGIONS=…`, etc.)
-2. Il interroge `GET /v1/servers` sur l'API Gluetun
+2. Il interroge `GET /v1/vpn/settings` sur l'API Gluetun (l'endpoint `/v1/servers` n'existe pas dans l'API Gluetun — Companion retourne les serveurs actuellement configurés dans Gluetun)
 3. Les résultats sont filtrés automatiquement (seuls les serveurs correspondant au filtre actif sont proposés)
 4. Une modal affiche les serveurs disponibles groupés par pays, avec cases à cocher
 5. Les serveurs déjà en base sont marqués — leur case est désactivée pour éviter les doublons

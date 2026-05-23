@@ -88,7 +88,8 @@
     </form>
     <button class="btn btn-outline-primary btn-sm fw-semibold"
             onclick="openDiscoverModal()"
-            title="{{ t.srv_discover_title }}">
+            data-bs-toggle="tooltip" data-bs-placement="bottom"
+            title="{{ t.srv_discover_tooltip }}">
       <i class="bi bi-search"></i> {{ t.srv_discover }}
     </button>
     <button class="btn btn-success btn-sm fw-semibold position-relative"
@@ -687,6 +688,9 @@
   - "{{ gluetun_api_port }}:8000/tcp"</pre>
         </div>
         <div id="discover-content" class="d-none">
+          <div id="discover-from-settings-note" class="d-none alert alert-info py-2 px-3 mb-2" style="font-size:.8rem">
+            <i class="bi bi-info-circle me-1"></i>{{ t.srv_discover_from_settings }}
+          </div>
           <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
             <div id="discover-filter-info" class="small text-muted"></div>
             <div class="d-flex gap-2">
@@ -971,6 +975,9 @@ function _renderDiscoverList(data) {
   const servers = data.servers || [];
   const ft = data.active_filter_type || '';
   const fv = data.active_filter_value || '';
+  // Show/hide "from settings" note
+  const fromSettingsNote = document.getElementById('discover-from-settings-note');
+  if (fromSettingsNote) fromSettingsNote.classList.toggle('d-none', !data.from_settings);
   const filterInfo = document.getElementById('discover-filter-info');
   if (ft && fv) {
     const varName = {'country':'SERVER_COUNTRIES','region':'SERVER_REGIONS','city':'SERVER_CITIES','hostname':'SERVER_HOSTNAMES','name':'SERVER_NAMES'}[ft] || ft.toUpperCase();
