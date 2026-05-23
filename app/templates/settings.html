@@ -87,10 +87,50 @@
   .settings-column .input-group[style*="max-width:200px"] {
     max-width: 145px !important;
   }
+  .settings-api-endpoints {
+    overflow-x: auto;
+  }
+  .settings-api-endpoints table {
+    min-width: 520px;
+  }
   @media (max-width: 991.98px) {
     .settings-board {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: .75rem;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1rem;
+    }
+    .settings-column {
+      width: 100%;
+    }
+    .settings-column .card {
+      padding: 1rem !important;
+    }
+    .settings-column .input-group,
+    .settings-column input,
+    .settings-column select,
+    .settings-column textarea {
+      min-width: 0;
+      max-width: 100%;
+    }
+    .settings-column .input-group[style*="max-width"] {
+      max-width: 100% !important;
+    }
+    .settings-api-endpoints {
+      max-width: 100%;
+    }
+    .settings-api-endpoints table {
+      min-width: 0;
+      width: 100%;
+      table-layout: fixed;
+    }
+    .settings-api-endpoints td:nth-child(1) {
+      width: 3.7rem;
+    }
+    .settings-api-endpoints td:nth-child(2) {
+      width: 8.8rem;
+      word-break: break-all;
+    }
+    .settings-api-endpoints td:nth-child(3) {
+      word-break: break-word;
     }
   }
 </style>
@@ -1022,16 +1062,18 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
       <hr class="my-3">
 
       <p class="small fw-semibold mb-2"><i class="bi bi-list-ul me-1"></i>{{ t.set_api_endpoints }}</p>
-      <table class="table table-sm table-borderless small mb-0" style="font-size:.8rem">
-        <tbody>
-          <tr><td class="text-nowrap"><span class="badge bg-success">GET</span></td><td class="font-monospace">/api/v1/status</td><td class="text-muted">Statut VPN, serveur actif, benchmark en cours</td></tr>
-          <tr><td class="text-nowrap"><span class="badge bg-success">GET</span></td><td class="font-monospace">/api/v1/servers</td><td class="text-muted">Liste des serveurs avec statistiques</td></tr>
-          <tr><td class="text-nowrap"><span class="badge bg-success">GET</span></td><td class="font-monospace">/api/v1/history</td><td class="text-muted">Historique des tests <code class="text-muted">?limit=50&amp;server=…</code></td></tr>
-          <tr><td class="text-nowrap"><span class="badge bg-success">GET</span></td><td class="font-monospace">/api/v1/switches</td><td class="text-muted">Historique des bascules <code class="text-muted">?limit=20</code></td></tr>
-          <tr><td class="text-nowrap"><span class="badge bg-warning text-dark">POST</span></td><td class="font-monospace">/api/v1/benchmark/trigger</td><td class="text-muted">Déclencher un benchmark complet</td></tr>
-          <tr><td class="text-nowrap"><span class="badge bg-warning text-dark">POST</span></td><td class="font-monospace">/api/v1/benchmark/trigger-quick</td><td class="text-muted">Déclencher un benchmark rapide</td></tr>
-        </tbody>
-      </table>
+      <div class="settings-api-endpoints">
+        <table class="table table-sm table-borderless small mb-0" style="font-size:.8rem">
+          <tbody>
+            <tr><td class="text-nowrap"><span class="badge bg-success">GET</span></td><td class="font-monospace">/api/v1/status</td><td class="text-muted">Statut VPN, serveur actif, benchmark en cours</td></tr>
+            <tr><td class="text-nowrap"><span class="badge bg-success">GET</span></td><td class="font-monospace">/api/v1/servers</td><td class="text-muted">Liste des serveurs avec statistiques</td></tr>
+            <tr><td class="text-nowrap"><span class="badge bg-success">GET</span></td><td class="font-monospace">/api/v1/history</td><td class="text-muted">Historique des tests <code class="text-muted">?limit=50&amp;server=…</code></td></tr>
+            <tr><td class="text-nowrap"><span class="badge bg-success">GET</span></td><td class="font-monospace">/api/v1/switches</td><td class="text-muted">Historique des bascules <code class="text-muted">?limit=20</code></td></tr>
+            <tr><td class="text-nowrap"><span class="badge bg-warning text-dark">POST</span></td><td class="font-monospace">/api/v1/benchmark/trigger</td><td class="text-muted">Déclencher un benchmark complet</td></tr>
+            <tr><td class="text-nowrap"><span class="badge bg-warning text-dark">POST</span></td><td class="font-monospace">/api/v1/benchmark/trigger-quick</td><td class="text-muted">Déclencher un benchmark rapide</td></tr>
+          </tbody>
+        </table>
+      </div>
 
     </div>
 
