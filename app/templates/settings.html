@@ -1052,11 +1052,11 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
   [
     form('sidecar'),
     form('proxy_credentials'),
-    cardWithAction('save_api_token'),
     cardWithForm('form-pull-network'),
     cardWithForm('form-post-switch'),
     cardWithForm('form-pause-bench'),
     cardWithAction('notifications'),
+    cardWithAction('save_api_token'),
   ].forEach(el => move(right, el));
 })();
 </script>
