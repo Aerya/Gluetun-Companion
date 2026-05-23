@@ -486,8 +486,18 @@ def start_stopped_containers(
                             '(skipping docker start after parent recreation)',
                             name, network_mode,
                         )
-                        if compose_project and container_project == compose_project:
-                            _compose_recreate(name, compose_dir, compose_project)
+                        # Use the Companion's mounted compose_dir when available.
+                        # If compose_project is unset, derive the project name from
+                        # the container's own label (avoids using host-side paths
+                        # from com.docker.compose.project.working_dir that are
+                        # inaccessible from inside the Companion container).
+                        if compose_dir and (not compose_project or container_project == compose_project):
+                            effective_project = compose_project or container_project
+                            logger.info(
+                                '%s — compose recreate with dir=%r project=%r',
+                                name, compose_dir, effective_project,
+                            )
+                            _compose_recreate(name, compose_dir, effective_project)
                         else:
                             logger.info(
                                 '%s is in project %r (not %r) — using container labels for recreate',
@@ -568,6 +578,46 @@ def list_network_dependents(container_name: str) -> list[str]:
                 result.append(c.name)
     except Exception as exc:
         logger.warning('list_network_dependents: %s', exc)
+    return sorted(result)
+
+
+def list_orphaned_network_dependents() -> list[str]:
+    """
+    Find containers whose network namespace is broken because they reference a
+    stale container ID in their NetworkMode (``container:<dead-id>``).
+
+    Called after an **external** Gluetun restart: the old container is gone, so
+    ``list_network_dependents`` (which matches by current name/ID) would return
+    nothing.  This function instead identifies any container whose NetworkMode
+    references a container ID that no longer exists — meaning the network
+    namespace it was sharing has been destroyed.
+
+    Returns the sorted list of container names that need to be recreated.
+    """
+    result: list[str] = []
+    try:
+        client = docker.from_env()
+        # Build the set of all currently-known container IDs and names
+        all_containers  = client.containers.list(all=True)
+        known_ids       = {c.id for c in all_containers}
+        # Also include short IDs (first 12 chars) as Docker stores them
+        known_short_ids = {c.id[:12] for c in all_containers}
+        known_names     = {c.name for c in all_containers}
+
+        for c in all_containers:
+            mode = c.attrs['HostConfig'].get('NetworkMode', '')
+            if not mode.startswith('container:'):
+                continue
+            ref = mode[len('container:'):]
+            # If the referenced container no longer exists → orphaned namespace
+            if ref not in known_ids and ref not in known_short_ids and ref not in known_names:
+                logger.debug(
+                    'list_orphaned_network_dependents: %s has stale NetworkMode %r',
+                    c.name, mode,
+                )
+                result.append(c.name)
+    except Exception as exc:
+        logger.warning('list_orphaned_network_dependents: %s', exc)
     return sorted(result)
 
 

@@ -1574,11 +1574,45 @@ def _docker_event_loop(app, container_name: str) -> None:
 
                 def _delayed_qc(a=app):
                     from .database import get_setting as _gs
+                    from .gluetun import (
+                        list_orphaned_network_dependents,
+                        restart_network_dependents,
+                    )
                     wait = int(_gs('connection_wait_seconds', '45'))
                     logger.info(
                         'Docker event: waiting %ds for VPN reconnect before quick check…', wait
                     )
                     time.sleep(wait)
+
+                    # After an external Gluetun restart, containers that share its
+                    # network namespace (network_mode: service:gluetun-*) still
+                    # reference the old (now dead) container ID.  They appear
+                    # "running" but have no working network.  Recreate them now so
+                    # the user's services (qBittorrent, etc.) come back up cleanly.
+                    try:
+                        orphans = list_orphaned_network_dependents()
+                        if orphans:
+                            logger.info(
+                                'Docker event: orphaned network-dependent containers detected: %s — recreating…',
+                                ', '.join(orphans),
+                            )
+                            compose_dir = a.config.get('COMPOSE_DIR', '')
+                            project     = a.config.get('COMPOSE_PROJECT', '')
+                            restarted, _ = restart_network_dependents(
+                                container_name,
+                                compose_dir, project,
+                                explicit_list=orphans,
+                            )
+                            if restarted:
+                                logger.info(
+                                    'Docker event: recreated orphaned containers: %s',
+                                    ', '.join(restarted),
+                                )
+                        else:
+                            logger.info('Docker event: no orphaned network-dependent containers found')
+                    except Exception as _exc:
+                        logger.warning('Docker event: error recreating orphaned containers: %s', _exc)
+
                     logger.info('Docker event: running automatic quick check now')
                     _run_event_triggered_quick_check(a)
 
