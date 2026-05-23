@@ -947,13 +947,13 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
     form('save_speed'),
     cardWithAction('db_retention'),
     form('save_vpn'),
-    cardWithAction('save_api_token'),
     cardWithAction('credentials'),
   ].forEach(el => move(left, el));
 
   [
     form('sidecar'),
     form('proxy_credentials'),
+    cardWithAction('save_api_token'),
     cardWithForm('form-pull-network'),
     cardWithForm('form-post-switch'),
     cardWithForm('form-pause-bench'),
