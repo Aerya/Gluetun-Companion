@@ -536,7 +536,7 @@
             <span id="discover-error-msg"></span>
           </div>
           <pre class="small bg-body-secondary rounded p-2">ports:
-  - "8000:8000/tcp"</pre>
+  - "{{ gluetun_api_port }}:8000/tcp"</pre>
         </div>
         <div id="discover-content" class="d-none">
           <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
@@ -1037,7 +1037,7 @@ function _loadDiscoverServers() {
 
   fetch('{{ url_for("main.api_gluetun_servers") }}')
     .then(r => {
-      if (r.status === 503) return r.json().then(d => { throw {api: true, msg: d.error}; });
+      if (r.status === 503) return r.json().then(d => { throw {api: true, data: d}; });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     })
@@ -1049,8 +1049,14 @@ function _loadDiscoverServers() {
     .catch(err => {
       document.getElementById('discover-loading').classList.add('d-none');
       document.getElementById('discover-error').classList.remove('d-none');
-      const errMsg = '{{ t.srv_discover_api_error }}';
-      document.getElementById('discover-error-msg').textContent = errMsg;
+      const errEl = document.getElementById('discover-error-msg');
+      let errMsg = '{{ t.srv_discover_api_error }}';
+      if (err && err.api && err.data && err.data.tried_urls && err.data.tried_urls.length) {
+        errMsg += '<br><span class="text-muted" style="font-size:.8rem">{{ t.srv_discover_tried }}: '
+                + err.data.tried_urls.map(u => '<code>' + u + '</code>').join(', ')
+                + '</span>';
+      }
+      errEl.innerHTML = errMsg;
     });
 }
 

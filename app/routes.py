@@ -303,6 +303,7 @@ def servers():
         active_profile=active_profile,
         profile_scores=profile_scores,
         profile_best=profile_best,
+        gluetun_api_port=get_setting('gluetun_api_port', '8000'),
     )
 
 
@@ -560,18 +561,41 @@ def api_gluetun_servers():
     from .gluetun import fetch_gluetun_servers, get_current_filters
     from .database import get_db, get_setting
 
-    container = current_app.config['GLUETUN_CONTAINER']
-    api_host  = current_app.config['GLUETUN_HOST']
-    api_port  = int(get_setting('gluetun_api_port', '8000'))
+    container    = current_app.config['GLUETUN_CONTAINER']
+    gluetun_host = current_app.config['GLUETUN_HOST']
+    api_port     = int(get_setting('gluetun_api_port', '8000'))
 
-    all_servers = fetch_gluetun_servers(api_host, api_port)
+    # Build a list of (host, port) combinations to try in order:
+    #   1. Configured GLUETUN_HOST + configured port  (standard case)
+    #   2. host.docker.internal + configured port     (fallback when GLUETUN_HOST
+    #      is a container name and port is the host-side exposed port)
+    #   3. GLUETUN_HOST + 8000                        (fallback when port was not
+    #      changed from default but GLUETUN_HOST is the container name)
+    _attempts: list[tuple[str, int]] = [(gluetun_host, api_port)]
+    if gluetun_host != 'host.docker.internal':
+        _attempts.append(('host.docker.internal', api_port))
+    if api_port != 8000:
+        _attempts.append((gluetun_host, 8000))
+
+    all_servers   = None
+    tried_urls: list[str] = []
+    for _h, _p in _attempts:
+        _url = f'http://{_h}:{_p}/v1/servers'
+        tried_urls.append(_url)
+        all_servers = fetch_gluetun_servers(_h, _p)
+        if all_servers is not None:
+            logger.debug('api_gluetun_servers: reached API at %s', _url)
+            break
+
     if all_servers is None:
+        logger.warning('api_gluetun_servers: unreachable — tried %s', tried_urls)
         return jsonify({
             'servers': [],
             'total_in_gluetun': 0,
             'active_filter_type': '',
             'active_filter_value': '',
             'error': 'api_unreachable',
+            'tried_urls': tried_urls,
         }), 503
 
     # ── Auto-detect active Gluetun filter ────────────────────────────────────
