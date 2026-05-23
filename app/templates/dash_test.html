@@ -16,31 +16,45 @@
 </div>
 
 {# ═══════════════════════════════════════════════════════════════════════════ #}
-{# ROW 1 — VPN status (large) + Active server + Next run ─────────────────── #}
+{# ROW 1 — VPN status + Active server + Benchmark controls ───────────────── #}
 {# ═══════════════════════════════════════════════════════════════════════════ #}
 <div class="row g-3 mb-3">
 
-  {# ── VPN status — large card ────────────────────────────────────────────── #}
-  <div class="col-12 col-md-4">
+  {# ── VPN status ─────────────────────────────────────────────────────────── #}
+  <div class="col-12 col-md-3">
     <div class="card h-100 p-3">
+      <div class="text-muted mb-2" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
+        <i class="bi bi-wifi"></i> {{ t.dash_vpn_status }}
+      </div>
       <div class="d-flex align-items-center gap-2 mb-2">
-        <span class="dot dot-{{ vpn_status }}" style="width:14px;height:14px;flex-shrink:0"></span>
-        <span class="fw-semibold" style="font-size:1.05rem">VPN {{ vpn_status | capitalize }}</span>
+        <span class="dot dot-{{ vpn_status }}" style="width:12px;height:12px;flex-shrink:0"></span>
+        <span class="fw-semibold" style="font-size:1rem">{{ vpn_status | capitalize }}</span>
       </div>
       {% if public_ip %}
-      <div class="d-flex align-items-center gap-2 mb-1">
-        <i class="bi bi-globe2 text-muted"></i>
-        <code style="font-size:.9rem">{{ public_ip }}</code>
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="bi bi-globe2 text-muted" style="font-size:.85rem"></i>
+        <code style="font-size:.85rem">{{ public_ip }}</code>
       </div>
       {% endif %}
-      <div class="mt-2 d-flex align-items-center gap-2" style="font-size:.8rem;color:var(--muted)">
-        <i class="bi bi-server"></i>
+      <div class="d-flex align-items-center gap-2 mb-1" style="font-size:.8rem;color:var(--muted)">
+        <i class="bi bi-list-check"></i>
         <span>{{ server_count }} {{ t.dash_active_servers }}</span>
       </div>
       {% if last_switch %}
-      <div class="mt-1" style="font-size:.75rem;color:var(--muted)">
+      <div style="font-size:.75rem;color:var(--muted)">
         <i class="bi bi-arrow-left-right"></i>
         {{ t.dash_last_switch }} {{ last_switch.switched_at | localtime | truncate(16, True, '') }}
+      </div>
+      {% endif %}
+      {% if adaptive_stats.has_enough_data and adaptive_stats.best_hour is not none %}
+      <div class="mt-auto pt-2">
+        <div class="p-2 rounded" style="background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.2)">
+          <div style="font-size:.72rem;color:var(--muted)">Fenêtre optimale</div>
+          <div>
+            <span class="text-success fw-semibold" style="font-size:.9rem">{{ '%02d'|format(adaptive_stats.best_hour) }}h</span>
+            <span class="text-muted ms-1" style="font-size:.72rem">· {{ adaptive_stats.hours[adaptive_stats.best_hour].avg_dl }} Mbps</span>
+          </div>
+        </div>
       </div>
       {% endif %}
     </div>
@@ -51,7 +65,7 @@
     <div class="card h-100 p-3">
       <div class="d-flex justify-content-between align-items-start mb-1">
         <div>
-          <div class="text-muted" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
+          <div class="text-muted mb-1" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
             <i class="bi bi-server"></i> {{ t.dash_active_server }}
           </div>
           <code style="font-size:1rem;font-weight:600">{{ current_server or '—' }}</code>
@@ -63,11 +77,11 @@
         {% endif %}
       </div>
       {% if sparkline_dl %}
-      <div style="position:relative;height:90px;margin-top:.5rem">
+      <div style="position:relative;height:130px;margin-top:.5rem">
         <canvas id="chartSparkline"></canvas>
       </div>
       {% else %}
-      <div class="text-muted text-center py-3" style="font-size:.85rem">
+      <div class="text-muted text-center py-4" style="font-size:.85rem">
         <i class="bi bi-bar-chart"></i> Aucun historique
       </div>
       {% endif %}
@@ -75,7 +89,7 @@
   </div>
 
   {# ── Benchmark controls ─────────────────────────────────────────────────── #}
-  <div class="col-12 col-md-3">
+  <div class="col-12 col-md-4">
     <div class="card h-100 p-3">
       <div class="text-muted mb-2" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
         <i class="bi bi-clock-history"></i> {{ t.dash_next_test }}
@@ -86,20 +100,12 @@
       <div class="text-muted mb-1">—</div>
       {% endif %}
       {% if last_cycle and last_cycle.duration_secs %}
-      <div class="text-muted mb-3" style="font-size:.72rem">
+      <div class="text-muted mb-3" style="font-size:.75rem">
         {{ t.dash_last_cycle }} {{ last_cycle.duration_secs | int }}s
         {% if last_cycle.servers_tested %}&nbsp;·&nbsp;{{ last_cycle.servers_tested }} {{ t.dash_servers_tested }}{% endif %}
       </div>
-      {% endif %}
-
-      {% if adaptive_stats.has_enough_data and adaptive_stats.best_hour is not none %}
-      <div class="mb-3 p-2 rounded" style="background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.2)">
-        <div style="font-size:.72rem;color:var(--muted)">Fenêtre optimale</div>
-        <div style="font-size:.85rem">
-          <span class="text-success fw-semibold">{{ '%02d'|format(adaptive_stats.best_hour) }}h</span>
-          <span class="text-muted ms-1" style="font-size:.72rem">· {{ adaptive_stats.hours[adaptive_stats.best_hour].avg_dl }} Mbps</span>
-        </div>
-      </div>
+      {% else %}
+      <div class="mb-3"></div>
       {% endif %}
 
       <div class="d-grid gap-2">

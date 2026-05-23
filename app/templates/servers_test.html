@@ -104,7 +104,7 @@
     {%- for h, d in adaptive_stats.hours.items() -%}
       {%- if d.score > ns.max_score -%}{%- set ns.max_score = d.score -%}{%- endif -%}
     {%- endfor -%}
-    <svg viewBox="0 0 504 64" preserveAspectRatio="none" style="width:100%;height:64px;display:block">
+    <svg viewBox="0 0 504 64" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;max-height:72px;display:block;overflow:visible">
       {%- for i in range(24) -%}
         {%- if i in adaptive_stats.hours -%}
           {%- set d = adaptive_stats.hours[i] -%}
@@ -215,15 +215,6 @@
             <th>{{ t.hist_col_jitter }}</th>
             <th>{{ t.hist_col_loss }}</th>
             <th>{{ t.hist_col_dns }}</th>
-            {% if adaptive_stats.has_enough_data %}
-            <th class="text-center">
-              <i class="bi bi-clock-history text-info" style="font-size:.75rem"></i>
-              Fenêtre
-              <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
-                 data-bs-toggle="tooltip" data-bs-placement="bottom"
-                 title="Meilleure heure de benchmark sur l'ensemble des serveurs (patterns globaux)"></i>
-            </th>
-            {% endif %}
             <th>{{ t.srv_col_last_test }}</th>
             <th class="text-end">{{ t.srv_col_actions }}</th>
           </tr>
@@ -336,16 +327,6 @@
                 <small class="{{ _dcls }}">{{ '%.0f'|format(_stab.avg_dns) }} ms</small>
               {%- else -%}<span class="text-muted">—</span>{%- endif -%}
             </td>
-            {# ── Fenêtre optimale column (global patterns, shown per row) ── #}
-            {% if adaptive_stats.has_enough_data %}
-            <td class="text-center">
-              <span class="badge" style="background:rgba(63,185,80,.15);color:#3fb950;border:1px solid #3fb950;font-size:.7rem"
-                    data-bs-toggle="tooltip" data-bs-placement="top"
-                    title="Meilleure fenêtre globale : {{ '%02d'|format(adaptive_stats.best_hour) }}h ({{ adaptive_stats.hours[adaptive_stats.best_hour].avg_dl }} Mbps)">
-                {{ '%02d'|format(adaptive_stats.best_hour) }}h
-              </span>
-            </td>
-            {% endif %}
             <td>
               <small class="text-muted">{{ (s.last_tested | localtime | truncate(16, True, '')) if s.last_tested else t.cmn_never }}</small>
             </td>
@@ -382,7 +363,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="{{ 19 if adaptive_stats.has_enough_data else 18 }}" class="text-center text-muted py-5">
+            <td colspan="18" class="text-center text-muted py-5">
               <i class="bi bi-hdd-network" style="font-size:2rem;opacity:.3"></i><br>
               {{ t.srv_empty }}<br>
               <small>{{ t.srv_empty_hint | safe }}</small>
@@ -431,7 +412,7 @@
               {{ s.avg_dl }} <span style="font-size:.75rem;font-weight:400">Mbps ↓</span>
             </div>
             {% if s.max_dl %}
-            <div class="text-muted" style="font-size:.72rem">max {{ s.max_dl }} Mbps</div>
+            <div class="text-muted" style="font-size:.75rem">max {{ s.max_dl }} Mbps</div>
             {% endif %}
           {% else %}
             <div class="text-muted" style="font-size:1.4rem">—</div>
@@ -466,7 +447,7 @@
           </div>
 
           {# Key metrics row #}
-          <div class="row g-1 text-center mt-1" style="font-size:.72rem">
+          <div class="row g-1 text-center mt-1" style="font-size:.75rem">
             <div class="col-4">
               <div class="text-muted">Latence</div>
               <div>{{ (s.avg_lat|int|string + ' ms') if s.avg_lat else '—' }}</div>
@@ -487,9 +468,9 @@
           </div>
 
           {# Last test + IP #}
-          <div class="mt-2 pt-2 border-top" style="font-size:.7rem;color:var(--muted)">
-            {% if s.last_ipv4 %}<code>{{ s.last_ipv4 }}</code>{% endif %}
-            <span class="ms-auto float-end">{{ (s.last_tested | localtime | truncate(13, True, '')) if s.last_tested else t.cmn_never }}</span>
+          <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center" style="font-size:.75rem;color:var(--muted)">
+            <code style="font-size:.75rem">{{ s.last_ipv4 or '' }}</code>
+            <span>{{ (s.last_tested | localtime | truncate(13, True, '')) if s.last_tested else t.cmn_never }}</span>
           </div>
         </div>
         <div class="card-footer p-2 d-flex gap-1 justify-content-end">
