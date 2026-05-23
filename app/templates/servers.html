@@ -100,12 +100,6 @@
   </div>
 </div>
 
-{# ── Named servers notice ─────────────────────────────────────────────────── #}
-<div class="alert alert-info py-2 px-3 mb-3 d-flex align-items-start gap-2" style="font-size:.82rem">
-  <i class="bi bi-info-circle-fill flex-shrink-0 mt-1"></i>
-  <span>{{ t.srv_named_servers_hint | safe }}</span>
-</div>
-
 {# ── New AirVPN banner ────────────────────────────────────────────────────── #}
 {% if new_airvpn %}
 <div class="alert alert-info alert-dismissible fade show mb-3 d-flex align-items-center gap-2"
@@ -660,6 +654,32 @@
   {% endif %}
 </div>
 
+{# ── Named servers notice modal (shown once, dismissed via localStorage) ─── #}
+<div class="modal fade" id="namedServersNoticeModal" tabindex="-1"
+     data-bs-backdrop="static" data-bs-keyboard="false" aria-labelledby="namedServersNoticeTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-bottom-0 pb-1">
+        <h5 class="modal-title" id="namedServersNoticeTitle">
+          <i class="bi bi-info-circle-fill text-info me-2"></i>{{ t.srv_named_servers_popup_title }}
+        </h5>
+      </div>
+      <div class="modal-body pt-2" style="font-size:.9rem">
+        {{ t.srv_named_servers_hint | safe }}
+      </div>
+      <div class="modal-footer justify-content-start border-top-0 pt-0">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="namedServersNoticeCheck"
+                 onchange="dismissNamedServersNotice(this)">
+          <label class="form-check-label fw-semibold" for="namedServersNoticeCheck">
+            {{ t.srv_named_servers_popup_confirm }}
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="airvpnModal" tabindex="-1">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
@@ -1093,6 +1113,19 @@ function _refreshAirvpnStats() {
 }
 _refreshAirvpnStats();
 setInterval(_refreshAirvpnStats, 5*60*1000);
+
+// ── Named servers notice (once per browser) ───────────────────────────────
+(function() {
+  if (!localStorage.getItem('companion_named_servers_v1')) {
+    new bootstrap.Modal(document.getElementById('namedServersNoticeModal')).show();
+  }
+})();
+function dismissNamedServersNotice(cb) {
+  if (cb.checked) {
+    localStorage.setItem('companion_named_servers_v1', '1');
+    bootstrap.Modal.getInstance(document.getElementById('namedServersNoticeModal')).hide();
+  }
+}
 
 document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el, {trigger:'hover focus'}));
 </script>
