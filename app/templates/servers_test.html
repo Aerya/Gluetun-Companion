@@ -94,6 +94,11 @@
         <i class="bi bi-download"></i> {{ t.srv_import }}
       </button>
     </form>
+    <button class="btn btn-outline-primary btn-sm fw-semibold"
+            onclick="openDiscoverModal()"
+            title="{{ t.srv_discover_title }}">
+      <i class="bi bi-search"></i> {{ t.srv_discover }}
+    </button>
     <button class="btn btn-success btn-sm fw-semibold position-relative"
             data-bs-toggle="modal" data-bs-target="#airvpnModal"
             id="btn-add-airvpn">
@@ -160,29 +165,32 @@
     {%- for h, d in adaptive_stats.hours.items() -%}
       {%- if d.score > ns.max_score -%}{%- set ns.max_score = d.score -%}{%- endif -%}
     {%- endfor -%}
-    <svg viewBox="0 0 720 124" preserveAspectRatio="xMidYMid meet" style="width:100%;min-height:124px;display:block;overflow:visible">
+    <svg viewBox="0 0 820 130" preserveAspectRatio="xMidYMid meet" style="width:100%;min-height:128px;display:block;overflow:visible">
+      <text x="0" y="14" font-size="10" fill="currentColor" opacity="0.55">Mbps</text>
+      <text x="0" y="104" font-size="10" fill="currentColor" opacity="0.55">Tranche horaire</text>
+      <text x="0" y="124" font-size="10" fill="currentColor" opacity="0.55">Benchmarks</text>
       {%- for i in range(24) -%}
         {%- if i in adaptive_stats.hours -%}
           {%- set d = adaptive_stats.hours[i] -%}
-          {%- set bar_h = ((d.score / ns.max_score) * 68)|int -%}
-          {%- set bar_y = 76 - bar_h -%}
+          {%- set bar_h = ((d.score / ns.max_score) * 62)|int -%}
+          {%- set bar_y = 82 - bar_h -%}
           {%- set is_good = i in adaptive_stats.good_hours -%}
           {%- set is_bad  = i in adaptive_stats.bad_hours -%}
           {%- set color = '#2dd4bf' if is_good else ('#fb7185' if is_bad else '#60a5fa') -%}
-          <rect x="{{ i * 30 + 2 }}" y="{{ bar_y }}" width="24" height="{{ bar_h }}"
+          <rect x="{{ 96 + i * 30 + 2 }}" y="{{ bar_y }}" width="24" height="{{ bar_h }}"
                 fill="{{ color }}" opacity="0.86" rx="3">
             <title>{{ '%02d'|format(i) }}h — {{ d.avg_dl }} Mbps · CV {{ d.cv_pct }}% · {{ d.n }} tests</title>
           </rect>
-          <text x="{{ i * 30 + 14 }}" y="{{ [bar_y - 4, 9]|max }}" text-anchor="middle"
+          <text x="{{ 96 + i * 30 + 14 }}" y="14" text-anchor="middle"
                 font-size="8.5" fill="currentColor" opacity="0.72">{{ d.avg_dl }}</text>
-          <text x="{{ i * 30 + 14 }}" y="116" text-anchor="middle"
-                font-size="8" fill="currentColor" opacity="0.45">{{ d.n }}t</text>
+          <text x="{{ 96 + i * 30 + 14 }}" y="124" text-anchor="middle"
+                font-size="8" fill="currentColor" opacity="0.48">{{ d.n }}</text>
         {%- else -%}
-          <rect x="{{ i * 30 + 2 }}" y="74" width="24" height="2"
+          <rect x="{{ 96 + i * 30 + 2 }}" y="80" width="24" height="2"
                 fill="currentColor" opacity="0.12" rx="1"></rect>
         {%- endif -%}
-        <text x="{{ i * 30 + 14 }}" y="102" text-anchor="middle"
-              font-size="11" fill="currentColor" opacity="0.55">{{ '%02d'|format(i) }}</text>
+        <text x="{{ 96 + i * 30 + 14 }}" y="104" text-anchor="middle"
+              font-size="10" fill="currentColor" opacity="0.6">{{ '%02d'|format(i) }}h</text>
       {%- endfor -%}
     </svg>
   </div>
@@ -530,9 +538,6 @@
               <i class="bi bi-shield-fill {{ _sc }}" style="font-size:.6rem"
                  title="{{ t.stab_col_header }}" data-bs-toggle="tooltip"></i>
             {%- endif -%}
-            {% if s.avg_ul %}
-              <span class="text-info ms-auto" style="font-size:.78rem">↑ {{ s.avg_ul }}</span>
-            {% endif %}
           </div>
 
           {# Key metrics row #}
@@ -635,6 +640,59 @@
 </div>
 
 {# ── AirVPN server picker modal (identical to /servers) ──────────────────── #}
+<div class="modal fade" id="discoverModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-search me-2"></i>{{ t.srv_discover_title }}
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="discover-body">
+        <div class="text-center text-muted py-4" id="discover-loading">
+          <div class="spinner-border spinner-border-sm me-2"></div>
+          {{ t.srv_discover_loading }}
+        </div>
+        <div id="discover-error" class="d-none">
+          <div class="alert alert-warning mb-2">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            <span id="discover-error-msg"></span>
+          </div>
+          <pre class="small bg-body-secondary rounded p-2">ports:
+  - "{{ gluetun_api_port }}:8000/tcp"</pre>
+        </div>
+        <div id="discover-content" class="d-none">
+          <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+            <div id="discover-filter-info" class="small text-muted"></div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-outline-secondary btn-sm" onclick="discoverSelectAll(true)">
+                {{ t.srv_discover_select_all }}
+              </button>
+              <button class="btn btn-outline-secondary btn-sm" onclick="discoverSelectAll(false)">
+                {{ t.srv_discover_deselect_all }}
+              </button>
+            </div>
+          </div>
+          <div id="discover-list" class="row g-1" style="max-height:420px;overflow-y:auto"></div>
+        </div>
+      </div>
+      <div class="modal-footer d-flex justify-content-between align-items-center">
+        <small class="text-muted" id="discover-count"></small>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+            {{ t.cmn_cancel }}
+          </button>
+          <button type="button" class="btn btn-primary btn-sm fw-semibold"
+                  id="discover-import-btn" onclick="discoverImport()" disabled>
+            <i class="bi bi-download me-1"></i>{{ t.srv_discover_import_btn }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="airvpnModal" tabindex="-1">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
@@ -772,6 +830,121 @@ function _esc(str) {
 }
 
 // ── AirVPN picker (same as /servers) ─────────────────────────────────────
+let _discoverData = [];
+function openDiscoverModal() {
+  const modal = new bootstrap.Modal(document.getElementById('discoverModal'));
+  modal.show();
+  _loadDiscoverServers();
+}
+function _loadDiscoverServers() {
+  document.getElementById('discover-loading').classList.remove('d-none');
+  document.getElementById('discover-error').classList.add('d-none');
+  document.getElementById('discover-content').classList.add('d-none');
+  document.getElementById('discover-import-btn').disabled = true;
+  document.getElementById('discover-count').textContent = '';
+  fetch('{{ url_for("main.api_gluetun_servers") }}')
+    .then(r => {
+      if (r.status === 503) return r.json().then(d => { throw {api: true, data: d}; });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(data => {
+      document.getElementById('discover-loading').classList.add('d-none');
+      _discoverData = data.servers || [];
+      _renderDiscoverList(data);
+    })
+    .catch(err => {
+      document.getElementById('discover-loading').classList.add('d-none');
+      document.getElementById('discover-error').classList.remove('d-none');
+      const errEl = document.getElementById('discover-error-msg');
+      let errMsg = '{{ t.srv_discover_api_error }}';
+      if (err && err.api && err.data && err.data.tried_urls && err.data.tried_urls.length) {
+        errMsg += '<br><span class="text-muted" style="font-size:.8rem">{{ t.srv_discover_tried }}: '
+                + err.data.tried_urls.map(u => '<code>' + u + '</code>').join(', ')
+                + '</span>';
+      }
+      errEl.innerHTML = errMsg;
+    });
+}
+function _renderDiscoverList(data) {
+  const list = document.getElementById('discover-list');
+  const servers = data.servers || [];
+  const ft = data.active_filter_type || '';
+  const fv = data.active_filter_value || '';
+  const filterInfo = document.getElementById('discover-filter-info');
+  if (ft && fv) {
+    const varName = {'country':'SERVER_COUNTRIES','region':'SERVER_REGIONS','city':'SERVER_CITIES','hostname':'SERVER_HOSTNAMES','name':'SERVER_NAMES'}[ft] || ft.toUpperCase();
+    filterInfo.innerHTML = '<i class="bi bi-funnel me-1"></i>{{ t.srv_discover_filter_hint }} <code>' + varName + '=' + _esc(fv) + '</code>';
+  } else {
+    filterInfo.textContent = '{{ t.srv_discover_all }}';
+  }
+  if (!servers.length) {
+    list.innerHTML = '<div class="col-12 text-muted small">{{ t.srv_discover_empty }}</div>';
+    document.getElementById('discover-content').classList.remove('d-none');
+    return;
+  }
+  const byCountry = {};
+  servers.forEach(s => {
+    const k = s.country || '-';
+    if (!byCountry[k]) byCountry[k] = [];
+    byCountry[k].push(s);
+  });
+  let html = '';
+  Object.keys(byCountry).sort().forEach(country => {
+    html += '<div class="col-12"><div class="fw-semibold small text-muted mb-1 mt-2"><i class="bi bi-globe me-1"></i>' + _esc(country) + '</div></div>';
+    byCountry[country].forEach(s => {
+      const checked = !s.already_added ? 'checked' : '';
+      const disabled = s.already_added ? 'disabled' : '';
+      const badge = s.already_added ? '<span class="badge bg-secondary ms-1" style="font-size:.65rem">{{ t.srv_discover_already }}</span>' : '';
+      const city = s.city ? '<span class="text-muted" style="font-size:.75rem"> - ' + _esc(s.city) + '</span>' : '';
+      const id = 'dc_' + String(s.import_name).replace(/[^a-z0-9]/gi, '_');
+      html += '<div class="col-12 col-sm-6 col-md-4"><div class="form-check">'
+            + '<input class="form-check-input discover-cb" type="checkbox" value="' + _esc(s.import_name) + '" data-type="' + _esc(s.import_type) + '" '
+            + checked + ' ' + disabled + ' id="' + id + '" onchange="_updateDiscoverCount()">'
+            + '<label class="form-check-label small" for="' + id + '">' + _esc(s.display) + badge + city + '</label></div></div>';
+    });
+  });
+  list.innerHTML = html;
+  document.getElementById('discover-content').classList.remove('d-none');
+  _updateDiscoverCount();
+}
+function _updateDiscoverCount() {
+  const checked = document.querySelectorAll('.discover-cb:checked:not(:disabled)').length;
+  document.getElementById('discover-count').textContent = checked + ' selectionne(s)';
+  document.getElementById('discover-import-btn').disabled = checked === 0;
+}
+function discoverSelectAll(select) {
+  document.querySelectorAll('.discover-cb:not(:disabled)').forEach(cb => cb.checked = select);
+  _updateDiscoverCount();
+}
+function discoverImport() {
+  const checked = [...document.querySelectorAll('.discover-cb:checked:not(:disabled)')];
+  if (!checked.length) return;
+  const byType = {};
+  checked.forEach(cb => {
+    const t = cb.dataset.type || 'name';
+    if (!byType[t]) byType[t] = [];
+    byType[t].push(cb.value);
+  });
+  const btn = document.getElementById('discover-import-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>...';
+  const requests = Object.entries(byType).map(([ft, names]) =>
+    fetch('{{ url_for("main.add_servers_bulk") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({names, filter_type: ft}),
+    }).then(r => r.json())
+  );
+  Promise.all(requests).then(() => {
+    bootstrap.Modal.getInstance(document.getElementById('discoverModal')).hide();
+    location.reload();
+  }).catch(() => {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-download me-1"></i>{{ t.srv_discover_import_btn }}';
+  });
+}
+
 const _existingServers = new Set({{ existing_names | tojson }});
 const _trackedNewNames = new Set({{ new_airvpn_names | tojson }});
 const _t = {

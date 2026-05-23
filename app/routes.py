@@ -1040,6 +1040,7 @@ def servers_test():
         active_profile=active_profile,
         profile_scores=profile_scores,
         profile_best=profile_best,
+        gluetun_api_port=get_setting('gluetun_api_port', '8000'),
     )
 
 

@@ -97,31 +97,34 @@
       {%- if d.score > ns.max_score -%}{%- set ns.max_score = d.score -%}{%- endif -%}
     {%- endfor -%}
     <div style="overflow-x:auto">
-      <svg viewBox="0 0 720 124" preserveAspectRatio="xMidYMid meet" style="width:100%;min-height:124px;display:block;overflow:visible">
+      <svg viewBox="0 0 820 130" preserveAspectRatio="xMidYMid meet" style="width:100%;min-height:128px;display:block;overflow:visible">
+        <text x="0" y="14" font-size="10" fill="currentColor" opacity="0.55">Mbps</text>
+        <text x="0" y="104" font-size="10" fill="currentColor" opacity="0.55">Tranche horaire</text>
+        <text x="0" y="124" font-size="10" fill="currentColor" opacity="0.55">Benchmarks</text>
         {%- for i in range(24) -%}
           {%- if i in adaptive_stats.hours -%}
             {%- set d = adaptive_stats.hours[i] -%}
-            {%- set bar_h = ((d.score / ns.max_score) * 68)|int -%}
-            {%- set bar_y = 76 - bar_h -%}
+            {%- set bar_h = ((d.score / ns.max_score) * 62)|int -%}
+            {%- set bar_y = 82 - bar_h -%}
             {%- set is_good = i in adaptive_stats.good_hours -%}
             {%- set is_bad  = i in adaptive_stats.bad_hours -%}
             {%- set color = '#2dd4bf' if is_good else ('#fb7185' if is_bad else '#60a5fa') -%}
-            <rect x="{{ i * 30 + 2 }}" y="{{ bar_y }}" width="24" height="{{ bar_h }}"
+            <rect x="{{ 96 + i * 30 + 2 }}" y="{{ bar_y }}" width="24" height="{{ bar_h }}"
                   fill="{{ color }}" opacity="0.86" rx="3">
               <title>{{ '%02d'|format(i) }}h — {{ d.avg_dl }} Mbps · CV {{ d.cv_pct }}% · {{ d.n }} tests</title>
             </rect>
-            <text x="{{ i * 30 + 14 }}" y="{{ [bar_y - 4, 9]|max }}" text-anchor="middle"
+            <text x="{{ 96 + i * 30 + 14 }}" y="14" text-anchor="middle"
                   font-size="8.5" fill="currentColor" opacity="0.72">{{ d.avg_dl }}</text>
-            <text x="{{ i * 30 + 14 }}" y="116" text-anchor="middle"
-                  font-size="8" fill="currentColor" opacity="0.45">{{ d.n }}t</text>
+            <text x="{{ 96 + i * 30 + 14 }}" y="124" text-anchor="middle"
+                  font-size="8" fill="currentColor" opacity="0.48">{{ d.n }}</text>
           {%- else -%}
-            <rect x="{{ i * 30 + 2 }}" y="74" width="24" height="2"
+            <rect x="{{ 96 + i * 30 + 2 }}" y="80" width="24" height="2"
                   fill="currentColor" opacity="0.12" rx="1">
               <title>{{ '%02d'|format(i) }}h — pas de données</title>
             </rect>
           {%- endif -%}
-          <text x="{{ i * 30 + 14 }}" y="102" text-anchor="middle"
-                font-size="11" fill="currentColor" opacity="0.55">{{ '%02d'|format(i) }}</text>
+          <text x="{{ 96 + i * 30 + 14 }}" y="104" text-anchor="middle"
+                font-size="10" fill="currentColor" opacity="0.6">{{ '%02d'|format(i) }}h</text>
         {%- endfor -%}
       </svg>
     </div>
