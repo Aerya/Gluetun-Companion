@@ -1158,7 +1158,7 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 <div class="row g-4 mt-2">
 
   {# ── Diagnostic ───────────────────────────────────────────────────────── #}
-  <div class="col-lg-4">
+  <div class="col-lg-6">
     <div class="card p-4 h-100">
       <h6 class="fw-bold mb-1">
         <i class="bi bi-stethoscope"></i> {{ t.set_diag_title }}
@@ -1188,8 +1188,10 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
     </div>
   </div>
 
-  {# ── Export / Import ──────────────────────────────────────────────────── #}
-  <div class="col-lg-4">
+  {# ── Export / Import + Grafana ───────────────────────────────────────── #}
+  <div class="col-lg-6">
+  <div class="row g-4">
+  <div class="col-12">
     <div class="card p-4 h-100">
       <h6 class="fw-bold mb-1">
         <i class="bi bi-arrow-left-right"></i> {{ t.set_export_title }}
@@ -1214,14 +1216,14 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
   </div>
 
   {# ── Grafana + Prometheus ──────────────────────────────────────────────── #}
-  <div class="col-lg-4">
-    <div class="card p-4 h-100">
+  <div class="col-12">
+    <div class="card p-4">
       <h6 class="fw-bold mb-1">
         <i class="bi bi-bar-chart-line"></i> {{ t.set_grafana_title }}
       </h6>
       <p class="text-muted mb-3" style="font-size:.85rem">{{ t.set_grafana_subtitle }}</p>
 
-      <a href="{{ url_for('main.grafana_dashboard') }}" class="btn btn-outline-warning btn-sm mb-3">
+      <a href="{{ url_for('main.grafana_dashboard') }}" class="btn btn-outline-warning btn-sm mb-3" style="width:fit-content">
         <i class="bi bi-download"></i> {{ t.set_grafana_btn }}
       </a>
 
@@ -1231,7 +1233,10 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
     </div>
   </div>
 
-</div>
+  </div>{# end inner row #}
+  </div>{# end col-lg-6 right #}
+
+</div>{# end outer row #}
 
 {% endblock %}
 
@@ -1639,8 +1644,13 @@ async function runDiagnostic() {
     apprise:      '{{ t.set_diag_apprise }}',
     sidecar:      '{{ t.set_diag_sidecar }}',
   };
-  const txt = { ok: '{{ t.set_diag_ok }}', fail: '{{ t.set_diag_fail }}',
-                na: '{{ t.set_diag_na }}', disabled: '{{ t.set_diag_disabled }}' };
+  const txt = {
+    ok:        '{{ t.set_diag_ok }}',
+    fail:      '{{ t.set_diag_fail }}',
+    na:        '{{ t.set_diag_na }}',
+    disabled:  '{{ t.set_diag_disabled }}',
+    ephemeral: '{{ t.set_diag_ephemeral }}',
+  };
 
   // Reset badges
   Object.keys(labels).forEach(k => {
@@ -1656,7 +1666,8 @@ async function runDiagnostic() {
       const el = document.getElementById('diag-' + key);
       if (!el) return;
       if (res.ok === true) {
-        el.className = 'badge bg-success'; el.textContent = txt.ok;
+        el.className = 'badge bg-success';
+        el.textContent = (res.detail || '').startsWith('port_') ? txt.ok : txt.ok;
       } else if (res.ok === false) {
         el.className = 'badge bg-danger';  el.textContent = txt.fail;
         el.title = res.detail || '';
@@ -1666,6 +1677,9 @@ async function runDiagnostic() {
           el.className = 'badge bg-secondary'; el.textContent = txt.na;
         } else if (detail === 'sidecar_disabled') {
           el.className = 'badge bg-secondary'; el.textContent = txt.disabled;
+        } else if (detail === 'ephemeral_idle') {
+          el.className = 'badge bg-success'; el.textContent = txt.ephemeral;
+          el.style.whiteSpace = 'normal'; el.style.maxWidth = '200px'; el.style.textAlign = 'right';
         } else {
           el.className = 'badge bg-secondary'; el.textContent = detail;
         }

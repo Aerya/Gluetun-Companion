@@ -1457,8 +1457,10 @@ def api_diagnostic():
         import docker as _docker
         _docker.from_env().ping()
         results['docker'] = {'ok': True, 'detail': 'Docker socket reachable'}
+        logger.info('diagnostic docker: OK')
     except Exception as exc:
         results['docker'] = {'ok': False, 'detail': str(exc)[:200]}
+        logger.warning('diagnostic docker: %s', exc)
 
     # 2. Gluetun HTTP proxy
     try:
@@ -1470,8 +1472,10 @@ def api_diagnostic():
         px = _proxies(host, port, user, pwd)
         r = _req.get('https://www.cloudflare.com/cdn-cgi/trace', proxies=px, timeout=10)
         results['gluetun_proxy'] = {'ok': r.status_code == 200, 'detail': f'HTTP {r.status_code}'}
+        logger.info('diagnostic gluetun_proxy: HTTP %s', r.status_code)
     except Exception as exc:
         results['gluetun_proxy'] = {'ok': False, 'detail': str(exc)[:200]}
+        logger.warning('diagnostic gluetun_proxy: %s', exc)
 
     # 3. AirVPN API
     try:
@@ -1481,20 +1485,24 @@ def api_diagnostic():
             headers={'User-Agent': 'GluetunCompanion/1.0'},
         )
         results['airvpn_api'] = {'ok': r.status_code == 200, 'detail': f'HTTP {r.status_code}'}
+        logger.info('diagnostic airvpn_api: HTTP %s', r.status_code)
     except Exception as exc:
         results['airvpn_api'] = {'ok': False, 'detail': str(exc)[:200]}
+        logger.warning('diagnostic airvpn_api: %s', exc)
 
     # 4. Discord webhook
     discord_url = get_setting('discord_webhook_url', '').strip()
     if discord_url:
         try:
             r = _req.get(discord_url, timeout=5)
-            # Discord returns 200 with webhook info on GET
             results['discord'] = {'ok': r.status_code == 200, 'detail': f'HTTP {r.status_code}'}
+            logger.info('diagnostic discord: HTTP %s', r.status_code)
         except Exception as exc:
             results['discord'] = {'ok': False, 'detail': str(exc)[:200]}
+            logger.warning('diagnostic discord: %s', exc)
     else:
         results['discord'] = {'ok': None, 'detail': 'not_configured'}
+        logger.info('diagnostic discord: not configured')
 
     # 5. Apprise
     apprise_urls = get_setting('apprise_urls', '').strip()
@@ -1504,34 +1512,41 @@ def api_diagnostic():
         if http_urls:
             try:
                 r = _req.head(http_urls[0], timeout=5, allow_redirects=True)
-                results['apprise'] = {
-                    'ok':     r.status_code < 500,
-                    'detail': f'HTTP {r.status_code}',
-                }
+                results['apprise'] = {'ok': r.status_code < 500, 'detail': f'HTTP {r.status_code}'}
+                logger.info('diagnostic apprise: HTTP %s', r.status_code)
             except Exception as exc:
                 results['apprise'] = {'ok': False, 'detail': str(exc)[:200]}
+                logger.warning('diagnostic apprise: %s', exc)
         else:
             scheme = lines[0].split('://')[0] if '://' in lines[0] else '?'
             results['apprise'] = {'ok': True, 'detail': f'configured ({scheme}://)'}
+            logger.info('diagnostic apprise: configured (%s)', scheme)
     else:
         results['apprise'] = {'ok': None, 'detail': 'not_configured'}
+        logger.info('diagnostic apprise: not configured')
 
-    # 6. Sidecar
+    # 6. Sidecar — ephemeral container: created at benchmark start, removed at end.
+    #    • No benchmark running → nothing to connect to; Docker already confirmed reachable above.
+    #    • Benchmark running    → the sidecar should be listening on its port.
     if get_setting('sidecar_mode', '0') == '1':
+        benchmark_running = get_setting('benchmark_running', '0') == '1'
         sidecar_port = int(get_setting('sidecar_port', '8766'))
-        try:
-            sock = socket.create_connection(('127.0.0.1', sidecar_port), timeout=3)
-            sock.close()
-            results['sidecar'] = {'ok': True, 'detail': f'Port {sidecar_port} reachable'}
-        except ConnectionRefusedError:
-            results['sidecar'] = {
-                'ok':     False,
-                'detail': f'Port {sidecar_port} not reachable (sidecar not running?)',
-            }
-        except Exception as exc:
-            results['sidecar'] = {'ok': False, 'detail': str(exc)[:200]}
+        if benchmark_running:
+            try:
+                sock = socket.create_connection(('127.0.0.1', sidecar_port), timeout=3)
+                sock.close()
+                results['sidecar'] = {'ok': True, 'detail': f'port_{sidecar_port}_ok'}
+                logger.info('diagnostic sidecar: port %s reachable', sidecar_port)
+            except Exception as exc:
+                results['sidecar'] = {'ok': False, 'detail': str(exc)[:200]}
+                logger.warning('diagnostic sidecar: port %s unreachable: %s', sidecar_port, exc)
+        else:
+            # Container is ephemeral — only exists during a benchmark. Docker works → OK.
+            results['sidecar'] = {'ok': True, 'detail': 'ephemeral_idle'}
+            logger.info('diagnostic sidecar: mode enabled, no benchmark running (ephemeral)')
     else:
         results['sidecar'] = {'ok': None, 'detail': 'sidecar_disabled'}
+        logger.info('diagnostic sidecar: disabled')
 
     return jsonify(results)
 

@@ -513,6 +513,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_diag_fail':           'Échec',
         'set_diag_na':             'Non configuré',
         'set_diag_disabled':       'Désactivé',
+        'set_diag_ephemeral':      'OK — éphémère (actif uniquement pendant un benchmark)',
 
         # ── Export / Import ──
         'set_export_title':        'Export / import de configuration',
@@ -1038,6 +1039,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_diag_fail':           'Failed',
         'set_diag_na':             'Not configured',
         'set_diag_disabled':       'Disabled',
+        'set_diag_ephemeral':      'OK — ephemeral (only active during a benchmark)',
 
         # ── Export / Import ──
         'set_export_title':        'Configuration export / import',
