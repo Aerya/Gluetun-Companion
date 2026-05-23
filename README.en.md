@@ -61,7 +61,6 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [Quick check before benchmark](#quick-check-before-benchmark-option)
   - [Adaptive scheduling](#adaptive-scheduling-option)
   - [Docker events listener](#docker-events-listener)
-  - [Automatic server discovery](#automatic-server-discovery)
   - [Usage profiles](#usage-profiles)
   - [Selection score — stability components](#selection-score--stability-components)
   - [Per-server confidence score](#per-server-confidence-score)
@@ -118,7 +117,6 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 
 ### UI & notifications
 - **Web UI** dark/light, FR/EN — auth, dashboard with sparkline, paginated history, charts, switches page with Mbps gain and connection time
-- **Automatic server discovery** — *Discover* button on the Servers page: queries the Gluetun control API (`/v1/vpn/settings`), automatically filters by the container's active filter (country, region, city, hostname…), displays available servers with checkboxes grouped by country; servers already in the database are marked; one-click import — compatible with all Gluetun VPN providers
 - **Contextual notifications** — 7 independently-configurable alert types (auto/manual switch, auto-exclude, benchmark with no results, benchmark complete, quick check result, new AirVPN servers) via Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…); severity levels 🔴/🟡/🔵; global Discord mention with configurable severity threshold
 - **Automatic purge** of SQLite history with configurable retention (in days)
 
@@ -221,11 +219,7 @@ Open **http://localhost:8765** — first login: enter the credentials you want (
 
 **Servers → Import from Gluetun**: the companion reads `SERVER_NAMES`, `SERVER_COUNTRIES`, etc. directly from the running container and imports each value with its filter type. Manual addition is also available on the same screen.
 
-> **Using a country / region / city filter?** The **Discover** button (Servers page) queries the Gluetun control API to list all individual servers matching your active filter and import them as `SERVER_NAMES` — essential for benchmarking each server independently. Prerequisite: expose Gluetun's control API port in your docker-compose.yml:
-> ```yaml
-> ports:
->   - "8000:8000/tcp"   # Gluetun control API (HTTP_CONTROL_SERVER_PORT)
-> ```
+> ⚠️ **Companion benchmarks each server individually, by name.** Setting `SERVER_COUNTRIES`, `SERVER_REGIONS` or `SERVER_CITIES` adds a single entry (e.g. "France") — Companion does **not** automatically discover individual servers in that country. Add each server by its name (`SERVER_NAMES`) for benchmarking to work. **Minimum 2 named servers required.**
 
 ---
 
@@ -310,32 +304,6 @@ In **Settings → Containers to restart after switch**: ordered list of containe
 ### Containers to pause during benchmark
 
 In **Settings → Containers to pause during benchmark**: list of containers stopped before the benchmark and restarted after — in all cases, even if the benchmark crashes. If a container is in both lists, the pause list takes priority (no duplicate restart). Useful for `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`.
-
-### Automatic server discovery
-
-The **Discover** button (Servers page) lets you bulk-import individual servers available in your Gluetun pool — essential if your configuration only uses a country, region, or city filter.
-
-**Prerequisite**: expose Gluetun's control API port in your `docker-compose.yml`:
-
-```yaml
-# in your existing Gluetun docker-compose.yml
-ports:
-  - "8887:8888"       # HTTP proxy (already present)
-  - "8000:8000/tcp"   # control API (HTTP_CONTROL_SERVER_PORT — add this)
-```
-
-**How it works**:
-
-1. Companion reads the active filter from the Gluetun container (`SERVER_COUNTRIES=France`, `SERVER_REGIONS=…`, etc.)
-2. It queries `GET /v1/vpn/settings` on the Gluetun API (the `/v1/servers` endpoint does not exist in Gluetun's API — Companion returns the servers currently configured in Gluetun)
-3. Results are filtered automatically (only servers matching the active filter are shown)
-4. A modal displays available servers grouped by country, with checkboxes
-5. Servers already in the database are marked — their checkbox is disabled to prevent duplicates
-6. The import adds selected servers as `filter_type=name` (or `hostname` if the provider has no individual name) — Companion can then benchmark them independently
-
-**Supported providers**: all Gluetun-compatible VPN providers. For AirVPN, each server has a unique name (`Menkent`, `Elgafar`…) → imported as `SERVER_NAMES`. For providers without individual names (Mullvad, ProtonVPN…) → imported as `SERVER_HOSTNAMES`.
-
-> The Gluetun API port is configurable in **Settings → Sidecar Mode → Gluetun API port** (default: 8000).
 
 ### AirVPN server picker
 
