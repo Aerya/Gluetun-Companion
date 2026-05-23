@@ -850,6 +850,8 @@ def servers_test():
                 ROUND(AVG(CASE WHEN st.success=1 THEN st.upload_mbps   END), 1) AS avg_ul,
                 ROUND(AVG(CASE WHEN st.success=1 THEN st.latency_ms    END), 0) AS avg_lat,
                 ROUND(MAX(CASE WHEN st.success=1 THEN st.download_mbps END), 1) AS max_dl,
+                ROUND(AVG(CASE WHEN st.success=1 AND st.dl_single_mbps IS NOT NULL
+                               THEN st.dl_single_mbps END), 1)                  AS avg_dl_single,
                 MAX(st.tested_at)                                                AS last_tested,
                 COUNT(st.id)                                                     AS total_tests,
                 SUM(CASE WHEN st.success=1 THEN 1 ELSE 0 END)                   AS ok_tests,
@@ -887,6 +889,11 @@ def servers_test():
                   for s in new_airvpn}
         new_airvpn_countries = ', '.join(sorted(cc_set))
 
+    _stability = get_stability_all()
+    active_profile = get_setting('active_profile', 'balanced')
+    profile_scores = _score_servers(rows, active_profile, _stability)
+    profile_best   = max(profile_scores, key=profile_scores.get) if profile_scores else None
+
     return render_template(
         'servers_test.html', servers=rows,
         filter_labels=FILTER_LABELS, filter_vars=FILTER_VARS,
@@ -896,11 +903,15 @@ def servers_test():
         filter_types=filter_types,
         active_server=active_server,
         confidence=compute_confidence_all(),
-        stability=get_stability_all(),
+        stability=_stability,
         new_airvpn=new_airvpn,
         new_airvpn_names=new_airvpn_names,
         new_airvpn_countries=new_airvpn_countries,
         adaptive_stats=get_hourly_benchmark_stats(),
+        profiles=PROFILES,
+        active_profile=active_profile,
+        profile_scores=profile_scores,
+        profile_best=profile_best,
     )
 
 
@@ -1030,6 +1041,58 @@ def switches():
     return render_template('switches.html', switches=rows,
                            from_date=from_date, to_date=to_date,
                            status_filter=status_filter)
+
+
+@bp.route('/switches_test')
+@login_required
+def switches_test():
+    from_date     = request.args.get('from_date',     '').strip()
+    to_date       = request.args.get('to_date',       '').strip()
+    status_filter = request.args.get('status_filter', '')
+
+    where_parts: list[str] = []
+    params: list = []
+    if from_date:
+        where_parts.append("DATE(switched_at) >= ?")
+        params.append(from_date)
+    if to_date:
+        where_parts.append("DATE(switched_at) <= ?")
+        params.append(to_date)
+    if status_filter == 'ok':
+        where_parts.append("success = 1")
+    elif status_filter == 'fail':
+        where_parts.append("success = 0")
+    where_sql = ('WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
+
+    with get_db() as db:
+        rows = db.execute(
+            f'SELECT * FROM switches {where_sql} ORDER BY switched_at DESC LIMIT 500',
+            params,
+        ).fetchall()
+
+    total = len(rows)
+    ok_count = sum(1 for r in rows if r['success'])
+    failed_count = total - ok_count
+    gains = [
+        (r['to_mbps'] or 0) - (r['from_mbps'] or 0)
+        for r in rows
+        if r['from_mbps'] is not None and r['to_mbps'] is not None
+    ]
+    avg_gain = round(sum(gains) / len(gains), 1) if gains else None
+    best_gain = round(max(gains), 1) if gains else None
+
+    return render_template(
+        'switches_test.html',
+        switches=rows,
+        from_date=from_date,
+        to_date=to_date,
+        status_filter=status_filter,
+        total=total,
+        ok_count=ok_count,
+        failed_count=failed_count,
+        avg_gain=avg_gain,
+        best_gain=best_gain,
+    )
 
 
 # ---------------------------------------------------------------------------

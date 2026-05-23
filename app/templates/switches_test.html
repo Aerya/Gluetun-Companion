@@ -1,0 +1,258 @@
+{% extends 'base.html' %}
+{% block title %}{{ t.nav_switches }} TEST - Gluetun Companion{% endblock %}
+
+{% block content %}
+<style>
+  .ops-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem;
+    align-items: end;
+    margin-bottom: 1rem;
+  }
+  .proposal-head {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem;
+    align-items: end;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border: 1px solid rgba(251,191,36,.24);
+    border-radius: 8px;
+    background:
+      linear-gradient(135deg, rgba(251,191,36,.11), rgba(45,212,191,.07)),
+      var(--bs-secondary-bg);
+  }
+  .proposal-kicker {
+    color: #fbbf24;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .proposal-title { margin: .15rem 0 0; font-weight: 800; letter-spacing: 0; }
+  .proposal-subtitle { color: var(--bs-secondary-color); font-size: .86rem; margin-top: .2rem; max-width: 820px; }
+  .proposal-tabs .btn { width: 38px; height: 32px; display: inline-flex; align-items: center; justify-content: center; }
+  .ops-title { margin: 0; font-size: 1.05rem; font-weight: 700; }
+  .ops-subtitle { color: var(--bs-secondary-color); font-size: .82rem; margin-top: .2rem; }
+  .ops-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .75rem;
+    margin-bottom: 1rem;
+  }
+  .ops-metric {
+    background: var(--bs-secondary-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 8px;
+    padding: .85rem 1rem;
+    min-height: 82px;
+  }
+  .ops-metric .label {
+    color: var(--bs-secondary-color);
+    font-size: .7rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .ops-metric .value { font-size: 1.35rem; font-weight: 750; line-height: 1.25; }
+  .ops-filter {
+    background: var(--bs-secondary-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 8px;
+    padding: .75rem;
+    margin-bottom: 1rem;
+  }
+  .ops-table { font-size: .86rem; }
+  .ops-table td, .ops-table th { vertical-align: middle; }
+  .server-flow {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) 24px minmax(120px, 1fr);
+    gap: .45rem;
+    align-items: center;
+    min-width: 300px;
+  }
+  .flow-server { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gain-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    border-radius: 999px;
+    padding: .18rem .55rem;
+    font-size: .78rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .gain-up { color: #3fb950; background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.28); }
+  .gain-down { color: #f85149; background: rgba(248,81,73,.10); border: 1px solid rgba(248,81,73,.24); }
+  .reason-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 999px;
+    padding: .18rem .55rem;
+    font-size: .76rem;
+    color: var(--bs-body-color);
+    background: var(--bs-tertiary-bg);
+  }
+  @media (max-width: 991.98px) {
+    .ops-header, .proposal-head { grid-template-columns: 1fr; }
+    .ops-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 575.98px) {
+    .ops-strip { grid-template-columns: 1fr; }
+    .server-flow { grid-template-columns: 1fr; min-width: 180px; }
+    .server-flow .bi-arrow-right { display: none; }
+  }
+</style>
+
+<div class="alert alert-warning py-1 px-3 mb-3 d-flex align-items-center gap-2" style="font-size:.8rem">
+  <i class="bi bi-flask"></i>
+  <span><strong>Mise en page test</strong> - <a href="{{ url_for('main.switches') }}" class="alert-link">Version stable</a></span>
+</div>
+
+<div class="proposal-head">
+  <div>
+    <div class="proposal-kicker">Proposition Codex</div>
+    <h5 class="proposal-title"><i class="bi bi-arrow-left-right"></i> Journal des bascules</h5>
+    <div class="proposal-subtitle">Une timeline operationnelle : origine, destination, gain reel, raison et resultat restent lisibles d'un coup d'oeil.</div>
+  </div>
+  <div class="btn-group btn-group-sm proposal-tabs">
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.dash_test') }}"><i class="bi bi-speedometer2"></i></a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.servers_test') }}"><i class="bi bi-hdd-network"></i></a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.history_test') }}"><i class="bi bi-graph-up"></i></a>
+    <a class="btn btn-outline-info active" href="{{ url_for('main.switches_test') }}"><i class="bi bi-arrow-left-right"></i></a>
+  </div>
+</div>
+
+<div class="ops-strip">
+  <div class="ops-metric">
+    <div class="label">Bascule(s)</div>
+    <div class="value">{{ total }}</div>
+    <div class="text-muted small">dans la vue courante</div>
+  </div>
+  <div class="ops-metric">
+    <div class="label">Succes</div>
+    <div class="value text-success">{{ ok_count }}</div>
+    <div class="text-muted small">{{ failed_count }} echec(s)</div>
+  </div>
+  <div class="ops-metric">
+    <div class="label">Gain moyen</div>
+    <div class="value {{ 'text-success' if avg_gain is not none and avg_gain >= 0 else 'text-danger' }}">
+      {{ ('%+.1f Mbps'|format(avg_gain)) if avg_gain is not none else '-' }}
+    </div>
+    <div class="text-muted small">sur les bascules mesurees</div>
+  </div>
+  <div class="ops-metric">
+    <div class="label">Meilleur gain</div>
+    <div class="value text-success">{{ ('%+.1f Mbps'|format(best_gain)) if best_gain is not none else '-' }}</div>
+    <div class="text-muted small">delta max observe</div>
+  </div>
+</div>
+
+<form method="get" class="ops-filter">
+  <div class="row g-2 align-items-end">
+    <div class="col-12 col-sm-auto">
+      <label class="form-label text-muted small mb-1">{{ t.cmn_status }}</label>
+      <select name="status_filter" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value=""     {{ 'selected' if not status_filter }}>{{ t.sw_filter_all }}</option>
+        <option value="ok"   {{ 'selected' if status_filter == 'ok' }}>{{ t.sw_filter_ok }}</option>
+        <option value="fail" {{ 'selected' if status_filter == 'fail' }}>{{ t.sw_filter_fail }}</option>
+      </select>
+    </div>
+    <div class="col-6 col-sm-auto">
+      <label class="form-label text-muted small mb-1">{{ t.hist_date_from }}</label>
+      <input type="date" name="from_date" class="form-control form-control-sm" value="{{ from_date }}">
+    </div>
+    <div class="col-6 col-sm-auto">
+      <label class="form-label text-muted small mb-1">{{ t.hist_date_to }}</label>
+      <input type="date" name="to_date" class="form-control form-control-sm" value="{{ to_date }}">
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-sm btn-outline-info" title="Filtrer"><i class="bi bi-funnel-fill"></i></button>
+    </div>
+    {% if from_date or to_date or status_filter %}
+    <div class="col-auto">
+      <a href="{{ url_for('main.switches_test') }}" class="btn btn-sm btn-outline-secondary" title="Reset"><i class="bi bi-x-lg"></i></a>
+    </div>
+    {% endif %}
+  </div>
+</form>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 ops-table">
+      <thead>
+        <tr>
+          <th>Flux</th>
+          <th>{{ t.sw_col_gain }}</th>
+          <th>{{ t.sw_col_ip }}</th>
+          <th>{{ t.sw_col_connect }}</th>
+          <th>{{ t.sw_col_reason }}</th>
+          <th>{{ t.cmn_status }}</th>
+          <th>{{ t.cmn_date }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in switches %}
+        {% set has_gain = s.from_mbps is not none and s.to_mbps is not none %}
+        {% set delta = (s.to_mbps - s.from_mbps) if has_gain else none %}
+        <tr>
+          <td>
+            <div class="server-flow">
+              <code class="flow-server text-muted" title="{{ s.from_server or '-' }}">{{ s.from_server or '-' }}</code>
+              <i class="bi bi-arrow-right text-muted text-center"></i>
+              <code class="flow-server text-success" title="{{ s.to_server }}">{{ s.to_server }}</code>
+            </div>
+          </td>
+          <td>
+            {% if has_gain %}
+              <span class="gain-pill {{ 'gain-up' if delta >= 0 else 'gain-down' }}">
+                <i class="bi {{ 'bi-arrow-up-right' if delta >= 0 else 'bi-arrow-down-right' }}"></i>
+                {{ '%+.1f'|format(delta) }} Mbps
+              </span>
+              <div class="text-muted small mt-1">{{ '%.1f'|format(s.from_mbps) }} -> {{ '%.1f'|format(s.to_mbps) }}</div>
+            {% else %}
+              <span class="text-muted">-</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if s.to_ipv4 or s.to_ipv6 %}
+              <small class="text-muted font-monospace">
+                {{ s.to_ipv4 or '' }}
+                {% if s.to_ipv6 %}<br><span style="font-size:.7rem">{{ s.to_ipv6 }}</span>{% endif %}
+              </small>
+            {% else %}<span class="text-muted">-</span>{% endif %}
+          </td>
+          <td>{{ (s.connect_secs | int|string ~ ' s') if s.connect_secs else '-' }}</td>
+          <td>
+            {% if s.reason == 'auto_best' %}
+              <span class="reason-chip"><i class="bi bi-magic text-info"></i>{{ t.sw_reason_auto }}</span>
+            {% elif s.reason == 'manual' %}
+              <span class="reason-chip"><i class="bi bi-hand-index text-warning"></i>{{ t.sw_reason_manual }}</span>
+            {% else %}
+              <span class="reason-chip">{{ s.reason }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if s.success %}
+              <span class="badge bg-success"><i class="bi bi-check2"></i> {{ t.cmn_success }}</span>
+            {% else %}
+              <span class="badge bg-danger"><i class="bi bi-x"></i> {{ t.cmn_failure }}</span>
+            {% endif %}
+          </td>
+          <td><small class="text-muted">{{ s.switched_at | localtime | truncate(16, True, '') }}</small></td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="text-center text-muted py-5">
+            <i class="bi bi-arrow-left-right" style="font-size:2rem;opacity:.3"></i><br>
+            {{ t.sw_empty }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -2,6 +2,47 @@
 {% block title %}Dashboard TEST – Gluetun Companion{% endblock %}
 
 {% block content %}
+<style>
+  .proposal-head {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem;
+    align-items: end;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border: 1px solid rgba(88,166,255,.22);
+    border-radius: 8px;
+    background:
+      linear-gradient(135deg, rgba(88,166,255,.12), rgba(63,185,80,.06)),
+      var(--bs-secondary-bg);
+  }
+  .proposal-kicker {
+    color: #58a6ff;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .proposal-title { margin: .15rem 0 0; font-weight: 800; letter-spacing: 0; }
+  .proposal-subtitle { color: var(--bs-secondary-color); font-size: .86rem; margin-top: .2rem; max-width: 820px; }
+  .proposal-tabs .btn { width: 38px; height: 32px; display: inline-flex; align-items: center; justify-content: center; }
+  .method-sidecar { background: #f6c86e; color: #111820; }
+  .method-qc { background: #8b5cf6; color: #fff; }
+  @media (max-width: 767.98px) { .proposal-head { grid-template-columns: 1fr; } }
+</style>
+<div class="proposal-head">
+  <div>
+    <div class="proposal-kicker">Proposition Codex</div>
+    <h5 class="proposal-title"><i class="bi bi-speedometer2"></i> Console VPN</h5>
+    <div class="proposal-subtitle">Un cockpit compact : etat immediat, serveur actif, prochaine action, puis donnees qui aident a decider.</div>
+  </div>
+  <div class="btn-group btn-group-sm proposal-tabs">
+    <a class="btn btn-info active" href="{{ url_for('main.dash_test') }}" title="Dashboard"><i class="bi bi-speedometer2"></i></a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.servers_test') }}" title="Serveurs"><i class="bi bi-hdd-network"></i></a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.history_test') }}" title="Historique"><i class="bi bi-graph-up"></i></a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.switches_test') }}" title="Switches"><i class="bi bi-arrow-left-right"></i></a>
+  </div>
+</div>
 {# ── Draft banner ─────────────────────────────────────────────────────────── #}
 <div class="alert alert-warning py-1 px-3 mb-3 d-flex align-items-center gap-2" style="font-size:.8rem">
   <i class="bi bi-flask"></i>
@@ -238,9 +279,9 @@
           </td>
           <td>
             {% if r.test_method == 'sidecar' %}
-              <span class="badge" style="background:#f0ad4e;color:#000"><i class="bi bi-boxes"></i> sidecar</span>
+              <span class="badge method-sidecar"><i class="bi bi-boxes"></i> sidecar</span>
             {% elif r.test_method == 'proxy_qc' %}
-              <span class="badge" style="background:#6f42c1"><i class="bi bi-hdd-network"></i> quick check</span>
+              <span class="badge method-qc"><i class="bi bi-hdd-network"></i> quick check</span>
             {% else %}
               <span class="badge bg-secondary"><i class="bi bi-globe2"></i> proxy</span>
             {% endif %}
@@ -277,6 +318,9 @@ const _isDark = document.documentElement.getAttribute('data-bs-theme') !== 'ligh
 const _cGrid  = _isDark ? 'rgba(48,54,61,.8)'  : 'rgba(0,0,0,.07)';
 const _cTick  = _isDark ? '#8b949e' : '#666';
 const _cLabel = _isDark ? '#c9d1d9' : '#333';
+const _chartDl = '#2dd4bf';
+const _chartDlFill = 'rgba(45,212,191,.16)';
+const _chartUl = '#fbbf24';
 
 // ── Live status polling ──────────────────────────────────────────────────
 function pollStatus() {
@@ -343,7 +387,7 @@ new Chart(document.getElementById('chartSparkline'), {
       {
         label: 'Download',
         data: [{% for v in sparkline_dl %}{{ v }},{% endfor %}],
-        borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,.12)',
+        borderColor: _chartDl, backgroundColor: _chartDlFill,
         fill: true, tension: 0.35,
         pointRadius: 2, pointHoverRadius: 5, borderWidth: 1.5,
       },
@@ -351,7 +395,7 @@ new Chart(document.getElementById('chartSparkline'), {
       {
         label: 'Upload',
         data: [{% for v in sparkline_ul %}{{ v if v else 'null' }},{% endfor %}],
-        borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,.0)',
+        borderColor: _chartUl, backgroundColor: 'rgba(251,191,36,0)',
         fill: false, tension: 0.35,
         pointRadius: 2, pointHoverRadius: 5, borderWidth: 1.5,
         borderDash: [4, 3], spanGaps: true,
