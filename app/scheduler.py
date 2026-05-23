@@ -122,6 +122,7 @@ def _test_one_server(
         restart_network_dependents, restart_containers_in_order,
         list_network_dependents,
     )
+    from .database import get_setting as _gs
     from .speedtest import test_download, test_latency, test_upload, test_stability
 
     label = f"{FILTER_VARS.get(filter_type, 'SERVER_NAMES')}={server_name}"
@@ -180,6 +181,19 @@ def _test_one_server(
     except Exception as exc:
         logger.warning('  Upload test failed for %s: %s', server_name, exc)
 
+    # Optional single-stream DL test (DDL profile / single_stream_test setting)
+    dl_single: float | None = None
+    if _gs('single_stream_test', '0') == '1':
+        try:
+            dl_single, _ = test_download(
+                proxy_host, proxy_port,
+                duration=dl_duration, samples=1, warmup=0.0, streams=1,
+                proxy_user=proxy_user, proxy_password=proxy_pass,
+            )
+            logger.info('    DL1 (single-stream) %.1f Mbps', dl_single)
+        except Exception as exc:
+            logger.warning('  Single-stream DL test failed for %s: %s', server_name, exc)
+
     # Stability test (jitter + packet loss via HTTP TTFB sampling)
     stability: dict | None = None
     try:
@@ -225,17 +239,19 @@ def _test_one_server(
         packet_loss_pct=stability['packet_loss_pct'] if stability else None,
         ping_min_ms=stability.get('ping_min_ms') if stability else None,
         ping_max_ms=stability.get('ping_max_ms') if stability else None,
+        dl_single_mbps=dl_single,
     )
 
     return {
-        'server':       server_name,
-        'filter_type':  filter_type,
-        'dl':           dl_median,
-        'ul':           ul_median,
-        'lat':          lat_median,
-        'connect_secs': connect_secs,
+        'server':          server_name,
+        'filter_type':     filter_type,
+        'dl':              dl_median,
+        'ul':              ul_median,
+        'lat':             lat_median,
+        'connect_secs':    connect_secs,
         'jitter_ms':       stability['jitter_ms']       if stability else None,
         'packet_loss_pct': stability['packet_loss_pct'] if stability else None,
+        'dl_single':       dl_single,
     }
 
 
@@ -262,7 +278,7 @@ def _test_one_server_sidecar(
 
     The real Gluetun container is never touched during this step.
     """
-    from .database import set_setting
+    from .database import set_setting, get_setting as _sgs
     from .gluetun import (
         FILTER_VARS,
         create_test_gluetun, create_speed_sidecar, stream_sidecar_logs,
@@ -329,6 +345,22 @@ def _test_one_server_sidecar(
                 ping_min_ms     = stability.get('ping_min_ms')
                 ping_max_ms     = stability.get('ping_max_ms')
 
+        # Optional single-stream DL test (sidecar still running)
+        dl_single: float | None = None
+        if _sgs('single_stream_test', '0') == '1':
+            try:
+                single_data = run_sidecar_test(
+                    sidecar_host, sidecar_port,
+                    duration=int(dl_duration), streams=1,
+                    method=sidecar_method,
+                    iperf_fallback=sidecar_iperf_fallback,
+                )
+                dl_single = single_data.get('download_mbps') or None
+                if dl_single:
+                    logger.info('    DL1 (single-stream) %.1f Mbps', dl_single)
+            except Exception as exc:
+                logger.warning('  Single-stream sidecar DL failed for %s: %s', server_name, exc)
+
         sources_log = []
         if dl_ookla:
             sources_log.append(f'ookla:{dl_ookla:.0f}')
@@ -372,6 +404,7 @@ def _test_one_server_sidecar(
             ping_min_ms=ping_min_ms,
             ping_max_ms=ping_max_ms,
             dns_latency_ms=dns_latency_ms,
+            dl_single_mbps=dl_single,
         )
 
         return {
@@ -383,6 +416,7 @@ def _test_one_server_sidecar(
             'connect_secs':    connect_secs,
             'jitter_ms':       jitter_ms,
             'packet_loss_pct': packet_loss_pct,
+            'dl_single':       dl_single,
         }
 
     finally:
@@ -889,20 +923,22 @@ def _do_benchmark(app, skip_quick_check: bool = False):
         if auto_sw and results:
             current_pct      = float(get_setting('weighted_score_current_pct', '65'))
             stability_weight = float(get_setting('stability_weight', '30'))
+            active_profile   = get_setting('active_profile', 'balanced')
             # Compute per-server metadata once (no N+1 queries)
             from .database import (
                 compute_confidence_all  as _conf_all,
                 get_docker_event_counts as _event_counts,
                 get_setting             as _gs,
             )
+            from .profiles import score_results as _score_results
             _conf_map      = _conf_all()
             retention_days = int(_gs('db_retention_days', '30'))
             _reconnect_map = _event_counts(days=retention_days)
             _CONF_FACTORS  = {'HIGH': 1.0, 'MEDIUM': 0.95, 'LOW': 0.85}
+            # Compute _weighted_score for every result (used as 'dl' axis in profiling)
             with get_db() as db:
-                best = max(
-                    results,
-                    key=lambda r: _weighted_score(
+                _ws_map = {
+                    r['server']: _weighted_score(
                         r['server'], r['dl'], db, current_pct,
                         _CONF_FACTORS.get(
                             _conf_map.get(r['server'], {}).get('level', 'MEDIUM'), 0.95
@@ -911,10 +947,18 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                         packet_loss_pct=r.get('packet_loss_pct'),
                         reconnect_count=_reconnect_map.get(r['server'], 0),
                         stability_weight=stability_weight,
-                    ),
-                )
+                    )
+                    for r in results
+                }
+            # Profile-based normalised score → pick best
+            _profile_scores = _score_results(results, active_profile, _ws_map)
+            best = max(results, key=lambda r: _profile_scores.get(r['server'], 0.0))
             best_label = f"{FILTER_VARS.get(best['filter_type'], 'SERVER_NAMES')}={best['server']}"
-            logger.info('Best (weighted): %s (%.1f Mbps current)', best_label, best['dl'])
+            logger.info(
+                'Best (profile=%s): %s (%.1f Mbps current, score=%.4f)',
+                active_profile, best_label, best['dl'],
+                _profile_scores.get(best['server'], 0.0),
+            )
             best_server_label = best_label
 
             from_label = format_filters(get_current_filters(container))
@@ -1172,6 +1216,7 @@ def _record_test(
     ping_max_ms: float | None = None,
     dns_latency_ms: float | None = None,
     trigger: str | None = None,
+    dl_single_mbps: float | None = None,
 ):
     from .database import get_db
     with get_db() as db:
@@ -1181,13 +1226,13 @@ def _record_test(
                 public_ip, public_ipv6, success, error_msg, test_method,
                 dl_ookla, ul_ookla, dl_librespeed, ul_librespeed, dl_iperf3, ul_iperf3,
                 jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms, dns_latency_ms,
-                test_trigger)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                test_trigger, dl_single_mbps)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (server_name, download_mbps, upload_mbps, latency_ms,
              public_ip, public_ipv6, int(success), error, method,
              dl_ookla, ul_ookla, dl_librespeed, ul_librespeed, dl_iperf3, ul_iperf3,
              jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms, dns_latency_ms,
-             trigger),
+             trigger, dl_single_mbps),
         )
 
 

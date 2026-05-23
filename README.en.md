@@ -61,6 +61,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [Quick check before benchmark](#quick-check-before-benchmark-option)
   - [Adaptive scheduling](#adaptive-scheduling-option)
   - [Docker events listener](#docker-events-listener)
+  - [Usage profiles](#usage-profiles)
   - [Selection score — stability components](#selection-score--stability-components)
   - [Per-server confidence score](#per-server-confidence-score)
   - [Jitter & Packet Loss](#jitter--packet-loss)
@@ -92,7 +93,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Docker events listener** — daemon thread watching for Gluetun container `start` events; if Gluetun restarts on its own (crash, update, watchdog), automatically triggers a quick check after N seconds (VPN reconnect delay); if speed drift exceeds the configured threshold and auto-switch is enabled, immediately runs a full benchmark; restarts triggered by Companion itself are ignored; 5-minute cooldown between triggers
 
 ### Server selection & automatic switching
-- **Automatic switching** to the fastest server (`docker compose up -d`), based on a weighted score combining current speed, exponential history, jitter, packet loss and involuntary reconnects (via Docker events); configurable *Speed vs stability* slider; dependent services (`network_mode: service:gluetun`) are recreated automatically
+- **Automatic switching** to the fastest server (`docker compose up -d`), based on a weighted score combining current speed, exponential history, jitter, packet loss and involuntary reconnects (via Docker events); configurable *Speed vs stability* slider; **6 usage profiles** (Balanced, Gaming, BitTorrent, DDL, Download, Streaming) — each profile weights metrics differently to find the server best suited to your actual use case; dependent services (`network_mode: service:gluetun`) are recreated automatically
 - **Manual switch** to any configured server from the Servers page — Gluetun is reconfigured and `network_mode: service:gluetun` containers are recreated automatically
 - **5 filter types**: `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - Configurable **retry** per server + global timeout per server
@@ -385,6 +386,29 @@ A color indicator is shown on the **Servers** page (*Confidence* column) and in 
 **Variability** (coefficient of variation) is the standard deviation of speeds divided by the mean: 0 % = identical results every test, 100 % = very scattered results. Quick check tests (`proxy_qc`) are excluded from the calculation.
 
 The score lightly influences automatic server selection: HIGH × 1.0 · MEDIUM × 0.95 · LOW × 0.85 applied to the weighted score.
+
+### Usage profiles
+
+Companion provides 6 **usage profiles** selectable from the **Servers** page (pill bar) or from **Settings → Automatic switching → Usage profile**.
+
+The active profile determines **how the best server is selected** at the end of each benchmark cycle, by weighting the measured metrics differently.
+
+| Profile | Primary criterion | Typical use |
+|---|---|---|
+| **Balanced** (default) | Existing weighted score (speed + history + stability) | General use — identical behavior to before |
+| **Gaming** | Low latency + low jitter | FPS, MMO, competitive games |
+| **BitTorrent** | Maximum multi-stream upload | qBittorrent, Transmission, Deluge |
+| **DDL (single-stream)** | Single-stream download throughput | Usenet (SABnzbd), direct downloaders (JDownloader) |
+| **Download (multi-stream)** | Maximum multi-stream download | Radarr/Sonarr, large file transfers |
+| **Video streaming** | Stable throughput + low jitter | Jellyfin, Plex, direct play |
+
+**Algorithm**: for each result from the current benchmark cycle, Companion computes the `_weighted_score` (speed + history + stability), then min-max normalises [0,1] all results on each axis. The weighted combination of normalised scores determines the best server for the active profile. The **Balanced** profile reproduces the exact previous behavior — no regression.
+
+**DDL profile and single-stream test**: the DDL profile leverages an additional metric, **single-stream download speed** (`dl_single_mbps`), measured after the main test (VPN connection already established, no reconnect overhead). This test is **optional** and disabled by default — enable it via **Settings → Speed measurement → Single-stream test (DDL)**.
+
+**Servers page**: the profile pill bar displays the **best server for the active profile** (computed from historical averages). The recommended server is highlighted with a 🏆 badge on its row (hidden in Balanced mode).
+
+---
 
 ### Selection score — stability components
 

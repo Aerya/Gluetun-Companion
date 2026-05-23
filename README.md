@@ -61,6 +61,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
   - [Vérification rapide avant benchmark](#vérification-rapide-avant-benchmark-option)
   - [Scheduling adaptatif](#scheduling-adaptatif-option)
   - [Écoute Docker events](#écoute-docker-events)
+  - [Profils d'usage](#profils-dusage)
   - [Score de sélection — composantes de stabilité](#score-de-sélection--composantes-de-stabilité)
   - [Score de confiance par serveur](#score-de-confiance-par-serveur)
   - [Jitter & Packet Loss](#jitter--packet-loss)
@@ -93,7 +94,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Écoute Docker events** — thread daemon qui surveille les événements `start` du container Gluetun ; si Gluetun redémarre de lui-même (crash, mise à jour, watchdog), déclenche automatiquement un quick check après N secondes (délai de reconnexion VPN) ; si la dérive de débit dépasse le seuil configuré et que la bascule automatique est activée, lance immédiatement un benchmark complet ; les redémarrages déclenchés par Companion lui-même sont ignorés ; cooldown de 5 min entre deux déclenchements
 
 ### Sélection & bascule automatique
-- **Bascule automatique** vers le meilleur serveur (`docker compose up -d`), basée sur un score pondéré intégrant débit actuel, historique exponentiel, jitter, perte paquets et reconnexions involontaires (via Docker events) ; curseur *Priorité débit vs stabilité* configurable ; les services dépendants (`network_mode: service:gluetun`) sont recréés automatiquement
+- **Bascule automatique** vers le meilleur serveur (`docker compose up -d`), basée sur un score pondéré intégrant débit actuel, historique exponentiel, jitter, perte paquets et reconnexions involontaires (via Docker events) ; curseur *Priorité débit vs stabilité* configurable ; **6 profils d'usage** sélectionnables (Équilibré, Jeu en ligne, BitTorrent, DDL, Téléchargement, Streaming) — chaque profil pondère différemment les métriques pour trouver le serveur le mieux adapté à l'usage réel ; les services dépendants (`network_mode: service:gluetun`) sont recréés automatiquement
 - **Bascule manuelle** vers n'importe quel serveur configuré depuis la page Serveurs — Gluetun est reconfiguré et les containers `network_mode: service:gluetun` sont recréés automatiquement
 - **5 types de filtre** : `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - **Retry** configurable par serveur + timeout global par serveur
@@ -386,6 +387,29 @@ Un indicateur coloré est affiché sur la page **Serveurs** (colonne *Fiabilité
 La **variabilité** (coefficient de variation) mesure l'écart-type des débits rapporté à la moyenne : 0 % = résultats identiques à chaque test, 100 % = résultats très dispersés. Les tests `proxy_qc` sont exclus du calcul.
 
 Le score influence légèrement la sélection automatique du meilleur serveur : HIGH × 1,0 · MEDIUM × 0,95 · LOW × 0,85 appliqués sur le score pondéré.
+
+### Profils d'usage
+
+Companion propose 6 **profils d'usage** sélectionnables depuis la page **Serveurs** (barre de pills) ou depuis **Paramètres → Bascule automatique → Profil d'usage**.
+
+Le profil actif détermine **comment le meilleur serveur est sélectionné** à la fin de chaque cycle de benchmark, en pondérant différemment les métriques mesurées.
+
+| Profil | Critère principal | Usage typique |
+|---|---|---|
+| **Équilibré** (défaut) | Score pondéré existant (débit + historique + stabilité) | Usage général — comportement identique à avant |
+| **Jeu en ligne** | Faible latence + faible jitter | FPS, MMO, jeux compétitifs |
+| **BitTorrent** | Upload multiflux maximal | qBittorrent, Transmission, Deluge |
+| **DDL (mono-flux)** | Débit monoflux | Usenet (SABnzbd), téléchargeurs directs (JDownloader) |
+| **Téléchargement (multi-flux)** | Débit download multiflux maximal | Radarr/Sonarr, transferts volumineux |
+| **Streaming vidéo** | Débit stable + faible jitter | Jellyfin, Plex, lecture directe |
+
+**Algorithme** : pour chaque résultat du cycle en cours, Companion calcule le `_weighted_score` (débit + historique + stabilité), puis normalise [0,1] l'ensemble des résultats sur chaque axe. La combinaison pondérée des scores normalisés détermine le meilleur serveur selon le profil actif. Le profil **Équilibré** reproduit exactement le comportement antérieur — aucune régression.
+
+**Profil DDL et test monoflux** : le profil DDL exploite une métrique supplémentaire, le **débit monoflux** (`dl_single_mbps`), mesurée après le test principal (connexion VPN déjà établie, sans surcoût de reconnexion). Ce test est **optionnel** et désactivé par défaut — activer via **Paramètres → Mesure de vitesse → Test monoflux (DDL)**.
+
+**Page Serveurs** : la barre de profils affiche le **meilleur serveur pour le profil actif** (calculé sur les moyennes historiques). Ce serveur est mis en évidence par un badge 🏆 sur sa ligne (masqué en profil Équilibré).
+
+---
 
 ### Score de sélection — composantes de stabilité
 

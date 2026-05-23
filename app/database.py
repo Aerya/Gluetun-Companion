@@ -125,7 +125,9 @@ def init_db(db_path: str):
                 ('notif_benchmark_end',         '0'),
                 ('notif_benchmark_failure',     '1'),
                 ('notify_mention',              ''),
-                ('notify_mention_level',        'critical');
+                ('notify_mention_level',        'critical'),
+                ('active_profile',              'balanced'),
+                ('single_stream_test',          '0');
         ''')
         # Migrations for columns added after initial schema
         for stmt in [
@@ -151,6 +153,7 @@ def init_db(db_path: str):
             "ALTER TABLE speed_tests ADD COLUMN ping_max_ms REAL",
             "ALTER TABLE speed_tests ADD COLUMN dns_latency_ms REAL",
             "ALTER TABLE speed_tests ADD COLUMN test_trigger TEXT",
+            "ALTER TABLE speed_tests ADD COLUMN dl_single_mbps REAL",
         ]:
             try:
                 db.execute(stmt)

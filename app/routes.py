@@ -19,6 +19,7 @@ from .database import (
     get_new_airvpn_servers, dismiss_new_airvpn_servers,
     get_stability_all,
 )
+from .profiles import PROFILES, score_servers as _score_servers
 from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
     get_current_filters, format_filters,
@@ -233,13 +234,15 @@ def servers():
             SELECT
                 s.id, s.name, s.filter_type, s.enabled,
                 s.consecutive_failures, s.created_at,
-                ROUND(AVG(CASE WHEN st.success=1 THEN st.download_mbps END), 1) AS avg_dl,
-                ROUND(AVG(CASE WHEN st.success=1 THEN st.upload_mbps   END), 1) AS avg_ul,
-                ROUND(AVG(CASE WHEN st.success=1 THEN st.latency_ms    END), 0) AS avg_lat,
-                ROUND(MAX(CASE WHEN st.success=1 THEN st.download_mbps END), 1) AS max_dl,
-                MAX(st.tested_at)                                                AS last_tested,
-                COUNT(st.id)                                                     AS total_tests,
-                SUM(CASE WHEN st.success=1 THEN 1 ELSE 0 END)                   AS ok_tests,
+                ROUND(AVG(CASE WHEN st.success=1 THEN st.download_mbps END), 1)   AS avg_dl,
+                ROUND(AVG(CASE WHEN st.success=1 THEN st.upload_mbps   END), 1)   AS avg_ul,
+                ROUND(AVG(CASE WHEN st.success=1 THEN st.latency_ms    END), 0)   AS avg_lat,
+                ROUND(MAX(CASE WHEN st.success=1 THEN st.download_mbps END), 1)   AS max_dl,
+                ROUND(AVG(CASE WHEN st.success=1 AND st.dl_single_mbps IS NOT NULL
+                               THEN st.dl_single_mbps END), 1)                    AS avg_dl_single,
+                MAX(st.tested_at)                                                  AS last_tested,
+                COUNT(st.id)                                                       AS total_tests,
+                SUM(CASE WHEN st.success=1 THEN 1 ELSE 0 END)                     AS ok_tests,
                 (SELECT public_ip   FROM speed_tests
                  WHERE server_name=s.name AND success=1 ORDER BY tested_at DESC LIMIT 1) AS last_ipv4,
                 (SELECT public_ipv6 FROM speed_tests
@@ -265,6 +268,12 @@ def servers():
     except Exception:
         active_server = ''
 
+    # Profile scores for display
+    _stability = get_stability_all()
+    active_profile = get_setting('active_profile', 'balanced')
+    profile_scores = _score_servers(rows, active_profile, _stability)
+    profile_best   = max(profile_scores, key=profile_scores.get) if profile_scores else None
+
     # AirVPN new-server data (banner + badge) — only if feature enabled
     new_airvpn: list[dict] = []
     new_airvpn_names: list[str] = []
@@ -286,10 +295,14 @@ def servers():
         filter_types=filter_types,
         active_server=active_server,
         confidence=compute_confidence_all(),
-        stability=get_stability_all(),
+        stability=_stability,
         new_airvpn=new_airvpn,
         new_airvpn_names=new_airvpn_names,
         new_airvpn_countries=new_airvpn_countries,
+        profiles=PROFILES,
+        active_profile=active_profile,
+        profile_scores=profile_scores,
+        profile_best=profile_best,
     )
 
 
@@ -1045,10 +1058,11 @@ def settings():
             flash_t('flash_settings_saved', 'success')
 
         elif action == 'save_speed':
-            set_setting('speedtest_duration', request.form.get('speedtest_duration', '8'))
-            set_setting('speedtest_samples',  request.form.get('speedtest_samples', '3'))
-            set_setting('speedtest_streams',  request.form.get('speedtest_streams', '4'))
-            set_setting('speedtest_warmup',   '1' if request.form.get('speedtest_warmup') else '0')
+            set_setting('speedtest_duration',  request.form.get('speedtest_duration', '8'))
+            set_setting('speedtest_samples',   request.form.get('speedtest_samples', '3'))
+            set_setting('speedtest_streams',   request.form.get('speedtest_streams', '4'))
+            set_setting('speedtest_warmup',    '1' if request.form.get('speedtest_warmup') else '0')
+            set_setting('single_stream_test',  '1' if request.form.get('single_stream_test') else '0')
             flash_t('flash_settings_saved', 'success')
 
         elif action == 'save_vpn':
@@ -1070,6 +1084,9 @@ def settings():
                 set_setting('stability_weight', str(int(max(0.0, min(sw, 100.0)))))
             except ValueError:
                 pass
+            _ap = request.form.get('active_profile', 'balanced')
+            if _ap in PROFILES:
+                set_setting('active_profile', _ap)
             flash_t('flash_settings_saved', 'success')
 
         # Legacy catch-all (kept for backward compat / direct API calls)
@@ -1195,6 +1212,8 @@ def settings():
         'adaptive_auto_shift':          get_setting('adaptive_auto_shift', '0'),
         'weighted_score_current_pct':   get_setting('weighted_score_current_pct', '65'),
         'stability_weight':             get_setting('stability_weight', '30'),
+        'active_profile':               get_setting('active_profile', 'balanced'),
+        'single_stream_test':           get_setting('single_stream_test', '0'),
         'api_token':                    get_setting('api_token', ''),
     }
     from .database import get_hourly_benchmark_stats
@@ -1205,6 +1224,7 @@ def settings():
         next_run=get_next_run(),
         gluetun_container=current_app.config['GLUETUN_CONTAINER'],
         adaptive_stats=adaptive_stats,
+        profiles=PROFILES,
     )
 
 
@@ -1437,6 +1457,17 @@ def metrics():
         '\n'.join(lines) + '\n',
         mimetype='text/plain; version=0.0.4; charset=utf-8',
     )
+
+
+@bp.route('/api/set-profile', methods=['POST'])
+@login_required
+def api_set_profile():
+    """Switch the active usage profile (called from /servers profile pill)."""
+    profile_key = (request.form.get('active_profile') or '').strip()
+    if profile_key not in PROFILES:
+        return jsonify({'status': 'invalid_profile'}), 400
+    set_setting('active_profile', profile_key)
+    return redirect(url_for('main.servers'))
 
 
 @bp.route('/api/trigger', methods=['POST'])

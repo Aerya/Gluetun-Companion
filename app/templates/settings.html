@@ -304,6 +304,28 @@
           <div class="form-text">{{ t.set_stability_weight_hint }}</div>
         </div>
 
+        <div class="mb-4 ms-4">
+          <label class="form-label small mb-1" for="active_profile">
+            {{ t.set_profile_label }}
+          </label>
+          <select name="active_profile" id="active_profile" class="form-select form-select-sm" style="max-width:300px">
+            {% for pk, pv in profiles.items() %}
+            <option value="{{ pk }}" {{ 'selected' if cfg.active_profile == pk }}>
+              {{ pv.label_fr if session.get('lang','fr') == 'fr' else pv.label_en }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text">{{ t.set_profile_hint }}</div>
+          {# Show hint for selected profile #}
+          {% for pk, pv in profiles.items() %}
+          <div class="form-text text-info profile-hint-{{ pk }}"
+               style="{{ 'display:block' if cfg.active_profile == pk else 'display:none' }}">
+            <i class="bi bi-info-circle me-1"></i>
+            {{ pv.hint_fr if session.get('lang','fr') == 'fr' else pv.hint_en }}
+          </div>
+          {% endfor %}
+        </div>
+
         <div class="d-flex gap-2 mt-3 mb-0">
           <button type="submit" class="btn btn-sm btn-success fw-semibold">
             <i class="bi bi-save"></i> {{ t.cmn_save }}
@@ -373,6 +395,15 @@
             {{ t.set_warmup_label | safe }}
           </label>
         </div>
+
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="single_stream_test" class="form-check-input"
+                 id="single_stream_test" {{ 'checked' if cfg.single_stream_test == '1' }}>
+          <label class="form-check-label" for="single_stream_test">
+            {{ t.set_single_stream_label | safe }}
+          </label>
+        </div>
+        <div class="form-text mb-2 ms-4">{{ t.set_single_stream_hint | safe }}</div>
 
         <div class="d-flex gap-2 mt-3 mb-0">
           <button type="submit" class="btn btn-sm btn-success fw-semibold">
@@ -1067,6 +1098,22 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 
 {% block scripts %}
 {% set _bench_method = 'sidecar' if cfg.sidecar_mode == '1' else 'proxy' %}
+<script>
+// ── Profile selector: show/hide per-profile hint ─────────────────────────
+(function () {
+  const sel = document.getElementById('active_profile');
+  if (!sel) return;
+  function _updateHints() {
+    document.querySelectorAll('[class^="profile-hint-"]').forEach(el => {
+      el.style.display = 'none';
+    });
+    const hint = document.querySelector('.profile-hint-' + sel.value);
+    if (hint) hint.style.display = 'block';
+  }
+  sel.addEventListener('change', _updateHints);
+  _updateHints();
+})();
+</script>
 <script>
 // â”€â”€ Shared: Docker container list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let _dockerContainers       = [];
