@@ -73,22 +73,35 @@ PROFILES: dict[str, dict] = {
 }
 
 
-def _pnorm(vals: dict[str, float], invert: bool = False) -> dict[str, float]:
-    """Min-max normalise a {name: value} dict to [0, 1].
+def _opt(v) -> 'float | None':
+    """Return float(v) when v is a real measurement, None when it is missing."""
+    return float(v) if v is not None else None
 
+
+def _pnorm(vals: dict[str, 'float | None'], invert: bool = False) -> dict[str, float]:
+    """Min-max normalise a {name: value | None} dict to [0, 1].
+
+    Entries whose value is None (no measurement at all) receive a neutral
+    score of 0.5 — they neither win nor lose on this dimension.
     If *invert* is True the direction is flipped (lower raw = 1.0).
-    When all values are identical every server gets 1.0 (no info loss).
+    When all known values are identical every measured server gets 1.0.
     """
     if not vals:
         return {}
-    mn = min(vals.values())
-    mx = max(vals.values())
+    known = {k: v for k, v in vals.items() if v is not None}
+    if not known:
+        return {k: 0.5 for k in vals}
+    mn = min(known.values())
+    mx = max(known.values())
     if mx == mn:
-        return {k: 1.0 for k in vals}
-    normed = {k: (v - mn) / (mx - mn) for k, v in vals.items()}
+        normed = {k: 1.0 for k in known}
+    else:
+        normed = {k: (v - mn) / (mx - mn) for k, v in known.items()}
     if invert:
-        return {k: 1.0 - n for k, n in normed.items()}
-    return normed
+        normed = {k: 1.0 - n for k, n in normed.items()}
+    result = {k: 0.5 for k in vals}   # neutral score for unmeasured servers
+    result.update(normed)
+    return result
 
 
 def _row_get(row, key: str, default=None):
@@ -120,12 +133,16 @@ def score_servers(
     if not names:
         return {}
 
-    raw_dl     = {r['name']: float(r['avg_dl']                                            or 0.0) for r in rows}
-    raw_ul     = {r['name']: float(r['avg_ul']                                            or 0.0) for r in rows}
-    raw_lat    = {r['name']: float(r['avg_lat']                                           or 0.0) for r in rows}
-    raw_jit    = {r['name']: float((stability.get(r['name']) or {}).get('avg_jitter') or 0.0) for r in rows}
-    raw_loss   = {r['name']: float((stability.get(r['name']) or {}).get('avg_loss')   or 0.0) for r in rows}
-    raw_single = {r['name']: float(_row_get(r, 'avg_dl_single')                          or 0.0) for r in rows}
+    # dl/ul/single: 0.0 when NULL means "never tested" → legitimate worst score
+    raw_dl     = {r['name']: float(r['avg_dl']              or 0.0) for r in rows}
+    raw_ul     = {r['name']: float(r['avg_ul']              or 0.0) for r in rows}
+    raw_single = {r['name']: float(_row_get(r, 'avg_dl_single') or 0.0) for r in rows}
+    # lat/jit/loss: None when NULL means "no measurement" → neutral 0.5 via _pnorm
+    # (0ms latency / 0ms jitter / 0% loss are impossible to fake; defaulting to 0.0
+    #  would make unmeasured servers appear as the best, skewing all profile scores)
+    raw_lat    = {r['name']: _opt(r['avg_lat'])                                       for r in rows}
+    raw_jit    = {r['name']: _opt((stability.get(r['name']) or {}).get('avg_jitter')) for r in rows}
+    raw_loss   = {r['name']: _opt((stability.get(r['name']) or {}).get('avg_loss'))   for r in rows}
 
     n_dl     = _pnorm(raw_dl)
     n_ul     = _pnorm(raw_ul)
@@ -175,11 +192,11 @@ def score_results(
         return {}
 
     raw_ws     = weighted_scores
-    raw_ul     = {r['server']: float(r.get('ul')              or 0.0) for r in results}
-    raw_lat    = {r['server']: float(r.get('lat')             or 0.0) for r in results}
-    raw_jit    = {r['server']: float(r.get('jitter_ms')       or 0.0) for r in results}
-    raw_loss   = {r['server']: float(r.get('packet_loss_pct') or 0.0) for r in results}
-    raw_single = {r['server']: float(r.get('dl_single')       or 0.0) for r in results}
+    raw_ul     = {r['server']: float(r.get('ul')     or 0.0) for r in results}
+    raw_single = {r['server']: float(r.get('dl_single') or 0.0) for r in results}
+    raw_lat    = {r['server']: _opt(r.get('lat'))             for r in results}
+    raw_jit    = {r['server']: _opt(r.get('jitter_ms'))       for r in results}
+    raw_loss   = {r['server']: _opt(r.get('packet_loss_pct')) for r in results}
 
     n_dl     = _pnorm(raw_ws)
     n_ul     = _pnorm(raw_ul)
