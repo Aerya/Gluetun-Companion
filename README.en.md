@@ -615,9 +615,14 @@ In **Settings → Scheduling & Benchmark**: the automatic cycle can be disabled 
 
 ## Security
 
+- **Anti brute-force** — The login endpoint blocks an IP after 5 failures within 5 minutes for 15 minutes. No external dependency: pure in-memory sliding window.
 - **CSRF** — All POST actions (forms and AJAX) are protected by a CSRF token via server-side session. The `X-CSRF-Token` header is automatically injected on every non-GET `fetch` request via a JavaScript interceptor.
 - **XSS** — Third-party API data (AirVPN) injected into the DOM via `innerHTML` is always escaped by a `_esc()` helper (HTML entity encoding). Event handlers on dynamic elements use `addEventListener` rather than inline `onchange` attributes.
 - **SECRET_KEY** — The application refuses to start if `SECRET_KEY` is missing or equal to the default value. Generate a secure key with: `openssl rand -hex 32`.
+- **Network exposure** — Gunicorn listens on `0.0.0.0:8765`. **Do not expose this port directly to the internet.** On a publicly accessible server, place Companion behind a reverse proxy (Nginx, Caddy, Traefik) with HTTPS and strong authentication, or restrict the binding to the local interface: `127.0.0.1:8765:8765` in your `docker-compose.yml`.
+- **`/metrics`** — Open by default on the LAN. If your machine is reachable from outside, set the `METRICS_TOKEN` environment variable or configure an API token in Settings → API: `/metrics` will use it automatically (Bearer token required in the `Authorization` header).
+- **Sidecar** — During a benchmark, the sidecar container exposes a local port (`8766` by default) without authentication. Ensure this port is not reachable from untrusted networks (e.g. block it in your firewall or bind it to `127.0.0.1` via `SIDECAR_PORT`).
+- **Secrets in /settings** — The API token, proxy password, and webhook URLs are displayed in cleartext in the Settings page. Restrict access to Companion to trusted users only.
 - **YAML injection** — The server filter value is sanitised before being written to `docker-compose.override.yml` (newlines stripped, quotes and backslashes escaped).
 - **Docker socket** — The Docker socket is secured via [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy), restricting access to the bare minimum (container read access, no root access to the daemon).
 

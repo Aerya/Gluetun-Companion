@@ -32,6 +32,41 @@ from .scheduler import get_next_run, reschedule, trigger_now, trigger_quick_now,
 
 bp = Blueprint('main', __name__)
 
+# ---------------------------------------------------------------------------
+# Login rate limiting (in-memory, per remote IP)
+# ---------------------------------------------------------------------------
+_login_attempts: dict[str, list[float]] = {}   # ip → [timestamp, ...]
+_login_lock = threading.Lock()
+_RL_MAX_ATTEMPTS = 5    # max failures before lockout
+_RL_WINDOW_SECS  = 300  # sliding window (5 min)
+_RL_LOCKOUT_SECS = 900  # lockout duration after max failures (15 min)
+
+
+def _rl_check(ip: str) -> tuple[bool, int]:
+    """Return (allowed, retry_after_secs). Cleans expired entries."""
+    now = time.time()
+    with _login_lock:
+        times = [t for t in _login_attempts.get(ip, []) if now - t < _RL_WINDOW_SECS]
+        _login_attempts[ip] = times
+        if len(times) >= _RL_MAX_ATTEMPTS:
+            retry_after = int(_RL_LOCKOUT_SECS - (now - times[0]))
+            return False, max(retry_after, 1)
+        return True, 0
+
+
+def _rl_record_failure(ip: str) -> None:
+    now = time.time()
+    with _login_lock:
+        times = [t for t in _login_attempts.get(ip, []) if now - t < _RL_WINDOW_SECS]
+        times.append(now)
+        _login_attempts[ip] = times
+
+
+def _rl_reset(ip: str) -> None:
+    with _login_lock:
+        _login_attempts.pop(ip, None)
+
+
 _HISTORY_PER_PAGE = 50
 _airvpn_cache: dict = {'data': None, 'ts': 0.0}
 _AIRVPN_CACHE_TTL = 300  # 5 minutes
@@ -52,7 +87,14 @@ def login_required(f):
 
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
+    ip = request.remote_addr or '0.0.0.0'
     if request.method == 'POST':
+        allowed, retry_after = _rl_check(ip)
+        if not allowed:
+            mins = (retry_after + 59) // 60
+            flash(f'Trop de tentatives. Réessayez dans {mins} min.', 'danger')
+            return render_template('login.html', first_login=False), 429
+
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
 
@@ -68,10 +110,12 @@ def login():
             return redirect(url_for('main.dashboard'))
 
         if username == stored_user and check_password_hash(stored_hash, password):
+            _rl_reset(ip)
             session['logged_in'] = True
             session['username'] = username
             return redirect(url_for('main.dashboard'))
 
+        _rl_record_failure(ip)
         flash_t('flash_login_failed', 'danger')
 
     first_login = not bool(get_setting('admin_password_hash', ''))
@@ -1102,7 +1146,8 @@ def metrics():
     Unauthenticated by default — set METRICS_TOKEN env var to require
     an 'Authorization: Bearer <token>' header.
     """
-    token = current_app.config.get('METRICS_TOKEN', '')
+    # METRICS_TOKEN env var takes precedence; fall back to the DB api_token if set.
+    token = current_app.config.get('METRICS_TOKEN', '') or get_setting('api_token', '')
     if token:
         auth = request.headers.get('Authorization', '')
         if auth != f'Bearer {token}':
