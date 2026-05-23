@@ -162,30 +162,29 @@
 {% endif %}
 
 {# ── Filters + sort bar ──────────────────────────────────────────────────── #}
-<div class="mb-3 d-flex align-items-center gap-2 flex-wrap" id="profilePreview">
-  <small class="text-muted fw-semibold text-nowrap">
-    <i class="bi bi-sliders2 me-1"></i>{{ t.srv_profile_label }} :
-  </small>
-  {% for pk, pv in profiles.items() %}
-  <button type="button" data-profile="{{ pk }}" data-best="{{ profile_bests.get(pk) or '' }}"
-          class="btn btn-sm {{ 'btn-success' if active_profile == pk else 'btn-outline-secondary' }} py-0 px-2"
-          style="font-size:.78rem"
-          title="{{ pv.hint_fr if session.get('lang','fr') == 'fr' else pv.hint_en }}">
-    {{ pv.label_fr if session.get('lang','fr') == 'fr' else pv.label_en }}
-  </button>
-  {% endfor %}
-  {% if profile_best %}
-  <span class="ms-2 text-muted" style="font-size:.75rem">
-    <i class="bi bi-trophy-fill text-warning me-1"></i>{{ t.srv_profile_best }} :
-    <code class="text-warning" id="profileBestName">{{ profile_best }}</code>
-  </span>
-  {% endif %}
-  <span class="ms-auto text-muted" style="font-size:.75rem">
-    {{ t.srv_profile_info }}
-    <i class="bi bi-info-circle text-info"
-       data-bs-toggle="tooltip" data-bs-placement="left"
-       title="{{ t.srv_profile_info }}"></i>
-  </span>
+<div class="mb-3" id="profilePreview">
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <small class="text-muted fw-semibold text-nowrap">
+      <i class="bi bi-sliders2 me-1"></i>{{ t.srv_profile_label }} :
+    </small>
+    {% for pk, pv in profiles.items() %}
+    <button type="button" data-profile="{{ pk }}" data-best="{{ profile_bests.get(pk) or '' }}"
+            class="btn btn-sm {{ 'btn-success' if active_profile == pk else 'btn-outline-secondary' }} py-0 px-2"
+            style="font-size:.78rem"
+            title="{{ pv.hint_fr if session.get('lang','fr') == 'fr' else pv.hint_en }}">
+      {{ pv.label_fr if session.get('lang','fr') == 'fr' else pv.label_en }}
+    </button>
+    {% endfor %}
+    {% if profile_best %}
+    <span class="ms-2 text-muted" style="font-size:.75rem">
+      <i class="bi bi-trophy-fill text-warning me-1"></i>{{ t.srv_profile_best }} :
+      <code class="text-warning" id="profileBestName">{{ profile_best }}</code>
+    </span>
+    {% endif %}
+  </div>
+  <div class="text-muted mt-1" style="font-size:.75rem">
+    <i class="bi bi-info-circle text-info me-1"></i>{{ t.srv_profile_info }}
+  </div>
 </div>
 
 <form method="get" class="row g-2 mb-3 align-items-end">
