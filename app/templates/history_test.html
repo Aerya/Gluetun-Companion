@@ -97,27 +97,27 @@
       {%- if d.score > ns.max_score -%}{%- set ns.max_score = d.score -%}{%- endif -%}
     {%- endfor -%}
     <div style="overflow-x:auto">
-      <svg viewBox="0 0 504 64" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;max-height:72px;display:block;overflow:visible">
+      <svg viewBox="0 0 720 132" preserveAspectRatio="xMidYMid meet" style="width:100%;min-height:150px;display:block;overflow:visible">
         {%- for i in range(24) -%}
           {%- if i in adaptive_stats.hours -%}
             {%- set d = adaptive_stats.hours[i] -%}
-            {%- set bar_h = ((d.score / ns.max_score) * 48)|int -%}
-            {%- set bar_y = 48 - bar_h -%}
+            {%- set bar_h = ((d.score / ns.max_score) * 92)|int -%}
+            {%- set bar_y = 96 - bar_h -%}
             {%- set is_good = i in adaptive_stats.good_hours -%}
             {%- set is_bad  = i in adaptive_stats.bad_hours -%}
             {%- set color = '#2dd4bf' if is_good else ('#fb7185' if is_bad else '#60a5fa') -%}
-            <rect x="{{ i * 21 }}" y="{{ bar_y }}" width="18" height="{{ bar_h }}"
-                  fill="{{ color }}" opacity="0.8" rx="2">
+            <rect x="{{ i * 30 + 2 }}" y="{{ bar_y }}" width="24" height="{{ bar_h }}"
+                  fill="{{ color }}" opacity="0.86" rx="3">
               <title>{{ '%02d'|format(i) }}h — {{ d.avg_dl }} Mbps · CV {{ d.cv_pct }}% · {{ d.n }} tests</title>
             </rect>
           {%- else -%}
-            <rect x="{{ i * 21 }}" y="46" width="18" height="2"
+            <rect x="{{ i * 30 + 2 }}" y="94" width="24" height="2"
                   fill="currentColor" opacity="0.12" rx="1">
               <title>{{ '%02d'|format(i) }}h — pas de données</title>
             </rect>
           {%- endif -%}
-          <text x="{{ i * 21 + 9 }}" y="62" text-anchor="middle"
-                font-size="7" fill="currentColor" opacity="0.4">{{ '%02d'|format(i) }}</text>
+          <text x="{{ i * 30 + 14 }}" y="122" text-anchor="middle"
+                font-size="11" fill="currentColor" opacity="0.55">{{ '%02d'|format(i) }}</text>
         {%- endfor -%}
       </svg>
     </div>

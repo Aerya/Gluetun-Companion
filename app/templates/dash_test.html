@@ -28,6 +28,31 @@
   .proposal-tabs .btn { width: 38px; height: 32px; display: inline-flex; align-items: center; justify-content: center; }
   .method-sidecar { background: #f6c86e; color: #111820; }
   .method-qc { background: #8b5cf6; color: #fff; }
+  .rank-bar-track {
+    position: relative;
+    height: 14px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(139,148,158,.12);
+  }
+  .rank-bar-max,
+  .rank-bar-avg {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    border-radius: inherit;
+    max-width: 100%;
+  }
+  .rank-bar-max { background: rgba(96,165,250,.22); }
+  .rank-bar-avg { opacity: .9; }
+  .bench-count {
+    display: inline-flex;
+    justify-content: flex-end;
+    min-width: 92px;
+    color: var(--bs-secondary-color);
+    font-size: .72rem;
+    white-space: nowrap;
+  }
   @media (max-width: 767.98px) { .proposal-head { grid-template-columns: 1fr; } }
 </style>
 <div class="proposal-head">
@@ -192,21 +217,19 @@
     {%- endfor -%}
     <div class="row g-2">
       {% for s in server_stats %}
-      {%- set pct_avg = ((s.avg_dl or 0) / ns.max_dl * 100)|int -%}
-      {%- set pct_max = ((s.max_dl or 0) / ns.max_dl * 100)|int -%}
+      {%- set pct_avg = [((s.avg_dl or 0) / ns.max_dl * 100)|int, 100]|min -%}
+      {%- set pct_max = [((s.max_dl or 0) / ns.max_dl * 100)|int, 100]|min -%}
       {%- set speed_cls = 'bg-success' if (s.avg_dl or 0) > 50 else ('bg-warning' if (s.avg_dl or 0) > 15 else 'bg-danger') -%}
       <div class="col-12 col-xl-6">
         <div class="d-flex align-items-center gap-2" style="min-height:28px">
           <div class="text-truncate" style="width:130px;font-size:.8rem" title="{{ s.server_name }}">
             <code>{{ s.server_name }}</code>
           </div>
-          <div class="flex-grow-1 position-relative" style="height:14px">
+          <div class="flex-grow-1 rank-bar-track">
             {# max bar (background) #}
-            <div class="position-absolute top-0 start-0 rounded"
-                 style="width:{{ pct_max }}%;height:100%;background:rgba(88,166,255,.2)"></div>
+            <div class="rank-bar-max" style="width:{{ pct_max }}%"></div>
             {# avg bar (foreground) #}
-            <div class="position-absolute top-0 start-0 rounded {{ speed_cls }}"
-                 style="width:{{ pct_avg }}%;height:100%;opacity:.8"></div>
+            <div class="rank-bar-avg {{ speed_cls }}" style="width:{{ pct_avg }}%"></div>
           </div>
           <div style="width:70px;font-size:.78rem;text-align:right">
             {% if s.avg_dl %}
@@ -215,8 +238,8 @@
               <span class="text-muted" style="font-size:.68rem">Mbps</span>
             {% else %}<span class="text-muted">—</span>{% endif %}
           </div>
-          <div style="width:32px;font-size:.7rem;color:var(--muted);text-align:right">
-            {{ s.cnt }}t
+          <div class="bench-count" title="{{ s.cnt }} benchmarks realises pour ce serveur">
+            {{ s.cnt }} benchmarks
           </div>
         </div>
       </div>
@@ -239,7 +262,7 @@
         <option value="{{ n }}" {{ 'selected' if recent_limit == n }}>{{ n }}</option>
         {% endfor %}
       </select>
-      <a href="{{ url_for('main.history') }}" class="btn btn-sm btn-outline-secondary">{{ t.dash_see_all }}</a>
+      <a href="{{ url_for('main.history_test') }}" class="btn btn-sm btn-outline-secondary">{{ t.dash_see_all }}</a>
     </div>
   </div>
   <div class="table-responsive">
@@ -251,6 +274,9 @@
           <th>{{ t.cmn_upload }}</th>
           <th>{{ t.cmn_latency }}</th>
           <th>{{ t.cmn_public_ip }}</th>
+          <th>{{ t.hist_col_jitter }}</th>
+          <th>{{ t.hist_col_loss }}</th>
+          <th>{{ t.hist_col_dns }}</th>
           <th>{{ t.hist_col_method }}</th>
           <th>{{ t.cmn_status }}</th>
           <th>{{ t.cmn_date }}</th>
@@ -278,6 +304,32 @@
             </small>
           </td>
           <td>
+            {% if r.jitter_ms is not none %}
+              {% set jcls = 'text-success' if r.jitter_ms < 15 else ('text-warning' if r.jitter_ms < 50 else 'text-danger') %}
+              <span class="{{ jcls }}">{{ '%.1f'|format(r.jitter_ms) }} ms</span>
+            {% elif r.test_method == 'proxy_qc' %}
+              <span class="text-muted" style="cursor:help" data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">-</span>
+            {% else %}-{% endif %}
+          </td>
+          <td>
+            {% if r.packet_loss_pct is not none %}
+              {% set lcls = 'text-success' if r.packet_loss_pct < 1 else ('text-warning' if r.packet_loss_pct < 5 else 'text-danger') %}
+              <span class="{{ lcls }}">{{ '%.1f'|format(r.packet_loss_pct) }}%</span>
+            {% elif r.test_method == 'proxy_qc' %}
+              <span class="text-muted" style="cursor:help" data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">-</span>
+            {% else %}-{% endif %}
+          </td>
+          <td>
+            {% if r.dns_latency_ms is not none %}
+              {% set dcls = 'text-success' if r.dns_latency_ms < 50 else ('text-warning' if r.dns_latency_ms < 150 else 'text-danger') %}
+              <span class="{{ dcls }}">{{ '%.0f'|format(r.dns_latency_ms) }} ms</span>
+            {% elif r.test_method == 'proxy_qc' %}
+              <span class="text-muted" style="cursor:help" data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">-</span>
+            {% elif r.test_method != 'sidecar' %}
+              <span class="text-muted" style="cursor:help" data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}">-</span>
+            {% else %}-{% endif %}
+          </td>
+          <td>
             {% if r.test_method == 'sidecar' %}
               <span class="badge method-sidecar"><i class="bi bi-boxes"></i> sidecar</span>
             {% elif r.test_method == 'proxy_qc' %}
@@ -297,7 +349,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="8" class="text-center text-muted py-4">{{ t.dash_no_tests }}</td>
+          <td colspan="11" class="text-center text-muted py-4">{{ t.dash_no_tests }}</td>
         </tr>
         {% endfor %}
       </tbody>
