@@ -63,7 +63,10 @@ def create_app():
     )
 
     secret_key = os.environ.get('SECRET_KEY', '')
-    if not secret_key or secret_key == 'dev-secret-change-me':
+    if not secret_key or secret_key in (
+        'dev-secret-change-me',
+        'remplacer-par-une-chaine-aleatoire-longue',
+    ):
         import sys
         logging.getLogger(__name__).critical(
             'SECRET_KEY is not set or uses the default value. '

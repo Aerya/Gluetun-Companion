@@ -953,7 +953,8 @@ def _do_benchmark(app, skip_quick_check: bool = False):
             # Profile-based normalised score → pick best
             _profile_scores = _score_results(results, active_profile, _ws_map)
             best = max(results, key=lambda r: _profile_scores.get(r['server'], 0.0))
-            best_label = f"{FILTER_VARS.get(best['filter_type'], 'SERVER_NAMES')}={best['server']}"
+            best_server_name  = best['server']   # bare name, for result lookup
+            best_label = f"{FILTER_VARS.get(best['filter_type'], 'SERVER_NAMES')}={best_server_name}"
             logger.info(
                 'Best (profile=%s): %s (%.1f Mbps current, score=%.4f)',
                 active_profile, best_label, best['dl'],
@@ -1078,7 +1079,7 @@ def _do_benchmark(app, skip_quick_check: bool = False):
 
         if _notif_bench_end and results:
             _best_dl = next(
-                (r['dl'] for r in results if r.get('server') == best_server_label),
+                (r['dl'] for r in results if r.get('server') == best_server_name),
                 None,
             )
             from .notify import send_benchmark_end_notification

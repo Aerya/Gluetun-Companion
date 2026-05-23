@@ -71,7 +71,7 @@ def status():
         'auto_switch':          get_setting('auto_switch',          '1') == '1',
         'active_server':        active_server,
         'active_filter':        format_filters(filters) if filters else None,
-        'vpn_connected':        vpn_status.get('connected', False) if vpn_status else False,
+        'vpn_connected':        vpn_status == 'running',
         'next_benchmark_at':    next_run.isoformat() if next_run else None,
     })
 
@@ -154,8 +154,8 @@ def history():
       server (str, optional) — filter by server name
     """
     try:
-        limit  = min(int(request.args.get('limit',  50)),  500)
-        offset = max(int(request.args.get('offset',  0)),    0)
+        limit  = max(1, min(int(request.args.get('limit',  50)),  500))
+        offset = max(0,     int(request.args.get('offset',  0)))
     except ValueError:
         return jsonify({'error': 'limit and offset must be integers'}), 400
 
@@ -215,8 +215,8 @@ def switches():
       offset (int, default 0)
     """
     try:
-        limit  = min(int(request.args.get('limit',  20)),  200)
-        offset = max(int(request.args.get('offset',  0)),    0)
+        limit  = max(1, min(int(request.args.get('limit',  20)),  200))
+        offset = max(0,     int(request.args.get('offset',  0)))
     except ValueError:
         return jsonify({'error': 'limit and offset must be integers'}), 400
 

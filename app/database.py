@@ -127,10 +127,24 @@ def init_db(db_path: str):
                 ('notif_quick_check',           '1'),
                 ('gluetun_api_port',            '8000'),
                 ('notify_mention',              ''),
-                ('notify_mention_level',        'critical'),
+                ('notify_mention_level',        'medium'),
                 ('active_profile',              'balanced'),
                 ('single_stream_test',          '0');
         ''')
+        # Data migration: legacy airvpn_notify_mention → notify_mention
+        _legacy = db.execute(
+            "SELECT value FROM settings WHERE key='airvpn_notify_mention'"
+        ).fetchone()
+        if _legacy and _legacy[0]:
+            _cur = db.execute(
+                "SELECT value FROM settings WHERE key='notify_mention'"
+            ).fetchone()
+            if not _cur or not _cur[0]:
+                db.execute(
+                    "UPDATE settings SET value=? WHERE key='notify_mention'",
+                    (_legacy[0],),
+                )
+
         # Migrations for columns added after initial schema
         for stmt in [
             "ALTER TABLE servers ADD COLUMN filter_type TEXT NOT NULL DEFAULT 'name'",
