@@ -936,6 +936,30 @@ def run_sidecar_ping_test(
     }
 
 
+def fetch_gluetun_servers(gluetun_host: str, gluetun_api_port: int) -> list[dict] | None:
+    """
+    Call Gluetun's /v1/servers endpoint and return the raw server list.
+
+    Returns:
+      - list[dict] on success (may be empty if provider has no servers)
+      - None if the API is unreachable (port not published, wrong host, etc.)
+
+    Gluetun must expose its control API port (HTTP_CONTROL_SERVER_PORT, default
+    8000) in the docker-compose ``ports`` section for this to work.
+    """
+    url = f'http://{gluetun_host}:{gluetun_api_port}/v1/servers'
+    try:
+        resp = requests.get(url, timeout=8)
+        resp.raise_for_status()
+        return resp.json().get('servers', [])
+    except requests.exceptions.ConnectionError as exc:
+        logger.warning('fetch_gluetun_servers: API unreachable at %s — %s', url, exc)
+        return None
+    except Exception as exc:
+        logger.warning('fetch_gluetun_servers: %s', exc)
+        return None
+
+
 def cleanup_test_containers(sidecar_image: str | None = None) -> None:
     """Stop and remove the test Gluetun and sidecar containers, then delete the sidecar image."""
     client = docker.from_env()

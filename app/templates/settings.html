@@ -558,6 +558,15 @@
           </div>
         </details>
 
+        <hr class="my-3">
+        <div class="mb-3">
+          <label class="form-label small fw-semibold mb-1">{{ t.set_gluetun_api_port_label }}</label>
+          <input type="number" name="gluetun_api_port" class="form-control form-control-sm"
+                 style="max-width:140px"
+                 value="{{ cfg.gluetun_api_port }}" min="1" max="65535">
+          <div class="text-muted mt-1" style="font-size:.78rem">{{ t.set_gluetun_api_port_hint | safe }}</div>
+        </div>
+
         <div class="d-flex gap-2 mt-3 mb-0">
           <button type="submit" class="btn btn-sm fw-semibold" style="background:#f0ad4e;color:#000">
             <i class="bi bi-save"></i> {{ t.cmn_save }}

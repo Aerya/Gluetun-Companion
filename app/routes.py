@@ -537,6 +537,106 @@ def add_servers_bulk():
     return jsonify({'added': added, 'skipped': skipped})
 
 
+@bp.route('/api/gluetun-servers')
+@login_required
+def api_gluetun_servers():
+    """
+    Query Gluetun's /v1/servers endpoint and return servers filtered by the
+    current Gluetun container's active filter (country, region, city…).
+
+    If the current filter is already filter_type=name the list is still
+    returned — useful to discover new servers in the same pool.
+
+    Response JSON:
+      {
+        "servers": [{import_name, import_type, display, country, city,
+                      hostname, already_added}],
+        "total_in_gluetun": int,
+        "active_filter_type": str,
+        "active_filter_value": str,
+        "error": str | null   (only when API is unreachable)
+      }
+    """
+    from .gluetun import fetch_gluetun_servers, get_current_filters
+    from .database import get_db, get_setting
+
+    container = current_app.config['GLUETUN_CONTAINER']
+    api_host  = current_app.config['GLUETUN_HOST']
+    api_port  = int(get_setting('gluetun_api_port', '8000'))
+
+    all_servers = fetch_gluetun_servers(api_host, api_port)
+    if all_servers is None:
+        return jsonify({
+            'servers': [],
+            'total_in_gluetun': 0,
+            'active_filter_type': '',
+            'active_filter_value': '',
+            'error': 'api_unreachable',
+        }), 503
+
+    # ── Auto-detect active Gluetun filter ────────────────────────────────────
+    current_filter = get_current_filters(container)
+    # Gluetun /v1/servers response field names matching each filter type
+    _field_map = {
+        'country':  'country',
+        'region':   'region',
+        'city':     'city',
+        'hostname': 'hostname',
+    }
+    active_filter_type  = ''
+    active_filter_value = ''
+    filtered = all_servers
+
+    if current_filter:
+        ft, fv = next(iter(current_filter.items()))
+        active_filter_type  = ft
+        active_filter_value = fv
+        if ft in _field_map:
+            field  = _field_map[ft]
+            wanted = {v.strip().lower() for v in fv.split(',')}
+            filtered = [
+                s for s in all_servers
+                if s.get(field, '').strip().lower() in wanted
+            ]
+        # filter_type == 'name': keep all (user might want to add more names)
+
+    # ── Servers already in Companion's DB ────────────────────────────────────
+    with get_db() as db:
+        existing = {r['name'] for r in db.execute('SELECT name FROM servers').fetchall()}
+
+    # ── Build result ──────────────────────────────────────────────────────────
+    result = []
+    for s in filtered:
+        name     = (s.get('name') or '').strip()
+        hostname = (s.get('hostname') or '').strip()
+        # Prefer the human-readable name; fall back to hostname for providers
+        # that don't have one (e.g. Mullvad, ProtonVPN).
+        import_name = name or hostname
+        import_type = 'name' if name else 'hostname'
+        if not import_name:
+            continue
+        result.append({
+            'import_name':   import_name,
+            'import_type':   import_type,
+            'display':       name or hostname,
+            'country':       (s.get('country') or '').strip(),
+            'city':          (s.get('city') or '').strip(),
+            'hostname':      hostname,
+            'already_added': import_name in existing,
+        })
+
+    # Sort: new servers first, then alphabetically
+    result.sort(key=lambda x: (x['already_added'], x['display'].lower()))
+
+    return jsonify({
+        'servers':             result,
+        'total_in_gluetun':    len(all_servers),
+        'active_filter_type':  active_filter_type,
+        'active_filter_value': active_filter_value,
+        'error':               None,
+    })
+
+
 # ---------------------------------------------------------------------------
 # History — hourly patterns
 # ---------------------------------------------------------------------------
@@ -1206,6 +1306,7 @@ def settings():
             set_setting('sidecar_speedtest_method', request.form.get('sidecar_speedtest_method', 'dual'))
             set_setting('sidecar_iperf_fallback',   '1' if request.form.get('sidecar_iperf_fallback') else '0')
             set_setting('sidecar_proxy_fallback',   '1' if request.form.get('sidecar_proxy_fallback') else '0')
+            set_setting('gluetun_api_port',         request.form.get('gluetun_api_port', '8000').strip() or '8000')
             flash_t('flash_sidecar_saved', 'success')
 
         elif action == 'post_switch':
@@ -1265,6 +1366,7 @@ def settings():
         'sidecar_speedtest_method': get_setting('sidecar_speedtest_method', 'dual'),
         'sidecar_iperf_fallback':      get_setting('sidecar_iperf_fallback', '1'),
         'sidecar_proxy_fallback':      get_setting('sidecar_proxy_fallback', '0'),
+        'gluetun_api_port':            get_setting('gluetun_api_port', '8000'),
         'post_switch_containers':       json.loads(get_setting('post_switch_containers', '[]')),
         'pause_bench_containers':       json.loads(get_setting('pause_bench_containers', '[]')),
         'pull_gluetun':                 get_setting('pull_gluetun', '0'),

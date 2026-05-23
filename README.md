@@ -61,6 +61,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
   - [Vérification rapide avant benchmark](#vérification-rapide-avant-benchmark-option)
   - [Scheduling adaptatif](#scheduling-adaptatif-option)
   - [Écoute Docker events](#écoute-docker-events)
+  - [Découverte automatique de serveurs](#découverte-automatique-de-serveurs)
   - [Profils d'usage](#profils-dusage)
   - [Score de sélection — composantes de stabilité](#score-de-sélection--composantes-de-stabilité)
   - [Score de confiance par serveur](#score-de-confiance-par-serveur)
@@ -118,7 +119,8 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 
 ### Interface & notifications
 - **Web UI** dark/light, FR/EN — auth, dashboard avec sparkline, historique paginé, graphiques, page bascules avec gain Mbps et temps de connexion
-- **Notifications contextuelles** — 6 types d'alertes configurables indépendamment (bascule auto/manuelle, auto-exclusion, benchmark sans résultat, fin de benchmark, nouveaux serveurs AirVPN) via webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…) ; sévérité 🔴/🟡/🔵 ; mention Discord globale avec seuil de sévérité configurable
+- **Découverte automatique de serveurs** — bouton *Découvrir* sur la page Serveurs : interroge l'API de contrôle Gluetun (`/v1/servers`), filtre automatiquement selon le filtre actif du container (pays, région, ville, hostname…), affiche les serveurs disponibles avec cases à cocher groupées par pays ; les serveurs déjà en base sont marqués ; import en un clic — compatible avec tous les fournisseurs VPN Gluetun
+- **Notifications contextuelles** — 7 types d'alertes configurables indépendamment (bascule auto/manuelle, auto-exclusion, benchmark sans résultat, fin de benchmark, résultat quick check, nouveaux serveurs AirVPN) via webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…) ; sévérité 🔴/🟡/🔵 ; mention Discord globale avec seuil de sévérité configurable
 - **Purge automatique** de l'historique SQLite configurable (rétention en jours)
 
 ### Intégration & infrastructure
@@ -220,6 +222,12 @@ Ouvrir **http://localhost:8765** — première connexion : entrez le compte à c
 
 **Serveurs → Importer depuis Gluetun** : le companion lit les variables `SERVER_NAMES`, `SERVER_COUNTRIES`, etc. directement depuis le container en cours et importe chaque valeur avec son type de filtre. Ajout manuel possible depuis le même écran.
 
+> **Vous utilisez un filtre pays / région / ville ?** Le bouton **Découvrir** (page Serveurs) interroge l'API de contrôle Gluetun pour lister tous les serveurs individuels correspondant à votre filtre et les importer en `SERVER_NAMES` — indispensable pour benchmarker chaque serveur séparément. Prérequis : exposer le port 8000 de Gluetun dans votre docker-compose.yml :
+> ```yaml
+> ports:
+>   - "8000:8000/tcp"   # API de contrôle Gluetun (HTTP_CONTROL_SERVER_PORT)
+> ```
+
 ---
 
 ## Variables d'environnement
@@ -303,6 +311,32 @@ Dans **Paramètres → Containers à redémarrer après bascule** : liste ordonn
 ### Containers à stopper pendant le benchmark
 
 Dans **Paramètres → Containers à stopper pendant le benchmark** : liste de containers stoppés avant le benchmark et relancés après — dans tous les cas, même si le benchmark plante. Si un container est dans les deux listes, la liste de pause a priorité (pas de doublon). Utile pour `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`.
+
+### Découverte automatique de serveurs
+
+Le bouton **Découvrir** (page Serveurs) permet d'importer en masse les serveurs individuels disponibles dans votre pool Gluetun — indispensable si votre configuration n'utilise qu'un filtre pays, région ou ville.
+
+**Prérequis** : exposer le port de l'API de contrôle Gluetun dans votre `docker-compose.yml` :
+
+```yaml
+# dans votre docker-compose.yml Gluetun existant
+ports:
+  - "8887:8888"       # proxy HTTP (déjà présent)
+  - "8000:8000/tcp"   # API de contrôle (HTTP_CONTROL_SERVER_PORT — à ajouter)
+```
+
+**Fonctionnement** :
+
+1. Companion lit le filtre actif depuis le container Gluetun (`SERVER_COUNTRIES=France`, `SERVER_REGIONS=…`, etc.)
+2. Il interroge `GET /v1/servers` sur l'API Gluetun
+3. Les résultats sont filtrés automatiquement (seuls les serveurs correspondant au filtre actif sont proposés)
+4. Une modal affiche les serveurs disponibles groupés par pays, avec cases à cocher
+5. Les serveurs déjà en base sont marqués — leur case est désactivée pour éviter les doublons
+6. L'import ajoute les serveurs sélectionnés en `filter_type=name` (ou `hostname` si le provider n'a pas de nom individuel) — Companion peut dès lors les benchmarker indépendamment
+
+**Providers supportés** : tous les fournisseurs compatibles Gluetun. Pour AirVPN, chaque serveur a un nom unique (`Menkent`, `Elgafar`…) → importé en `SERVER_NAMES`. Pour les providers sans nom (Mullvad, ProtonVPN…) → importé en `SERVER_HOSTNAMES`.
+
+> Le port API Gluetun est configurable dans **Paramètres → Mode Sidecar → Port API Gluetun** (défaut : 8000).
 
 ### Sélecteur de serveurs AirVPN
 
@@ -481,6 +515,7 @@ Companion envoie des alertes ciblées via **webhook Discord** et/ou **[Apprise](
 | 🔵 Bascule manuelle | Info | ❌ | Bascule déclenchée manuellement depuis l'UI |
 | 🔵 Fin de benchmark | Info | ❌ | Cycle de benchmark terminé avec succès |
 | 🔵 Déjà sur le meilleur | Info | ❌ | Le serveur actif est déjà le meilleur — aucun changement |
+| 🔵 Résultat quick check | Info | ✅ | Benchmark rapide manuel terminé (serveur, vitesse, delta vs baseline) |
 
 **Mention Discord globale** : un seul champ `Mention Discord` (ex. `<@123456789>` pour un utilisateur, `<@&987654321>` pour un rôle) s'applique à toutes les alertes. Un seuil de sévérité est configurable :
 - **Critique uniquement** (défaut) — mention uniquement pour les alertes 🔴

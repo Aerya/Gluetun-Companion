@@ -125,6 +125,7 @@ def init_db(db_path: str):
                 ('notif_benchmark_end',         '0'),
                 ('notif_benchmark_failure',     '1'),
                 ('notif_quick_check',           '1'),
+                ('gluetun_api_port',            '8000'),
                 ('notify_mention',              ''),
                 ('notify_mention_level',        'critical'),
                 ('active_profile',              'balanced'),
