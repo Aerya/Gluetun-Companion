@@ -97,7 +97,7 @@ def create_app():
 
     @app.before_request
     def _csrf_check():
-        validate_csrf()
+        return validate_csrf()
 
     # ── Auto-detect Companion URL (for notifications) ─────────────────────
     # Captures request.url_root on real page hits and persists it to settings.
