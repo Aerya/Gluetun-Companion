@@ -1123,14 +1123,17 @@ function _flag(code) {
   const o = 0x1F1E6;
   return String.fromCodePoint(code.toUpperCase().charCodeAt(0)-65+o, code.toUpperCase().charCodeAt(1)-65+o);
 }
-function _loadBar(pct) {
+function _loadBar(pct, bw_max) {
   const cls = pct < 40 ? 'bg-success' : pct < 70 ? 'bg-warning' : 'bg-danger';
+  const bwHtml = bw_max
+    ? `<div><small class="text-muted" style="font-size:.68rem">${bw_max >= 1000 ? (bw_max % 1000 === 0 ? bw_max/1000 : (bw_max/1000).toFixed(1)) + ' Gbit/s' : bw_max + ' Mbit/s'} max</small></div>`
+    : '';
   return `<div class="d-flex align-items-center gap-2">
     <div class="progress flex-grow-1" style="height:5px;min-width:60px">
       <div class="progress-bar ${cls}" style="width:${pct}%"></div>
     </div>
     <small class="text-muted" style="width:2.8rem;text-align:right">${pct}%</small>
-  </div>`;
+  </div>${bwHtml}`;
 }
 
 function _renderServersTab(servers) {
@@ -1153,7 +1156,7 @@ function _renderServersTab(servers) {
       <td><code class="fw-semibold">${_esc(s.name)}</code>${exists ? '<span class="badge bg-secondary ms-1" style="font-size:.65rem">'+_esc(_t.alreadyAdded)+'</span>' : ''}</td>
       <td><span title="${_esc(s.country)}">${_flag(s.country_code)} <small>${_esc(s.country)}</small></span></td>
       <td><small class="text-muted">${_esc(s.location)}</small></td>
-      <td>${_loadBar(s.load)}</td>
+      <td>${_loadBar(s.load, s.bw_max)}</td>
       <td><small class="text-muted">${_esc(String(s.users))}</small></td>
       <td>${s.health==='ok' ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-exclamation-triangle-fill text-warning" data-bs-toggle="tooltip" data-bs-title="'+_esc(_t.healthErr)+'"></i>'}</td>
     `);
@@ -1190,7 +1193,7 @@ function _renderCountriesTab(countries) {
       if (exists) cb.disabled=true;
       else cb.addEventListener('change', e => airvpnToggle(s.name, e.target.checked));
       row.appendChild(cb);
-      row.insertAdjacentHTML('beforeend', `<code class="flex-shrink-0">${_esc(s.name)}</code>${s.name===c.best?`<span class="badge bg-warning text-dark flex-shrink-0"><i class="bi bi-trophy-fill me-1"></i>${_esc(_t.best)}</span>`:''} ${exists?`<span class="badge bg-secondary flex-shrink-0" style="font-size:.65rem">${_esc(_t.alreadyAdded)}</span>`:''}<div class="flex-grow-1">${_loadBar(s.load)}</div><small class="text-muted flex-shrink-0">${s.users} users</small>`);
+      row.insertAdjacentHTML('beforeend', `<code class="flex-shrink-0">${_esc(s.name)}</code>${s.name===c.best?`<span class="badge bg-warning text-dark flex-shrink-0"><i class="bi bi-trophy-fill me-1"></i>${_esc(_t.best)}</span>`:''} ${exists?`<span class="badge bg-secondary flex-shrink-0" style="font-size:.65rem">${_esc(_t.alreadyAdded)}</span>`:''}<div class="flex-grow-1">${_loadBar(s.load, s.bw_max)}</div><small class="text-muted flex-shrink-0">${s.users} users</small>`);
       if (!exists) { row.addEventListener('click', e => { if(e.target.closest('input'))return; const c=row.querySelector('input'); c.checked=!c.checked; airvpnToggle(s.name,c.checked); }); }
       body.appendChild(row);
     }
@@ -1218,7 +1221,7 @@ function _renderNewTab(allServers) {
     const cb=document.createElement('input'); cb.type='checkbox'; cb.className='form-check-input airvpn-cb'; cb.value=s.name;
     cb.addEventListener('change', e=>airvpnToggle(s.name,e.target.checked));
     tdCb.appendChild(cb); tr.appendChild(tdCb);
-    tr.insertAdjacentHTML('beforeend',`<td><code class="fw-semibold">${_esc(s.name)}</code></td><td>${_flag(s.country_code)} <small>${_esc(s.country)}</small></td><td><small class="text-muted">${_esc(s.location)}</small></td><td>${_loadBar(s.load)}</td><td><small class="text-muted">${s.users}</small></td>`);
+    tr.insertAdjacentHTML('beforeend',`<td><code class="fw-semibold">${_esc(s.name)}</code></td><td>${_flag(s.country_code)} <small>${_esc(s.country)}</small></td><td><small class="text-muted">${_esc(s.location)}</small></td><td>${_loadBar(s.load, s.bw_max)}</td><td><small class="text-muted">${s.users}</small></td>`);
     tr.addEventListener('click', e=>{if(e.target.closest('input'))return;const c=tr.querySelector('input');c.checked=!c.checked;airvpnToggle(s.name,c.checked);});
     tbody.appendChild(tr);
   }
@@ -1269,7 +1272,7 @@ function _refreshAirvpnStats() {
         const name=td.dataset.srv; const s=map.get(name);
         const utd=document.querySelector(`td.srv-col-users[data-srv="${CSS.escape(name)}"]`);
         if(!s){td.innerHTML='<span class="text-muted">—</span>';if(utd)utd.innerHTML='<span class="text-muted">—</span>';return;}
-        td.innerHTML=_loadBar(s.load)+(s.health!=='ok'?' <i class="bi bi-exclamation-triangle-fill text-warning ms-1" style="font-size:.75rem"></i>':'');
+        td.innerHTML=_loadBar(s.load, s.bw_max)+(s.health!=='ok'?' <i class="bi bi-exclamation-triangle-fill text-warning ms-1" style="font-size:.75rem"></i>':'');
         if(utd)utd.innerHTML=`<small class="text-muted">${s.users}</small>`;
       });
       _airvpnStatsFirstLoad=false;
