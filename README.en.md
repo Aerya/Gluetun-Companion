@@ -603,6 +603,53 @@ In **Settings → Scheduling & Benchmark**: the automatic cycle can be disabled 
 
 ---
 
+## Diagnostic
+
+The **Settings** page includes a diagnostic button that tests each component used by Companion in one click:
+
+| Component | What is tested |
+|---|---|
+| **Docker** | Docker socket reachability |
+| **Gluetun proxy** | HTTP request through the VPN proxy to Cloudflare |
+| **AirVPN API** | Public endpoint `airvpn.org/api` |
+| **Discord** | GET on the configured webhook URL |
+| **Apprise** | HEAD on the URL if HTTP, otherwise reports the scheme |
+| **Sidecar** | TCP connection to the sidecar port (default `8766`) |
+
+---
+
+## Configuration export / import
+
+Available from **Settings**, the **Export configuration** button generates a `companion-config.json` file containing all settings *excluding secrets* (passwords, tokens, webhooks). This file can be re-imported on another instance via the **Import** button.
+
+---
+
+## Grafana dashboard
+
+A Grafana dashboard JSON file is downloadable from **Settings**. It is pre-wired to Companion's Prometheus metrics and includes panels for:
+
+- Download/upload throughput per server (bar gauge)
+- Latency, jitter, packet loss, DNS (bar gauge)
+- Confidence index and profile score (bar gauge)
+- Errors by type (donut chart)
+- Summary table of all servers
+
+### Available Prometheus metrics
+
+In addition to the base metrics (`avg_dl`, `avg_ul`, `avg_latency`, `test_count`, `failure_count`, `enabled`, `active`), Companion exposes:
+
+| Metric | Description |
+|---|---|
+| `gluetun_companion_server_avg_jitter_ms` | Average jitter (sidecar tests only) |
+| `gluetun_companion_server_avg_loss_pct` | Average packet loss |
+| `gluetun_companion_server_avg_dns_ms` | Average DNS latency |
+| `gluetun_companion_server_confidence` | Confidence index: 0=LOW, 1=MEDIUM, 2=HIGH |
+| `gluetun_companion_server_score` | Active profile score [0–1] |
+| `gluetun_companion_server_last_benchmark_ts_seconds` | Unix timestamp of the last test |
+| `gluetun_companion_errors_total{type}` | Error counter by type: timeout, connection, vpn, other |
+
+---
+
 ## Notes
 
 - **Sidecar mode (default):** your main Gluetun is never restarted during testing — dependent services are not interrupted. **Proxy mode (optional):** the benchmark briefly interrupts those services on each server test. Schedule during off-peak hours.

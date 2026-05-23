@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import logging
+import socket
 import threading
 import time
 from functools import wraps
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 from flask import (
     Blueprint, Response, current_app, flash, jsonify,
-    redirect, render_template, request, session, url_for,
+    redirect, render_template, request, send_file, session, url_for,
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -31,6 +32,27 @@ from .i18n import flash_t, get_t
 from .scheduler import get_next_run, reschedule, trigger_now, trigger_quick_now, trigger_single_server
 
 bp = Blueprint('main', __name__)
+
+# ---------------------------------------------------------------------------
+# Config export/import — allowed keys (no secrets)
+# ---------------------------------------------------------------------------
+_EXPORT_KEYS = frozenset({
+    'test_interval_hours', 'auto_switch', 'connection_wait_seconds',
+    'speedtest_samples', 'speedtest_duration', 'speedtest_retries',
+    'server_timeout_secs', 'auto_exclude_failures', 'speedtest_warmup',
+    'speedtest_streams', 'db_retention_days', 'sidecar_mode', 'sidecar_image',
+    'sidecar_port', 'sidecar_speedtest_method', 'sidecar_iperf_fallback',
+    'sidecar_proxy_fallback', 'post_switch_containers', 'pause_bench_containers',
+    'auto_benchmark', 'pull_gluetun', 'pull_post_switch_containers',
+    'pull_pause_bench_containers', 'pull_network_containers',
+    'quick_check_mode', 'quick_check_threshold', 'weighted_score_current_pct',
+    'stability_weight', 'adaptive_scheduling', 'adaptive_auto_shift',
+    'notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
+    'notif_auto_exclude', 'notif_benchmark_end', 'notif_benchmark_failure',
+    'notif_quick_check', 'gluetun_api_port', 'notify_mention_level',
+    'active_profile', 'single_stream_test', 'airvpn_new_server_notif',
+    'proxy_username',
+})
 
 # ---------------------------------------------------------------------------
 # Login rate limiting (in-memory, per remote IP)
@@ -1193,7 +1215,8 @@ def metrics():
                                AND (st.test_method IS NULL OR st.test_method != 'proxy_qc')
                                THEN st.latency_ms END), 2)    AS avg_lat,
                 COUNT(st.id)                                        AS total_tests,
-                SUM(CASE WHEN st.success=0 THEN 1 ELSE 0 END)      AS failed_tests
+                SUM(CASE WHEN st.success=0 THEN 1 ELSE 0 END)      AS failed_tests,
+                MAX(strftime('%s', st.tested_at))                   AS last_ts
             FROM servers s
             LEFT JOIN speed_tests st ON st.server_name = s.name
             GROUP BY s.id
@@ -1208,6 +1231,24 @@ def metrics():
             FROM switches
         ''').fetchone()
 
+        err_rows = db.execute('''
+            SELECT
+                CASE
+                    WHEN LOWER(COALESCE(error_msg,'')) LIKE '%timeout%'  THEN 'timeout'
+                    WHEN LOWER(COALESCE(error_msg,'')) LIKE '%connect%'
+                      OR LOWER(COALESCE(error_msg,'')) LIKE '%refused%'  THEN 'connection'
+                    WHEN LOWER(COALESCE(error_msg,'')) LIKE '%vpn%'
+                      OR LOWER(COALESCE(error_msg,'')) LIKE '%gluetun%'  THEN 'vpn'
+                    ELSE 'other'
+                END AS error_type,
+                COUNT(*) AS cnt
+            FROM speed_tests
+            WHERE success=0
+              AND error_msg IS NOT NULL
+              AND TRIM(COALESCE(error_msg,'')) != ''
+            GROUP BY error_type
+        ''').fetchall()
+
     # ── Active server (best-effort) ────────────────────────────────────────
     active_server = ''
     try:
@@ -1217,6 +1258,19 @@ def metrics():
         pass
 
     bm_running = int(get_setting('benchmark_running', '0') == '1')
+
+    # ── Stability / confidence / profile scores (extended metrics) ─────────
+    stab_map = get_stability_all()
+    conf_map = compute_confidence_all()
+    _CONF_NUM = {'LOW': 0, 'MEDIUM': 1, 'HIGH': 2}
+
+    _profile_scores: dict[str, float] = {}
+    _active_profile = get_setting('active_profile', 'balanced')
+    try:
+        from .profiles import score_servers as _score_srv
+        _profile_scores = _score_srv(server_rows, _active_profile, stab_map)
+    except Exception:
+        pass
 
     # ── Per-server gauges ──────────────────────────────────────────────────
     _metric('gluetun_companion_server_avg_dl_mbps',
@@ -1259,6 +1313,48 @@ def metrics():
             'gauge',
             [({'server': r['name']}, 1 if r['name'] == active_server else 0)
              for r in server_rows])
+
+    _metric('gluetun_companion_server_last_benchmark_ts_seconds',
+            'Unix timestamp of the last speed test recorded for this server (any method)',
+            'gauge',
+            [({'server': r['name']}, int(r['last_ts']))
+             for r in server_rows if r['last_ts']])
+
+    _metric('gluetun_companion_server_avg_jitter_ms',
+            'Average jitter in milliseconds (sidecar tests only, proxy_qc excluded)',
+            'gauge',
+            [({'server': name}, data.get('avg_jitter'))
+             for name, data in stab_map.items()])
+
+    _metric('gluetun_companion_server_avg_loss_pct',
+            'Average packet loss percentage (sidecar tests only, proxy_qc excluded)',
+            'gauge',
+            [({'server': name}, data.get('avg_loss'))
+             for name, data in stab_map.items()])
+
+    _metric('gluetun_companion_server_avg_dns_ms',
+            'Average DNS latency in milliseconds (sidecar tests only, proxy_qc excluded)',
+            'gauge',
+            [({'server': name}, data.get('avg_dns'))
+             for name, data in stab_map.items()])
+
+    _metric('gluetun_companion_server_confidence',
+            'Confidence level: 0=LOW, 1=MEDIUM, 2=HIGH',
+            'gauge',
+            [({'server': name}, _CONF_NUM.get(data.get('level', 'LOW'), 0))
+             for name, data in conf_map.items()])
+
+    if _profile_scores:
+        _metric('gluetun_companion_server_score',
+                'Current usage-profile score in [0, 1] (higher = better for active profile)',
+                'gauge',
+                [({'server': name, 'profile': _active_profile}, score)
+                 for name, score in _profile_scores.items()])
+
+    _metric('gluetun_companion_errors_total',
+            'Total failed speed tests grouped by error type (timeout, connection, vpn, other)',
+            'counter',
+            [({'type': r['error_type']}, r['cnt']) for r in err_rows])
 
     # ── Global counters / gauges ───────────────────────────────────────────
     _metric('gluetun_companion_switches_total',
@@ -1341,6 +1437,179 @@ def api_notify_test():
 def api_docker_containers():
     """Return the list of currently running Docker container names."""
     return jsonify(list_docker_containers())
+
+
+# ---------------------------------------------------------------------------
+# Diagnostic
+# ---------------------------------------------------------------------------
+
+@bp.route('/api/diagnostic', methods=['POST'])
+@login_required
+def api_diagnostic():
+    """Run connectivity checks: Docker, Gluetun proxy, AirVPN API, Discord, Apprise, sidecar."""
+    import requests as _req
+
+    cfg     = current_app.config
+    results = {}
+
+    # 1. Docker socket
+    try:
+        import docker as _docker
+        _docker.from_env().ping()
+        results['docker'] = {'ok': True, 'detail': 'Docker socket reachable'}
+    except Exception as exc:
+        results['docker'] = {'ok': False, 'detail': str(exc)[:200]}
+
+    # 2. Gluetun HTTP proxy
+    try:
+        host = cfg['GLUETUN_HOST']
+        port = cfg['GLUETUN_PROXY_PORT']
+        user = get_setting('proxy_username', '') or None
+        pwd  = get_setting('proxy_password', '') or None
+        from .gluetun import _proxies
+        px = _proxies(host, port, user, pwd)
+        r = _req.get('https://www.cloudflare.com/cdn-cgi/trace', proxies=px, timeout=10)
+        results['gluetun_proxy'] = {'ok': r.status_code == 200, 'detail': f'HTTP {r.status_code}'}
+    except Exception as exc:
+        results['gluetun_proxy'] = {'ok': False, 'detail': str(exc)[:200]}
+
+    # 3. AirVPN API
+    try:
+        r = _req.get(
+            'https://airvpn.org/api/?service=status',
+            timeout=10,
+            headers={'User-Agent': 'GluetunCompanion/1.0'},
+        )
+        results['airvpn_api'] = {'ok': r.status_code == 200, 'detail': f'HTTP {r.status_code}'}
+    except Exception as exc:
+        results['airvpn_api'] = {'ok': False, 'detail': str(exc)[:200]}
+
+    # 4. Discord webhook
+    discord_url = get_setting('discord_webhook_url', '').strip()
+    if discord_url:
+        try:
+            r = _req.get(discord_url, timeout=5)
+            # Discord returns 200 with webhook info on GET
+            results['discord'] = {'ok': r.status_code == 200, 'detail': f'HTTP {r.status_code}'}
+        except Exception as exc:
+            results['discord'] = {'ok': False, 'detail': str(exc)[:200]}
+    else:
+        results['discord'] = {'ok': None, 'detail': 'not_configured'}
+
+    # 5. Apprise
+    apprise_urls = get_setting('apprise_urls', '').strip()
+    if apprise_urls:
+        lines     = [u.strip() for u in apprise_urls.splitlines() if u.strip()]
+        http_urls = [u for u in lines if u.startswith('http')]
+        if http_urls:
+            try:
+                r = _req.head(http_urls[0], timeout=5, allow_redirects=True)
+                results['apprise'] = {
+                    'ok':     r.status_code < 500,
+                    'detail': f'HTTP {r.status_code}',
+                }
+            except Exception as exc:
+                results['apprise'] = {'ok': False, 'detail': str(exc)[:200]}
+        else:
+            scheme = lines[0].split('://')[0] if '://' in lines[0] else '?'
+            results['apprise'] = {'ok': True, 'detail': f'configured ({scheme}://)'}
+    else:
+        results['apprise'] = {'ok': None, 'detail': 'not_configured'}
+
+    # 6. Sidecar
+    if get_setting('sidecar_mode', '0') == '1':
+        sidecar_port = int(get_setting('sidecar_port', '8766'))
+        try:
+            sock = socket.create_connection(('127.0.0.1', sidecar_port), timeout=3)
+            sock.close()
+            results['sidecar'] = {'ok': True, 'detail': f'Port {sidecar_port} reachable'}
+        except ConnectionRefusedError:
+            results['sidecar'] = {
+                'ok':     False,
+                'detail': f'Port {sidecar_port} not reachable (sidecar not running?)',
+            }
+        except Exception as exc:
+            results['sidecar'] = {'ok': False, 'detail': str(exc)[:200]}
+    else:
+        results['sidecar'] = {'ok': None, 'detail': 'sidecar_disabled'}
+
+    return jsonify(results)
+
+
+# ---------------------------------------------------------------------------
+# Config export / import
+# ---------------------------------------------------------------------------
+
+@bp.route('/config/export')
+@login_required
+def config_export():
+    """Download non-secret settings as a JSON file."""
+    from datetime import datetime, timezone
+
+    with get_db() as db:
+        rows = db.execute('SELECT key, value FROM settings').fetchall()
+
+    payload = {
+        '_version':     1,
+        '_exported_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'settings':     {r['key']: r['value'] for r in rows if r['key'] in _EXPORT_KEYS},
+    }
+
+    resp = Response(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        mimetype='application/json',
+    )
+    resp.headers['Content-Disposition'] = 'attachment; filename="companion-config.json"'
+    return resp
+
+
+@bp.route('/config/import', methods=['POST'])
+@login_required
+def config_import():
+    """Import settings from a JSON file (secrets are ignored)."""
+    f = request.files.get('config_file')
+    if not f:
+        flash('Aucun fichier fourni.', 'danger')
+        return redirect(url_for('main.settings'))
+
+    try:
+        data = json.loads(f.read().decode('utf-8'))
+    except Exception as exc:
+        flash(f'Fichier invalide : {exc}', 'danger')
+        return redirect(url_for('main.settings'))
+
+    if not isinstance(data, dict) or 'settings' not in data:
+        flash("Format invalide — clé 'settings' manquante.", 'danger')
+        return redirect(url_for('main.settings'))
+
+    imported = skipped = 0
+    for key, value in data['settings'].items():
+        if key in _EXPORT_KEYS:
+            set_setting(key, str(value))
+            imported += 1
+        else:
+            skipped += 1
+
+    flash(
+        f'{imported} paramètre(s) importé(s).'
+        + (f' {skipped} clé(s) ignorée(s) (secrètes ou inconnues).' if skipped else ''),
+        'success',
+    )
+    return redirect(url_for('main.settings'))
+
+
+# ---------------------------------------------------------------------------
+# Grafana dashboard download
+# ---------------------------------------------------------------------------
+
+@bp.route('/grafana-dashboard')
+@login_required
+def grafana_dashboard():
+    """Serve the pre-built Grafana dashboard JSON."""
+    import os
+    path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'grafana-dashboard.json')
+    return send_file(path, mimetype='application/json', as_attachment=True,
+                     download_name='gluetun-companion-dashboard.json')
 
 
 @bp.route('/api/gluetun-network-containers')

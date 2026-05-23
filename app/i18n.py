@@ -497,6 +497,35 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_airvpn_mention_label':'Mention Discord (optionnel)',
         'set_airvpn_mention_hint': 'ID Discord à mentionner dans la notification (ex. <code>&lt;@123456789&gt;</code> ou <code>&lt;@&amp;ROLE_ID&gt;</code>). Laisser vide pour ne pas mentionner.',
         'flash_airvpn_dismissed':  'Nouveaux serveurs ignorés.',
+
+        # ── Diagnostic ──
+        'set_diag_title':          'Diagnostic',
+        'set_diag_subtitle':       'Teste la connectivité de chaque composant utilisé par Companion.',
+        'set_diag_btn':            'Lancer le diagnostic',
+        'set_diag_running':        'Diagnostic en cours…',
+        'set_diag_docker':         'Docker',
+        'set_diag_proxy':          'Proxy Gluetun',
+        'set_diag_airvpn':         'API AirVPN',
+        'set_diag_discord':        'Discord',
+        'set_diag_apprise':        'Apprise',
+        'set_diag_sidecar':        'Sidecar',
+        'set_diag_ok':             'OK',
+        'set_diag_fail':           'Échec',
+        'set_diag_na':             'Non configuré',
+        'set_diag_disabled':       'Désactivé',
+
+        # ── Export / Import ──
+        'set_export_title':        'Export / import de configuration',
+        'set_export_subtitle':     'Sauvegardez ou restaurez tous les paramètres (hors secrets : mots de passe, tokens, webhooks).',
+        'set_export_btn':          'Exporter la configuration',
+        'set_import_btn':          'Importer',
+        'set_import_hint':         'Fichier JSON exporté depuis Companion. Les clés secrètes sont ignorées à l\'import.',
+
+        # ── Grafana ──
+        'set_grafana_title':       'Dashboard Grafana',
+        'set_grafana_subtitle':    'Téléchargez le dashboard Grafana pré-câblé sur les métriques Prometheus de Companion.',
+        'set_grafana_btn':         'Télécharger le dashboard',
+        'set_grafana_metrics_hint':'Métriques disponibles : débit, latence, jitter, perte de paquets, DNS, score de profil, indice de confiance, dernier benchmark, erreurs par type.',
     },
 
     'en': {
@@ -993,6 +1022,35 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_airvpn_mention_label':'Discord mention (optional)',
         'set_airvpn_mention_hint': 'Discord ID to mention in the notification (e.g. <code>&lt;@123456789&gt;</code> or <code>&lt;@&amp;ROLE_ID&gt;</code>). Leave blank to skip.',
         'flash_airvpn_dismissed':  'New servers dismissed.',
+
+        # ── Diagnostic ──
+        'set_diag_title':          'Diagnostic',
+        'set_diag_subtitle':       'Tests connectivity for each component used by Companion.',
+        'set_diag_btn':            'Run diagnostic',
+        'set_diag_running':        'Running diagnostic…',
+        'set_diag_docker':         'Docker',
+        'set_diag_proxy':          'Gluetun proxy',
+        'set_diag_airvpn':         'AirVPN API',
+        'set_diag_discord':        'Discord',
+        'set_diag_apprise':        'Apprise',
+        'set_diag_sidecar':        'Sidecar',
+        'set_diag_ok':             'OK',
+        'set_diag_fail':           'Failed',
+        'set_diag_na':             'Not configured',
+        'set_diag_disabled':       'Disabled',
+
+        # ── Export / Import ──
+        'set_export_title':        'Configuration export / import',
+        'set_export_subtitle':     'Back up or restore all settings (excluding secrets: passwords, tokens, webhooks).',
+        'set_export_btn':          'Export configuration',
+        'set_import_btn':          'Import',
+        'set_import_hint':         'JSON file exported from Companion. Secret keys are ignored on import.',
+
+        # ── Grafana ──
+        'set_grafana_title':       'Grafana dashboard',
+        'set_grafana_subtitle':    'Download the Grafana dashboard pre-wired to Companion\'s Prometheus metrics.',
+        'set_grafana_btn':         'Download dashboard',
+        'set_grafana_metrics_hint':'Available metrics: throughput, latency, jitter, packet loss, DNS, profile score, confidence index, last benchmark, error counters by type.',
     },
 }
 
