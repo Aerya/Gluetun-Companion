@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  OWNER: ${{ github.repository_owner }}
+  IMAGE_NAMESPACE: aerya
 
 jobs:
   companion:
@@ -40,7 +40,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/gluetun-companion
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/gluetun-companion
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -86,7 +86,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/gluetun-companion-sidecar
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/gluetun-companion-sidecar
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
