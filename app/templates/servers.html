@@ -181,6 +181,11 @@
     <code class="text-warning">{{ profile_best }}</code>
   </span>
   {% endif %}
+  <span class="ms-auto" style="font-size:.75rem">
+    <i class="bi bi-info-circle text-info"
+       data-bs-toggle="tooltip" data-bs-placement="left"
+       title="{{ t.srv_profile_info }}"></i>
+  </span>
 </form>
 
 <form method="get" class="row g-2 mb-3 align-items-end">
@@ -283,7 +288,7 @@
               <span class="badge bg-success ms-1" style="font-size:.7rem">{{ t.srv_active_badge }}</span>
               {% endif %}
               {% if profile_best and s.name == profile_best and active_profile != 'balanced' %}
-              <span class="ms-1" title="{{ t.srv_profile_best }}">ðŸ†</span>
+              <span class="ms-1 text-warning" title="{{ t.srv_profile_best }}"><i class="bi bi-trophy-fill"></i></span>
               {% elif not s.enabled %}
               <span class="badge bg-secondary ms-1" style="font-size:.7rem">OFF</span>
               {% endif %}
