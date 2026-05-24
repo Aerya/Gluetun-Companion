@@ -412,6 +412,12 @@ The active profile determines **how the best server is selected** at the end of 
 
 **Servers page**: the profile pill bar displays the **best server for the active profile** (computed from historical averages). The recommended server is highlighted with a 🏆 badge on its row (hidden in Balanced mode).
 
+**Explainable score**: each server in the table view has a 📊 button (chart icon) next to its name. Clicking it opens a popover showing each metric's contribution to the final score — download speed, upload, latency, jitter, packet loss — as weighted progress bars with the raw measured values. Only metrics actually used by the active profile are displayed.
+
+**Scoring time window**: by default, the averages used to rank servers are computed over the **last 30 days**. This can be adjusted in **Settings → Automatic switching → Scoring window**: 7 d, 14 d, 30 d, or all data. A shorter window favours recent performance; a longer window smooths out one-off spikes.
+
+**Outlier detection**: enable in **Settings → Automatic switching → Filter outlier values**. When active, each per-server, per-metric result series is filtered using the IQR method (interquartile range × 1.5) before computing averages. Clearly aberrant measurements (network spike, transient saturation) are excluded from scoring — they remain visible in the history. Requires at least 4 measurements per server to take effect.
+
 ---
 
 ### Selection score — stability components

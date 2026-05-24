@@ -413,6 +413,12 @@ Le profil actif détermine **comment le meilleur serveur est sélectionné** à 
 
 **Page Serveurs** : la barre de profils affiche le **meilleur serveur pour le profil actif** (calculé sur les moyennes historiques). Ce serveur est mis en évidence par un badge 🏆 sur sa ligne (masqué en profil Équilibré).
 
+**Score explicable** : chaque serveur affiché dans la vue tableau dispose d'un bouton 📊 (icône graphique) à côté de son nom. Un clic ouvre un popover détaillant la contribution de chaque métrique au score final — débit download, upload, latence, jitter, perte de paquets — sous forme de barres de progression pondérées, avec les valeurs brutes mesurées. Seules les métriques effectivement utilisées par le profil actif sont affichées.
+
+**Fenêtre temporelle de scoring** : par défaut, les moyennes utilisées pour le classement des serveurs sont calculées sur les **30 derniers jours**. Ce paramètre est ajustable dans **Paramètres → Bascule automatique → Fenêtre de scoring** : 7 j, 14 j, 30 j, ou toutes les données. Une fenêtre courte favorise les performances récentes ; une fenêtre longue lisse les pics ponctuels.
+
+**Détection d'outliers** : option activable dans **Paramètres → Bascule automatique → Filtrage des valeurs aberrantes**. Lorsqu'elle est active, chaque série de résultats par serveur et par métrique est filtrée via la méthode IQR (interquartile range × 1,5) avant le calcul des moyennes. Les mesures manifestement aberrantes (pic réseau, saturation ponctuelle) sont ignorées pour le scoring — elles restent visibles dans l'historique. Requiert au minimum 4 mesures par serveur pour s'appliquer.
+
 ---
 
 ### Score de sélection — composantes de stabilité

@@ -120,6 +120,8 @@ def init_db(db_path: str):
                 ('pull_network_containers',     '[]'),
                 ('quick_check_mode',            '0'),
                 ('quick_check_threshold',       '15'),
+                ('scoring_window_days',         '30'),
+                ('outlier_detection',           '1'),
                 ('weighted_score_current_pct',  '65'),
                 ('airvpn_new_server_notif',     '0'),
                 ('airvpn_notify_mention',       ''),
@@ -214,7 +216,7 @@ def set_setting(key: str, value: str):
         )
 
 
-def compute_confidence_all() -> dict[str, dict]:
+def compute_confidence_all(window_days: int | None = None) -> dict[str, dict]:
     """Compute confidence scores for all servers (zero migrations needed).
 
     Returns {server_name: {'level': 'HIGH'|'MEDIUM'|'LOW', 'nb': int,
@@ -227,9 +229,16 @@ def compute_confidence_all() -> dict[str, dict]:
 
     proxy_qc tests are excluded (quick checks — not representative benchmarks).
     SQLite variance = E[x²] − E[x]² (population variance, no STDDEV function needed).
+    *window_days* restricts the computation to the last N days (None = all history).
     """
+    window_sql = ''
+    params: list = []
+    if window_days:
+        window_sql = "AND st.tested_at >= datetime('now', ?)"
+        params = [f'-{window_days} days']
+
     with get_db() as db:
-        rows = db.execute('''
+        rows = db.execute(f'''
             SELECT
                 s.name,
                 COALESCE(s.consecutive_failures, 0) AS consec,
@@ -248,9 +257,9 @@ def compute_confidence_all() -> dict[str, dict]:
                              THEN st.download_mbps END)
                 ) AS variance
             FROM servers s
-            LEFT JOIN speed_tests st ON st.server_name = s.name
+            LEFT JOIN speed_tests st ON st.server_name = s.name {window_sql}
             GROUP BY s.name
-        ''').fetchall()
+        ''', params).fetchall()
 
     result: dict[str, dict] = {}
     for r in rows:
@@ -286,15 +295,23 @@ def compute_confidence_all() -> dict[str, dict]:
 # Stability metrics (jitter / packet loss) per server
 # ---------------------------------------------------------------------------
 
-def get_stability_all() -> dict[str, dict]:
+def get_stability_all(window_days: int | None = None) -> dict[str, dict]:
     """Return average stability metrics per server (proxy_qc excluded).
 
     Returns {server_name: {'avg_jitter': float|None, 'avg_loss': float|None,
                            'avg_ping_min': float|None, 'avg_ping_max': float|None,
                            'avg_dns': float|None, 'n': int}}
+
+    *window_days* restricts the computation to the last N days (None = all history).
     """
+    window_sql = ''
+    params: list = []
+    if window_days:
+        window_sql = "AND st.tested_at >= datetime('now', ?)"
+        params = [f'-{window_days} days']
+
     with get_db() as db:
-        rows = db.execute('''
+        rows = db.execute(f'''
             SELECT
                 s.name,
                 ROUND(AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
@@ -313,9 +330,9 @@ def get_stability_all() -> dict[str, dict]:
                     0
                 ) AS n
             FROM servers s
-            LEFT JOIN speed_tests st ON st.server_name = s.name
+            LEFT JOIN speed_tests st ON st.server_name = s.name {window_sql}
             GROUP BY s.name
-        ''').fetchall()
+        ''', params).fetchall()
 
     return {
         r['name']: {
@@ -328,6 +345,103 @@ def get_stability_all() -> dict[str, dict]:
         }
         for r in rows
     }
+
+
+# ---------------------------------------------------------------------------
+# Outlier detection + windowed server stats
+# ---------------------------------------------------------------------------
+
+def _iqr_filter(values: list) -> list:
+    """Remove outliers using the IQR × 1.5 fence.
+
+    Returns the input unchanged when fewer than 4 values are present
+    (not enough data to reliably identify outliers) or when IQR == 0
+    (all values identical — nothing to filter).
+    """
+    if len(values) < 4:
+        return values
+    sv = sorted(values)
+    n = len(sv)
+    q1 = sv[n // 4]
+    q3 = sv[(3 * n) // 4]
+    iqr = q3 - q1
+    if iqr == 0:
+        return values
+    lo, hi = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+    filtered = [v for v in values if lo <= v <= hi]
+    return filtered if filtered else values   # never return empty list
+
+
+def get_server_filtered_stats(
+    window_days: int | None = None,
+    filter_outliers: bool = True,
+) -> dict[str, dict]:
+    """Return per-server DL/UL/LAT/DL_SINGLE averages with optional
+    time-window (days) and IQR outlier filtering.
+
+    Returns {name: {avg_dl, avg_ul, avg_lat, avg_dl_single, nb, outliers_removed}}.
+    Servers with no qualifying tests still appear with None averages and nb=0.
+    """
+    window_sql = ''
+    params: list = []
+    if window_days:
+        window_sql = "AND st.tested_at >= datetime('now', ?)"
+        params = [f'-{window_days} days']
+
+    with get_db() as db:
+        raw_rows = db.execute(f'''
+            SELECT
+                s.name,
+                st.download_mbps,
+                st.upload_mbps,
+                st.latency_ms,
+                st.dl_single_mbps
+            FROM servers s
+            LEFT JOIN speed_tests st
+                ON st.server_name = s.name
+                AND st.success = 1
+                AND st.test_method != 'proxy_qc'
+                {window_sql}
+            ORDER BY s.name
+        ''', params).fetchall()
+
+    from collections import defaultdict
+    per: dict[str, dict] = defaultdict(lambda: {'dl': [], 'ul': [], 'lat': [], 'sg': []})
+    all_names: set[str] = set()
+
+    for r in raw_rows:
+        all_names.add(r['name'])
+        if r['download_mbps'] is not None:
+            per[r['name']]['dl'].append(float(r['download_mbps']))
+        if r['upload_mbps'] is not None:
+            per[r['name']]['ul'].append(float(r['upload_mbps']))
+        if r['latency_ms'] is not None:
+            per[r['name']]['lat'].append(float(r['latency_ms']))
+        if r['dl_single_mbps'] is not None:
+            per[r['name']]['sg'].append(float(r['dl_single_mbps']))
+
+    result: dict[str, dict] = {}
+    for name in all_names:
+        m = per[name]
+        dl_all = m['dl']
+        dl_flt = _iqr_filter(dl_all) if filter_outliers else dl_all
+        ul_flt = _iqr_filter(m['ul']) if filter_outliers else m['ul']
+        lat_flt = _iqr_filter(m['lat']) if filter_outliers else m['lat']
+        sg_flt  = _iqr_filter(m['sg'])  if filter_outliers else m['sg']
+
+        def _avg(vals, ndigits=1):
+            return round(sum(vals) / len(vals), ndigits) if vals else None
+
+        result[name] = {
+            'avg_dl':          _avg(dl_flt),
+            'avg_ul':          _avg(ul_flt),
+            'avg_lat':         round(sum(lat_flt) / len(lat_flt)) if lat_flt else None,
+            'avg_dl_single':   _avg(sg_flt),
+            'nb':              len(dl_all),
+            'outliers_removed': len(dl_all) - len(dl_flt),
+        }
+
+    return result
 
 
 # ---------------------------------------------------------------------------

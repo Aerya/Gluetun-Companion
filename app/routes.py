@@ -17,10 +17,10 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from .database import (
     get_db, get_setting, set_setting, compute_confidence_all,
     get_new_airvpn_servers, dismiss_new_airvpn_servers,
-    get_stability_all,
+    get_stability_all, get_server_filtered_stats,
     get_airvpn_snapshot, update_airvpn_snapshot,
 )
-from .profiles import PROFILES, score_servers as _score_servers
+from .profiles import PROFILES, score_servers as _score_servers, score_servers_detail as _score_servers_detail
 from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
     get_current_filters, format_filters,
@@ -45,7 +45,8 @@ _EXPORT_KEYS = frozenset({
     'sidecar_proxy_fallback', 'post_switch_containers', 'pause_bench_containers',
     'auto_benchmark', 'pull_gluetun', 'pull_post_switch_containers',
     'pull_pause_bench_containers', 'pull_network_containers',
-    'quick_check_mode', 'quick_check_threshold', 'weighted_score_current_pct',
+    'quick_check_mode', 'quick_check_threshold', 'scoring_window_days', 'outlier_detection',
+    'weighted_score_current_pct',
     'stability_weight', 'adaptive_scheduling', 'adaptive_auto_shift',
     'notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
     'notif_auto_exclude', 'notif_benchmark_end', 'notif_benchmark_failure',
@@ -345,10 +346,29 @@ def servers():
     except Exception:
         active_server = ''
 
-    # Profile scores for display
-    _stability = get_stability_all()
+    # ── Scoring window + outlier settings ────────────────────────────────────
+    _score_window  = int(get_setting('scoring_window_days', '30')) or None  # 0 → None = all
+    _outlier_on    = get_setting('outlier_detection', '1') == '1'
+
+    # ── Filtered per-server stats (avg_dl/ul/lat with window + IQR) ───────────
+    _fstats = get_server_filtered_stats(_score_window, _outlier_on)
+    # Merge filtered averages back into rows (convert Row→dict first)
+    rows = [dict(r) for r in rows]
+    for r in rows:
+        fs = _fstats.get(r['name'])
+        if fs:
+            r['avg_dl']        = fs['avg_dl']
+            r['avg_ul']        = fs['avg_ul']
+            r['avg_lat']       = fs['avg_lat']
+            r['avg_dl_single'] = fs['avg_dl_single']
+            r['outliers_removed'] = fs['outliers_removed']
+        else:
+            r.setdefault('outliers_removed', 0)
+
+    # ── Profile scores for display ────────────────────────────────────────────
+    _stability = get_stability_all(_score_window)
     active_profile = get_setting('active_profile', 'balanced')
-    profile_scores = _score_servers(rows, active_profile, _stability)
+    profile_scores, profile_scores_detail = _score_servers_detail(rows, active_profile, _stability)
     profile_best   = max(profile_scores, key=profile_scores.get) if profile_scores else None
     profile_bests = {}
     for profile_key in PROFILES:
@@ -375,7 +395,7 @@ def servers():
         from_date=from_date, to_date=to_date,
         filter_types=filter_types,
         active_server=active_server,
-        confidence=compute_confidence_all(),
+        confidence=compute_confidence_all(_score_window),
         stability=_stability,
         new_airvpn=new_airvpn,
         new_airvpn_names=new_airvpn_names,
@@ -383,9 +403,12 @@ def servers():
         profiles=PROFILES,
         active_profile=active_profile,
         profile_scores=profile_scores,
+        profile_scores_detail=profile_scores_detail,
         profile_best=profile_best,
         profile_bests=profile_bests,
         adaptive_stats=get_hourly_benchmark_stats(),
+        scoring_window_days=_score_window or 0,
+        outlier_detection=_outlier_on,
     )
 
 
@@ -933,6 +956,13 @@ def settings():
             _ap = request.form.get('active_profile', 'balanced')
             if _ap in PROFILES:
                 set_setting('active_profile', _ap)
+            try:
+                _win = int(request.form.get('scoring_window_days', '30'))
+                if _win in (0, 7, 14, 30):
+                    set_setting('scoring_window_days', str(_win))
+            except ValueError:
+                pass
+            set_setting('outlier_detection', '1' if request.form.get('outlier_detection') else '0')
             flash_t('flash_settings_saved', 'success')
 
         # Legacy catch-all (kept for backward compat / direct API calls)
@@ -1058,6 +1088,8 @@ def settings():
         'quick_check_threshold':        get_setting('quick_check_threshold', '15'),
         'adaptive_scheduling':          get_setting('adaptive_scheduling', '0'),
         'adaptive_auto_shift':          get_setting('adaptive_auto_shift', '0'),
+        'scoring_window_days':          get_setting('scoring_window_days', '30'),
+        'outlier_detection':            get_setting('outlier_detection', '1'),
         'weighted_score_current_pct':   get_setting('weighted_score_current_pct', '65'),
         'stability_weight':             get_setting('stability_weight', '30'),
         'active_profile':               get_setting('active_profile', 'balanced'),

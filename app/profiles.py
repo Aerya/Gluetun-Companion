@@ -169,6 +169,88 @@ def score_servers(
     return scores
 
 
+def score_servers_detail(
+    rows,
+    profile_key: str,
+    stability: dict[str, dict],
+) -> tuple[dict[str, float], dict[str, dict]]:
+    """Like score_servers() but also returns the per-component breakdown.
+
+    Returns (scores, details) where:
+      scores  = {name: float}          — same output as score_servers()
+      details = {name: {
+          'score':      int  (0–100),
+          'components': {'dl', 'ul', 'lat', 'jit', 'loss'}  — normalised 0–100
+          'raws':       {'dl', 'ul', 'lat', 'jit', 'loss'}  — raw measured values
+          'weights':    profile weight vector
+      }}
+    """
+    profile = PROFILES.get(profile_key, PROFILES['balanced'])
+    w = profile['weights']
+
+    names = [r['name'] for r in rows]
+    if not names:
+        return {}, {}
+
+    raw_dl     = {r['name']: float(r['avg_dl']              or 0.0) for r in rows}
+    raw_ul     = {r['name']: float(r['avg_ul']              or 0.0) for r in rows}
+    raw_single = {r['name']: float(_row_get(r, 'avg_dl_single') or 0.0) for r in rows}
+    raw_lat    = {r['name']: _opt(r['avg_lat'])                         for r in rows}
+    raw_jit    = {r['name']: _opt((stability.get(r['name']) or {}).get('avg_jitter')) for r in rows}
+    raw_loss   = {r['name']: _opt((stability.get(r['name']) or {}).get('avg_loss'))   for r in rows}
+
+    n_dl     = _pnorm(raw_dl)
+    n_ul     = _pnorm(raw_ul)
+    n_lat    = _pnorm(raw_lat,    invert=True)
+    n_jit    = _pnorm(raw_jit,    invert=True)
+    n_loss   = _pnorm(raw_loss,   invert=True)
+    n_single = _pnorm(raw_single)
+
+    total_w = sum(w.values()) or 1.0
+
+    scores:  dict[str, float] = {}
+    details: dict[str, dict]  = {}
+
+    for name in names:
+        c_dl   = n_dl.get(name, 0.0)
+        c_ul   = n_ul.get(name, 0.0)
+        c_lat  = n_lat.get(name, 0.0)
+        c_jit  = n_jit.get(name, 0.0)
+        c_loss = n_loss.get(name, 0.0)
+        c_sg   = n_single.get(name, 0.0)
+
+        score = (
+            w['dl']     * c_dl
+            + w['ul']   * c_ul
+            + w['lat']  * c_lat
+            + w['jit']  * c_jit
+            + w['loss'] * c_loss
+            + w['single'] * c_sg
+        ) / total_w
+
+        scores[name] = round(score, 4)
+        details[name] = {
+            'score': round(score * 100),
+            'components': {
+                'dl':   round(c_dl   * 100),
+                'ul':   round(c_ul   * 100),
+                'lat':  round(c_lat  * 100),
+                'jit':  round(c_jit  * 100),
+                'loss': round(c_loss * 100),
+            },
+            'raws': {
+                'dl':   raw_dl.get(name),
+                'ul':   raw_ul.get(name),
+                'lat':  raw_lat.get(name),
+                'jit':  raw_jit.get(name),
+                'loss': raw_loss.get(name),
+            },
+            'weights': {k: v for k, v in w.items()},
+        }
+
+    return scores, details
+
+
 def score_results(
     results: list[dict],
     profile_key: str,

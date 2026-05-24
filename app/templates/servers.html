@@ -326,6 +326,45 @@
               {% elif not s.enabled %}
               <span class="badge bg-secondary ms-1" style="font-size:.7rem">OFF</span>
               {% endif %}
+              {# ── Score breakdown popover ── #}
+              {% set _det = profile_scores_detail.get(s.name) %}
+              {% if _det %}
+                {%- set _lang = session.get('lang','fr') -%}
+                {%- set _profile_lbl = profiles.get(active_profile, {}) -%}
+                {%- set _plabel = _profile_lbl.label_fr if _lang == 'fr' else _profile_lbl.label_en -%}
+                {%- set _w = _det.weights -%}
+                {%- set _c = _det.components -%}
+                {%- set _r = _det.raws -%}
+                {%- set _metrics = [
+                  ('dl',   t.score_detail_dl,   _c.dl,   _r.dl,   ' Mbps', False),
+                  ('ul',   t.score_detail_ul,   _c.ul,   _r.ul,   ' Mbps', False),
+                  ('lat',  t.score_detail_lat,  _c.lat,  _r.lat,  ' ms',   True),
+                  ('jit',  t.score_detail_jit,  _c.jit,  _r.jit,  ' ms',   True),
+                  ('loss', t.score_detail_loss, _c.loss, _r.loss, '%',     True),
+                ] -%}
+                {%- set ns = namespace(pop_rows='') -%}
+                {%- for key, label, comp, raw, unit, invert in _metrics -%}
+                  {%- if _w.get(key, 0) > 0 -%}
+                    {%- set bar_cls = 'bg-success' if comp >= 70 else ('bg-warning' if comp >= 40 else 'bg-danger') -%}
+                    {%- set raw_fmt = ('%.1f'|format(raw) ~ unit) if raw is not none else '—' -%}
+                    {%- set pop_row -%}<div style="margin-bottom:4px"><div class="d-flex justify-content-between" style="font-size:.72rem"><span>{{ label }}</span><span class="text-muted">{{ raw_fmt }}</span></div><div class="progress" style="height:4px"><div class="progress-bar {{ bar_cls }}" style="width:{{ comp }}%"></div></div></div>{%- endset -%}
+                    {%- set ns.pop_rows = ns.pop_rows ~ pop_row -%}
+                  {%- endif -%}
+                {%- endfor -%}
+                {%- set _outliers_line = '' -%}
+                {%- if s.get('outliers_removed', 0) > 0 -%}
+                  {%- set _outliers_line = '<div style="font-size:.68rem;color:#888;margin-top:4px"><i class="bi bi-funnel-fill me-1"></i>' ~ s.outliers_removed ~ ' ' ~ t.score_detail_outliers ~ '</div>' -%}
+                {%- endif -%}
+                {%- set pop_html -%}<div style="min-width:200px"><div class="fw-semibold mb-2" style="font-size:.78rem"><i class="bi bi-bar-chart-fill me-1 text-info"></i>{{ t.score_detail_title }} {{ _plabel }} — {{ _det.score }}%</div>{{ ns.pop_rows }}{{ _outliers_line }}</div>{%- endset -%}
+                <button type="button" class="btn btn-link p-0 ms-1 align-baseline score-detail-btn"
+                        style="font-size:.75rem;color:var(--bs-info);line-height:1;vertical-align:middle"
+                        data-bs-toggle="popover" data-bs-trigger="click focus"
+                        data-bs-html="true" data-bs-placement="right"
+                        data-bs-content="{{ pop_html | e }}"
+                        title="{{ t.score_detail_title }} — {{ _det.score }}%">
+                  <i class="bi bi-bar-chart-fill"></i>
+                </button>
+              {% endif %}
             </td>
             <td>
               <small class="text-muted font-monospace">{{ filter_vars.get(s.filter_type, s.filter_type) }}</small>
@@ -1295,5 +1334,6 @@ function dismissNamedServersNotice(cb) {
 }
 
 document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el, {trigger:'hover focus'}));
+document.querySelectorAll('.score-detail-btn').forEach(el => new bootstrap.Popover(el, {trigger:'click focus', html:true}));
 </script>
 {% endblock %}

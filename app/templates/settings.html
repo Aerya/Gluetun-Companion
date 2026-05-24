@@ -366,6 +366,36 @@
           {% endfor %}
         </div>
 
+        <hr class="my-3">
+
+        {# ── Fenêtre temporelle de scoring ── #}
+        <div class="mb-3 ms-4">
+          <label class="form-label small fw-semibold mb-1">{{ t.set_scoring_window_label }}</label>
+          <div class="d-flex gap-3 flex-wrap mt-1">
+            {% for val, lbl in [('7', t.set_scoring_window_7), ('14', t.set_scoring_window_14), ('30', t.set_scoring_window_30), ('0', t.set_scoring_window_0)] %}
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="scoring_window_days"
+                     id="sw_{{ val }}" value="{{ val }}"
+                     {{ 'checked' if cfg.scoring_window_days|string == val }}>
+              <label class="form-check-label small" for="sw_{{ val }}">{{ lbl }}</label>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="form-text">{{ t.set_scoring_window_hint }}</div>
+        </div>
+
+        {# ── Détection d'outliers ── #}
+        <div class="mb-4 ms-4">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="outlier_detection"
+                   id="outlier_detection" {{ 'checked' if cfg.outlier_detection == '1' }}>
+            <label class="form-check-label small" for="outlier_detection">
+              {{ t.set_outlier_label }}
+            </label>
+          </div>
+          <div class="form-text">{{ t.set_outlier_hint }}</div>
+        </div>
+
         <div class="d-flex gap-2 mt-3 mb-0">
           <button type="submit" class="btn btn-sm btn-success fw-semibold">
             <i class="bi bi-save"></i> {{ t.cmn_save }}
