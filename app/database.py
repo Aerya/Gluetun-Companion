@@ -76,6 +76,15 @@ def init_db(db_path: str):
                 dismissed     INTEGER NOT NULL DEFAULT 0
             );
 
+            CREATE TABLE IF NOT EXISTS airvpn_snapshot (
+                name         TEXT PRIMARY KEY,
+                load         INTEGER NOT NULL DEFAULT 0,
+                users        INTEGER NOT NULL DEFAULT 0,
+                health       TEXT NOT NULL DEFAULT 'ok',
+                country      TEXT NOT NULL DEFAULT '',
+                country_code TEXT NOT NULL DEFAULT ''
+            );
+
             INSERT OR IGNORE INTO settings (key, value) VALUES
                 ('test_interval_hours',      '6'),
                 ('admin_username',           'admin'),
@@ -369,6 +378,33 @@ def dismiss_new_airvpn_servers():
     """Mark all tracked new servers as dismissed (user acknowledged the banner)."""
     with get_db() as db:
         db.execute("UPDATE airvpn_new_servers SET dismissed = 1")
+
+
+def get_airvpn_snapshot() -> dict:
+    """Return previous AirVPN snapshot as {name: {load, users, health, country, country_code}}."""
+    with get_db() as db:
+        rows = db.execute(
+            'SELECT name, load, users, health, country, country_code FROM airvpn_snapshot'
+        ).fetchall()
+    return {
+        r['name']: {
+            'load': r['load'], 'users': r['users'], 'health': r['health'],
+            'country': r['country'], 'country_code': r['country_code'],
+        }
+        for r in rows
+    }
+
+
+def update_airvpn_snapshot(servers: list[dict]) -> None:
+    """Replace the entire AirVPN snapshot with the current server list."""
+    with get_db() as db:
+        db.execute('DELETE FROM airvpn_snapshot')
+        db.executemany(
+            'INSERT INTO airvpn_snapshot (name, load, users, health, country, country_code)'
+            ' VALUES (?, ?, ?, ?, ?, ?)',
+            [(s['name'], s['load'], s['users'], s['health'],
+              s.get('country', ''), s.get('country_code', '')) for s in servers],
+        )
 
 
 def get_hourly_benchmark_stats(min_samples: int = 3) -> dict:

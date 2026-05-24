@@ -106,8 +106,8 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Automatic Docker image updates** *(option)* — at switch time, Companion can update images before restarting containers: Gluetun itself, auto-managed network containers, post-switch containers and benchmark-paused containers; togglable per container from Settings
 
 ### AirVPN
-- **Built-in AirVPN server picker** — *+ Add an AirVPN server* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), two views — full searchable list (load, users, health) and geographic distribution by country with a **Best** badge on the least-loaded server; multi-select, one-click add
-- **New AirVPN server detection** *(optional)* — compares the AirVPN API with your configured servers every 24 h; badge and dismissable banner on the Servers page + *New* tab in the add modal; Discord/Apprise notification with optional mention
+- **Built-in AirVPN server picker** — *+ Add an AirVPN server* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), four tabs — full searchable list, geographic distribution by country, **Recommended** tab (load < 50 %, health OK, < 30 users) and **Changes** tab (newly detected servers, disappeared servers, load shifts, top 5 healthiest countries); multi-select, one-click add
+- **New AirVPN server detection** *(optional)* — compares the AirVPN API with your configured servers every 24 h; badge and dismissable banner on the Servers page + *Changes* tab in the add modal; Discord/Apprise notification with optional mention
 
 ### Analysis & history
 - **Per-server confidence score** — 🟢/🟡/🔴 indicator on the Servers page and in History; based on measurement count and result variability; factored into the automatic selection score (light weighting)
@@ -307,11 +307,13 @@ In **Settings → Containers to pause during benchmark**: list of containers sto
 
 ### AirVPN server picker
 
-On **Servers → + Add an AirVPN server**: a modal loads live data from the [AirVPN API](https://airvpn.org/?referred_by=483746) (5-min server-side cache). Two tabs:
-- **Servers** — full list with color-coded load bar (green/orange/red), user count, health status, real-time search
+On **Servers → + Add an AirVPN server**: a modal loads live data from the [AirVPN API](https://airvpn.org/?referred_by=483746) (5-min server-side cache). Four tabs:
+- **Servers** — full list with color-coded load bar (green/orange/red), user count, health status, sortable columns, real-time search
 - **By country** — collapsible sections per country with flag emoji, 🏆 **Best** badge on the least-loaded server, "Select all" button per country
+- **⭐ Recommended** — servers meeting all three criteria: load < 50 %, health OK, and fewer than 30 connected users; green badge showing the count
+- **↔ Changes** — diff since the last check: newly appeared servers (selectable for instant add), disappeared servers, load shifts ≥ 10 % (with ↑↓ arrow and delta badge), top 5 countries ranked by healthy-server percentage then average load
 
-Servers already in the database are grayed out with their checkbox disabled. Multi-select, one-click add.
+Servers already in the database are grayed out with their checkbox disabled. The search bar filters all tabs simultaneously. Multi-select, one-click add.
 
 ### Quick check before benchmark *(option)*
 
@@ -462,7 +464,7 @@ Accessible from **History → Hourly patterns**, this view shows average perform
 **UI surfaces:**
 - **Badge** `+N` on the *Add an AirVPN server* button (Servers page)
 - **Dismissable banner** at the top of the Servers page: *"3 new servers available in your countries (NL, FR)"* with a link to the modal
-- **New tab** in the add modal: lists all AirVPN servers not yet in your list (⭐ *New* badge on automatically detected ones); unified search filter
+- **Changes tab** in the add modal: *New servers detected* section with ⭐ *New* badge and checkbox for direct one-click add; unified search filter
 
 **Discord/Apprise notification:**
 Sent only when new servers are discovered, grouped by country. Uses the global *Discord mention* field (see [Contextual notifications](#contextual-notifications)).

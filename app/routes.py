@@ -18,6 +18,7 @@ from .database import (
     get_db, get_setting, set_setting, compute_confidence_all,
     get_new_airvpn_servers, dismiss_new_airvpn_servers,
     get_stability_all,
+    get_airvpn_snapshot, update_airvpn_snapshot,
 )
 from .profiles import PROFILES, score_servers as _score_servers
 from .gluetun import (
@@ -1110,18 +1111,20 @@ def api_airvpn_servers():
         bw      = s.get('bw', 0) or 0
         bw_max  = s.get('bw_max', 0) or 0
         load    = s.get('currentload', 0) or 0
+        users   = s.get('users', 0) or 0
+        health  = s.get('health', 'ok')
         entry   = {
-            'name':        name,
-            'country':     country,
+            'name':         name,
+            'country':      country,
             'country_code': cc,
-            'location':    s.get('location', ''),
-            'continent':   s.get('continent', ''),
-            'load':        load,
-            'users':       s.get('users', 0) or 0,
-            'bw':          bw,
-            'bw_max':      bw_max,
-            'avail_mbps':  max(0, bw_max - bw),
-            'health':      s.get('health', 'ok'),
+            'location':     s.get('location', ''),
+            'continent':    s.get('continent', ''),
+            'load':         load,
+            'users':        users,
+            'bw':           bw,
+            'bw_max':       bw_max,
+            'avail_mbps':   max(0, bw_max - bw),
+            'health':       health,
         }
         servers.append(entry)
         if country not in countries_map:
@@ -1130,18 +1133,83 @@ def api_airvpn_servers():
 
     servers.sort(key=lambda x: x['name'])
 
+    # ── Diff vs previous snapshot ────────────────────────────────────────────
+    snapshot     = get_airvpn_snapshot()
+    has_snapshot = bool(snapshot)
+    current_names = {s['name'] for s in servers}
+    snap_names    = set(snapshot.keys())
+
+    appeared: list[dict] = []
+    disappeared: list[dict] = []
+    load_changes: list[dict] = []
+
+    if has_snapshot:
+        appeared     = [s for s in servers if s['name'] not in snap_names]
+        disappeared  = [
+            {'name': n, **snapshot[n]}
+            for n in sorted(snap_names - current_names)
+        ]
+        for s in servers:
+            if s['name'] in snapshot:
+                prev = snapshot[s['name']]['load']
+                delta = s['load'] - prev
+                if abs(delta) >= 10:
+                    load_changes.append({
+                        'name':         s['name'],
+                        'country':      s['country'],
+                        'country_code': s['country_code'],
+                        'load':         s['load'],
+                        'prev_load':    prev,
+                        'delta':        delta,
+                    })
+        load_changes.sort(key=lambda x: abs(x['delta']), reverse=True)
+
+    # ── Recommended flag: health ok + load < 50 % + users < 30 ─────────────
+    _REC_LOAD  = 50
+    _REC_USERS = 30
+    for s in servers:
+        s['recommended'] = (
+            s['health'] == 'ok'
+            and s['load'] < _REC_LOAD
+            and s['users'] < _REC_USERS
+        )
+
+    # Persist snapshot for next call
+    update_airvpn_snapshot(servers)
+
+    # ── Countries ────────────────────────────────────────────────────────────
     countries_list: list[dict] = []
     for cdata in countries_map.values():
+        total   = len(cdata['servers'])
+        n_ok    = sum(1 for sv in cdata['servers'] if sv['health'] == 'ok')
         healthy = [sv for sv in cdata['servers'] if sv['health'] == 'ok']
         pool    = healthy or cdata['servers']
         best    = min(pool, key=lambda x: x['load'])['name'] if pool else None
         cdata['best']         = best
-        cdata['server_count'] = len(cdata['servers'])
+        cdata['server_count'] = total
+        cdata['healthy_pct']  = round(n_ok / total * 100) if total else 0
+        cdata['avg_load']     = round(sum(sv['load'] for sv in cdata['servers']) / total) if total else 0
         cdata['servers'].sort(key=lambda x: x['load'])
         countries_list.append(cdata)
     countries_list.sort(key=lambda x: x['country'])
 
-    result = {'servers': servers, 'countries': countries_list}
+    # Top-5 healthiest countries (desc healthy_pct, then asc avg_load)
+    best_health_countries = sorted(
+        countries_list,
+        key=lambda c: (-c['healthy_pct'], c['avg_load']),
+    )[:5]
+
+    result = {
+        'servers':   servers,
+        'countries': countries_list,
+        'diff': {
+            'has_snapshot':         has_snapshot,
+            'appeared':             appeared,
+            'disappeared':          disappeared,
+            'load_changes':         load_changes,
+            'best_health_countries': best_health_countries,
+        },
+    }
     _airvpn_cache = {'data': result, 'ts': now}
     return jsonify(result)
 

@@ -107,8 +107,8 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Mise à jour automatique des images Docker** *(option)* — au moment de la bascule, Companion peut mettre à jour les images avant de relancer les containers : Gluetun lui-même, les containers réseau auto-gérés, les containers à redémarrer après bascule et les containers en pause pendant le benchmark ; activable individuellement par container depuis les Paramètres
 
 ### AirVPN
-- **Sélecteur de serveurs AirVPN intégré** — bouton *+ Ajouter un serveur AirVPN* sur la page Serveurs : données en direct depuis `airvpn.org/api/status/` (cache 5 min), deux vues — liste complète searchable (charge, utilisateurs, santé) et répartition géographique par pays avec badge **Best** sur le serveur le moins chargé ; ajout multi-sélection en un clic
-- **Détection de nouveaux serveurs AirVPN** *(optionnel)* — compare l'API AirVPN avec vos serveurs configurés toutes les 24 h ; bannière et badge sur la page Serveurs + onglet *Nouveaux* dans le modal d'ajout ; notification Discord/Apprise avec mention optionnelle
+- **Sélecteur de serveurs AirVPN intégré** — bouton *+ Ajouter un serveur AirVPN* sur la page Serveurs : données en direct depuis `airvpn.org/api/status/` (cache 5 min), quatre onglets — liste complète searchable, répartition géographique par pays, onglet **Recommandés** (charge < 50 %, santé OK, < 30 utilisateurs) et onglet **Changements** (nouveaux serveurs détectés, serveurs disparus, évolutions de charge, top 5 pays les plus sains) ; ajout multi-sélection en un clic
+- **Détection de nouveaux serveurs AirVPN** *(optionnel)* — compare l'API AirVPN avec vos serveurs configurés toutes les 24 h ; bannière et badge sur la page Serveurs + onglet *Changements* dans le modal d'ajout ; notification Discord/Apprise avec mention optionnelle
 
 ### Analyse & historique
 - **Score de confiance par serveur** — indicateur 🟢/🟡/🔴 sur la page Serveurs et dans l'historique ; basé sur le nombre de mesures et la variabilité des résultats ; intégré dans le score de sélection automatique (pondération légère)
@@ -308,11 +308,13 @@ Dans **Paramètres → Containers à stopper pendant le benchmark** : liste de c
 
 ### Sélecteur de serveurs AirVPN
 
-Sur **Serveurs → + Ajouter un serveur AirVPN** : un modal charge les données en direct depuis l'[API AirVPN](https://airvpn.org/?referred_by=483746) (cache 5 min côté serveur). Deux onglets :
-- **Serveurs** — liste complète avec barre de charge colorée (vert/orange/rouge), nombre d'utilisateurs, statut de santé, recherche en temps réel
+Sur **Serveurs → + Ajouter un serveur AirVPN** : un modal charge les données en direct depuis l'[API AirVPN](https://airvpn.org/?referred_by=483746) (cache 5 min côté serveur). Quatre onglets :
+- **Serveurs** — liste complète avec barre de charge colorée (vert/orange/rouge), nombre d'utilisateurs, statut de santé, tri par colonne, recherche en temps réel
 - **Par pays** — sections collapsibles par pays avec flag emoji, badge 🏆 **Best** sur le serveur le moins chargé, bouton "Sélectionner tous" par pays
+- **⭐ Recommandés** — serveurs réunissant les trois critères : charge < 50 %, santé OK et moins de 30 utilisateurs connectés ; badge vert indiquant le nombre disponible
+- **↔ Changements** — diff depuis la dernière consultation : nouveaux serveurs apparus (ajoutables en un clic), serveurs disparus de l'API, changements de charge ≥ 10 % (avec flèche ↑↓ et delta), top 5 pays classés par pourcentage de serveurs sains puis charge moyenne
 
-Les serveurs déjà dans la base sont grisés et leur case à cocher est désactivée. Sélection multiple, ajout en un clic.
+Les serveurs déjà dans la base sont grisés et leur case à cocher est désactivée. La barre de recherche filtre simultanément tous les onglets. Sélection multiple, ajout en un clic.
 
 ### Vérification rapide avant benchmark *(option)*
 
@@ -463,7 +465,7 @@ Fonctionnalité **désactivée par défaut**, uniquement pour les utilisateurs A
 **Surfaces UI :**
 - **Badge** `+N` sur le bouton *Ajouter un serveur AirVPN* (page Serveurs)
 - **Bannière dismissable** en haut de la page Serveurs : *« 3 nouveaux serveurs disponibles dans vos pays (NL, FR) »* avec lien vers le modal
-- **Onglet Nouveaux** dans le modal d'ajout : liste de tous les serveurs AirVPN pas encore dans votre liste (badge ⭐ *Nouveau* sur ceux qui ont été détectés automatiquement) ; filtre de recherche unifié
+- **Onglet Changements** dans le modal d'ajout : section *Nouveaux serveurs détectés* avec badge ⭐ *Nouveau* et case à cocher pour ajout direct ; filtre de recherche unifié
 
 **Notification Discord/Apprise :**
 Envoyée uniquement lors de la découverte de nouveaux serveurs, regroupée par pays. Utilise le champ *Mention Discord* global (voir [Notifications contextuelles](#notifications-contextuelles)).
