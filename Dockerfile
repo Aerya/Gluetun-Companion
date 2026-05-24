@@ -1,7 +1,7 @@
 # Stage 1 — récupère uniquement le binaire docker CLI (pas le daemon)
 # docker:28-cli — Go stdlib patché (CVE-2025-68121, CVE-2024-45337, CVE-2026-33186)
 #                  + docker/docker v27.1.1+ (CVE-2024-41110)
-FROM docker:28-cli AS docker-bin
+FROM docker:29-cli AS docker-bin
 
 # Stage 2 — image finale
 FROM python:3.12-slim
