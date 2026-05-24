@@ -604,21 +604,6 @@ Dans **Paramètres → Planification & Benchmark** : le cycle automatique peut �
 
 ---
 
-## Diagnostic
-
-La page **Paramètres** propose un bouton de diagnostic qui teste en un clic chaque composant utilisé par Companion :
-
-| Composant | Ce qui est testé |
-|---|---|
-| **Docker** | Accessibilité du socket Docker |
-| **Proxy Gluetun** | Requête HTTP via le proxy VPN vers Cloudflare |
-| **API AirVPN** | Endpoint public `airvpn.org/api` |
-| **Discord** | GET sur l'URL du webhook configuré |
-| **Apprise** | HEAD sur l'URL si HTTP, sinon signalement du schéma |
-| **Sidecar** | Connexion TCP au port sidecar (par défaut `8766`) |
-
----
-
 ## Export / import de configuration
 
 Accessible depuis **Paramètres**, le bouton **Exporter la configuration** génère un fichier `companion-config.json` contenant tous les paramètres *hors secrets* (mots de passe, tokens, webhooks). Ce fichier peut être réimporté sur une autre instance via le bouton **Importer**.

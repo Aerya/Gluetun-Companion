@@ -1152,46 +1152,13 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 </div>{# end settings-board #}
 
 {# ══════════════════════════════════════════════════════════════════════════
-   Outils — Diagnostic · Export/Import · Grafana
+   Outils — Export/Import · Grafana
    (hors settings-source pour rester visible)
    ══════════════════════════════════════════════════════════════════════════ #}
 <div class="row g-4 mt-2">
 
-  {# ── Diagnostic ───────────────────────────────────────────────────────── #}
+  {# ── Export / Import ──────────────────────────────────────────────────── #}
   <div class="col-lg-6">
-    <div class="card p-4 h-100">
-      <h6 class="fw-bold mb-1">
-        <i class="bi bi-stethoscope"></i> {{ t.set_diag_title }}
-      </h6>
-      <p class="text-muted mb-3" style="font-size:.85rem">{{ t.set_diag_subtitle }}</p>
-
-      <div id="diagResults" class="mb-3" style="display:none">
-        {% set _diag_items = [
-          ('docker',       t.set_diag_docker),
-          ('gluetun_proxy',t.set_diag_proxy),
-          ('airvpn_api',   t.set_diag_airvpn),
-          ('discord',      t.set_diag_discord),
-          ('apprise',      t.set_diag_apprise),
-          ('sidecar',      t.set_diag_sidecar),
-        ] %}
-        {% for key, label in _diag_items %}
-        <div class="d-flex justify-content-between align-items-center py-1 border-bottom" style="font-size:.85rem">
-          <span>{{ label }}</span>
-          <span id="diag-{{ key }}" class="badge bg-secondary">—</span>
-        </div>
-        {% endfor %}
-      </div>
-
-      <button class="btn btn-outline-primary btn-sm mt-auto" id="diagBtn" onclick="runDiagnostic()">
-        <i class="bi bi-play-circle"></i> {{ t.set_diag_btn }}
-      </button>
-    </div>
-  </div>
-
-  {# ── Export / Import + Grafana ───────────────────────────────────────── #}
-  <div class="col-lg-6">
-  <div class="row g-4">
-  <div class="col-12">
     <div class="card p-4 h-100">
       <h6 class="fw-bold mb-1">
         <i class="bi bi-arrow-left-right"></i> {{ t.set_export_title }}
@@ -1216,8 +1183,8 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
   </div>
 
   {# ── Grafana + Prometheus ──────────────────────────────────────────────── #}
-  <div class="col-12">
-    <div class="card p-4">
+  <div class="col-lg-6">
+    <div class="card p-4 h-100">
       <h6 class="fw-bold mb-1">
         <i class="bi bi-bar-chart-line"></i> {{ t.set_grafana_title }}
       </h6>
@@ -1233,10 +1200,7 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
     </div>
   </div>
 
-  </div>{# end inner row #}
-  </div>{# end col-lg-6 right #}
-
-</div>{# end outer row #}
+</div>{# end row #}
 
 {% endblock %}
 
@@ -1625,75 +1589,6 @@ function triggerQuick() {
         btn.disabled = false;
       }, 3000);
     });
-}
-</script>
-<script>
-// ── Diagnostic ────────────────────────────────────────────────────────────
-async function runDiagnostic() {
-  const btn     = document.getElementById('diagBtn');
-  const results = document.getElementById('diagResults');
-  btn.disabled  = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>{{ t.set_diag_running }}';
-  results.style.display = 'block';
-
-  const labels = {
-    docker:       '{{ t.set_diag_docker }}',
-    gluetun_proxy:'{{ t.set_diag_proxy }}',
-    airvpn_api:   '{{ t.set_diag_airvpn }}',
-    discord:      '{{ t.set_diag_discord }}',
-    apprise:      '{{ t.set_diag_apprise }}',
-    sidecar:      '{{ t.set_diag_sidecar }}',
-  };
-  const txt = {
-    ok:        '{{ t.set_diag_ok }}',
-    fail:      '{{ t.set_diag_fail }}',
-    na:        '{{ t.set_diag_na }}',
-    disabled:  '{{ t.set_diag_disabled }}',
-    ephemeral: '{{ t.set_diag_ephemeral }}',
-  };
-
-  // Reset badges
-  Object.keys(labels).forEach(k => {
-    const el = document.getElementById('diag-' + k);
-    if (el) { el.className = 'badge bg-secondary'; el.textContent = '…'; }
-  });
-
-  try {
-    const resp = await fetch('{{ url_for("main.api_diagnostic") }}', { method: 'POST' });
-    const data = await resp.json();
-
-    Object.entries(data).forEach(([key, res]) => {
-      const el = document.getElementById('diag-' + key);
-      if (!el) return;
-      if (res.ok === true) {
-        el.className = 'badge bg-success';
-        el.textContent = (res.detail || '').startsWith('port_') ? txt.ok : txt.ok;
-      } else if (res.ok === false) {
-        el.className = 'badge bg-danger';  el.textContent = txt.fail;
-        el.title = res.detail || '';
-      } else {
-        const detail = res.detail || '';
-        if (detail === 'not_configured') {
-          el.className = 'badge bg-secondary'; el.textContent = txt.na;
-        } else if (detail === 'sidecar_disabled') {
-          el.className = 'badge bg-secondary'; el.textContent = txt.disabled;
-        } else if (detail === 'ephemeral_idle') {
-          el.className = 'badge bg-success'; el.textContent = txt.ephemeral;
-          el.style.whiteSpace = 'normal'; el.style.maxWidth = '200px'; el.style.textAlign = 'right';
-        } else {
-          el.className = 'badge bg-secondary'; el.textContent = detail;
-        }
-      }
-    });
-  } catch (err) {
-    Object.keys(labels).forEach(k => {
-      const el = document.getElementById('diag-' + k);
-      if (el) { el.className = 'badge bg-danger'; el.textContent = 'Error'; }
-    });
-  }
-
-  btn.disabled  = false;
-  btn.innerHTML = '<i class="bi bi-play-circle"></i> {{ t.set_diag_btn }}';
 }
 </script>
 {% endblock %}

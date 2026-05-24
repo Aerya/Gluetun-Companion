@@ -603,21 +603,6 @@ In **Settings → Scheduling & Benchmark**: the automatic cycle can be disabled 
 
 ---
 
-## Diagnostic
-
-The **Settings** page includes a diagnostic button that tests each component used by Companion in one click:
-
-| Component | What is tested |
-|---|---|
-| **Docker** | Docker socket reachability |
-| **Gluetun proxy** | HTTP request through the VPN proxy to Cloudflare |
-| **AirVPN API** | Public endpoint `airvpn.org/api` |
-| **Discord** | GET on the configured webhook URL |
-| **Apprise** | HEAD on the URL if HTTP, otherwise reports the scheme |
-| **Sidecar** | TCP connection to the sidecar port (default `8766`) |
-
----
-
 ## Configuration export / import
 
 Available from **Settings**, the **Export configuration** button generates a `companion-config.json` file containing all settings *excluding secrets* (passwords, tokens, webhooks). This file can be re-imported on another instance via the **Import** button.

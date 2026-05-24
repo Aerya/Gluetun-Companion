@@ -2,7 +2,6 @@ import csv
 import io
 import json
 import logging
-import socket
 import threading
 import time
 from functools import wraps
@@ -1437,118 +1436,6 @@ def api_notify_test():
 def api_docker_containers():
     """Return the list of currently running Docker container names."""
     return jsonify(list_docker_containers())
-
-
-# ---------------------------------------------------------------------------
-# Diagnostic
-# ---------------------------------------------------------------------------
-
-@bp.route('/api/diagnostic', methods=['POST'])
-@login_required
-def api_diagnostic():
-    """Run connectivity checks: Docker, Gluetun proxy, AirVPN API, Discord, Apprise, sidecar."""
-    import requests as _req
-
-    cfg     = current_app.config
-    results = {}
-
-    # 1. Docker socket
-    try:
-        import docker as _docker
-        _docker.from_env().ping()
-        results['docker'] = {'ok': True, 'detail': 'Docker socket reachable'}
-        logger.info('diagnostic docker: OK')
-    except Exception as exc:
-        results['docker'] = {'ok': False, 'detail': str(exc)[:200]}
-        logger.warning('diagnostic docker: %s', exc)
-
-    # 2. Gluetun HTTP proxy
-    try:
-        host = cfg['GLUETUN_HOST']
-        port = cfg['GLUETUN_PROXY_PORT']
-        user = get_setting('proxy_username', '') or None
-        pwd  = get_setting('proxy_password', '') or None
-        from .gluetun import _proxies
-        px = _proxies(host, port, user, pwd)
-        r = _req.get('https://www.cloudflare.com/cdn-cgi/trace', proxies=px, timeout=10)
-        results['gluetun_proxy'] = {'ok': r.status_code == 200, 'detail': f'HTTP {r.status_code}'}
-        logger.info('diagnostic gluetun_proxy: HTTP %s', r.status_code)
-    except Exception as exc:
-        results['gluetun_proxy'] = {'ok': False, 'detail': str(exc)[:200]}
-        logger.warning('diagnostic gluetun_proxy: %s', exc)
-
-    # 3. AirVPN API
-    try:
-        r = _req.get(
-            'https://airvpn.org/api/?service=status',
-            timeout=10,
-            headers={'User-Agent': 'GluetunCompanion/1.0'},
-        )
-        results['airvpn_api'] = {'ok': r.status_code == 200, 'detail': f'HTTP {r.status_code}'}
-        logger.info('diagnostic airvpn_api: HTTP %s', r.status_code)
-    except Exception as exc:
-        results['airvpn_api'] = {'ok': False, 'detail': str(exc)[:200]}
-        logger.warning('diagnostic airvpn_api: %s', exc)
-
-    # 4. Discord webhook
-    discord_url = get_setting('discord_webhook_url', '').strip()
-    if discord_url:
-        try:
-            r = _req.get(discord_url, timeout=5)
-            results['discord'] = {'ok': r.status_code == 200, 'detail': f'HTTP {r.status_code}'}
-            logger.info('diagnostic discord: HTTP %s', r.status_code)
-        except Exception as exc:
-            results['discord'] = {'ok': False, 'detail': str(exc)[:200]}
-            logger.warning('diagnostic discord: %s', exc)
-    else:
-        results['discord'] = {'ok': None, 'detail': 'not_configured'}
-        logger.info('diagnostic discord: not configured')
-
-    # 5. Apprise
-    apprise_urls = get_setting('apprise_urls', '').strip()
-    if apprise_urls:
-        lines     = [u.strip() for u in apprise_urls.splitlines() if u.strip()]
-        http_urls = [u for u in lines if u.startswith('http')]
-        if http_urls:
-            try:
-                r = _req.head(http_urls[0], timeout=5, allow_redirects=True)
-                results['apprise'] = {'ok': r.status_code < 500, 'detail': f'HTTP {r.status_code}'}
-                logger.info('diagnostic apprise: HTTP %s', r.status_code)
-            except Exception as exc:
-                results['apprise'] = {'ok': False, 'detail': str(exc)[:200]}
-                logger.warning('diagnostic apprise: %s', exc)
-        else:
-            scheme = lines[0].split('://')[0] if '://' in lines[0] else '?'
-            results['apprise'] = {'ok': True, 'detail': f'configured ({scheme}://)'}
-            logger.info('diagnostic apprise: configured (%s)', scheme)
-    else:
-        results['apprise'] = {'ok': None, 'detail': 'not_configured'}
-        logger.info('diagnostic apprise: not configured')
-
-    # 6. Sidecar — ephemeral container: created at benchmark start, removed at end.
-    #    • No benchmark running → nothing to connect to; Docker already confirmed reachable above.
-    #    • Benchmark running    → the sidecar should be listening on its port.
-    if get_setting('sidecar_mode', '0') == '1':
-        benchmark_running = get_setting('benchmark_running', '0') == '1'
-        sidecar_port = int(get_setting('sidecar_port', '8766'))
-        if benchmark_running:
-            try:
-                sock = socket.create_connection(('127.0.0.1', sidecar_port), timeout=3)
-                sock.close()
-                results['sidecar'] = {'ok': True, 'detail': f'port_{sidecar_port}_ok'}
-                logger.info('diagnostic sidecar: port %s reachable', sidecar_port)
-            except Exception as exc:
-                results['sidecar'] = {'ok': False, 'detail': str(exc)[:200]}
-                logger.warning('diagnostic sidecar: port %s unreachable: %s', sidecar_port, exc)
-        else:
-            # Container is ephemeral — only exists during a benchmark. Docker works → OK.
-            results['sidecar'] = {'ok': True, 'detail': 'ephemeral_idle'}
-            logger.info('diagnostic sidecar: mode enabled, no benchmark running (ephemeral)')
-    else:
-        results['sidecar'] = {'ok': None, 'detail': 'sidecar_disabled'}
-        logger.info('diagnostic sidecar: disabled')
-
-    return jsonify(results)
 
 
 # ---------------------------------------------------------------------------

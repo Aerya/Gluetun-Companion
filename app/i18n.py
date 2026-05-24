@@ -498,23 +498,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_airvpn_mention_hint': 'ID Discord à mentionner dans la notification (ex. <code>&lt;@123456789&gt;</code> ou <code>&lt;@&amp;ROLE_ID&gt;</code>). Laisser vide pour ne pas mentionner.',
         'flash_airvpn_dismissed':  'Nouveaux serveurs ignorés.',
 
-        # ── Diagnostic ──
-        'set_diag_title':          'Diagnostic',
-        'set_diag_subtitle':       'Teste la connectivité de chaque composant utilisé par Companion.',
-        'set_diag_btn':            'Lancer le diagnostic',
-        'set_diag_running':        'Diagnostic en cours…',
-        'set_diag_docker':         'Docker',
-        'set_diag_proxy':          'Proxy Gluetun',
-        'set_diag_airvpn':         'API AirVPN',
-        'set_diag_discord':        'Discord',
-        'set_diag_apprise':        'Apprise',
-        'set_diag_sidecar':        'Sidecar',
-        'set_diag_ok':             'OK',
-        'set_diag_fail':           'Échec',
-        'set_diag_na':             'Non configuré',
-        'set_diag_disabled':       'Désactivé',
-        'set_diag_ephemeral':      'OK — éphémère (actif uniquement pendant un benchmark)',
-
         # ── Export / Import ──
         'set_export_title':        'Export / import de configuration',
         'set_export_subtitle':     'Sauvegardez ou restaurez tous les paramètres (hors secrets : mots de passe, tokens, webhooks).',
@@ -1023,23 +1006,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_airvpn_mention_label':'Discord mention (optional)',
         'set_airvpn_mention_hint': 'Discord ID to mention in the notification (e.g. <code>&lt;@123456789&gt;</code> or <code>&lt;@&amp;ROLE_ID&gt;</code>). Leave blank to skip.',
         'flash_airvpn_dismissed':  'New servers dismissed.',
-
-        # ── Diagnostic ──
-        'set_diag_title':          'Diagnostic',
-        'set_diag_subtitle':       'Tests connectivity for each component used by Companion.',
-        'set_diag_btn':            'Run diagnostic',
-        'set_diag_running':        'Running diagnostic…',
-        'set_diag_docker':         'Docker',
-        'set_diag_proxy':          'Gluetun proxy',
-        'set_diag_airvpn':         'AirVPN API',
-        'set_diag_discord':        'Discord',
-        'set_diag_apprise':        'Apprise',
-        'set_diag_sidecar':        'Sidecar',
-        'set_diag_ok':             'OK',
-        'set_diag_fail':           'Failed',
-        'set_diag_na':             'Not configured',
-        'set_diag_disabled':       'Disabled',
-        'set_diag_ephemeral':      'OK — ephemeral (only active during a benchmark)',
 
         # ── Export / Import ──
         'set_export_title':        'Configuration export / import',
