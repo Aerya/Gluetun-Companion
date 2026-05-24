@@ -141,7 +141,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'srv_airvpn_col_server':     'Serveur',
         'srv_airvpn_col_location':   'Lieu',
         'srv_airvpn_col_load':       'Charge',
-        'srv_airvpn_col_users':      'Users',
+        'srv_airvpn_col_users':      'Utilisateurs',
         'srv_airvpn_best':           'Best',
         'srv_airvpn_select_all':     'Tout sélectionner',
         'srv_airvpn_deselect_all':   'Tout désélectionner',
