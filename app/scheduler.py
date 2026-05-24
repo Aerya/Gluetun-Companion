@@ -1133,6 +1133,10 @@ def test_single_server(app, server_name: str, filter_type: str):
 
 def _do_single_server(app, server_name: str, filter_type: str):
     from .database import get_db, get_setting, set_setting
+    from .gluetun import (
+        switch_server, wait_for_vpn,
+        get_current_filters, restart_network_dependents, list_network_dependents,
+    )
 
     set_setting('benchmark_running', '1')
     logger.info('Single-server test: %s (%s)', server_name, filter_type)
@@ -1163,6 +1167,7 @@ def _do_single_server(app, server_name: str, filter_type: str):
         sidecar_proxy_fallback = get_setting('sidecar_proxy_fallback', '0') == '1'
 
         if sidecar_mode:
+            # ── Sidecar mode: test in isolation, switch only on success ──────
             result = _test_server_sidecar_with_retry(
                 server_name, filter_type,
                 container, sidecar_image, proxy_host, sidecar_port,
@@ -1171,6 +1176,8 @@ def _do_single_server(app, server_name: str, filter_type: str):
             )
             if result is None and sidecar_proxy_fallback:
                 logger.info('Sidecar failed for %s — falling back to HTTP proxy', server_name)
+                # Proxy fallback: save original server so we can revert on failure
+                orig_filters = get_current_filters(container)
                 result = _test_server_with_retry(
                     server_name, filter_type,
                     container, compose_dir, project,
@@ -1178,7 +1185,40 @@ def _do_single_server(app, server_name: str, filter_type: str):
                     wait_secs, dl_duration, dl_samples, lat_samples,
                     warmup, dl_streams, max_retries, timeout_secs,
                 )
+                if result is None and orig_filters:
+                    # Proxy test failed → revert Gluetun to the original server
+                    orig_ft = next(iter(orig_filters))
+                    orig_sv = orig_filters[orig_ft].split(',')[0].strip()
+                    if orig_sv and orig_sv != server_name:
+                        logger.info('Proxy fallback failed → reverting Gluetun to %s', orig_sv)
+                        switch_server(orig_sv, orig_ft, container, compose_dir, project)
+
+            if result:
+                # Test succeeded (sidecar or proxy fallback) → switch real Gluetun
+                logger.info('Single-server test passed (%.1f Mbps) → switching Gluetun to %s',
+                            result['dl'], server_name)
+                pre_deps = list_network_dependents(container)
+                ok, err = switch_server(server_name, filter_type, container, compose_dir, project)
+                if ok:
+                    connected, _ = wait_for_vpn(
+                        proxy_host, proxy_port, timeout=wait_secs,
+                        proxy_user=proxy_user, proxy_password=proxy_pass,
+                    )
+                    restarted, _ = restart_network_dependents(
+                        container, compose_dir, project, explicit_list=pre_deps,
+                    )
+                    if restarted:
+                        logger.info('Recreated network dependents: %s', ', '.join(restarted))
+                    if connected:
+                        logger.info('Gluetun now on %s', server_name)
+                    else:
+                        logger.warning('Switched to %s but VPN reconnect timed out', server_name)
+                else:
+                    logger.error('Switch to %s failed after sidecar test: %s', server_name, err)
+
         else:
+            # ── Proxy mode: Gluetun must switch first; revert on failure ────
+            orig_filters = get_current_filters(container)
             result = _test_server_with_retry(
                 server_name, filter_type,
                 container, compose_dir, project,
@@ -1186,9 +1226,19 @@ def _do_single_server(app, server_name: str, filter_type: str):
                 wait_secs, dl_duration, dl_samples, lat_samples,
                 warmup, dl_streams, max_retries, timeout_secs,
             )
+            if result is None and orig_filters:
+                # Test failed → revert Gluetun to the server it was on before
+                orig_ft = next(iter(orig_filters))
+                orig_sv = orig_filters[orig_ft].split(',')[0].strip()
+                if orig_sv and orig_sv != server_name:
+                    logger.info('Proxy single-server test failed → reverting Gluetun to %s', orig_sv)
+                    switch_server(orig_sv, orig_ft, container, compose_dir, project)
+            elif result:
+                logger.info('Single-server proxy test done: %s %.1f Mbps — Gluetun stays on this server',
+                            server_name, result['dl'])
+
         if result:
             _update_consecutive_failures(server_name, success=True, threshold=auto_exclude)
-            logger.info('Single-server test done: %s %.1f Mbps', server_name, result['dl'])
         else:
             _update_consecutive_failures(server_name, success=False, threshold=auto_exclude)
     finally:

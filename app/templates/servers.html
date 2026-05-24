@@ -358,8 +358,7 @@
                 {%- set pop_html -%}<div style="min-width:200px"><div class="fw-semibold mb-2" style="font-size:.78rem"><i class="bi bi-bar-chart-fill me-1 text-info"></i>{{ t.score_detail_title }} {{ _plabel }} — {{ _det.score }}%</div>{{ ns.pop_rows }}{{ _outliers_line }}</div>{%- endset -%}
                 <button type="button" class="btn btn-link p-0 ms-1 align-baseline score-detail-btn"
                         style="font-size:.75rem;color:var(--bs-info);line-height:1;vertical-align:middle"
-                        data-bs-toggle="popover" data-bs-trigger="click focus"
-                        data-bs-html="true" data-bs-placement="right"
+                        data-bs-toggle="popover" data-bs-placement="right"
                         data-bs-content="{{ pop_html | forceescape }}"
                         title="{{ t.score_detail_title }} — {{ _det.score }}%">
                   <i class="bi bi-bar-chart-fill"></i>
@@ -1334,6 +1333,13 @@ function dismissNamedServersNotice(cb) {
 }
 
 document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el, {trigger:'hover focus'}));
-document.querySelectorAll('.score-detail-btn').forEach(el => new bootstrap.Popover(el, {trigger:'click focus', html:true}));
+document.querySelectorAll('.score-detail-btn').forEach(el => new bootstrap.Popover(el, {trigger:'click', html:true}));
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.score-detail-btn') && !e.target.closest('.popover')) {
+    document.querySelectorAll('.score-detail-btn').forEach(el => {
+      bootstrap.Popover.getInstance(el)?.hide();
+    });
+  }
+});
 </script>
 {% endblock %}
