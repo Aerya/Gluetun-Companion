@@ -708,15 +708,20 @@ def run_benchmark(app):
         return
 
     # ── Adaptive scheduling: shift to next favorable hour if needed ──────────
+    # Only shift when the interval job still exists in the scheduler.
+    # DateTrigger (one-shot) jobs are removed by APScheduler *before* execution,
+    # so get_job() returning None means we are already in a shifted run — just
+    # proceed with the benchmark instead of trying to reschedule a removed job.
     if (get_setting('adaptive_scheduling', '0') == '1'
-            and get_setting('adaptive_auto_shift', '0') == '1'):
+            and get_setting('adaptive_auto_shift', '0') == '1'
+            and _scheduler is not None
+            and _scheduler.get_job('benchmark') is not None):
         delay_secs = _compute_adaptive_delay()
         if delay_secs:
             from apscheduler.triggers.date import DateTrigger
             from datetime import datetime, timedelta
             next_fire = datetime.now() + timedelta(seconds=delay_secs)
-            if _scheduler:
-                _scheduler.reschedule_job('benchmark', trigger=DateTrigger(run_date=next_fire))
+            _scheduler.reschedule_job('benchmark', trigger=DateTrigger(run_date=next_fire))
             logger.info(
                 'Adaptive scheduling: current hour is suboptimal — '
                 'benchmark shifted by %.0f min to %s',
