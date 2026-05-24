@@ -1,5 +1,7 @@
 # Stage 1 — récupère uniquement le binaire docker CLI (pas le daemon)
-FROM docker:27-cli AS docker-bin
+# docker:28-cli — Go stdlib patché (CVE-2025-68121, CVE-2024-45337, CVE-2026-33186)
+#                  + docker/docker v27.1.1+ (CVE-2024-41110)
+FROM docker:28-cli AS docker-bin
 
 # Stage 2 — image finale
 FROM python:3.12-slim
@@ -16,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
          *) echo "Unsupported arch: $ARCH" && exit 1 ;; \
        esac \
     && mkdir -p /usr/local/lib/docker/cli-plugins \
-    && curl -fsSL "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-${COMPOSE_ARCH}" \
+    && curl -fsSL "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-${COMPOSE_ARCH}" \
          -o /usr/local/lib/docker/cli-plugins/docker-compose \
     && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose \
     && apt-get purge -y curl && apt-get autoremove -y \

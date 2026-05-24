@@ -67,9 +67,10 @@ updates:
         update-types: ["version-update:semver-major"]
 
   # ── Docker base image — Companion ────────────────────────────────────────
-  # Python tag "3.12-slim": Dependabot would treat 3.12→3.14 as a "minor"
-  # update, but it's actually a Python major version change → ignore minor too.
-  # Only allow patch updates (rebuilds for security on the same 3.12 base).
+  # python:3.12-slim: ignore minor+major (3.12→3.13 would be a Python version
+  # bump, not just a security rebuild — keep locked on 3.12.X patches).
+  # docker:XX-cli: allow ALL updates including major (27→28 is often the only
+  # way to get a patched Go stdlib — blocking major would leave CVEs open).
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
@@ -83,8 +84,6 @@ updates:
         update-types:
           - "version-update:semver-major"
           - "version-update:semver-minor"
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
 
   # ── Docker base image — Sidecar ──────────────────────────────────────────
   - package-ecosystem: "docker"
@@ -100,5 +99,3 @@ updates:
         update-types:
           - "version-update:semver-major"
           - "version-update:semver-minor"
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]

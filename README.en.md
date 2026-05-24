@@ -666,6 +666,26 @@ In addition to the base metrics (`avg_dl`, `avg_ul`, `avg_latency`, `test_count`
 - **YAML injection** — The server filter value is sanitised before being written to `docker-compose.override.yml` (newlines stripped, quotes and backslashes escaped).
 - **Docker socket** — The Docker socket is secured via [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy), restricting access to the bare minimum (container read access, no root access to the daemon).
 
+### Docker image security
+
+Both images (`gluetun-companion` and `gluetun-companion-sidecar`) bundle **third-party Go binaries** (Docker CLI, Docker Compose, librespeed-cli, ookla speedtest) with their own dependency chains, invisible to Python package managers. A two-layer pipeline keeps these images up to date:
+
+**Dependabot** (already in place, runs every Monday 06:00 UTC):
+- Updates **pip** dependencies for both Companion and Sidecar (auto-PR; patch = auto-merge, minor = manual review)
+- Tracks **Docker base images** (`python:3.12-slim`) — Python runtime security rebuilds
+- Tracks **GitHub Actions** versions in CI workflows
+
+**Trivy workflow** (`.github/workflows/trivy-scan.yml`, every Monday 07:00 UTC):
+- Builds both images and scans them with [Trivy](https://github.com/aquasecurity/trivy) for HIGH and CRITICAL CVEs
+- Uploads results as SARIF to the repository's **Security tab** (*Security → Code scanning*)
+- If fixable CVEs are found and a newer Docker CLI image is available: **automatically opens a PR** bumping `FROM docker:XX-cli` in the Dockerfile
+- If no automatic fix is possible: **opens an Issue** listing the CVEs for manual review
+
+**Smoke test** (`.github/workflows/docker-publish.yml`, on every PR):
+- Builds both images for amd64
+- Starts each container with a minimal configuration and checks it responds over HTTP within 20 seconds
+- Blocks the merge if an image fails to start — ensures security updates do not break functionality
+
 ---
 
 ## Credits

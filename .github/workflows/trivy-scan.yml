@@ -1,0 +1,163 @@
+name: Trivy CVE scan & auto-fix PR
+
+# Runs weekly to detect HIGH/CRITICAL CVEs in both Docker images.
+# - Uploads results to the GitHub Security tab (SARIF)
+# - If fixable CVEs are found AND a Dockerfile change is possible → opens a PR
+# - The PR triggers docker-publish.yml (build + smoke test) to verify the fix
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'   # Every Monday 07:00 UTC (after Dependabot at 06:00)
+  workflow_dispatch:       # Manual trigger for on-demand scans
+
+permissions:
+  contents: write
+  pull-requests: write
+  security-events: write
+
+jobs:
+  scan-and-fix:
+    name: Scan images & create fix PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Build both images (amd64 only — faster, sufficient for scanning) ──
+      - name: Build Companion image
+        run: docker build -t companion-scan:latest .
+
+      - name: Build Sidecar image
+        run: docker build -t sidecar-scan:latest ./sidecar
+
+      # ── SARIF → GitHub Security tab ─────────────────────────────────────
+      - name: Trivy — Companion (SARIF)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: companion-scan:latest
+          format: sarif
+          output: trivy-companion.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+
+      - name: Trivy — Sidecar (SARIF)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: sidecar-scan:latest
+          format: sarif
+          output: trivy-sidecar.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: '.'
+        # Continues even if no CVEs (empty SARIF is valid)
+        continue-on-error: true
+
+      # ── JSON → parse CVEs & attempt Dockerfile fix ───────────────────────
+      - name: Trivy — Companion (JSON)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: companion-scan:latest
+          format: json
+          output: trivy-companion.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+
+      - name: Trivy — Sidecar (JSON)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: sidecar-scan:latest
+          format: json
+          output: trivy-sidecar.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+
+      - name: Compute Dockerfile fixes
+        id: fix
+        run: python3 .github/scripts/trivy_autofix.py
+
+      # ── Create PR if the script modified any Dockerfile ──────────────────
+      - name: Create fix PR
+        if: steps.fix.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: security/trivy-autofix
+          delete-branch: false
+          title: 'security: bump Docker base images to patch CVEs'
+          body-path: .github/pr_body.md
+          labels: |
+            security
+            automated
+          commit-message: |
+            security: bump Docker base images (Trivy CVE auto-fix)
+
+            Automated update triggered by weekly Trivy scan.
+            See PR body for full CVE list.
+
+      # ── If no Dockerfile change possible, open an issue instead ──────────
+      - name: Count fixable CVEs
+        id: count
+        run: |
+          python3 - <<'EOF'
+          import json, pathlib, sys
+
+          total = 0
+          for f in ('trivy-companion.json', 'trivy-sidecar.json'):
+              try:
+                  data = json.loads(pathlib.Path(f).read_text())
+              except Exception:
+                  continue
+              for result in data.get('Results', []):
+                  for v in result.get('Vulnerabilities', []):
+                      if v.get('FixedVersion'):
+                          total += 1
+
+          with open(pathlib.Path(os.environ['GITHUB_OUTPUT']), 'a') as out:
+              out.write(f'total={total}\n')
+          EOF
+        env:
+          GITHUB_OUTPUT: ${{ env.GITHUB_OUTPUT }}
+
+      - name: Open issue if CVEs remain and no PR was created
+        if: steps.fix.outputs.changed != 'true' && steps.count.outputs.total > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('.github/pr_body.md', 'utf8');
+            const title = `🔴 Trivy: ${process.env.TOTAL} fixable CVE(s) require manual update`;
+
+            // Search for existing open issue to avoid duplicates
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'security,automated',
+              state: 'open',
+            });
+
+            const existing = issues.data.find(i => i.title.startsWith('🔴 Trivy:'));
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                title,
+                body,
+              });
+              console.log(`Updated existing issue #${existing.number}`);
+            } else {
+              const issue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['security', 'automated'],
+              });
+              console.log(`Created issue #${issue.data.number}`);
+            }
+          env:
+            TOTAL: ${{ steps.count.outputs.total }}

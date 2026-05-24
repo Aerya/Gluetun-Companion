@@ -667,6 +667,26 @@ En plus des métriques de base (`avg_dl`, `avg_ul`, `avg_latency`, `test_count`,
 - **Sidecar** — Pendant un benchmark, le container sidecar expose un port local (`8766` par défaut) sans authentification. Ce port ne doit pas être accessible depuis l'extérieur. Si votre hôte est public, restreignez le binding ou isolez ce port par firewall.
 - **Secrets dans /settings** — Le token API, le mot de passe proxy et les URLs de webhook sont affichés en clair dans l'interface d'administration. Tout accès à l'UI admin équivaut à un accès total à ces secrets.
 
+### Sécurité des images Docker
+
+Les deux images (`gluetun-companion` et `gluetun-companion-sidecar`) embarquent des **binaires Go tiers** (Docker CLI, Docker Compose, librespeed-cli, ookla speedtest) qui ont leur propre chaîne de dépendances, invisible pour les gestionnaires de paquets Python. Un pipeline à deux niveaux maintient ces images à jour :
+
+**Dependabot** (déjà en place, exécuté chaque lundi 06:00 UTC) :
+- Met à jour les dépendances **pip** de Companion et du Sidecar (PRs automatiques, patch = auto-merge, mineur = revue manuelle)
+- Surveille les images de base **Docker** (`python:3.12-slim`) — mises à jour de sécurité du runtime Python
+- Surveille les versions des **GitHub Actions** dans les workflows CI
+
+**Workflow Trivy** (`.github/workflows/trivy-scan.yml`, chaque lundi 07:00 UTC) :
+- Builde les deux images et les scanne avec [Trivy](https://github.com/aquasecurity/trivy) pour les CVE de sévérité HIGH et CRITICAL
+- Upload les résultats au format SARIF dans l'**onglet Security** du dépôt GitHub (visible sous *Security → Code scanning*)
+- Si des CVE avec fix disponible sont détectées et qu'une image Docker CLI plus récente existe : **ouvre automatiquement une PR** qui bumpe le `FROM docker:XX-cli` dans le Dockerfile
+- Si aucun changement automatique n'est possible : **ouvre une Issue** listant les CVE à corriger manuellement
+
+**Smoke test** (`.github/workflows/docker-publish.yml`, sur chaque PR) :
+- Builde les deux images en amd64
+- Démarre chaque container avec une configuration minimale et vérifie qu'il répond en HTTP dans les 20 secondes
+- Bloque le merge si une image ne démarre plus — garantit que les mises à jour de sécurité ne cassent pas les fonctionnalités
+
 ---
 
 ## Crédits

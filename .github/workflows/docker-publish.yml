@@ -103,3 +103,80 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=sidecar
           cache-to: type=gha,mode=max,scope=sidecar
+
+  # ── Smoke test — runs on PRs only, single-arch build ─────────────────────
+  # Verifies both images start and respond to HTTP requests after the change.
+  # A failed smoke test blocks the PR merge.
+  smoke-test:
+    name: Smoke test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build amd64-only images locally (faster than multi-arch Buildx for tests)
+      - name: Build Companion (amd64)
+        run: docker build -t companion-smoke:pr .
+
+      - name: Build Sidecar (amd64)
+        run: docker build -t sidecar-smoke:pr ./sidecar
+
+      # ── Companion smoke test ──────────────────────────────────────────────
+      - name: Start Companion
+        run: |
+          mkdir -p /tmp/companion-data
+          docker run -d --name companion-smoke \
+            -e SECRET_KEY=smoke-test-$(openssl rand -hex 16) \
+            -e GLUETUN_CONTAINER=gluetun \
+            -e GLUETUN_HOST=localhost \
+            -e GLUETUN_PROXY_PORT=8888 \
+            -e COMPOSE_DIR=/compose \
+            -v /tmp/companion-data:/data \
+            -p 8765:8765 \
+            companion-smoke:pr
+
+      - name: Companion health check (HTTP 2xx/3xx within 20s)
+        run: |
+          for i in $(seq 1 20); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8765/ 2>/dev/null || echo 0)
+            if [ "$CODE" -ge 200 ] && [ "$CODE" -lt 400 ]; then
+              echo "✅ Companion responded HTTP $CODE after ${i}s"
+              exit 0
+            fi
+            echo "  [${i}/20] waiting (last HTTP code: $CODE)..."
+            sleep 1
+          done
+          echo "❌ Companion did not respond in 20s"
+          docker logs companion-smoke
+          exit 1
+
+      # ── Sidecar smoke test ───────────────────────────────────────────────
+      - name: Start Sidecar
+        run: |
+          docker run -d --name sidecar-smoke \
+            -p 8766:8766 \
+            sidecar-smoke:pr
+
+      - name: Sidecar health check (HTTP response on /health within 20s)
+        run: |
+          # /health returns 200 if VPN up, 503 if VPN not reachable (expected in CI).
+          # Either way the HTTP server must respond — any code != 0 means it's alive.
+          for i in $(seq 1 20); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8766/health 2>/dev/null || echo 0)
+            if [ "$CODE" != "0" ]; then
+              echo "✅ Sidecar HTTP server is up (code: $CODE) after ${i}s"
+              exit 0
+            fi
+            echo "  [${i}/20] waiting..."
+            sleep 1
+          done
+          echo "❌ Sidecar did not respond in 20s"
+          docker logs sidecar-smoke
+          exit 1
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop companion-smoke sidecar-smoke 2>/dev/null || true
+          docker rm  companion-smoke sidecar-smoke 2>/dev/null || true
