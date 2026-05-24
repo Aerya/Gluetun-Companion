@@ -360,7 +360,7 @@
                         style="font-size:.75rem;color:var(--bs-info);line-height:1;vertical-align:middle"
                         data-bs-toggle="popover" data-bs-trigger="click focus"
                         data-bs-html="true" data-bs-placement="right"
-                        data-bs-content="{{ pop_html | e }}"
+                        data-bs-content="{{ pop_html | forceescape }}"
                         title="{{ t.score_detail_title }} — {{ _det.score }}%">
                   <i class="bi bi-bar-chart-fill"></i>
                 </button>
