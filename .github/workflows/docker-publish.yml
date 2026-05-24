@@ -104,23 +104,42 @@ jobs:
           cache-from: type=gha,scope=sidecar
           cache-to: type=gha,mode=max,scope=sidecar
 
-  # ── Smoke test — runs on PRs only, single-arch build ─────────────────────
-  # Verifies both images start and respond to HTTP requests after the change.
-  # A failed smoke test blocks the PR merge.
+  # ── Smoke test — PRs only, reuses GHA layer cache from companion/sidecar ─
+  # Builds amd64-only images (fast, via cache), starts them, checks HTTP.
+  # A failed smoke test blocks merge.
   smoke-test:
     name: Smoke test
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    needs: [companion, sidecar]   # wait for cache to be written first
 
     steps:
       - uses: actions/checkout@v4
 
-      # Build amd64-only images locally (faster than multi-arch Buildx for tests)
-      - name: Build Companion (amd64)
-        run: docker build -t companion-smoke:pr .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build Sidecar (amd64)
-        run: docker build -t sidecar-smoke:pr ./sidecar
+      # Reuses the GHA layer cache populated by companion/sidecar jobs above.
+      # Only amd64 is built locally (arm64 not available on ubuntu-latest runners).
+      - name: Build Companion (amd64, cache reuse)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: companion-smoke:test
+          cache-from: type=gha,scope=companion
+
+      - name: Build Sidecar (amd64, cache reuse)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./sidecar
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: sidecar-smoke:test
+          cache-from: type=gha,scope=sidecar
 
       # ── Companion smoke test ──────────────────────────────────────────────
       - name: Start Companion
@@ -134,7 +153,7 @@ jobs:
             -e COMPOSE_DIR=/compose \
             -v /tmp/companion-data:/data \
             -p 8765:8765 \
-            companion-smoke:pr
+            companion-smoke:test
 
       - name: Companion health check (HTTP 2xx/3xx within 20s)
         run: |
@@ -144,7 +163,7 @@ jobs:
               echo "✅ Companion responded HTTP $CODE after ${i}s"
               exit 0
             fi
-            echo "  [${i}/20] waiting (last HTTP code: $CODE)..."
+            echo "  [${i}/20] waiting (last code: $CODE)..."
             sleep 1
           done
           echo "❌ Companion did not respond in 20s"
@@ -156,12 +175,12 @@ jobs:
         run: |
           docker run -d --name sidecar-smoke \
             -p 8766:8766 \
-            sidecar-smoke:pr
+            sidecar-smoke:test
 
-      - name: Sidecar health check (HTTP response on /health within 20s)
+      - name: Sidecar health check (HTTP on /health within 20s)
         run: |
-          # /health returns 200 if VPN up, 503 if VPN not reachable (expected in CI).
-          # Either way the HTTP server must respond — any code != 0 means it's alive.
+          # /health returns 200 if VPN up, 503 if not (expected in CI).
+          # Any non-zero HTTP code means the server is running.
           for i in $(seq 1 20); do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8766/health 2>/dev/null || echo 0)
             if [ "$CODE" != "0" ]; then

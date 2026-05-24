@@ -32,7 +32,7 @@ jobs:
 
       # ── SARIF → GitHub Security tab ─────────────────────────────────────
       - name: Trivy — Companion (SARIF)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: companion-scan:latest
           format: sarif
@@ -41,7 +41,7 @@ jobs:
           ignore-unfixed: false
 
       - name: Trivy — Sidecar (SARIF)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: sidecar-scan:latest
           format: sarif
@@ -53,12 +53,11 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: '.'
-        # Continues even if no CVEs (empty SARIF is valid)
         continue-on-error: true
 
       # ── JSON → parse CVEs & attempt Dockerfile fix ───────────────────────
       - name: Trivy — Companion (JSON)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: companion-scan:latest
           format: json
@@ -67,7 +66,7 @@ jobs:
           ignore-unfixed: false
 
       - name: Trivy — Sidecar (JSON)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: sidecar-scan:latest
           format: json
@@ -98,12 +97,12 @@ jobs:
             Automated update triggered by weekly Trivy scan.
             See PR body for full CVE list.
 
-      # ── If no Dockerfile change possible, open an issue instead ──────────
+      # ── Count remaining fixable CVEs (for issue creation) ────────────────
       - name: Count fixable CVEs
         id: count
         run: |
           python3 - <<'EOF'
-          import json, pathlib, sys
+          import json, os, pathlib
 
           total = 0
           for f in ('trivy-companion.json', 'trivy-sidecar.json'):
@@ -116,12 +115,11 @@ jobs:
                       if v.get('FixedVersion'):
                           total += 1
 
-          with open(pathlib.Path(os.environ['GITHUB_OUTPUT']), 'a') as out:
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write(f'total={total}\n')
           EOF
-        env:
-          GITHUB_OUTPUT: ${{ env.GITHUB_OUTPUT }}
 
+      # ── Open / update issue if CVEs remain and no auto-fix PR was created ─
       - name: Open issue if CVEs remain and no PR was created
         if: steps.fix.outputs.changed != 'true' && steps.count.outputs.total > 0
         uses: actions/github-script@v7
@@ -129,9 +127,9 @@ jobs:
           script: |
             const fs = require('fs');
             const body = fs.readFileSync('.github/pr_body.md', 'utf8');
-            const title = `🔴 Trivy: ${process.env.TOTAL} fixable CVE(s) require manual update`;
+            const total = '${{ steps.count.outputs.total }}';
+            const title = '🔴 Trivy: ' + total + ' fixable CVE(s) require manual update';
 
-            // Search for existing open issue to avoid duplicates
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -148,7 +146,7 @@ jobs:
                 title,
                 body,
               });
-              console.log(`Updated existing issue #${existing.number}`);
+              console.log('Updated existing issue #' + existing.number);
             } else {
               const issue = await github.rest.issues.create({
                 owner: context.repo.owner,
@@ -157,7 +155,5 @@ jobs:
                 body,
                 labels: ['security', 'automated'],
               });
-              console.log(`Created issue #${issue.data.number}`);
+              console.log('Created issue #' + issue.data.number);
             }
-          env:
-            TOTAL: ${{ steps.count.outputs.total }}
