@@ -49,7 +49,7 @@ _EXPORT_KEYS = frozenset({
     'stability_weight', 'adaptive_scheduling', 'adaptive_auto_shift',
     'notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
     'notif_auto_exclude', 'notif_benchmark_end', 'notif_benchmark_failure',
-    'notif_quick_check', 'gluetun_api_port', 'notify_mention_level',
+    'notif_quick_check', 'notify_mention_level',
     'active_profile', 'single_stream_test', 'airvpn_new_server_notif',
     'proxy_username',
 })
@@ -989,7 +989,6 @@ def settings():
             set_setting('sidecar_speedtest_method', request.form.get('sidecar_speedtest_method', 'dual'))
             set_setting('sidecar_iperf_fallback',   '1' if request.form.get('sidecar_iperf_fallback') else '0')
             set_setting('sidecar_proxy_fallback',   '1' if request.form.get('sidecar_proxy_fallback') else '0')
-            set_setting('gluetun_api_port',         request.form.get('gluetun_api_port', '8000').strip() or '8000')
             flash_t('flash_sidecar_saved', 'success')
 
         elif action == 'post_switch':
@@ -1049,7 +1048,6 @@ def settings():
         'sidecar_speedtest_method': get_setting('sidecar_speedtest_method', 'dual'),
         'sidecar_iperf_fallback':      get_setting('sidecar_iperf_fallback', '1'),
         'sidecar_proxy_fallback':      get_setting('sidecar_proxy_fallback', '0'),
-        'gluetun_api_port':            get_setting('gluetun_api_port', '8000'),
         'post_switch_containers':       json.loads(get_setting('post_switch_containers', '[]')),
         'pause_bench_containers':       json.loads(get_setting('pause_bench_containers', '[]')),
         'pull_gluetun':                 get_setting('pull_gluetun', '0'),
