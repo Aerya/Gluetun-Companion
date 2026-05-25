@@ -68,30 +68,6 @@ def init_db(db_path: str):
                 value TEXT
             );
 
-            -- ── WireGuard provider profiles ────────────────────────────────
-            -- One row per configured VPN account (provider + credentials).
-            -- Credentials are stored encrypted in vpn_profile_vars.
-            CREATE TABLE IF NOT EXISTS vpn_profiles (
-                id               INTEGER PRIMARY KEY AUTOINCREMENT,
-                name             TEXT    NOT NULL,           -- user-given name, e.g. "AirVPN Principal"
-                provider         TEXT    NOT NULL,           -- wg_providers.py key, e.g. "airvpn"
-                enabled          INTEGER NOT NULL DEFAULT 1,
-                rotation_allowed INTEGER NOT NULL DEFAULT 0, -- may this profile be used in rotation?
-                rotation_priority INTEGER NOT NULL DEFAULT 0, -- lower = higher priority
-                created_at       TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at       TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- One row per WireGuard env var (PRIVATE_KEY, ADDRESSES, …) per profile.
-            -- Secret values are stored encrypted with the "enc:" prefix (see crypto.py).
-            CREATE TABLE IF NOT EXISTS vpn_profile_vars (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                profile_id INTEGER NOT NULL REFERENCES vpn_profiles(id) ON DELETE CASCADE,
-                var_key    TEXT    NOT NULL,   -- Gluetun env var name
-                var_value  TEXT    NOT NULL DEFAULT '',
-                UNIQUE(profile_id, var_key)
-            );
-
             CREATE TABLE IF NOT EXISTS gluetun_catalogue (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 provider     TEXT NOT NULL,
@@ -123,9 +99,6 @@ def init_db(db_path: str):
                 country      TEXT NOT NULL DEFAULT '',
                 country_code TEXT NOT NULL DEFAULT ''
             );
-
-            CREATE INDEX IF NOT EXISTS idx_vpn_profile_vars_profile
-                ON vpn_profile_vars(profile_id);
 
             INSERT OR IGNORE INTO settings (key, value) VALUES
                 ('test_interval_hours',      '6'),
@@ -188,11 +161,7 @@ def init_db(db_path: str):
                 ('catalogue_import_provider',  ''),
                 ('catalogue_bench_on_import',  '0'),
                 ('catalogue_sidecar_port',     '8767'),
-                ('catalogue_last_refresh',     ''),
-                -- WireGuard multi-provider rotation
-                ('wg_rotation_mode',           'none'),   -- none | free | conditional
-                ('wg_rotation_threshold',      '10'),     -- % score gain required (conditional mode)
-                ('wg_active_profile_id',       '');
+                ('catalogue_last_refresh',     '');
         ''')
         # Data migration: legacy airvpn_notify_mention → notify_mention
         _legacy = db.execute(
@@ -233,8 +202,6 @@ def init_db(db_path: str):
             "ALTER TABLE speed_tests ADD COLUMN dns_latency_ms REAL",
             "ALTER TABLE speed_tests ADD COLUMN test_trigger TEXT",
             "ALTER TABLE speed_tests ADD COLUMN dl_single_mbps REAL",
-            # WireGuard multi-provider: link servers to a VPN profile
-            "ALTER TABLE servers ADD COLUMN vpn_profile_id INTEGER REFERENCES vpn_profiles(id)",
         ]:
             try:
                 db.execute(stmt)
@@ -676,181 +643,3 @@ def purge_old_new_airvpn_servers():
             "DELETE FROM airvpn_new_servers"
             " WHERE first_seen_at < datetime('now', '-7 days')"
         )
-
-
-# ---------------------------------------------------------------------------
-# WireGuard VPN profile CRUD
-# ---------------------------------------------------------------------------
-
-def get_vpn_profiles(enabled_only: bool = False) -> list[dict]:
-    """Return all VPN profiles, optionally filtered to enabled ones only.
-
-    Each profile dict includes a 'vars' sub-dict {var_key: var_value} with
-    raw (possibly encrypted) values — callers decrypt secrets as needed.
-    """
-    where = 'WHERE p.enabled = 1' if enabled_only else ''
-    with get_db() as db:
-        profiles = db.execute(
-            f'SELECT id, name, provider, enabled, rotation_allowed, '
-            f'rotation_priority, created_at, updated_at '
-            f'FROM vpn_profiles {where} ORDER BY rotation_priority, id'
-        ).fetchall()
-
-        result = []
-        for p in profiles:
-            vars_rows = db.execute(
-                'SELECT var_key, var_value FROM vpn_profile_vars WHERE profile_id = ?',
-                (p['id'],),
-            ).fetchall()
-            result.append({
-                'id':               p['id'],
-                'name':             p['name'],
-                'provider':         p['provider'],
-                'enabled':          bool(p['enabled']),
-                'rotation_allowed': bool(p['rotation_allowed']),
-                'rotation_priority': p['rotation_priority'],
-                'created_at':       p['created_at'],
-                'updated_at':       p['updated_at'],
-                'vars':             {r['var_key']: r['var_value'] for r in vars_rows},
-            })
-    return result
-
-
-def get_vpn_profile(profile_id: int) -> dict | None:
-    """Return one VPN profile by id, or None if not found."""
-    with get_db() as db:
-        p = db.execute(
-            'SELECT id, name, provider, enabled, rotation_allowed, '
-            'rotation_priority, created_at, updated_at '
-            'FROM vpn_profiles WHERE id = ?',
-            (profile_id,),
-        ).fetchone()
-        if not p:
-            return None
-        vars_rows = db.execute(
-            'SELECT var_key, var_value FROM vpn_profile_vars WHERE profile_id = ?',
-            (profile_id,),
-        ).fetchall()
-    return {
-        'id':               p['id'],
-        'name':             p['name'],
-        'provider':         p['provider'],
-        'enabled':          bool(p['enabled']),
-        'rotation_allowed': bool(p['rotation_allowed']),
-        'rotation_priority': p['rotation_priority'],
-        'created_at':       p['created_at'],
-        'updated_at':       p['updated_at'],
-        'vars':             {r['var_key']: r['var_value'] for r in vars_rows},
-    }
-
-
-def create_vpn_profile(
-    name: str,
-    provider: str,
-    vars: dict[str, str],
-    enabled: bool = True,
-    rotation_allowed: bool = False,
-    rotation_priority: int = 0,
-) -> int:
-    """Insert a new VPN profile and its vars.  Returns the new profile id.
-
-    *vars* is {var_key: var_value} — secret values must already be encrypted
-    by the caller (use crypto.encrypt()).
-    """
-    with get_db() as db:
-        cur = db.execute(
-            'INSERT INTO vpn_profiles (name, provider, enabled, rotation_allowed, rotation_priority) '
-            'VALUES (?, ?, ?, ?, ?)',
-            (name, provider, int(enabled), int(rotation_allowed), rotation_priority),
-        )
-        profile_id = cur.lastrowid
-        for var_key, var_value in vars.items():
-            db.execute(
-                'INSERT OR REPLACE INTO vpn_profile_vars (profile_id, var_key, var_value) '
-                'VALUES (?, ?, ?)',
-                (profile_id, var_key, var_value),
-            )
-    return profile_id
-
-
-def update_vpn_profile(
-    profile_id: int,
-    name: str | None = None,
-    provider: str | None = None,
-    vars: dict[str, str] | None = None,
-    enabled: bool | None = None,
-    rotation_allowed: bool | None = None,
-    rotation_priority: int | None = None,
-) -> bool:
-    """Update an existing VPN profile.  Returns False if the profile doesn't exist.
-
-    Only non-None arguments are updated.  For *vars*, each key-value pair is
-    upserted individually (pass only the vars you want to change).
-    Secret values must already be encrypted by the caller.
-    """
-    with get_db() as db:
-        p = db.execute('SELECT id FROM vpn_profiles WHERE id = ?', (profile_id,)).fetchone()
-        if not p:
-            return False
-
-        fields: list[str] = ["updated_at = CURRENT_TIMESTAMP"]
-        params: list = []
-        if name is not None:
-            fields.append('name = ?');          params.append(name)
-        if provider is not None:
-            fields.append('provider = ?');      params.append(provider)
-        if enabled is not None:
-            fields.append('enabled = ?');       params.append(int(enabled))
-        if rotation_allowed is not None:
-            fields.append('rotation_allowed = ?'); params.append(int(rotation_allowed))
-        if rotation_priority is not None:
-            fields.append('rotation_priority = ?'); params.append(rotation_priority)
-
-        if fields:
-            params.append(profile_id)
-            db.execute(
-                f'UPDATE vpn_profiles SET {", ".join(fields)} WHERE id = ?',
-                params,
-            )
-
-        if vars is not None:
-            for var_key, var_value in vars.items():
-                db.execute(
-                    'INSERT OR REPLACE INTO vpn_profile_vars (profile_id, var_key, var_value) '
-                    'VALUES (?, ?, ?)',
-                    (profile_id, var_key, var_value),
-                )
-    return True
-
-
-def delete_vpn_profile(profile_id: int) -> bool:
-    """Delete a VPN profile and all its vars (cascade).  Returns False if not found."""
-    with get_db() as db:
-        p = db.execute('SELECT id FROM vpn_profiles WHERE id = ?', (profile_id,)).fetchone()
-        if not p:
-            return False
-        db.execute('DELETE FROM vpn_profiles WHERE id = ?', (profile_id,))
-    return True
-
-
-def get_servers_without_profile() -> list[dict]:
-    """Return servers that have no vpn_profile_id set (orphaned servers)."""
-    with get_db() as db:
-        rows = db.execute(
-            'SELECT id, name, filter_type, enabled FROM servers '
-            'WHERE vpn_profile_id IS NULL ORDER BY name'
-        ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def assign_servers_to_profile(server_ids: list[int], profile_id: int) -> int:
-    """Set vpn_profile_id for the given server ids.  Returns number of rows updated."""
-    if not server_ids:
-        return 0
-    placeholders = ','.join('?' * len(server_ids))
-    with get_db() as db:
-        cur = db.execute(
-            f'UPDATE servers SET vpn_profile_id = ? WHERE id IN ({placeholders})',
-            [profile_id, *server_ids],
-        )
-    return cur.rowcount

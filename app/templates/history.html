@@ -238,9 +238,6 @@
       <thead>
         <tr>
           {{ sort_th(t.cmn_server,     'server',  'asc') }}
-          {% if vpn_profiles %}
-          <th style="white-space:nowrap;color:var(--bs-secondary-color);font-weight:500">{{ t.srv_col_provider }}</th>
-          {% endif %}
           {{ sort_th(t.cmn_download,   'dl',      'desc') }}
           {{ sort_th(t.cmn_upload,     'ul',      'desc') }}
           {{ sort_th(t.cmn_latency,    'latency', 'asc') }}
@@ -303,23 +300,6 @@
                  data-bs-toggle="tooltip" title="{{ _tip_parts | join(' · ') }}"></i>
             {%- endif -%}
           </td>
-          {% if vpn_profiles %}
-          <td>
-            {% if r.vp_name %}
-              {%- set _ns = namespace(prov_label=r.vp_provider) -%}
-              {%- for _pk, _pd in wg_providers -%}
-                {%- if _pk == r.vp_provider -%}{%- set _ns.prov_label = _pd.label -%}{%- endif -%}
-              {%- endfor -%}
-              <span class="badge bg-secondary bg-opacity-25 text-body border"
-                    style="font-size:.7rem;max-width:9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle"
-                    title="{{ r.vp_name }} ({{ _ns.prov_label }})">
-                {{ r.vp_name }}
-              </span>
-            {% else %}
-              <span class="text-muted">—</span>
-            {% endif %}
-          </td>
-          {% endif %}
           <td>
             {% if r.download_mbps %}
               {% set cls = 'speed-good' if r.download_mbps > 50 else ('speed-ok' if r.download_mbps > 15 else 'speed-bad') %}
@@ -408,7 +388,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="{{ 12 if vpn_profiles else 11 }}" class="text-center text-muted py-4">{{ t.hist_empty }}</td>
+          <td colspan="11" class="text-center text-muted py-4">{{ t.hist_empty }}</td>
         </tr>
         {% endfor %}
       </tbody>
