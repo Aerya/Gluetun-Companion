@@ -442,7 +442,7 @@
               <div class="d-flex gap-1">
                 <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2"
                         style="font-size:.72rem"
-                        onclick="_wgEditProfile({{ profile | tojson }})">
+                        onclick="_wgEditProfile({{ profile | tojson | forceescape }})">
                   <i class="bi bi-pencil"></i>
                 </button>
                 <form method="post" class="d-inline"
