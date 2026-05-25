@@ -33,7 +33,7 @@ services:
       - DATA_DIR=/data
       - GLUETUN_HOST=host.docker.internal
       - GLUETUN_PROXY_PORT=8887          # port du proxy HTTP Gluetun exposé sur l'hôte
-      - GLUETUN_CONTAINER=gluetun-airvpn   # nom exact du service dans le compose Gluetun
+      - GLUETUN_CONTAINER=gluetun-airvpn   # nom exact du container Gluetun (le service Compose est détecté automatiquement)
       - COMPOSE_DIR=/compose
       - DOCKER_HOST=tcp://socket-proxy:2375
       # Optionnel : protéger /metrics par un Bearer token.

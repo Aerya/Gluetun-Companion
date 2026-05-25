@@ -208,7 +208,7 @@ services:
       - DATA_DIR=/data
       - GLUETUN_HOST=host.docker.internal
       - GLUETUN_PROXY_PORT=8887
-      - GLUETUN_CONTAINER=gluetun-airvpn   # nom exact du container Gluetun
+      - GLUETUN_CONTAINER=gluetun-airvpn   # nom exact du container Gluetun (le service Compose est détecté automatiquement)
       - COMPOSE_DIR=/compose
       - DOCKER_HOST=tcp://socket-proxy:2375
       # Optionnel : protéger /metrics par un Bearer token.
@@ -228,7 +228,7 @@ docker compose up -d
 ```
 
 > **Pourquoi `socket-proxy` ?**
-> Le socket Docker donne un accès quasi-total à l'hôte. Le proxy [Tecnativa](https://github.com/Tecnativa/docker-socket-proxy) s'intercale entre Companion et le socket, et n'expose que les opérations strictement nécessaires — Companion ne peut pas lancer de container privilégié, monter des chemins arbitraires, etc. Fonctionnement identique pour l'utilisateur, surface d'attaque réduite.
+> Le socket Docker donne un accès quasi-total à l'hôte. Le proxy [Tecnativa](https://github.com/Tecnativa/docker-socket-proxy) s'intercale entre Companion et le socket, et restreint l'accès aux opérations nécessaires : lecture des containers/images/réseaux/volumes, et POST/DELETE requis pour créer et supprimer les containers sidecar temporaires. Il empêche notamment tout accès direct au daemon (exec, info, swarm…). Fonctionnement identique pour l'utilisateur, surface d'attaque réduite.
 
 Ouvrir **http://localhost:8765** — première connexion : entrez le compte à créer (enregistré automatiquement).
 
@@ -679,10 +679,10 @@ En plus des métriques de base (`avg_dl`, `avg_ul`, `avg_latency`, `test_count`,
 ## Sécurité
 
 - **CSRF** — Toutes les actions POST (formulaires et AJAX) sont protégées par un token CSRF via session serveur. L'en-tête `X-CSRF-Token` est injecté automatiquement sur chaque `fetch` non-GET grâce à un intercepteur JavaScript.
-- **XSS** — Les données issues d'API tierces (AirVPN) injectées dans le DOM via `innerHTML` sont systématiquement échappées par une fonction `_esc()` (HTML entity encoding). Les handlers d'événements sur éléments dynamiques utilisent `addEventListener` plutôt que des attributs `onchange` inline.
+- **XSS** — Les données issues d'API tierces (AirVPN) injectées dans le DOM via `innerHTML` sont systématiquement échappées par une fonction `_esc()` (HTML entity encoding) avant insertion. Les attributs `onclick`/`onchange` inline présents dans les composants dynamiques ne contiennent que des valeurs JSONifiées ou des constantes — aucune donnée utilisateur non échappée n'y est interpolée.
 - **SECRET_KEY** — L'application refuse de démarrer si `SECRET_KEY` est absente ou égale à la valeur par défaut (`dev-secret-change-me`, `remplacer-par-une-chaine-aleatoire-longue`). Génère une clé sécurisée avec : `openssl rand -hex 32`.
 - **Injection YAML** — La valeur du filtre de serveur est assainie avant écriture dans `docker-compose.override.yml` (retours à la ligne supprimés, guillemets et backslashs échappés).
-- **Socket Docker** — Le socket Docker est sécurisé via [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy), qui limite l'accès au strict nécessaire (lecture des containers, pas d'accès root au daemon).
+- **Socket Docker** — Le socket Docker est sécurisé via [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy), qui restreint les appels autorisés : lecture (containers, images, réseaux, volumes) + POST/DELETE pour la gestion des sidecars temporaires. Tout accès direct au daemon Docker (exec, swarm, info…) est bloqué.
 - **Anti brute-force** — Le login bloque une IP après 5 échecs en 5 minutes pendant 15 minutes (compteur en mémoire, remis à zéro à la connexion réussie).
 - **Exposition réseau** — Gunicorn écoute sur `0.0.0.0:8765` (toutes interfaces). **Ne pas exposer ce port directement sur Internet.** Sur un serveur accessible publiquement, placez Companion derrière un reverse proxy (Nginx, Caddy, Traefik) avec HTTPS et authentification forte, ou restreignez le binding à l'interface locale : `127.0.0.1:8765:8765` dans le `docker-compose.yml`.
 - **`/metrics`** — Ouvert par défaut sur le LAN. Si votre machine est accessible depuis l'extérieur, définissez la variable `METRICS_TOKEN` ou configurez un token API dans Paramètres → API : `/metrics` l'utilisera automatiquement pour exiger un Bearer token.
