@@ -925,6 +925,64 @@ def _do_benchmark(app, skip_quick_check: bool = False):
             logger.info('No enabled servers — skipping benchmark')
             return
 
+        # ── Pre-filter 1: include only selected filter types ─────────────────
+        # Setting: bench_include_types — JSON list of types, e.g. ["name","country"]
+        # Empty list (default) = include all types (no filtering).
+        try:
+            _include_types = set(_json.loads(get_setting('bench_include_types', '[]')))
+        except Exception:
+            _include_types = set()
+        if _include_types:
+            _before = len(servers)
+            servers = [s for s in servers if s['filter_type'] in _include_types]
+            logger.info(
+                'Bench type filter: keeping types %s → %d/%d server(s)',
+                sorted(_include_types), len(servers), _before,
+            )
+
+        # ── Pre-filter 2: AirVPN load/users threshold (name-type only) ───────
+        # Settings: airvpn_bench_max_load (0=disabled), airvpn_bench_max_users (0=disabled)
+        # Uses airvpn_snapshot table (updated every 5 min from AirVPN API).
+        # Servers without snapshot data are always kept.
+        _max_load  = int(get_setting('airvpn_bench_max_load',  '0') or '0')
+        _max_users = int(get_setting('airvpn_bench_max_users', '0') or '0')
+        if _max_load > 0 or _max_users > 0:
+            _name_servers = [s for s in servers if s['filter_type'] == 'name']
+            if _name_servers:
+                with get_db() as db:
+                    _snap_rows = db.execute(
+                        'SELECT name, load, users FROM airvpn_snapshot'
+                    ).fetchall()
+                _snap_map = {r['name']: r for r in _snap_rows}
+                _kept, _skipped = [], []
+                for s in servers:
+                    if s['filter_type'] != 'name':
+                        _kept.append(s)
+                        continue
+                    _snap = _snap_map.get(s['name'])
+                    if _snap is None:
+                        # No AirVPN data → always keep (may be a non-AirVPN name server)
+                        _kept.append(s)
+                        continue
+                    if _max_load > 0 and _snap['load'] is not None and _snap['load'] > _max_load:
+                        _skipped.append(f"{s['name']}(load={_snap['load']}%)")
+                        continue
+                    if _max_users > 0 and _snap['users'] is not None and _snap['users'] > _max_users:
+                        _skipped.append(f"{s['name']}(users={_snap['users']})")
+                        continue
+                    _kept.append(s)
+                if _skipped:
+                    logger.info(
+                        'AirVPN pre-filter: skipped %d server(s) exceeding thresholds '
+                        '(max_load=%d%%, max_users=%d): %s',
+                        len(_skipped), _max_load, _max_users, ', '.join(_skipped),
+                    )
+                servers = _kept
+
+        if not servers:
+            logger.info('No servers left after pre-filters — skipping benchmark')
+            return
+
         results: list[dict] = []
 
         for row in servers:

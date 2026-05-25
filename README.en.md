@@ -63,6 +63,8 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [HTTP proxy mode (optional)](#http-proxy-mode-optional)
   - [Quick check before benchmark](#quick-check-before-benchmark-option)
   - [Adaptive scheduling](#adaptive-scheduling-option)
+  - [Benchmark filtering by entry type](#benchmark-filtering-by-entry-type-option)
+  - [AirVPN pre-filter before benchmark](#airvpn-pre-filter-before-benchmark-option-dedicated-to-airvpn)
   - [Docker events listener](#docker-events-listener)
   - [Usage profiles](#usage-profiles)
   - [Selection score — stability components](#selection-score--stability-components)
@@ -88,6 +90,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Multi-source results** — Ookla, librespeed and iperf3 speeds stored separately and displayed in the dashboard and history
 - **Multi-stream download** — N concurrent TCP connections (configurable, default: 4)
 - **Automatic benchmarking** every X hours — download, upload and latency per server; automatic cycle can be disabled (manual trigger only)
+- **Benchmark pre-filtering** *(option)* — select which **entry types** to include in each cycle (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`); all types included by default; excluded servers remain in the list and can be tested manually; configurable in Settings → Benchmark filtering
 - **Quick check before benchmark** *(option)* — tests only the current server before each cycle; if speed is within ±N% of the last known result, the full benchmark is skipped entirely — no containers paused, no VPN restarts; triggers the full benchmark only when performance drifts significantly
 - **Adaptive scheduling** *(option)* — analyses hourly speed and variance patterns to identify the best and worst benchmark windows; recommended time slots displayed in Settings; optional auto-shift: if the next cycle falls on an unfavorable hour, it is shifted up to 3 h forward to the next favorable window
 - **On-demand quick benchmark** — button always available (dashboard and settings); tests only the active server via the Gluetun HTTP proxy, result in seconds, no VPN interruption, result saved in history
@@ -126,6 +129,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 
 ### AirVPN
 - **Built-in AirVPN server picker** — *+ Add an AirVPN server* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), four tabs — full searchable list, geographic distribution by country, **Recommended** tab (load < 50 %, health OK, < 30 users) and **Changes** tab (newly detected servers, disappeared servers, load shifts, top 5 healthiest countries); multi-select, one-click add
+- **AirVPN pre-filter before benchmark** *(optional, dedicated to [AirVPN](https://airvpn.org/?referred_by=483746))* — at benchmark start, **[AirVPN](https://airvpn.org/?referred_by=483746)** servers of type `SERVER_NAMES` whose **load** or **user count** exceeds a configurable threshold are automatically skipped; data from the AirVPN cache (updated every 5 min); servers without AirVPN data are never excluded; thresholds configurable in Settings → Benchmark filtering
 - **New AirVPN server detection** *(optional)* — compares the AirVPN API with your configured servers every 24 h; badge and dismissable banner on the Servers page + *Changes* tab in the add modal; Discord/Apprise notification with optional mention
 
 ### Analysis & history
@@ -366,6 +370,44 @@ Companion analyses the test history to compute, for each hour of the day (0–23
 **Auto-shift** *(sub-option)*: if a scheduled cycle falls on an unfavorable hour, the benchmark is deferred by up to 3 h to the next favorable window. If none is found within that delay, the benchmark runs immediately. Once complete, the scheduler resumes its normal interval.
 
 > This option complements the automatic cycle — it does not replace it. The configured interval remains the reference; the adaptive shift only adjusts the next trigger if the hour is deemed unfavorable.
+
+### Benchmark filtering by entry type *(option)*
+
+Enable via **Settings → Scheduling & Cycle → Benchmark filtering → Server types to include**.
+
+By default, the benchmark tests **all** enabled entries in `/servers`, regardless of their Gluetun type. With this option, you select exactly which types will participate in each cycle:
+
+| Type | Gluetun variable | Typical use |
+|---|---|---|
+| **Name** | `SERVER_NAMES` | Individual AirVPN servers, precise name |
+| **Country** | `SERVER_COUNTRIES` | Broad geographic selection |
+| **City** | `SERVER_CITIES` | Precise geographic selection |
+| **Region** | `SERVER_REGIONS` | Region / state |
+| **Hostname** | `SERVER_HOSTNAMES` | FQDN hostname |
+
+- **All checked** (default): identical behaviour — no filtering.
+- **Some checked**: only entries of the checked types are tested; the others remain in `/servers` and can be tested individually via the "Test now" button.
+
+> Useful if you have `country`/`region` entries as fallback but only want to test them occasionally, without including them in every automatic cycle.
+
+### AirVPN pre-filter before benchmark *(option, dedicated to [AirVPN](https://airvpn.org/?referred_by=483746))*
+
+Enable via **Settings → Scheduling & Cycle → Benchmark filtering → AirVPN pre-filter**.
+
+When you have added a large number of **[AirVPN](https://airvpn.org/?referred_by=483746)** servers (type `SERVER_NAMES`), a full benchmark cycle can take a very long time. This pre-filter lets you **automatically skip overloaded servers** at the start of each cycle:
+
+- **Max load (%)** — `0` = disabled. E.g. `70` → servers showing more than 70% load in the AirVPN cache are skipped for this cycle.
+- **Max users** — `0` = disabled. E.g. `30` → servers with more than 30 connected users are skipped.
+
+The two thresholds are independent and cumulative — a server is skipped as soon as **at least one** enabled threshold is exceeded.
+
+**Data source**: the internal `airvpn_snapshot` table, updated every **5 minutes** from the `airvpn.org/api/status/` API. No extra API call is made at benchmark launch.
+
+**Servers without data**: a `name`-type server with no entry in the snapshot (non-AirVPN provider, server absent from the API) is **never filtered** — it is always included in the benchmark.
+
+**Scope**: this filter only applies to `name`-type servers (**[AirVPN](https://airvpn.org/?referred_by=483746)**). Entries of type `country`, `city`, `region`, `hostname` are never affected.
+
+> Skipped servers remain in `/servers`, can be tested manually, and will be candidates again in the next cycle if their load has dropped in the meantime.
 
 ### Docker events listener
 

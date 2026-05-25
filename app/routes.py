@@ -998,6 +998,21 @@ def settings():
                 pass
             set_setting('adaptive_scheduling', '1' if request.form.get('adaptive_scheduling') else '0')
             set_setting('adaptive_auto_shift', '1' if request.form.get('adaptive_auto_shift') else '0')
+            # Bench pre-filters
+            _types_selected = request.form.getlist('bench_include_types')
+            _valid_types = {'name', 'country', 'city', 'region', 'hostname'}
+            _types_clean = [t for t in _types_selected if t in _valid_types]
+            set_setting('bench_include_types', json.dumps(_types_clean))
+            try:
+                _max_load = int(request.form.get('airvpn_bench_max_load', '0') or '0')
+                set_setting('airvpn_bench_max_load', str(max(0, min(_max_load, 100))))
+            except ValueError:
+                pass
+            try:
+                _max_users = int(request.form.get('airvpn_bench_max_users', '0') or '0')
+                set_setting('airvpn_bench_max_users', str(max(0, _max_users)))
+            except ValueError:
+                pass
             reschedule(float(request.form.get('interval', '6')), enabled=auto_bm)
             flash_t('flash_settings_saved', 'success')
 
@@ -1186,6 +1201,9 @@ def settings():
         'catalogue_import_filter_type':   get_setting('catalogue_import_filter_type', 'all'),
         'catalogue_auto_add':             get_setting('catalogue_auto_add', '0'),
         'catalogue_last_refresh':         get_setting('catalogue_last_refresh', ''),
+        'bench_include_types':            json.loads(get_setting('bench_include_types', '[]')),
+        'airvpn_bench_max_load':          get_setting('airvpn_bench_max_load', '0'),
+        'airvpn_bench_max_users':         get_setting('airvpn_bench_max_users', '0'),
     }
     from .database import get_hourly_benchmark_stats
     from .catalogue import catalogue_stats

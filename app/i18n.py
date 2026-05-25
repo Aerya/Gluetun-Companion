@@ -529,6 +529,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_adaptive_worst':            'Pire heure',
         'set_adaptive_h':                'h',
 
+        # ── Benchmark pre-filters ──
+        'set_bench_filter_title':        'Filtrage du benchmark',
+        'set_bench_types_label':         'Types de serveurs à inclure',
+        'set_bench_types_hint':          'Sélectionnez les types d\'entrées à tester. Par défaut, tous les types sont inclus. Décocher un type exclut toutes ses entrées du cycle de benchmark (elles restent dans la liste et peuvent être testées manuellement).',
+        'set_bench_types_all':           'Tout sélectionner',
+        'set_bench_types_none':          'Tout désélectionner',
+        'set_bench_airvpn_title':        'Filtre AirVPN avant benchmark',
+        'set_bench_airvpn_hint':         'Au démarrage du benchmark, les serveurs AirVPN (type « nom ») dont la charge ou le nombre d\'utilisateurs dépasse le seuil configuré sont ignorés. Les données proviennent du cache AirVPN (mis à jour toutes les 5 min). Les serveurs sans données AirVPN ne sont pas filtrés. ⚠️ Dédié aux serveurs <a href="https://airvpn.org/?referred_by=483746" target="_blank" rel="noreferrer">AirVPN</a> — sans effet sur les autres providers.',
+        'set_bench_airvpn_max_load':     'Charge max (%)',
+        'set_bench_airvpn_max_load_hint':'0 = désactivé. Ex : 70 → ignore les serveurs à plus de 70 % de charge.',
+        'set_bench_airvpn_max_users':    'Utilisateurs max',
+        'set_bench_airvpn_max_users_hint':'0 = désactivé. Ex : 30 → ignore les serveurs avec plus de 30 utilisateurs connectés.',
+
         # ── Hourly patterns ──
         'pat_title':        'Patterns horaires',
         'pat_server_label': 'Serveur',
@@ -1146,6 +1159,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_adaptive_best':             'Best hour',
         'set_adaptive_worst':            'Worst hour',
         'set_adaptive_h':                'h',
+
+        # ── Benchmark pre-filters ──
+        'set_bench_filter_title':        'Benchmark filtering',
+        'set_bench_types_label':         'Server types to include',
+        'set_bench_types_hint':          'Select the entry types to test. By default, all types are included. Unchecking a type excludes all its entries from the benchmark cycle (they remain in the list and can be tested manually).',
+        'set_bench_types_all':           'Select all',
+        'set_bench_types_none':          'Deselect all',
+        'set_bench_airvpn_title':        'AirVPN pre-filter',
+        'set_bench_airvpn_hint':         'At benchmark start, AirVPN servers (type "name") whose load or user count exceeds the configured threshold are skipped. Data comes from the AirVPN cache (updated every 5 min). Servers without AirVPN data are not filtered. ⚠️ Dedicated to <a href="https://airvpn.org/?referred_by=483746" target="_blank" rel="noreferrer">AirVPN</a> servers — no effect on other providers.',
+        'set_bench_airvpn_max_load':     'Max load (%)',
+        'set_bench_airvpn_max_load_hint':'0 = disabled. E.g. 70 → skip servers with more than 70% load.',
+        'set_bench_airvpn_max_users':    'Max users',
+        'set_bench_airvpn_max_users_hint':'0 = disabled. E.g. 30 → skip servers with more than 30 connected users.',
 
         # ── Hourly patterns ──
         'pat_title':        'Hourly patterns',

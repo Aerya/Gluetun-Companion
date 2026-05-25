@@ -281,6 +281,87 @@
           </div>
         </div>
 
+        <hr class="my-3">
+
+        {# ── Benchmark pre-filters ──────────────────────────────────────── #}
+        <div class="fw-semibold mb-2" style="font-size:.85rem">
+          <i class="bi bi-funnel-fill text-info me-1"></i>{{ t.set_bench_filter_title }}
+        </div>
+
+        {# ── Filter by Gluetun type (all providers) ── #}
+        <div class="mb-3">
+          <label class="form-label small fw-semibold mb-1">{{ t.set_bench_types_label }}</label>
+          <div class="form-text text-muted mb-2" style="font-size:.75rem">{{ t.set_bench_types_hint }}</div>
+          {%- set _all_types = [
+            ('name',     t.filter_label_name),
+            ('country',  t.filter_label_country),
+            ('city',     t.filter_label_city),
+            ('region',   t.filter_label_region),
+            ('hostname', t.filter_label_hostname),
+          ] -%}
+          {%- set _inc = cfg.bench_include_types -%}
+          {# If list is empty = all included; if non-empty = only listed types ─ #}
+          {%- set _all_checked = (_inc | length == 0) -%}
+          <div class="d-flex flex-wrap gap-3 mb-1">
+            {% for type_val, type_lbl in _all_types %}
+            <div class="form-check">
+              <input class="form-check-input bench-type-cb" type="checkbox"
+                     name="bench_include_types" value="{{ type_val }}"
+                     id="bench_type_{{ type_val }}"
+                     {{ 'checked' if _all_checked or type_val in _inc }}
+                     onchange="_updateBenchTypeAll()">
+              <label class="form-check-label small" for="bench_type_{{ type_val }}">
+                {{ type_lbl }}
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="d-flex gap-2 mt-1">
+            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2"
+                    style="font-size:.72rem" onclick="_benchTypesSelectAll(true)">
+              {{ t.set_bench_types_all }}
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2"
+                    style="font-size:.72rem" onclick="_benchTypesSelectAll(false)">
+              {{ t.set_bench_types_none }}
+            </button>
+          </div>
+        </div>
+
+        {# ── AirVPN load/users filter ── #}
+        <div class="mb-1">
+          <label class="form-label small fw-semibold mb-1">
+            {{ t.set_bench_airvpn_title }}
+          </label>
+          <div class="form-text text-muted mb-2" style="font-size:.75rem">{{ t.set_bench_airvpn_hint | safe }}</div>
+          <div class="d-flex gap-3 flex-wrap">
+            <div>
+              <label class="form-label small mb-1" for="airvpn_bench_max_load">
+                {{ t.set_bench_airvpn_max_load }}
+              </label>
+              <div class="input-group" style="max-width:130px">
+                <input type="number" name="airvpn_bench_max_load" id="airvpn_bench_max_load"
+                       class="form-control form-control-sm"
+                       value="{{ cfg.airvpn_bench_max_load }}" min="0" max="100" step="1">
+                <span class="input-group-text">%</span>
+              </div>
+              <div class="form-text" style="font-size:.72rem">{{ t.set_bench_airvpn_max_load_hint }}</div>
+            </div>
+            <div>
+              <label class="form-label small mb-1" for="airvpn_bench_max_users">
+                {{ t.set_bench_airvpn_max_users }}
+              </label>
+              <div class="input-group" style="max-width:130px">
+                <input type="number" name="airvpn_bench_max_users" id="airvpn_bench_max_users"
+                       class="form-control form-control-sm"
+                       value="{{ cfg.airvpn_bench_max_users }}" min="0" step="1">
+                <span class="input-group-text"><i class="bi bi-people-fill" style="font-size:.75rem"></i></span>
+              </div>
+              <div class="form-text" style="font-size:.72rem">{{ t.set_bench_airvpn_max_users_hint }}</div>
+            </div>
+          </div>
+        </div>
+
         <div class="d-flex gap-2 flex-wrap mb-0 mt-3">
           <button type="submit" class="btn btn-sm btn-success fw-semibold">
             <i class="bi bi-save"></i> {{ t.cmn_save }}
@@ -1704,6 +1785,14 @@ function toggleAdaptive(enabled) {
   }
 }
 toggleAdaptive(document.getElementById('adaptive_scheduling').checked);
+
+// ── Benchmark type filter helpers ─────────────────────────────────────────
+function _benchTypesSelectAll(checked) {
+  document.querySelectorAll('.bench-type-cb').forEach(cb => cb.checked = checked);
+}
+// No extra validation needed — unchecked boxes send no value, checked ones
+// send their value; the server treats empty list as "all included".
+function _updateBenchTypeAll() { /* reserved for future indeterminate state */ }
 
 // ── Benchmark triggers ───────────────────────────────────────────────────
 const _setMsgRunning  = '{{ t.set_running }}';
