@@ -89,6 +89,12 @@
         <i class="bi bi-list-check"></i>
         <span>{{ server_count }} {{ t.dash_active_servers }}</span>
       </div>
+      {% if active_profile %}
+      <div class="d-flex align-items-center gap-2 mb-1" style="font-size:.78rem;color:var(--bs-secondary-color)">
+        <i class="bi bi-person-badge"></i>
+        <span>{{ active_profile.profile_name }}</span>
+      </div>
+      {% endif %}
       {% if last_switch %}
       <div style="font-size:.75rem;color:var(--muted)">
         <i class="bi bi-arrow-left-right"></i>
@@ -118,6 +124,11 @@
             <i class="bi bi-server"></i> {{ t.dash_active_server }}
           </div>
           <code style="font-size:1rem;font-weight:600">{{ current_server or '—' }}</code>
+          {% if active_profile %}
+          <div style="font-size:.76rem;color:var(--bs-secondary-color);margin-top:.2rem">
+            <i class="bi bi-person-badge"></i> {{ active_profile.profile_name }}
+          </div>
+          {% endif %}
         </div>
         {% if sparkline_dl %}
         <span class="badge bg-success" style="font-size:.85rem">
@@ -211,8 +222,11 @@
       {%- set speed_cls = 'bg-success' if (s.avg_dl or 0) > 50 else ('bg-warning' if (s.avg_dl or 0) > 15 else 'bg-danger') -%}
       <div class="col-12 col-xl-6">
         <div class="d-flex align-items-center gap-2" style="min-height:28px">
-          <div class="text-truncate" style="width:130px;font-size:.8rem" title="{{ s.server_name }}">
-            <code>{{ s.server_name }}</code>
+          <div style="width:130px;font-size:.8rem;min-width:0" title="{{ s.server_name }}">
+            <div class="text-truncate"><code>{{ s.server_name }}</code></div>
+            {% if s.profile_name %}
+            <div class="text-truncate" style="font-size:.65rem;color:var(--bs-secondary-color);margin-top:.05rem">{{ s.profile_name }}</div>
+            {% endif %}
           </div>
           <div class="flex-grow-1 rank-bar-track">
             {# max bar (background) #}
@@ -259,6 +273,7 @@
       <thead>
         <tr>
           <th>{{ t.cmn_server }}</th>
+          <th>{{ t.cmn_provider }}</th>
           <th>{{ t.cmn_download }}</th>
           <th>{{ t.cmn_upload }}</th>
           <th>{{ t.cmn_latency }}</th>
@@ -287,6 +302,11 @@
         {% for r in recent_tests %}
         <tr>
           <td><code>{{ r.server_name }}</code></td>
+          <td>
+            {% if r.profile_name %}
+            <small class="text-muted">{{ r.profile_name }}</small>
+            {% else %}—{% endif %}
+          </td>
           <td>
             {% if r.download_mbps %}
               {% set cls = 'speed-good' if r.download_mbps > 50 else ('speed-ok' if r.download_mbps > 15 else 'speed-bad') %}
@@ -350,7 +370,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="11" class="text-center text-muted py-4">{{ t.dash_no_tests }}</td>
+          <td colspan="12" class="text-center text-muted py-4">{{ t.dash_no_tests }}</td>
         </tr>
         {% endfor %}
       </tbody>

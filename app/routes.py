@@ -202,7 +202,11 @@ def dashboard():
 
     with get_db() as db:
         recent_tests = db.execute(
-            'SELECT * FROM speed_tests ORDER BY tested_at DESC LIMIT ?', (recent_limit,)
+            'SELECT st.*, vp.name AS profile_name, vp.provider AS provider_key '
+            'FROM speed_tests st '
+            'LEFT JOIN servers s ON s.name = st.server_name '
+            'LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id '
+            'ORDER BY st.tested_at DESC LIMIT ?', (recent_limit,)
         ).fetchall()
         last_switch = db.execute(
             'SELECT * FROM switches ORDER BY switched_at DESC LIMIT 1'
@@ -211,13 +215,18 @@ def dashboard():
             'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'
         ).fetchone()['n']
         server_stats = db.execute('''
-            SELECT server_name,
-                   ROUND(AVG(download_mbps), 1) AS avg_dl,
-                   ROUND(MAX(download_mbps), 1) AS max_dl,
-                   ROUND(AVG(latency_ms),    0) AS avg_lat,
+            SELECT st.server_name,
+                   vp.name  AS profile_name,
+                   vp.provider AS provider_key,
+                   ROUND(AVG(st.download_mbps), 1) AS avg_dl,
+                   ROUND(MAX(st.download_mbps), 1) AS max_dl,
+                   ROUND(AVG(st.latency_ms),    0) AS avg_lat,
                    COUNT(*) AS cnt
-            FROM speed_tests WHERE success = 1
-            GROUP BY server_name
+            FROM speed_tests st
+            LEFT JOIN servers s ON s.name = st.server_name
+            LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
+            WHERE st.success = 1
+            GROUP BY st.server_name
             ORDER BY avg_dl DESC
             LIMIT 12
         ''').fetchall()
@@ -233,6 +242,7 @@ def dashboard():
         sparkline_dl: list[float] = []
         sparkline_ul: list[float | None] = []
         sparkline_server: str | None = None
+        active_profile: dict | None = None
         if current_filters:
             sname = next(iter(current_filters.values())).split(',')[0].strip()
             sparkline_server = sname
@@ -247,12 +257,22 @@ def dashboard():
                 sparkline_labels.append(r['tested_at'][5:16])
                 sparkline_dl.append(r['download_mbps'] or 0)
                 sparkline_ul.append(r['upload_mbps'])
+            # Provider of the active server
+            _prof_row = db.execute(
+                'SELECT vp.name AS profile_name, vp.provider AS provider_key '
+                'FROM servers s '
+                'LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id '
+                'WHERE s.name = ?', (sname,)
+            ).fetchone()
+            if _prof_row and _prof_row['profile_name']:
+                active_profile = dict(_prof_row)
 
     return render_template(
         'dashboard.html',
         vpn_status=vpn_status,
         public_ip=public_ip,
         current_server=current_server,
+        active_profile=active_profile,
         recent_tests=recent_tests,
         recent_limit=recent_limit,
         last_switch=last_switch,

@@ -23,6 +23,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Common ──
         'cmn_server':        'Serveur',
+        'cmn_provider':      'Profil',
         'cmn_download':      'Download',
         'cmn_upload':        'Upload',
         'cmn_latency':       'Latence',
@@ -796,6 +797,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Common ──
         'cmn_server':        'Server',
+        'cmn_provider':      'Profile',
         'cmn_download':      'Download',
         'cmn_upload':        'Upload',
         'cmn_latency':       'Latency',
