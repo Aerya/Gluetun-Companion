@@ -1024,8 +1024,6 @@ def settings():
             flash_t('flash_sidecar_saved', 'success')
 
         elif action == 'catalogue':
-            set_setting('catalogue_enabled',              '1' if request.form.get('catalogue_enabled') else '0')
-            set_setting('catalogue_servers_dir',          request.form.get('catalogue_servers_dir', '/gluetun/servers').strip() or '/gluetun/servers')
             set_setting('catalogue_import_mode',          request.form.get('catalogue_import_mode', 'active'))
             set_setting('catalogue_import_provider',      request.form.get('catalogue_import_provider', '').strip())
             set_setting('catalogue_bench_on_import',      '1' if request.form.get('catalogue_bench_on_import') else '0')
@@ -1106,8 +1104,6 @@ def settings():
         'active_profile':               get_setting('active_profile', 'balanced'),
         'single_stream_test':           get_setting('single_stream_test', '0'),
         'api_token':                    get_setting('api_token', ''),
-        'catalogue_enabled':              get_setting('catalogue_enabled', '0'),
-        'catalogue_servers_dir':          get_setting('catalogue_servers_dir', '/gluetun/servers'),
         'catalogue_import_mode':          get_setting('catalogue_import_mode', 'active'),
         'catalogue_import_provider':      get_setting('catalogue_import_provider', ''),
         'catalogue_bench_on_import':      get_setting('catalogue_bench_on_import', '0'),
@@ -1649,15 +1645,15 @@ def api_gluetun_network_containers():
 @bp.route('/api/catalogue/refresh', methods=['POST'])
 @login_required
 def api_catalogue_refresh():
-    """Force-refresh the Gluetun server catalogue via a catalogue sidecar."""
+    """Force-refresh the Gluetun server catalogue via a catalogue sidecar.
+    The sidecar downloads server lists from the public Gluetun GitHub repo —
+    no volume mounting required."""
     from .catalogue import refresh_catalogue_from_sidecar
     sidecar_image = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
     sidecar_host  = current_app.config['GLUETUN_HOST']
-    servers_dir   = get_setting('catalogue_servers_dir', '/gluetun/servers')
     result = refresh_catalogue_from_sidecar(
         sidecar_image=sidecar_image,
         sidecar_host=sidecar_host,
-        servers_dir=servers_dir,
     )
     return jsonify(result), (200 if result.get('ok') else 500)
 

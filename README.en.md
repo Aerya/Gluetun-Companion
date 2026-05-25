@@ -103,35 +103,18 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Auto-disable** a server after N consecutive failures
 
 ### Gluetun server catalogue
-- **Gluetun volume read** — the Sidecar reads the JSON files exported by Gluetun directly (`/gluetun/servers/airvpn.json`, etc.); no external API call, no changes to your Gluetun configuration beyond the volume mount
-- **Automatic refresh** — the list is updated at every Sidecar launch (cyclic benchmark); a dedicated button in Settings lets you force an immediate refresh even when cyclic benchmarks are disabled
+- **GitHub download** — the catalogue Sidecar downloads server lists directly from the public [`qdm12/gluetun-servers`](https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers) repository; **no volume to mount**, no changes to your Gluetun configuration required
+- **Automatic refresh** — the list is updated at every Sidecar launch (cyclic benchmark); a dedicated button in Settings and in the `/servers` modal lets you force an immediate refresh
 - **3 import modes in Settings**:
-  1. **All providers** — imports servers from every provider present in the Gluetun volume
+  1. **All providers** — imports servers from every provider available on GitHub
   2. **Chosen provider** — imports only the servers of a provider selected manually
   3. **Active provider** — automatically detects the provider configured in your Gluetun and imports its servers only
   — for each mode, an option to **run a Sidecar benchmark** on the imported servers immediately after import
 - **All filter types** — each server is imported with its full attributes: `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`
 - **Multi-filter selection from `/servers`** — select servers by freely mixing filter types (e.g. names + countries + cities at the same time); Companion applies the right filter in Gluetun and changes the filter type on the fly if needed
-- ⚠️ **ProtonVPN not supported** — generating ProtonVPN JSON files requires Proton credentials (paid account for premium servers); cannot be automated transparently — see [Gluetun documentation](https://github.com/qdm12/gluetun-wiki/blob/main/setup/servers.md#list-of-vpn-servers)
+- ⚠️ **ProtonVPN not supported** — ProtonVPN files require Proton credentials (paid account for premium servers) and are not publicly available — see [Gluetun documentation](https://github.com/qdm12/gluetun-wiki/blob/main/setup/servers.md#list-of-vpn-servers)
 
-**Prerequisites on the Gluetun side** — add to the `gluetun` service in your `docker-compose.yml`:
-```yaml
-volumes:
-  - ./gluetun:/gluetun
-environment:
-  UPDATER_PERIOD: 24h                      # enables periodic updates
-  UPDATER_PREFER_DIRECT_DOWNLOAD: "yes"    # writes one JSON per provider into /gluetun/servers/
-  # Optional — to include providers other than the active one:
-  # UPDATER_VPN_SERVICE_PROVIDERS: airvpn,mullvad
-```
-And mount the same volume read-only in the **Companion** (it automatically passes it to the temporary catalogue sidecar container it creates on demand):
-```yaml
-gluetun-companion:
-  volumes:
-    - /path/to/data:/data
-    - /path/to/gluetun/stack:/compose
-    - ./gluetun:/gluetun:ro   # ← add this for the catalogue feature
-```
+**Prerequisites** — the catalogue sidecar only needs outbound HTTPS access (Docker bridge network, enabled by default). **No `docker-compose.yml` changes required.**
 
 ### Docker container management
 - **Gluetun network containers (auto-managed)** — all containers using `network_mode: service:gluetun` are detected and restarted automatically after each switch

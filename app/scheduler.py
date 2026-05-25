@@ -765,24 +765,23 @@ def _do_benchmark(app, skip_quick_check: bool = False):
     set_setting('benchmark_running', '1')
     cycle_start = time.time()
 
-    # ── Catalogue refresh via sidecar (if enabled) ──────────────────────────
-    if get_setting('catalogue_enabled', '0') == '1':
-        try:
-            from .catalogue import refresh_catalogue_from_sidecar
-            _sidecar_img  = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
-            _sidecar_host = app.config['GLUETUN_HOST']
-            _servers_dir  = get_setting('catalogue_servers_dir', '/gluetun/servers')
-            _cat = refresh_catalogue_from_sidecar(
-                sidecar_image=_sidecar_img,
-                sidecar_host=_sidecar_host,
-                servers_dir=_servers_dir,
-            )
-            if _cat.get('ok'):
-                logger.info('catalogue: refreshed via sidecar — %d servers', _cat.get('total', 0))
-            else:
-                logger.warning('catalogue: refresh failed — %s', _cat.get('error', '?'))
-        except Exception as _cat_exc:
-            logger.warning('catalogue: refresh error — %s', _cat_exc)
+    # ── Catalogue refresh via sidecar (always) ───────────────────────────────
+    # The sidecar downloads server lists from the public Gluetun GitHub repo.
+    # No volume mounting required.
+    try:
+        from .catalogue import refresh_catalogue_from_sidecar
+        _sidecar_img  = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
+        _sidecar_host = app.config['GLUETUN_HOST']
+        _cat = refresh_catalogue_from_sidecar(
+            sidecar_image=_sidecar_img,
+            sidecar_host=_sidecar_host,
+        )
+        if _cat.get('ok'):
+            logger.info('catalogue: refreshed via sidecar — %d servers', _cat.get('total', 0))
+        else:
+            logger.warning('catalogue: refresh failed — %s', _cat.get('error', '?'))
+    except Exception as _cat_exc:
+        logger.warning('catalogue: refresh error — %s', _cat_exc)
 
     # These are needed in the finally block (and before quick check), so define early.
     container   = app.config['GLUETUN_CONTAINER']

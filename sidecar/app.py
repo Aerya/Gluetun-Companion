@@ -50,6 +50,7 @@ method values:
 
 import json
 import logging
+import os
 import re
 import subprocess
 import time
@@ -63,7 +64,18 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO, format='%(levelname)s %(name)s %(message)s')
 logger = logging.getLogger(__name__)
 
-_PROBE_URL = 'https://www.cloudflare.com/cdn-cgi/trace'
+_PROBE_URL    = 'https://www.cloudflare.com/cdn-cgi/trace'
+# ProtonVPN requires Proton credentials — excluded from catalogue
+_CAT_EXCLUDED = {'protonvpn', 'proton'}
+# Directory where Gluetun writes per-provider JSON files
+# (set via SERVERS_DIR env var when Companion creates this container)
+# Public GitHub repository that holds per-provider server JSON files.
+# No volume mounting or Gluetun API required — pure HTTP download.
+_GITHUB_API_URL = 'https://api.github.com/repos/qdm12/gluetun-servers/contents/pkg/servers'
+_GITHUB_RAW_URL = 'https://raw.githubusercontent.com/qdm12/gluetun-servers/main/pkg/servers'
+# Shared secret — Companion generates a random token per sidecar instance and
+# passes it via SIDECAR_SECRET env var.  All endpoints require it when set.
+_SECRET       = os.environ.get('SIDECAR_SECRET', '')
 
 # Public iperf3 servers tried in order — first one that responds wins
 _IPERF3_SERVERS: list[tuple[str, int]] = [
@@ -79,11 +91,24 @@ _PING_TARGETS = ['1.1.1.1', '8.8.8.8', '9.9.9.9']
 
 
 # ---------------------------------------------------------------------------
+# Auth helper
+# ---------------------------------------------------------------------------
+
+def _require_auth():
+    """Return a 403 Response if the shared secret is set and the request
+    does not supply it via the X-Sidecar-Token header."""
+    if _SECRET and request.headers.get('X-Sidecar-Token') != _SECRET:
+        from flask import abort
+        abort(403)
+
+
+# ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
 
 @app.route('/health')
 def health():
+    _require_auth()
     try:
         resp = requests.get(_PROBE_URL, timeout=10)
         if resp.status_code == 200:
@@ -98,11 +123,111 @@ def health():
 
 
 # ---------------------------------------------------------------------------
+# Ready — lightweight readiness probe (no VPN check)
+# ---------------------------------------------------------------------------
+
+@app.route('/ready')
+def ready():
+    _require_auth()
+    return jsonify({'ok': True})
+
+
+# ---------------------------------------------------------------------------
+# Catalogue — read Gluetun per-provider JSON files from mounted volume
+# ---------------------------------------------------------------------------
+
+@app.route('/catalogue')
+def catalogue():
+    """
+    Download per-provider server JSON files from the public Gluetun repository:
+      https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers
+
+    No volume mounting, no Gluetun API — pure public HTTPS download.
+    Requires X-Sidecar-Token header when SIDECAR_SECRET is set.
+    Called by the Companion at the start of each benchmark cycle and on
+    manual catalogue refresh.
+    """
+    _require_auth()
+
+    # ── 1. List available provider files via GitHub API ──────────────────────
+    try:
+        gh_resp = requests.get(
+            _GITHUB_API_URL,
+            timeout=15,
+            headers={'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'gluetun-companion'},
+        )
+        gh_resp.raise_for_status()
+        file_list = gh_resp.json()
+    except Exception as exc:
+        logger.error('catalogue: GitHub API error: %s', exc)
+        return jsonify({
+            'ok': False,
+            'error': f'GitHub API unreachable: {exc}',
+            'providers': {},
+        }), 503
+
+    # ── 2. Download and parse each provider JSON ─────────────────────────────
+    result: dict[str, list] = {}
+
+    for entry in file_list:
+        fname = entry.get('name', '')
+        if not fname.endswith('.json'):
+            continue
+
+        provider = fname[:-5].lower()   # strip .json → provider name
+
+        if provider in _CAT_EXCLUDED:
+            logger.info('catalogue: skipping %s (excluded)', provider)
+            continue
+
+        raw_url = f'{_GITHUB_RAW_URL}/{fname}'
+        try:
+            r = requests.get(raw_url, timeout=30, headers={'User-Agent': 'gluetun-companion'})
+            r.raise_for_status()
+            data = r.json()
+        except Exception as exc:
+            logger.warning('catalogue: cannot fetch %s: %s', fname, exc)
+            continue
+
+        raw_servers = data.get('servers', [])
+        normalized: list[dict] = []
+        for s in raw_servers:
+            hostnames = s.get('hostnames') or []
+            hostname  = s.get('hostname') or (hostnames[0] if hostnames else '')
+            srv = {
+                'name':         s.get('name') or s.get('server_name') or '',
+                'country':      s.get('country') or '',
+                'country_code': (s.get('country_code') or s.get('countryCode') or '').lower(),
+                'region':       s.get('region') or '',
+                'city':         s.get('city') or '',
+                'hostname':     hostname or '',
+            }
+            if any(srv.values()):
+                normalized.append(srv)
+
+        if normalized:
+            result[provider] = normalized
+            logger.info('catalogue: %s → %d servers', provider, len(normalized))
+
+    if not result:
+        return jsonify({
+            'ok': False,
+            'error': 'No servers fetched from GitHub (check network access)',
+            'providers': {},
+        }), 404
+
+    total = sum(len(v) for v in result.values())
+    logger.info('catalogue: total %d servers from %d providers', total, len(result))
+    return jsonify({'ok': True, 'providers': result})
+
+
+# ---------------------------------------------------------------------------
 # Test
 # ---------------------------------------------------------------------------
 
 @app.route('/test', methods=['GET', 'POST'])
 def test():
+    _require_auth()
     duration       = max(4, min(60, int(request.args.get('duration', 8))))
     streams        = max(1, min(16, int(request.args.get('streams', 4))))
     method         = request.args.get('method', 'dual')
@@ -214,6 +339,7 @@ def ping_endpoint():
       count    — packets per target (default: 20, range: 5–100)
       interval — seconds between packets (default: 0.2, range: 0.1–1.0)
     """
+    _require_auth()
     targets_str = request.args.get('targets', ','.join(_PING_TARGETS))
     targets     = [t.strip() for t in targets_str.split(',') if t.strip()]
     count       = max(5, min(100, int(request.args.get('count', 20))))

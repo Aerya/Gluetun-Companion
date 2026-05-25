@@ -1022,62 +1022,29 @@ def cleanup_test_containers(sidecar_image: str | None = None) -> None:
 
 def create_catalogue_sidecar(
     sidecar_image: str,
-    servers_dir: str = '/gluetun/servers',
     port: int = _CATALOGUE_SIDECAR_PORT,
     token: str = '',
 ) -> tuple[bool, str | None]:
     """
-    Create a standalone sidecar container (bridge network, no VPN required)
-    with the Gluetun servers directory mounted read-only.
-    The Companion uses this container to call /catalogue and retrieve the
-    server list without running a speed test.
+    Create a standalone sidecar container (bridge network, internet access).
+    The sidecar fetches server lists from the public Gluetun GitHub repository:
+      https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers
 
-    *servers_dir* is the path INSIDE the container where JSON files are mounted.
-    The function auto-detects the corresponding HOST path by inspecting the
-    Companion container's own mounts; falls back to using servers_dir as-is
-    (works when host and container paths are identical).
+    No volume mounting required — the sidecar only needs outbound HTTPS.
 
     *token* is passed as SIDECAR_SECRET env var so all sidecar endpoints
     require it on every request.  Generate with secrets.token_hex(32) in
     the caller and reuse the same token for all subsequent HTTP calls.
     """
-    import socket
-
     try:
         client = docker.from_env()
 
-        # ── Auto-detect host-side path for the servers dir ──────────────────
-        host_servers_path: str | None = None
-        try:
-            self_id   = socket.gethostname()
-            companion = client.containers.get(self_id)
-            for mount in companion.attrs.get('Mounts', []):
-                dest = mount.get('Destination', '')
-                src  = mount.get('Source', '')
-                if dest == servers_dir:
-                    host_servers_path = src
-                    break
-                if servers_dir.startswith(dest + '/'):
-                    # e.g. servers_dir=/gluetun/servers, mount dest=/gluetun
-                    host_servers_path = src + servers_dir[len(dest):]
-                    break
-        except Exception as exc:
-            logger.debug('catalogue sidecar: cannot inspect companion mounts: %s', exc)
-
-        if host_servers_path is None:
-            # Fallback: assume host path == container path (works for bind-mounts
-            # where the user mapped the same absolute path on both sides)
-            host_servers_path = servers_dir
-            logger.debug('catalogue sidecar: using servers_dir as host path: %s', host_servers_path)
-
-        logger.info(
-            'Pulling sidecar image for catalogue: %s', sidecar_image
-        )
+        logger.info('Pulling sidecar image for catalogue: %s', sidecar_image)
         client.images.pull(sidecar_image)
 
         _remove_container(client, _CATALOGUE_SIDECAR_NAME)
 
-        env: dict[str, str] = {'SERVERS_DIR': servers_dir}
+        env: dict[str, str] = {}
         if token:
             env['SIDECAR_SECRET'] = token
 
@@ -1086,15 +1053,13 @@ def create_catalogue_sidecar(
             name=_CATALOGUE_SIDECAR_NAME,
             network_mode='bridge',
             environment=env,
-            volumes={host_servers_path: {'bind': servers_dir, 'mode': 'ro'}},
-            ports={f'8766/tcp': port},
+            ports={'8766/tcp': port},
             detach=True,
             remove=False,
         )
         logger.info(
-            'Catalogue sidecar started: %s (servers: %s → %s, port: %d, auth: %s)',
-            _CATALOGUE_SIDECAR_NAME, host_servers_path, servers_dir, port,
-            'yes' if token else 'no',
+            'Catalogue sidecar started: %s (port: %d, auth: %s)',
+            _CATALOGUE_SIDECAR_NAME, port, 'yes' if token else 'no',
         )
         return True, None
     except Exception as exc:

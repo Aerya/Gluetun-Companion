@@ -348,31 +348,28 @@ def _wait_for_catalogue_sidecar(host: str, port: int, timeout: int = 60, token: 
 def refresh_catalogue_from_sidecar(
     sidecar_image: str,
     sidecar_host: str,
-    servers_dir: str | None = None,
     catalogue_port: int = 8767,
 ) -> dict:
     """
     Spin up a catalogue-only sidecar container, call its /catalogue endpoint,
     save the results to gluetun_catalogue, then destroy the container.
 
-    This is the primary refresh path: the SIDECAR reads the Gluetun JSON files,
-    not the Companion directly.
+    The sidecar fetches server lists from the public Gluetun GitHub repository:
+      https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers
+    No volume mounting or Gluetun API required — pure HTTPS download.
 
     Returns {ok, total, providers} or {ok: False, error}.
     """
     from .gluetun import create_catalogue_sidecar, cleanup_catalogue_sidecar, _CATALOGUE_SIDECAR_PORT
 
-    if servers_dir is None:
-        servers_dir = get_setting('catalogue_servers_dir', '/gluetun/servers')
     if catalogue_port == _CATALOGUE_SIDECAR_PORT:
-        # allow override via setting
         catalogue_port = int(get_setting('catalogue_sidecar_port', str(_CATALOGUE_SIDECAR_PORT)))
 
     # ── Generate one-time shared secret for this sidecar instance ───────────
     token = secrets.token_hex(32)
 
     # ── 1. Create sidecar ────────────────────────────────────────────────────
-    ok, err = create_catalogue_sidecar(sidecar_image, servers_dir, catalogue_port, token=token)
+    ok, err = create_catalogue_sidecar(sidecar_image, catalogue_port, token=token)
     if not ok:
         logger.error('refresh_catalogue_from_sidecar: sidecar creation failed: %s', err)
         return {'ok': False, 'error': f'Sidecar creation failed: {err}'}
