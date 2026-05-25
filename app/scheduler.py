@@ -278,6 +278,7 @@ def _test_one_server_sidecar(
 
     The real Gluetun container is never touched during this step.
     """
+    import secrets as _secrets
     from .database import set_setting, get_setting as _sgs
     from .gluetun import (
         FILTER_VARS,
@@ -290,6 +291,10 @@ def _test_one_server_sidecar(
     logger.info('Sidecar testing: %s', label)
     set_setting('benchmark_current_server', server_name)
 
+    # One-time shared secret for this sidecar instance — prevents any other
+    # process from interacting with the sidecar API during the test.
+    token = _secrets.token_hex(32)
+
     try:
         # Step 1 — launch test Gluetun with the target server
         ok, err = create_test_gluetun(real_container, filter_type, server_name, sidecar_port)
@@ -297,7 +302,7 @@ def _test_one_server_sidecar(
             raise RuntimeError(f'Test Gluetun creation failed: {err}')
 
         # Step 2 — attach sidecar to test Gluetun's network namespace
-        ok, err = create_speed_sidecar(sidecar_image)
+        ok, err = create_speed_sidecar(sidecar_image, token=token)
         if not ok:
             raise RuntimeError(f'Speed sidecar creation failed: {err}')
 
@@ -305,7 +310,9 @@ def _test_one_server_sidecar(
         stream_sidecar_logs()
 
         # Step 3 — wait for VPN connectivity on sidecar
-        connected, connect_secs = wait_for_sidecar(sidecar_host, sidecar_port, timeout=wait_secs)
+        connected, connect_secs = wait_for_sidecar(
+            sidecar_host, sidecar_port, timeout=wait_secs, token=token,
+        )
         if not connected:
             raise RuntimeError(f'Sidecar VPN timeout after {connect_secs:.0f}s')
 
@@ -313,7 +320,8 @@ def _test_one_server_sidecar(
         data = run_sidecar_test(sidecar_host, sidecar_port,
                                 duration=int(dl_duration), streams=dl_streams,
                                 method=sidecar_method,
-                                iperf_fallback=sidecar_iperf_fallback)
+                                iperf_fallback=sidecar_iperf_fallback,
+                                token=token)
 
         dl_median  = data.get('download_mbps') or 0.0
         ul_median  = data.get('upload_mbps')
@@ -338,7 +346,7 @@ def _test_one_server_sidecar(
         dns_latency_ms  = data.get('dns_latency_ms')
 
         if jitter_ms is None:
-            stability = run_sidecar_ping_test(sidecar_host, sidecar_port)
+            stability = run_sidecar_ping_test(sidecar_host, sidecar_port, token=token)
             if stability:
                 jitter_ms       = stability['jitter_ms']
                 packet_loss_pct = stability['packet_loss_pct']
@@ -354,6 +362,7 @@ def _test_one_server_sidecar(
                     duration=int(dl_duration), streams=1,
                     method=sidecar_method,
                     iperf_fallback=sidecar_iperf_fallback,
+                    token=token,
                 )
                 dl_single = single_data.get('download_mbps') or None
                 if dl_single:
@@ -755,6 +764,25 @@ def _do_benchmark(app, skip_quick_check: bool = False):
 
     set_setting('benchmark_running', '1')
     cycle_start = time.time()
+
+    # ── Catalogue refresh via sidecar (if enabled) ──────────────────────────
+    if get_setting('catalogue_enabled', '0') == '1':
+        try:
+            from .catalogue import refresh_catalogue_from_sidecar
+            _sidecar_img  = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
+            _sidecar_host = app.config['GLUETUN_HOST']
+            _servers_dir  = get_setting('catalogue_servers_dir', '/gluetun/servers')
+            _cat = refresh_catalogue_from_sidecar(
+                sidecar_image=_sidecar_img,
+                sidecar_host=_sidecar_host,
+                servers_dir=_servers_dir,
+            )
+            if _cat.get('ok'):
+                logger.info('catalogue: refreshed via sidecar — %d servers', _cat.get('total', 0))
+            else:
+                logger.warning('catalogue: refresh failed — %s', _cat.get('error', '?'))
+        except Exception as _cat_exc:
+            logger.warning('catalogue: refresh error — %s', _cat_exc)
 
     # These are needed in the finally block (and before quick check), so define early.
     container   = app.config['GLUETUN_CONTAINER']

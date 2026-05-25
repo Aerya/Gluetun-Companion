@@ -68,6 +68,21 @@ def init_db(db_path: str):
                 value TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS gluetun_catalogue (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider     TEXT NOT NULL,
+                name         TEXT NOT NULL DEFAULT '',
+                country      TEXT NOT NULL DEFAULT '',
+                country_code TEXT NOT NULL DEFAULT '',
+                region       TEXT NOT NULL DEFAULT '',
+                city         TEXT NOT NULL DEFAULT '',
+                hostname     TEXT NOT NULL DEFAULT '',
+                updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_catalogue_provider
+                ON gluetun_catalogue(provider);
+
             CREATE TABLE IF NOT EXISTS airvpn_new_servers (
                 name          TEXT PRIMARY KEY,
                 country       TEXT NOT NULL DEFAULT '',
@@ -139,7 +154,14 @@ def init_db(db_path: str):
                 ('notify_mention',              ''),
                 ('notify_mention_level',        'medium'),
                 ('active_profile',              'balanced'),
-                ('single_stream_test',          '0');
+                ('single_stream_test',          '0'),
+                ('catalogue_enabled',          '0'),
+                ('catalogue_servers_dir',      '/gluetun/servers'),
+                ('catalogue_import_mode',      'active'),
+                ('catalogue_import_provider',  ''),
+                ('catalogue_bench_on_import',  '0'),
+                ('catalogue_sidecar_port',     '8767'),
+                ('catalogue_last_refresh',     '');
         ''')
         # Data migration: legacy airvpn_notify_mention → notify_mention
         _legacy = db.execute(

@@ -731,6 +731,136 @@
       </form>
     </div>
 
+    {# ── Catalogue de serveurs Gluetun ──────────────────────────────────────── #}
+    <form method="post">
+      <input type="hidden" name="action" value="catalogue">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="card p-4 mb-4">
+        <h6 class="fw-bold mb-1">
+          <i class="bi bi-collection-fill text-info"></i> {{ t.set_catalogue_title }}
+        </h6>
+        <p class="text-muted small mb-3">{{ t.set_catalogue_subtitle }}</p>
+
+        <div class="alert alert-warning py-2 px-3 mb-3" style="font-size:.82rem">
+          {{ t.set_catalogue_proton_warning | safe }}
+        </div>
+
+        <div class="mb-3 form-check form-switch">
+          <input type="checkbox" name="catalogue_enabled" class="form-check-input"
+                 id="catalogue_enabled" {{ 'checked' if cfg.catalogue_enabled == '1' }}>
+          <label class="form-check-label fw-semibold" for="catalogue_enabled">
+            {{ t.set_catalogue_enabled_label }}
+          </label>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">{{ t.set_catalogue_dir_label }}</label>
+          <input type="text" name="catalogue_servers_dir" class="form-control form-control-sm"
+                 style="max-width:380px" value="{{ cfg.catalogue_servers_dir }}">
+          <div class="form-text text-muted" style="font-size:.78rem">
+            {{ t.set_catalogue_dir_hint | safe }}
+          </div>
+        </div>
+
+        <details class="mb-3" style="font-size:.82rem">
+          <summary class="text-muted" style="cursor:pointer">
+            <i class="bi bi-info-circle me-1"></i>{{ t.set_sidecar_how_title }}
+          </summary>
+          <div class="mt-2">
+            <p class="mb-1">{{ t.set_catalogue_compose_hint | safe }}</p>
+            <pre class="bg-dark text-light rounded p-2 mb-2" style="font-size:.75rem">volumes:
+  - ./gluetun:/gluetun
+environment:
+  UPDATER_PERIOD: 24h
+  UPDATER_PREFER_DIRECT_DOWNLOAD: "yes"
+  # UPDATER_VPN_SERVICE_PROVIDERS: airvpn,mullvad  # optionnel</pre>
+            <p class="mb-1">{{ t.set_catalogue_compose_companion | safe }}</p>
+            <pre class="bg-dark text-light rounded p-2 mb-0" style="font-size:.75rem">companion:
+  volumes:
+    - ./gluetun:/gluetun:ro</pre>
+          </div>
+        </details>
+
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">{{ t.set_catalogue_import_mode_label }}</label>
+          <select name="catalogue_import_mode" class="form-select form-select-sm"
+                  style="max-width:340px" id="catalogue_import_mode"
+                  onchange="document.getElementById('catalogue_provider_row').classList.toggle('d-none', this.value !== 'provider')">
+            <option value="active"   {{ 'selected' if cfg.catalogue_import_mode == 'active' }}>{{ t.set_catalogue_mode_active }}</option>
+            <option value="all"      {{ 'selected' if cfg.catalogue_import_mode == 'all' }}>{{ t.set_catalogue_mode_all }}</option>
+            <option value="provider" {{ 'selected' if cfg.catalogue_import_mode == 'provider' }}>{{ t.set_catalogue_mode_provider }}</option>
+          </select>
+        </div>
+
+        <div class="mb-3 {{ 'd-none' if cfg.catalogue_import_mode != 'provider' }}" id="catalogue_provider_row">
+          <label class="form-label small fw-semibold">{{ t.set_catalogue_provider_label }}</label>
+          {% if catalogue_stats.providers %}
+          <select name="catalogue_import_provider" class="form-select form-select-sm" style="max-width:280px">
+            {% for p in catalogue_stats.providers %}
+            <option value="{{ p.name }}" {{ 'selected' if cfg.catalogue_import_provider == p.name }}>
+              {{ p.name }} ({{ p.count }} {{ t.set_catalogue_servers }})
+            </option>
+            {% endfor %}
+          </select>
+          {% else %}
+          <input type="text" name="catalogue_import_provider" class="form-control form-control-sm"
+                 style="max-width:280px" value="{{ cfg.catalogue_import_provider }}"
+                 placeholder="ex: airvpn">
+          {% endif %}
+        </div>
+
+        <div class="mb-3 form-check">
+          <input type="checkbox" name="catalogue_bench_on_import" class="form-check-input"
+                 id="catalogue_bench_on_import" {{ 'checked' if cfg.catalogue_bench_on_import == '1' }}>
+          <label class="form-check-label small" for="catalogue_bench_on_import">
+            {{ t.set_catalogue_bench_label }}
+          </label>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label small fw-semibold">{{ t.set_catalogue_filter_type_label }}</label>
+          <select name="catalogue_import_filter_type" class="form-select form-select-sm"
+                  style="max-width:340px" id="catalogue_import_filter_type">
+            <option value="all"      {{ 'selected' if cfg.get('catalogue_import_filter_type','all') == 'all' }}>{{ t.set_catalogue_filter_all }}</option>
+            <option value="name"     {{ 'selected' if cfg.get('catalogue_import_filter_type') == 'name' }}>{{ t.set_catalogue_filter_name }}</option>
+            <option value="country"  {{ 'selected' if cfg.get('catalogue_import_filter_type') == 'country' }}>{{ t.set_catalogue_filter_country }}</option>
+            <option value="city"     {{ 'selected' if cfg.get('catalogue_import_filter_type') == 'city' }}>{{ t.set_catalogue_filter_city }}</option>
+            <option value="region"   {{ 'selected' if cfg.get('catalogue_import_filter_type') == 'region' }}>{{ t.set_catalogue_filter_region }}</option>
+            <option value="hostname" {{ 'selected' if cfg.get('catalogue_import_filter_type') == 'hostname' }}>{{ t.set_catalogue_filter_hostname }}</option>
+          </select>
+        </div>
+
+        {# ── Catalogue stats ── #}
+        {% if catalogue_stats.total > 0 %}
+        <div class="mb-3 p-2 rounded" style="background:var(--bs-secondary-bg);font-size:.82rem">
+          <div class="fw-semibold mb-1">{{ t.set_catalogue_stats_title }}</div>
+          {% for p in catalogue_stats.providers %}
+          <span class="badge bg-secondary me-1">{{ p.name }}: {{ p.count }}</span>
+          {% endfor %}
+          {% if cfg.catalogue_last_refresh %}
+          <div class="text-muted mt-1">{{ t.set_catalogue_last_refresh }}: {{ cfg.catalogue_last_refresh[:19] }}</div>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="text-muted small mb-3 fst-italic">{{ t.set_catalogue_empty }}</div>
+        {% endif %}
+
+        <div class="d-flex gap-2 flex-wrap">
+          <button type="submit" class="btn btn-sm btn-primary">
+            <i class="bi bi-floppy-fill me-1"></i>{{ t.btn_save }}
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-success" id="btn-catalogue-import"
+                  onclick="importCatalogue()">
+            <i class="bi bi-download me-1"></i>{{ t.set_catalogue_import_btn }}
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-info" id="btn-catalogue-refresh"
+                  onclick="refreshCatalogue()">
+            <i class="bi bi-arrow-clockwise me-1"></i>{{ t.set_catalogue_refresh_btn }}
+          </button>
+        </div>
+      </div>
+    </form>
+
     {# ── Post-switch containers ────────────────────────────────────────────── #}
     <div class="card p-4 mb-4">
       <h6 class="fw-bold mb-1">
@@ -1609,6 +1739,88 @@ function triggerQuick() {
         btn.classList.replace('btn-outline-warning', 'btn-outline-info');
         btn.disabled = false;
       }, 3000);
+    });
+}
+
+function importCatalogue() {
+  const btn      = document.getElementById('btn-catalogue-import');
+  const origHtml = btn.innerHTML;
+  const mode     = document.getElementById('catalogue_import_mode').value;
+  const filterEl = document.getElementById('catalogue_import_filter_type');
+  const filterType = filterEl ? filterEl.value : 'all';
+
+  // Provider value: try select first, fall back to text input
+  let provider = '';
+  const provSelect = document.querySelector('select[name="catalogue_import_provider"]');
+  const provText   = document.querySelector('input[name="catalogue_import_provider"]');
+  if (provSelect) provider = provSelect.value;
+  else if (provText) provider = provText.value.trim();
+
+  const benchOnImport = document.getElementById('catalogue_bench_on_import')?.checked || false;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>{{ t.set_catalogue_importing }}';
+
+  fetch('{{ url_for("main.api_catalogue_import") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': '{{ csrf_token() }}'},
+    body: JSON.stringify({
+      mode:            mode,
+      provider:        provider,
+      filter_type:     filterType,
+      bench_on_import: benchOnImport,
+    }),
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      const bench = data.bench_triggered ? ' ⚡' : '';
+      btn.innerHTML = `<i class="bi bi-check-lg me-1"></i>{{ t.set_catalogue_import_ok }} +${data.added}${bench}`;
+      btn.classList.replace('btn-outline-success', 'btn-success');
+    } else {
+      btn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>' + (data.error || 'Error');
+      btn.classList.replace('btn-outline-success', 'btn-danger');
+    }
+    setTimeout(() => {
+      btn.innerHTML = origHtml;
+      btn.classList.remove('btn-success', 'btn-danger');
+      btn.classList.add('btn-outline-success');
+      btn.disabled = false;
+    }, 4000);
+  })
+  .catch(() => {
+    btn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Error';
+    btn.classList.replace('btn-outline-success', 'btn-danger');
+    setTimeout(() => {
+      btn.innerHTML = origHtml;
+      btn.classList.remove('btn-danger');
+      btn.classList.add('btn-outline-success');
+      btn.disabled = false;
+    }, 3000);
+  });
+}
+
+function refreshCatalogue() {
+  const btn = document.getElementById('btn-catalogue-refresh');
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>{{ t.set_catalogue_refreshing }}';
+  fetch('{{ url_for("main.api_catalogue_refresh") }}', { method: 'POST', headers: {'X-CSRF-Token': '{{ csrf_token() }}'} })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>' + data.total + ' servers';
+        btn.classList.replace('btn-outline-info', 'btn-outline-success');
+      } else {
+        btn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>' + (data.error || 'Error');
+        btn.classList.replace('btn-outline-info', 'btn-outline-danger');
+      }
+      setTimeout(() => { btn.innerHTML = origHtml; btn.classList.replace('btn-outline-success', 'btn-outline-info'); btn.classList.replace('btn-outline-danger', 'btn-outline-info'); btn.disabled = false; }, 4000);
+    })
+    .catch(() => {
+      btn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Error';
+      btn.classList.replace('btn-outline-info', 'btn-outline-danger');
+      setTimeout(() => { btn.innerHTML = origHtml; btn.classList.replace('btn-outline-danger', 'btn-outline-info'); btn.disabled = false; }, 3000);
     });
 }
 </script>

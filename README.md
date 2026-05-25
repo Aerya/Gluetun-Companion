@@ -50,6 +50,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - [Fonctionnalités](#fonctionnalités)
   - [Mesure de performances](#mesure-de-performances)
   - [Sélection & bascule automatique](#sélection--bascule-automatique)
+  - [Catalogue de serveurs Gluetun](#catalogue-de-serveurs-gluetun)
   - [Gestion des containers Docker](#gestion-des-containers-docker)
   - [AirVPN](#airvpn)
   - [Analyse & historique](#analyse--historique)
@@ -101,6 +102,37 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **5 types de filtre** : `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - **Retry** configurable par serveur + timeout global par serveur
 - **Auto-désactivation** d'un serveur après N échecs consécutifs
+
+### Catalogue de serveurs Gluetun
+- **Lecture du volume Gluetun** — le Sidecar lit directement les fichiers JSON exportés par Gluetun (`/gluetun/servers/airvpn.json`, etc.) ; aucun appel API externe, aucune modification de votre configuration Gluetun requise au-delà du montage de volume
+- **Mise à jour automatique** — la liste est rafraîchie à chaque lancement du Sidecar (benchmark cyclique) ; un bouton dédié dans les Paramètres permet de forcer une mise à jour immédiate même si les benchmarks cycliques sont désactivés
+- **3 modes d'import dans les Paramètres** :
+  1. **Tous les providers** — importe les serveurs de tous les providers présents dans le volume Gluetun
+  2. **Provider au choix** — importe uniquement les serveurs du provider sélectionné manuellement
+  3. **Provider actif** — détecte automatiquement le provider configuré dans votre Gluetun et n'importe que ses serveurs
+  — pour chacun de ces modes, option de **lancer un bench Sidecar** sur les serveurs importés immédiatement après l'import
+- **Tous les types de filtre** — chaque serveur est importé avec ses attributs complets : `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`
+- **Sélection multi-filtre depuis `/servers`** — sélectionnez des serveurs en mixant librement les types de filtre (ex : noms + pays + villes simultanément) ; Companion applique le bon filtre dans Gluetun et change le type à la volée si nécessaire
+- ⚠️ **ProtonVPN non supporté** — la génération des fichiers JSON ProtonVPN nécessite des identifiants Proton (compte payant pour les serveurs premium) ; impossible à automatiser de façon transparente — voir [la documentation Gluetun](https://github.com/qdm12/gluetun-wiki/blob/main/setup/servers.md#list-of-vpn-servers)
+
+**Prérequis côté Gluetun** — ajouter dans le service `gluetun` de votre `docker-compose.yml` :
+```yaml
+volumes:
+  - ./gluetun:/gluetun
+environment:
+  UPDATER_PERIOD: 24h                      # active la mise à jour périodique
+  UPDATER_PREFER_DIRECT_DOWNLOAD: "yes"    # écrit un JSON par provider dans /gluetun/servers/
+  # Optionnel — pour inclure d'autres providers que le provider actif :
+  # UPDATER_VPN_SERVICE_PROVIDERS: airvpn,mullvad
+```
+Et monter le même volume en lecture seule dans le **Companion** (il le transmet automatiquement au container sidecar catalogue qu'il crée à la volée) :
+```yaml
+gluetun-companion:
+  volumes:
+    - /chemin/vers/data:/data
+    - /chemin/vers/stack/gluetun:/compose
+    - ./gluetun:/gluetun:ro   # ← ajouter pour la fonctionnalité catalogue
+```
 
 ### Gestion des containers Docker
 - **Containers réseau Gluetun (auto-gérés)** — tous les containers en `network_mode: service:gluetun` sont détectés et relancés automatiquement après chaque bascule
@@ -666,7 +698,7 @@ En plus des métriques de base (`avg_dl`, `avg_ul`, `avg_latency`, `test_count`,
 - **Anti brute-force** — Le login bloque une IP après 5 échecs en 5 minutes pendant 15 minutes (compteur en mémoire, remis à zéro à la connexion réussie).
 - **Exposition réseau** — Gunicorn écoute sur `0.0.0.0:8765` (toutes interfaces). **Ne pas exposer ce port directement sur Internet.** Sur un serveur accessible publiquement, placez Companion derrière un reverse proxy (Nginx, Caddy, Traefik) avec HTTPS et authentification forte, ou restreignez le binding à l'interface locale : `127.0.0.1:8765:8765` dans le `docker-compose.yml`.
 - **`/metrics`** — Ouvert par défaut sur le LAN. Si votre machine est accessible depuis l'extérieur, définissez la variable `METRICS_TOKEN` ou configurez un token API dans Paramètres → API : `/metrics` l'utilisera automatiquement pour exiger un Bearer token.
-- **Sidecar** — Pendant un benchmark, le container sidecar expose un port local (`8766` par défaut) sans authentification. Ce port ne doit pas être accessible depuis l'extérieur. Si votre hôte est public, restreignez le binding ou isolez ce port par firewall.
+- **Sidecar** — Chaque container sidecar (speed-test sur le port `8766`, catalogue sur le port `8767`) reçoit automatiquement un secret aléatoire généré par le Companion (`SIDECAR_SECRET`, 32 octets d'entropie via `secrets.token_hex`). Toutes les requêtes HTTP vers le sidecar exigent ce secret dans l'en-tête `X-Sidecar-Token` — un sidecar sans le bon token répond `403`. Ce secret est unique par instance et détruit avec le container à la fin du test. Ces ports ne doivent pas être accessibles depuis l'extérieur : si votre hôte est public, restreignez le binding ou isolez ces ports par firewall.
 - **Secrets dans /settings** — Le token API, le mot de passe proxy et les URLs de webhook sont affichés en clair dans l'interface d'administration. Tout accès à l'UI admin équivaut à un accès total à ces secrets.
 
 ### Sécurité des images Docker

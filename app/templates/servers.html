@@ -86,6 +86,11 @@
         <i class="bi bi-download"></i> {{ t.srv_import }}
       </button>
     </form>
+    <button class="btn btn-outline-info btn-sm fw-semibold"
+            data-bs-toggle="modal" data-bs-target="#catalogueModal"
+            id="btn-add-catalogue">
+      <i class="bi bi-collection-fill me-1"></i>{{ t.srv_add_catalogue }}
+    </button>
     <button class="btn btn-success btn-sm fw-semibold position-relative"
             data-bs-toggle="modal" data-bs-target="#airvpnModal"
             id="btn-add-airvpn">
@@ -718,6 +723,81 @@
   </div>
 </div>
 
+{# ── Catalogue modal ──────────────────────────────────────────────────────── #}
+<div class="modal fade" id="catalogueModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold">
+          <i class="bi bi-collection-fill text-info me-2"></i>{{ t.srv_catalogue_modal_title }}
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">{{ t.srv_catalogue_modal_subtitle }}</p>
+
+        {# ── Filters row ── #}
+        <div class="d-flex gap-2 flex-wrap mb-3">
+          <select class="form-select form-select-sm" style="max-width:200px"
+                  id="cat-provider-select" onchange="loadCatalogue()">
+            <option value="">{{ t.srv_catalogue_provider_all }}</option>
+          </select>
+          <select class="form-select form-select-sm" style="max-width:180px"
+                  id="cat-filter-select" onchange="loadCatalogue()">
+            <option value="name">{{ t.srv_catalogue_filter_name }}</option>
+            <option value="country">{{ t.srv_catalogue_filter_country }}</option>
+            <option value="city">{{ t.srv_catalogue_filter_city }}</option>
+            <option value="region">{{ t.srv_catalogue_filter_region }}</option>
+            <option value="hostname">{{ t.srv_catalogue_filter_hostname }}</option>
+          </select>
+          <input type="text" class="form-control form-control-sm" style="max-width:220px"
+                 id="cat-search" placeholder="{{ t.srv_catalogue_search }}"
+                 oninput="filterCatalogueTable()">
+        </div>
+
+        {# ── Status messages ── #}
+        <div id="cat-loading" class="text-muted small">
+          <span class="spinner-border spinner-border-sm me-1"></span>{{ t.srv_catalogue_loading }}
+        </div>
+        <div id="cat-error" class="alert alert-danger d-none py-2">
+          <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ t.srv_catalogue_error }}
+        </div>
+        <div id="cat-empty" class="alert alert-warning d-none py-2" style="font-size:.85rem">
+          {{ t.srv_catalogue_empty }}
+        </div>
+
+        {# ── Table ── #}
+        <div id="cat-table-wrap" class="d-none">
+          <table class="table table-sm table-hover align-middle" style="font-size:.85rem">
+            <thead class="table-dark sticky-top">
+              <tr>
+                <th style="width:32px">
+                  <input type="checkbox" class="form-check-input" id="cat-select-all"
+                         title="{{ t.srv_catalogue_select_all }}" onchange="_catToggleAll(this.checked)">
+                </th>
+                <th>{{ t.srv_catalogue_col_value }}</th>
+                <th>{{ t.srv_catalogue_col_country }}</th>
+                <th>{{ t.srv_catalogue_col_provider }}</th>
+                <th class="text-end" style="min-width:200px"></th>
+              </tr>
+            </thead>
+            <tbody id="cat-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer justify-content-between align-items-center">
+        <small class="text-muted" id="cat-count"></small>
+        <div id="cat-bulk-bar" class="d-none d-flex align-items-center gap-2">
+          <span class="text-muted small" id="cat-selected-count"></span>
+          <button class="btn btn-sm btn-success" onclick="catalogueBulkAdd()">
+            <i class="bi bi-plus-lg me-1"></i>{{ t.srv_catalogue_add_selected }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="airvpnModal" tabindex="-1">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
@@ -1297,6 +1377,244 @@ document.getElementById('airvpn-search').addEventListener('input', function(){
   // Diff tab: filter rows with data-name/data-country
   document.querySelectorAll('#airvpn-diff-container [data-name]').forEach(el=>el.classList.toggle('d-none',!_match(el)));
 });
+
+// ── Catalogue modal ───────────────────────────────────────────────────────
+const _catExisting = new Set({{ existing_all_names | tojson }});
+const _catT = {
+  alreadyAdded: {{ t.srv_catalogue_already_added | tojson }},
+  addBtn:       {{ t.srv_catalogue_add_btn | tojson }},
+  switchBtn:    {{ t.srv_catalogue_switch_btn | tojson }},
+  selected:     {{ t.srv_catalogue_selected | tojson }},
+  bulkAdded:    {{ t.srv_catalogue_bulk_added | tojson }},
+};
+
+let _catEntries = [];
+let _catProviders = [];
+
+// Load providers once when modal opens
+document.getElementById('catalogueModal').addEventListener('show.bs.modal', () => {
+  if (_catProviders.length === 0) {
+    fetch('{{ url_for("main.api_catalogue_providers") }}')
+      .then(r => r.json())
+      .then(data => {
+        _catProviders = data.providers || [];
+        const sel = document.getElementById('cat-provider-select');
+        _catProviders.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.name;
+          opt.textContent = p.name + ' (' + p.count + ')';
+          sel.appendChild(opt);
+        });
+        loadCatalogue();
+      })
+      .catch(() => loadCatalogue());
+  } else {
+    loadCatalogue();
+  }
+});
+
+function loadCatalogue() {
+  const provider    = document.getElementById('cat-provider-select').value;
+  const filterType  = document.getElementById('cat-filter-select').value;
+
+  document.getElementById('cat-loading').classList.remove('d-none');
+  document.getElementById('cat-error').classList.add('d-none');
+  document.getElementById('cat-empty').classList.add('d-none');
+  document.getElementById('cat-table-wrap').classList.add('d-none');
+
+  const params = new URLSearchParams({ filter_type: filterType });
+  if (provider) params.set('provider', provider);
+
+  fetch('{{ url_for("main.api_catalogue_servers") }}?' + params)
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(data => {
+      _catEntries = data.entries || [];
+      document.getElementById('cat-loading').classList.add('d-none');
+      if (_catEntries.length === 0) {
+        document.getElementById('cat-empty').classList.remove('d-none');
+        return;
+      }
+      _renderCatalogueTable(_catEntries);
+      document.getElementById('cat-table-wrap').classList.remove('d-none');
+      document.getElementById('cat-search').value = '';
+    })
+    .catch(() => {
+      document.getElementById('cat-loading').classList.add('d-none');
+      document.getElementById('cat-error').classList.remove('d-none');
+    });
+}
+
+function _renderCatalogueTable(entries) {
+  const tbody    = document.getElementById('cat-tbody');
+  const filterFt = document.getElementById('cat-filter-select').value;
+  tbody.innerHTML = '';
+
+  // Reset select-all + hide bulk bar
+  const selAll = document.getElementById('cat-select-all');
+  if (selAll) { selAll.checked = false; selAll.indeterminate = false; }
+  _catUpdateBulkBar();
+
+  entries.forEach(e => {
+    const exists = _catExisting.has(e.value);
+    const tr = document.createElement('tr');
+    tr.dataset.value      = (e.value || '').toLowerCase();
+    tr.dataset.country    = (e.country || '').toLowerCase();
+    tr.dataset.filterType = filterFt;
+    if (exists) tr.classList.add('opacity-50');
+
+    const flag = e.country_code
+      ? String.fromCodePoint(...[...e.country_code.toUpperCase()].map(c => 0x1F1E6 - 65 + c.charCodeAt(0)))
+      : '';
+
+    // Checkbox cell: empty placeholder for already-added rows so columns align
+    const checkCell = exists
+      ? '<td></td>'
+      : `<td><input type="checkbox" class="form-check-input cat-row-check"
+              data-value="${_esc(e.value)}" data-filter-type="${_esc(filterFt)}"
+              onchange="_catUpdateBulkBar()"></td>`;
+
+    tr.innerHTML = `
+      ${checkCell}
+      <td class="fw-semibold">${_esc(e.value)}</td>
+      <td><small class="text-muted">${flag} ${_esc(e.country || '')}</small></td>
+      <td><small class="text-muted">${_esc(e.provider || '')}</small></td>
+      <td class="text-end">
+        ${exists
+          ? `<span class="badge bg-secondary">${_esc(_catT.alreadyAdded)}</span>`
+          : `<button class="btn btn-outline-success btn-sm me-1"
+                     onclick="catalogueAdd(${JSON.stringify(e.value)},${JSON.stringify(filterFt)})"
+                     title="${_esc(_catT.addBtn)}">
+               <i class="bi bi-plus-lg"></i>
+             </button>
+             <button class="btn btn-outline-primary btn-sm"
+                     onclick="catalogueSwitch(${JSON.stringify(e.value)},${JSON.stringify(filterFt)})"
+                     title="${_esc(_catT.switchBtn)}">
+               <i class="bi bi-lightning-fill"></i>
+             </button>`
+        }
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('cat-count').textContent = entries.length + ' entries';
+}
+
+// Toggle all VISIBLE unchecked rows
+function _catToggleAll(checked) {
+  document.querySelectorAll('#cat-tbody .cat-row-check').forEach(cb => {
+    if (!cb.closest('tr').classList.contains('d-none')) cb.checked = checked;
+  });
+  _catUpdateBulkBar();
+}
+
+// Update the bulk-add bar and select-all indeterminate state
+function _catUpdateBulkBar() {
+  const allChecks     = [...document.querySelectorAll('#cat-tbody .cat-row-check')].filter(cb => !cb.closest('tr').classList.contains('d-none'));
+  const checkedVisible = allChecks.filter(cb => cb.checked);
+  const n = checkedVisible.length;
+
+  const bar = document.getElementById('cat-bulk-bar');
+  const cnt = document.getElementById('cat-selected-count');
+  bar.classList.toggle('d-none', n === 0);
+  if (n > 0) cnt.textContent = n + ' ' + _catT.selected;
+
+  const selAll = document.getElementById('cat-select-all');
+  if (selAll && allChecks.length > 0) {
+    selAll.indeterminate = n > 0 && n < allChecks.length;
+    selAll.checked       = n === allChecks.length;
+  }
+}
+
+// Add all checked entries to the server list (grouped by filter_type)
+async function catalogueBulkAdd() {
+  const byType = {};
+  document.querySelectorAll('#cat-tbody .cat-row-check:checked').forEach(cb => {
+    const ft = cb.dataset.filterType;
+    if (!byType[ft]) byType[ft] = [];
+    byType[ft].push(cb.dataset.value);
+  });
+
+  const btn = document.querySelector('#cat-bulk-bar button');
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>…';
+
+  let totalAdded = 0;
+  for (const [ft, names] of Object.entries(byType)) {
+    try {
+      const r = await fetch('{{ url_for("main.add_servers_bulk") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': '{{ csrf_token() }}'},
+        body: JSON.stringify({ names, filter_type: ft }),
+      });
+      const d = await r.json();
+      if (d.added) {
+        totalAdded += d.added;
+        names.forEach(n => _catExisting.add(n));
+      }
+    } catch { /* skip on error */ }
+  }
+
+  btn.innerHTML = origHtml;
+  btn.disabled = false;
+
+  // Re-render to move added entries to "already added" state
+  _renderCatalogueTable(_catEntries);
+
+  if (totalAdded > 0) {
+    const toast = document.createElement('div');
+    toast.className = 'position-fixed bottom-0 end-0 p-3';
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `<div class="toast show align-items-center text-bg-success border-0">
+      <div class="d-flex">
+        <div class="toast-body">${totalAdded} ${_esc(_catT.bulkAdded)}</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                onclick="this.closest('.position-fixed').remove()"></button>
+      </div></div>`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+}
+
+function filterCatalogueTable() {
+  const q = document.getElementById('cat-search').value.toLowerCase();
+  document.querySelectorAll('#cat-tbody tr').forEach(tr => {
+    const match = !q || tr.dataset.value.includes(q) || tr.dataset.country.includes(q);
+    tr.classList.toggle('d-none', !match);
+  });
+  _catUpdateBulkBar();  // recount visible selections after filtering
+}
+
+function catalogueAdd(value, filterType) {
+  fetch('{{ url_for("main.add_servers_bulk") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': '{{ csrf_token() }}'},
+    body: JSON.stringify({ names: [value], filter_type: filterType }),
+  })
+  .then(r => r.json())
+  .then(() => { _catExisting.add(value); _renderCatalogueTable(_catEntries); })
+  .catch(console.warn);
+}
+
+function catalogueSwitch(value, filterType) {
+  if (!confirm('{{ t.srv_confirm_test_a }} ' + value + ' {{ t.srv_confirm_test_b }}')) return;
+  fetch('{{ url_for("main.api_catalogue_add_and_test") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': '{{ csrf_token() }}'},
+    body: JSON.stringify({ name: value, filter_type: filterType }),
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) {
+      _catExisting.add(value);
+      _renderCatalogueTable(_catEntries);
+      bootstrap.Modal.getInstance(document.getElementById('catalogueModal')).hide();
+    } else {
+      alert(d.error || 'Error');
+    }
+  })
+  .catch(console.warn);
+}
 
 // ── AirVPN live stats ─────────────────────────────────────────────────────
 let _airvpnStatsFirstLoad = true;

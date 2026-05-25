@@ -752,8 +752,10 @@ def get_public_ips(
 # Sidecar container management
 # ---------------------------------------------------------------------------
 
-_TEST_GLUETUN_NAME  = 'gluetun-companion-test'
-_SIDECAR_NAME       = 'gluetun-companion-sidecar'
+_TEST_GLUETUN_NAME      = 'gluetun-companion-test'
+_SIDECAR_NAME           = 'gluetun-companion-sidecar'
+_CATALOGUE_SIDECAR_NAME = 'gluetun-companion-catalogue'
+_CATALOGUE_SIDECAR_PORT = 8767
 
 
 def _remove_container(client, name: str) -> None:
@@ -823,10 +825,13 @@ def create_test_gluetun(
         return False, str(exc)
 
 
-def create_speed_sidecar(sidecar_image: str) -> tuple[bool, str | None]:
+def create_speed_sidecar(sidecar_image: str, token: str = '') -> tuple[bool, str | None]:
     """
     Pull the latest sidecar image, then create the container in the test Gluetun
     network namespace. Pulling every time ensures we always run the latest version.
+
+    *token* is passed as SIDECAR_SECRET env var so the sidecar requires it on
+    every request.  Generate with secrets.token_hex(32) in the caller.
     """
     try:
         client = docker.from_env()
@@ -837,11 +842,16 @@ def create_speed_sidecar(sidecar_image: str) -> tuple[bool, str | None]:
 
         _remove_container(client, _SIDECAR_NAME)
 
+        env: dict[str, str] = {}
+        if token:
+            env['SIDECAR_SECRET'] = token
+
         client.containers.run(
             image=sidecar_image,
             name=_SIDECAR_NAME,
             network_mode=f'container:{_TEST_GLUETUN_NAME}',
             cap_add=['NET_RAW'],
+            environment=env,
             detach=True,
             remove=False,
         )
@@ -873,19 +883,21 @@ def wait_for_sidecar(
     host: str,
     port: int,
     timeout: int = 90,
+    token: str = '',
 ) -> tuple[bool, float]:
     """
     Poll the sidecar /health endpoint until VPN is up or timeout expires.
     Returns (success, elapsed_seconds).
     """
-    url   = f'http://{host}:{port}/health'
-    start = time.time()
+    url     = f'http://{host}:{port}/health'
+    headers = {'X-Sidecar-Token': token} if token else {}
+    start   = time.time()
     # Give sidecar a moment to boot
     time.sleep(5)
     deadline = start + timeout
     while time.time() < deadline:
         try:
-            resp = requests.get(url, timeout=5)
+            resp = requests.get(url, headers=headers, timeout=5)
             if resp.status_code == 200 and resp.json().get('vpn'):
                 return True, round(time.time() - start, 1)
         except Exception:
@@ -901,12 +913,14 @@ def run_sidecar_test(
     streams: int = 4,
     method: str = 'dual',
     iperf_fallback: str = '1',
+    token: str = '',
 ) -> dict:
     """
     Call the sidecar /test endpoint and return the result dict.
     Raises RuntimeError if the call fails.
     """
-    url  = f'http://{host}:{port}/test'
+    url     = f'http://{host}:{port}/test'
+    headers = {'X-Sidecar-Token': token} if token else {}
     # Ookla controls its own duration; give generous timeout
     timeout = duration * 4 + 120
     resp = requests.post(
@@ -917,6 +931,7 @@ def run_sidecar_test(
             'method':         method,
             'iperf_fallback': iperf_fallback,
         },
+        headers=headers,
         timeout=timeout,
     )
     resp.raise_for_status()
@@ -929,6 +944,7 @@ def run_sidecar_ping_test(
     targets: list[str] | None = None,
     count: int = 20,
     interval: float = 0.2,
+    token: str = '',
 ) -> dict | None:
     """
     Call the sidecar /ping endpoint to measure jitter and packet loss from
@@ -943,7 +959,8 @@ def run_sidecar_ping_test(
     """
     if targets is None:
         targets = ['1.1.1.1', '8.8.8.8', '9.9.9.9']
-    url = f'http://{host}:{port}/ping'
+    url     = f'http://{host}:{port}/ping'
+    headers = {'X-Sidecar-Token': token} if token else {}
     timeout = count * interval * len(targets) + 30
     try:
         resp = requests.post(
@@ -953,6 +970,7 @@ def run_sidecar_ping_test(
                 'count':    count,
                 'interval': interval,
             },
+            headers=headers,
             timeout=timeout,
         )
         if resp.status_code == 404:
@@ -1000,6 +1018,96 @@ def cleanup_test_containers(sidecar_image: str | None = None) -> None:
         except Exception as exc:
             logger.debug('Could not remove sidecar image: %s', exc)
     logger.info('Test containers cleaned up')
+
+
+def create_catalogue_sidecar(
+    sidecar_image: str,
+    servers_dir: str = '/gluetun/servers',
+    port: int = _CATALOGUE_SIDECAR_PORT,
+    token: str = '',
+) -> tuple[bool, str | None]:
+    """
+    Create a standalone sidecar container (bridge network, no VPN required)
+    with the Gluetun servers directory mounted read-only.
+    The Companion uses this container to call /catalogue and retrieve the
+    server list without running a speed test.
+
+    *servers_dir* is the path INSIDE the container where JSON files are mounted.
+    The function auto-detects the corresponding HOST path by inspecting the
+    Companion container's own mounts; falls back to using servers_dir as-is
+    (works when host and container paths are identical).
+
+    *token* is passed as SIDECAR_SECRET env var so all sidecar endpoints
+    require it on every request.  Generate with secrets.token_hex(32) in
+    the caller and reuse the same token for all subsequent HTTP calls.
+    """
+    import socket
+
+    try:
+        client = docker.from_env()
+
+        # ── Auto-detect host-side path for the servers dir ──────────────────
+        host_servers_path: str | None = None
+        try:
+            self_id   = socket.gethostname()
+            companion = client.containers.get(self_id)
+            for mount in companion.attrs.get('Mounts', []):
+                dest = mount.get('Destination', '')
+                src  = mount.get('Source', '')
+                if dest == servers_dir:
+                    host_servers_path = src
+                    break
+                if servers_dir.startswith(dest + '/'):
+                    # e.g. servers_dir=/gluetun/servers, mount dest=/gluetun
+                    host_servers_path = src + servers_dir[len(dest):]
+                    break
+        except Exception as exc:
+            logger.debug('catalogue sidecar: cannot inspect companion mounts: %s', exc)
+
+        if host_servers_path is None:
+            # Fallback: assume host path == container path (works for bind-mounts
+            # where the user mapped the same absolute path on both sides)
+            host_servers_path = servers_dir
+            logger.debug('catalogue sidecar: using servers_dir as host path: %s', host_servers_path)
+
+        logger.info(
+            'Pulling sidecar image for catalogue: %s', sidecar_image
+        )
+        client.images.pull(sidecar_image)
+
+        _remove_container(client, _CATALOGUE_SIDECAR_NAME)
+
+        env: dict[str, str] = {'SERVERS_DIR': servers_dir}
+        if token:
+            env['SIDECAR_SECRET'] = token
+
+        client.containers.run(
+            image=sidecar_image,
+            name=_CATALOGUE_SIDECAR_NAME,
+            network_mode='bridge',
+            environment=env,
+            volumes={host_servers_path: {'bind': servers_dir, 'mode': 'ro'}},
+            ports={f'8766/tcp': port},
+            detach=True,
+            remove=False,
+        )
+        logger.info(
+            'Catalogue sidecar started: %s (servers: %s → %s, port: %d, auth: %s)',
+            _CATALOGUE_SIDECAR_NAME, host_servers_path, servers_dir, port,
+            'yes' if token else 'no',
+        )
+        return True, None
+    except Exception as exc:
+        return False, str(exc)
+
+
+def cleanup_catalogue_sidecar() -> None:
+    """Stop and remove the catalogue sidecar container."""
+    try:
+        _remove_container(docker.from_env(), _CATALOGUE_SIDECAR_NAME)
+        logger.info('Catalogue sidecar removed')
+    except Exception as exc:
+        logger.debug('cleanup_catalogue_sidecar: %s', exc)
 
 
 def wait_for_vpn(

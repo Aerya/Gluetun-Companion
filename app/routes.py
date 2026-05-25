@@ -336,7 +336,8 @@ def servers():
             'SELECT DISTINCT filter_type FROM servers ORDER BY filter_type'
         ).fetchall()]
 
-    existing_names = [r['name'] for r in rows if r['filter_type'] == 'name']
+    existing_names     = [r['name'] for r in rows if r['filter_type'] == 'name']
+    existing_all_names = [r['name'] for r in rows]  # all filter types (for catalogue picker)
 
     # Current active server — read from Gluetun (best-effort, empty string on failure)
     try:
@@ -391,6 +392,7 @@ def servers():
         'servers.html', servers=rows,
         filter_labels=FILTER_LABELS, filter_vars=FILTER_VARS,
         existing_names=existing_names,
+        existing_all_names=existing_all_names,
         sort=sort, type_filter=type_filter, q=q,
         from_date=from_date, to_date=to_date,
         filter_types=filter_types,
@@ -1021,6 +1023,15 @@ def settings():
             set_setting('sidecar_proxy_fallback',   '1' if request.form.get('sidecar_proxy_fallback') else '0')
             flash_t('flash_sidecar_saved', 'success')
 
+        elif action == 'catalogue':
+            set_setting('catalogue_enabled',              '1' if request.form.get('catalogue_enabled') else '0')
+            set_setting('catalogue_servers_dir',          request.form.get('catalogue_servers_dir', '/gluetun/servers').strip() or '/gluetun/servers')
+            set_setting('catalogue_import_mode',          request.form.get('catalogue_import_mode', 'active'))
+            set_setting('catalogue_import_provider',      request.form.get('catalogue_import_provider', '').strip())
+            set_setting('catalogue_bench_on_import',      '1' if request.form.get('catalogue_bench_on_import') else '0')
+            set_setting('catalogue_import_filter_type',   request.form.get('catalogue_import_filter_type', 'all'))
+            flash_t('flash_catalogue_saved', 'success')
+
         elif action == 'post_switch':
             containers = [c.strip() for c in request.form.getlist('post_switch_containers') if c.strip()]
             pull_set   = set(request.form.getlist('pull_post_switch_containers'))
@@ -1095,8 +1106,16 @@ def settings():
         'active_profile':               get_setting('active_profile', 'balanced'),
         'single_stream_test':           get_setting('single_stream_test', '0'),
         'api_token':                    get_setting('api_token', ''),
+        'catalogue_enabled':              get_setting('catalogue_enabled', '0'),
+        'catalogue_servers_dir':          get_setting('catalogue_servers_dir', '/gluetun/servers'),
+        'catalogue_import_mode':          get_setting('catalogue_import_mode', 'active'),
+        'catalogue_import_provider':      get_setting('catalogue_import_provider', ''),
+        'catalogue_bench_on_import':      get_setting('catalogue_bench_on_import', '0'),
+        'catalogue_import_filter_type':   get_setting('catalogue_import_filter_type', 'all'),
+        'catalogue_last_refresh':         get_setting('catalogue_last_refresh', ''),
     }
     from .database import get_hourly_benchmark_stats
+    from .catalogue import catalogue_stats
     adaptive_stats = get_hourly_benchmark_stats()
     return render_template(
         'settings.html',
@@ -1105,6 +1124,7 @@ def settings():
         gluetun_container=current_app.config['GLUETUN_CONTAINER'],
         adaptive_stats=adaptive_stats,
         profiles=PROFILES,
+        catalogue_stats=catalogue_stats(),
     )
 
 
@@ -1622,6 +1642,109 @@ def api_gluetun_network_containers():
         return jsonify(list_network_dependents(container))
     except Exception:
         return jsonify([])
+
+
+# ── Catalogue API ───────────────────────────────────────────────────────────
+
+@bp.route('/api/catalogue/refresh', methods=['POST'])
+@login_required
+def api_catalogue_refresh():
+    """Force-refresh the Gluetun server catalogue via a catalogue sidecar."""
+    from .catalogue import refresh_catalogue_from_sidecar
+    sidecar_image = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
+    sidecar_host  = current_app.config['GLUETUN_HOST']
+    servers_dir   = get_setting('catalogue_servers_dir', '/gluetun/servers')
+    result = refresh_catalogue_from_sidecar(
+        sidecar_image=sidecar_image,
+        sidecar_host=sidecar_host,
+        servers_dir=servers_dir,
+    )
+    return jsonify(result), (200 if result.get('ok') else 500)
+
+
+@bp.route('/api/catalogue/providers')
+@login_required
+def api_catalogue_providers():
+    """Return list of providers and their server counts in the catalogue."""
+    from .catalogue import catalogue_stats
+    return jsonify(catalogue_stats())
+
+
+@bp.route('/api/catalogue/servers')
+@login_required
+def api_catalogue_servers():
+    """
+    Return catalogue entries for a filter type.
+    Query params: provider (optional), filter_type (default: name)
+    """
+    from .catalogue import get_catalogue_entries
+    provider    = request.args.get('provider', '').strip() or None
+    filter_type = request.args.get('filter_type', 'name')
+    entries     = get_catalogue_entries(provider=provider, filter_type=filter_type)
+    return jsonify({'entries': entries, 'filter_type': filter_type})
+
+
+@bp.route('/api/catalogue/add-and-test', methods=['POST'])
+@login_required
+def api_catalogue_add_and_test():
+    """
+    Add a single server from the catalogue to the servers table (if not already there),
+    then trigger a background test/switch on it.
+    Body JSON: {name, filter_type}
+    """
+    from .scheduler import trigger_single_server
+    data        = request.get_json(force=True, silent=True) or {}
+    name        = data.get('name', '').strip()
+    filter_type = data.get('filter_type', 'name')
+
+    if not name:
+        return jsonify({'ok': False, 'error': 'missing name'}), 400
+    if filter_type not in FILTER_VARS:
+        filter_type = 'name'
+
+    if get_setting('benchmark_running', '0') == '1':
+        return jsonify({'ok': False, 'error': 'benchmark_running'}), 409
+
+    with get_db() as db:
+        db.execute('INSERT OR IGNORE INTO servers (name, filter_type) VALUES (?, ?)', (name, filter_type))
+        row = db.execute('SELECT id FROM servers WHERE name=?', (name,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'error': 'failed to add server'}), 500
+
+    trigger_single_server(current_app._get_current_object(), name, filter_type)
+    return jsonify({'ok': True, 'name': name})
+
+
+@bp.route('/api/catalogue/import', methods=['POST'])
+@login_required
+def api_catalogue_import():
+    """
+    Import servers from the catalogue into the servers table.
+    Body JSON: {mode, provider, filter_type, bench_on_import}
+    """
+    from .catalogue import import_to_servers
+    data        = request.get_json(force=True, silent=True) or {}
+    mode        = data.get('mode', 'active')
+    provider    = data.get('provider', '')
+    filter_type = data.get('filter_type', 'name')
+    container   = current_app.config['GLUETUN_CONTAINER']
+
+    result = import_to_servers(
+        mode=mode,
+        provider=provider,
+        filter_type=filter_type,
+        container_name=container,
+    )
+
+    if result.get('ok') and data.get('bench_on_import'):
+        try:
+            trigger_now(current_app._get_current_object())
+            result['bench_triggered'] = True
+        except Exception as exc:
+            result['bench_triggered'] = False
+            result['bench_error'] = str(exc)
+
+    return jsonify(result), (200 if result.get('ok') else 500)
 
 
 @bp.route('/api/status')
