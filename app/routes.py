@@ -22,6 +22,9 @@ from .database import (
     get_vpn_profiles, get_vpn_profile,
     create_vpn_profile, update_vpn_profile, delete_vpn_profile,
     get_servers_without_profile,
+    get_rotation_pools, get_rotation_pool,
+    create_rotation_pool, update_rotation_pool, delete_rotation_pool,
+    set_pool_next_rotation, _UNSET as _DB_UNSET,
 )
 from .wg_providers import WG_PROVIDERS, get_all_providers, get_fields, get_secret_field_keys
 from .crypto import encrypt as crypto_encrypt, decrypt as crypto_decrypt, mask as crypto_mask
@@ -407,8 +410,15 @@ def servers():
 
     # ── Filtered per-server stats (avg_dl/ul/lat with window + IQR) ───────────
     _fstats = get_server_filtered_stats(_score_window, _outlier_on)
-    # Merge filtered averages back into rows (convert Row→dict first)
+    # Save raw SQL averages (include proxy_qc) before overwriting with filtered stats.
+    # These are used as a fallback for profile scoring when the filtered stats return None
+    # (which happens for servers that only have proxy_qc quick-check tests, not full benchmarks).
     rows = [dict(r) for r in rows]
+    for r in rows:
+        r['_raw_avg_dl']  = r.get('avg_dl')
+        r['_raw_avg_ul']  = r.get('avg_ul')
+        r['_raw_avg_lat'] = r.get('avg_lat')
+
     for r in rows:
         fs = _fstats.get(r['name'])
         if fs:
@@ -423,12 +433,37 @@ def servers():
     # ── Profile scores for display ────────────────────────────────────────────
     _stability = get_stability_all(_score_window)
     active_profile = get_setting('active_profile', 'balanced')
-    profile_scores, profile_scores_detail = _score_servers_detail(rows, active_profile, _stability)
+
+    # Build scoring rows: use filtered (IQR-cleaned, no proxy_qc) stats when available;
+    # fall back to raw SQL averages (incl. proxy_qc) for avg_dl so that servers with
+    # only quick-check data still differentiate by download speed instead of all tying.
+    def _make_scoring_row(r: dict) -> dict:
+        sr = dict(r)
+        if sr.get('avg_dl') is None and sr.get('_raw_avg_dl') is not None:
+            sr['avg_dl']  = sr['_raw_avg_dl']
+            sr['avg_ul']  = sr.get('_raw_avg_ul')
+            sr['avg_lat'] = sr.get('_raw_avg_lat')
+        return sr
+
+    _rows_scoring = [_make_scoring_row(r) for r in rows]
+
+    profile_scores, profile_scores_detail = _score_servers_detail(_rows_scoring, active_profile, _stability)
     profile_best   = max(profile_scores, key=profile_scores.get) if profile_scores else None
     profile_bests = {}
     for profile_key in PROFILES:
-        _scores = _score_servers(rows, profile_key, _stability)
+        _scores = _score_servers(_rows_scoring, profile_key, _stability)
         profile_bests[profile_key] = max(_scores, key=_scores.get) if _scores else None
+
+    # Detect whether all profiles converge to the same best server (= data-limited situation:
+    # only download speed is available, so every profile picks the download champion).
+    _unique_bests = {v for v in profile_bests.values() if v}
+    profile_scores_limited = len(_unique_bests) <= 1 and bool(_unique_bests)
+
+    # Strip internal scoring keys before passing rows to the template
+    for r in rows:
+        r.pop('_raw_avg_dl',  None)
+        r.pop('_raw_avg_ul',  None)
+        r.pop('_raw_avg_lat', None)
 
     # ── Pagination (Python-side slice — full rows needed for scores above) ───
     total_servers = len(rows)
@@ -476,6 +511,7 @@ def servers():
         profile_scores_detail=profile_scores_detail,
         profile_best=profile_best,
         profile_bests=profile_bests,
+        profile_scores_limited=profile_scores_limited,
         adaptive_stats=get_hourly_benchmark_stats(),
         scoring_window_days=_score_window or 0,
         outlier_detection=_outlier_on,
@@ -2054,6 +2090,214 @@ def api_catalogue_import():
             result['bench_error'] = str(exc)
 
     return jsonify(result), (200 if result.get('ok') else 500)
+
+
+# ---------------------------------------------------------------------------
+# Rotation pools
+# ---------------------------------------------------------------------------
+
+@bp.route('/pools')
+@login_required
+def pools():
+    from .i18n import get_t
+    from .rotation_pools import resolve_pool_servers
+    t    = get_t()
+    lang = get_setting('ui_lang', 'fr')
+    all_pools = get_rotation_pools()
+
+    # Resolve candidate counts for each pool (for display)
+    for p in all_pools:
+        try:
+            p['candidate_count'] = len(resolve_pool_servers(p['id']))
+        except Exception:
+            p['candidate_count'] = 0
+
+    # Build server list for autocomplete
+    with get_db() as db:
+        all_servers = db.execute(
+            'SELECT name, filter_type, vpn_profile_id FROM servers WHERE enabled=1 ORDER BY name'
+        ).fetchall()
+        all_servers = [dict(s) for s in all_servers]
+
+        # Available filter values per type (for dropdown)
+        filter_values: dict[str, list[str]] = {}
+        for ft in ('name', 'country', 'city', 'region', 'hostname'):
+            rows = db.execute(
+                'SELECT DISTINCT name FROM servers WHERE filter_type=? AND enabled=1 ORDER BY name',
+                (ft,),
+            ).fetchall()
+            filter_values[ft] = [r['name'] for r in rows]
+
+    wg_profiles_list = get_vpn_profiles()
+
+    return render_template(
+        'pools.html',
+        t=t, lang=lang,
+        pools=all_pools,
+        all_servers=all_servers,
+        filter_values_json=json.dumps(filter_values),
+        wg_profiles=wg_profiles_list,
+    )
+
+
+@bp.route('/api/pools', methods=['POST'])
+@login_required
+def api_pool_create():
+    """Create a new rotation pool from JSON body."""
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'ok': False, 'error': 'Name is required'}), 400
+
+    criteria = _parse_pool_criteria(data.get('criteria') or [])
+    interval_h = _parse_interval(data)
+
+    pool_id = create_rotation_pool(
+        name=name,
+        mode=data.get('mode', 'random'),
+        enabled=bool(data.get('enabled', True)),
+        auto_rotate=bool(data.get('auto_rotate', False)),
+        interval_hours=interval_h,
+        quick_bench=bool(data.get('quick_bench', False)),
+        notify=bool(data.get('notify', True)),
+        top_n=_parse_top_n(data.get('top_n')),
+        criteria=criteria,
+    )
+    # Schedule first auto-rotation if applicable
+    _maybe_schedule_next(pool_id, interval_h, bool(data.get('auto_rotate', False)))
+    return jsonify({'ok': True, 'id': pool_id})
+
+
+@bp.route('/api/pools/<int:pool_id>', methods=['PUT'])
+@login_required
+def api_pool_update(pool_id: int):
+    """Update an existing pool."""
+    data = request.get_json(silent=True) or {}
+    pool = get_rotation_pool(pool_id)
+    if not pool:
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+
+    name = (data.get('name') or '').strip() or None
+    interval_h = _parse_interval(data)
+    auto_rotate = data.get('auto_rotate')
+    criteria = _parse_pool_criteria(data.get('criteria') or []) if 'criteria' in data else None
+
+    # top_n: only update if key was present in request; otherwise use sentinel to leave unchanged
+    top_n_arg = _parse_top_n(data['top_n']) if 'top_n' in data else _DB_UNSET
+
+    update_rotation_pool(
+        pool_id,
+        name=name,
+        mode=data.get('mode'),
+        enabled=data.get('enabled'),
+        auto_rotate=None if auto_rotate is None else bool(auto_rotate),
+        interval_hours=interval_h,
+        quick_bench=data.get('quick_bench'),
+        notify=data.get('notify'),
+        top_n=top_n_arg,
+        criteria=criteria,
+    )
+    # Reschedule if auto_rotate or interval changed
+    if auto_rotate is not None or interval_h is not None:
+        _maybe_schedule_next(
+            pool_id,
+            interval_h if interval_h is not None else pool['interval_hours'],
+            bool(auto_rotate) if auto_rotate is not None else bool(pool['auto_rotate']),
+        )
+    return jsonify({'ok': True})
+
+
+@bp.route('/api/pools/<int:pool_id>', methods=['DELETE'])
+@login_required
+def api_pool_delete(pool_id: int):
+    if delete_rotation_pool(pool_id):
+        return jsonify({'ok': True})
+    return jsonify({'ok': False, 'error': 'Not found'}), 404
+
+
+@bp.route('/api/pools/<int:pool_id>/rotate', methods=['POST'])
+@login_required
+def api_pool_rotate(pool_id: int):
+    """Trigger an immediate manual rotation for this pool."""
+    from .rotation_pools import do_pool_rotation
+    pool = get_rotation_pool(pool_id)
+    if not pool:
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    if get_setting('benchmark_running', '0') == '1':
+        return jsonify({'ok': False, 'error': 'Benchmark in progress'}), 409
+    result = do_pool_rotation(pool_id, current_app._get_current_object(), manual=True)
+    return jsonify(result)
+
+
+@bp.route('/api/pools/<int:pool_id>/candidates')
+@login_required
+def api_pool_candidates(pool_id: int):
+    """Return the current candidate server list for a pool (live resolution)."""
+    from .rotation_pools import resolve_pool_servers
+    pool = get_rotation_pool(pool_id)
+    if not pool:
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    candidates = resolve_pool_servers(pool_id)
+    return jsonify({'ok': True, 'candidates': candidates, 'count': len(candidates)})
+
+
+# ── Pool helpers ──────────────────────────────────────────────────────────────
+
+def _parse_pool_criteria(raw: list) -> list[dict]:
+    """Validate and normalise criteria list from JSON payload."""
+    result = []
+    for c in raw:
+        ctype = (c.get('crit_type') or '').strip()
+        if ctype not in ('all', 'server', 'filter', 'profile'):
+            continue
+        cval = c.get('crit_value')
+        if ctype == 'server' and not cval:
+            continue
+        if ctype == 'filter':
+            try:
+                fdata = json.loads(cval) if isinstance(cval, str) else cval
+                if not fdata or not fdata.get('type'):
+                    continue
+                cval = json.dumps({'type': fdata['type'], 'value': fdata.get('value', '')})
+            except Exception:
+                continue
+        if ctype == 'profile':
+            try:
+                int(cval)
+            except (TypeError, ValueError):
+                continue
+        result.append({'crit_type': ctype, 'crit_value': cval if ctype != 'all' else None})
+    return result
+
+
+def _parse_interval(data: dict) -> float | None:
+    raw = data.get('interval_hours')
+    if raw is None:
+        return None
+    try:
+        return max(0.5, float(raw))
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_top_n(raw) -> int | None:
+    if raw is None or raw == '':
+        return None
+    try:
+        v = int(raw)
+        return v if v > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _maybe_schedule_next(pool_id: int, interval_h: float | None, auto_rotate: bool) -> None:
+    """Set next_rotation_at = now + interval if auto_rotate is True, else clear it."""
+    from datetime import datetime, timedelta
+    if auto_rotate and interval_h and interval_h > 0:
+        next_dt = (datetime.utcnow() + timedelta(hours=interval_h)).strftime('%Y-%m-%d %H:%M:%S')
+        set_pool_next_rotation(pool_id, next_dt)
+    else:
+        set_pool_next_rotation(pool_id, None)
 
 
 @bp.route('/api/status')

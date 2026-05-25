@@ -28,6 +28,7 @@ _SEVERITY: dict[str, str] = {
     'benchmark_failure':  'critical',
     'auto_switch':        'medium',
     'airvpn':             'medium',
+    'pool_rotation':      'medium',
     'manual_switch':      'info',
     'already_best':       'info',
     'benchmark_end':      'info',
@@ -812,3 +813,74 @@ def send_test_notification(
             return False, f'Apprise : {exc}'
 
     return True, 'OK'
+
+
+# ── Pool rotation notifications ───────────────────────────────────────────────
+
+def send_pool_rotation_notification(
+    pool_name: str,
+    from_server: str | None,
+    to_server: str,
+    dl_mbps: float | None,
+    to_ipv4: str | None,
+    to_ipv6: str | None,
+    manual: bool = False,
+    discord_url: str | None = None,
+    apprise_urls: str | None = None,
+    lang: str = 'fr',
+    companion_url: str | None = None,
+    mention: str | None = None,
+    mention_level: str = 'medium',
+):
+    """Notify after a pool rotation switch."""
+    if not discord_url and not apprise_urls:
+        return
+    t = get_translations(lang)
+
+    from_label = _strip_filter(from_server) if from_server else '—'
+    to_label   = _strip_filter(to_server)
+    trigger_label = t.get('notif_pool_manual', 'Manuel') if manual else t.get('notif_pool_auto', 'Automatique')
+
+    title = t.get('notif_pool_title', '🔁 Pool rotation') + f' — {pool_name}'
+
+    if discord_url:
+        try:
+            fields = [
+                {'name': t.get('notif_pool_pool', 'Pool'), 'value': f'`{pool_name}`', 'inline': True},
+                {'name': t.get('notif_pool_trigger', 'Déclenchement'), 'value': trigger_label, 'inline': True},
+                {'name': '​', 'value': '​', 'inline': True},
+                {'name': t.get('notif_field_from', 'Avant'), 'value': f'`{from_label}`', 'inline': True},
+                {'name': t.get('notif_field_to',   'Après'), 'value': f'`{to_label}`', 'inline': True},
+                {'name': '​', 'value': '​', 'inline': True},
+            ]
+            if dl_mbps is not None:
+                fields.append({
+                    'name': t.get('notif_pool_speed', 'Débit (quick bench)'),
+                    'value': f'{dl_mbps:.1f} Mbps', 'inline': True,
+                })
+            if to_ipv4:
+                ip_val = to_ipv4 + (f' / {to_ipv6}' if to_ipv6 else '')
+                fields.append({'name': 'IP', 'value': f'`{ip_val}`', 'inline': True})
+            payload = _discord_base_payload(title, 0x58a6ff, fields, t, companion_url)
+            _post_discord(discord_url, payload, mention, 'pool_rotation', mention_level)
+            logger.info('Discord pool rotation notification sent (pool=%s)', pool_name)
+        except Exception as exc:
+            logger.warning('Discord pool rotation notification failed: %s', exc)
+
+    if apprise_urls:
+        try:
+            lines = [
+                f'🔁 {from_label} → {to_label}',
+                f'{t.get("notif_pool_pool", "Pool")} : {pool_name} ({trigger_label})',
+            ]
+            if dl_mbps is not None:
+                lines.append(f'{t.get("notif_pool_speed", "Débit")} : {dl_mbps:.1f} Mbps')
+            if to_ipv4:
+                ip_str = to_ipv4 + (f' / {to_ipv6}' if to_ipv6 else '')
+                lines.append(f'IP : {ip_str}')
+            if companion_url:
+                lines.append(companion_url)
+            _notify_apprise(apprise_urls, title, '\n'.join(lines))
+            logger.info('Apprise pool rotation notification sent (pool=%s)', pool_name)
+        except Exception as exc:
+            logger.warning('Apprise pool rotation notification failed: %s', exc)

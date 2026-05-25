@@ -2042,6 +2042,60 @@ def start_docker_event_listener(app, container_name: str) -> None:
     logger.info('Docker event listener started (watching: %s)', container_name)
 
 
+def _check_rotation_pools(app):
+    """
+    Runs every 5 minutes. For each auto-rotate pool whose next_rotation_at has
+    passed, execute a pool rotation — unless a benchmark is already running.
+    Pool rotations are intentionally NOT locked by _lock to avoid blocking the
+    benchmark; instead we check benchmark_running before switching.
+    """
+    from .database import get_db, get_setting
+    from .rotation_pools import do_pool_rotation
+
+    with app.app_context():
+        try:
+            with get_db() as db:
+                due = db.execute(
+                    """SELECT id, name FROM rotation_pools
+                       WHERE enabled = 1 AND auto_rotate = 1
+                         AND next_rotation_at IS NOT NULL
+                         AND next_rotation_at <= datetime('now')
+                       ORDER BY next_rotation_at""",
+                ).fetchall()
+        except Exception as exc:
+            logger.error('Pool rotation check: DB error: %s', exc)
+            return
+
+        if not due:
+            return
+
+        for row in due:
+            if get_setting('benchmark_running', '0') == '1':
+                logger.info(
+                    'Pool rotation [%d] "%s": benchmark running — deferring',
+                    row['id'], row['name'],
+                )
+                continue
+            logger.info(
+                'Pool rotation [%d] "%s": auto-rotation due — executing',
+                row['id'], row['name'],
+            )
+            try:
+                result = do_pool_rotation(row['id'], app, manual=False)
+                if result['ok']:
+                    logger.info(
+                        'Pool rotation [%d]: switched to %s%s',
+                        row['id'], result['server'],
+                        f' ({result["dl_mbps"]:.1f} Mbps)' if result.get('dl_mbps') else '',
+                    )
+                else:
+                    logger.warning(
+                        'Pool rotation [%d]: failed — %s', row['id'], result.get('error')
+                    )
+            except Exception as exc:
+                logger.error('Pool rotation [%d]: unexpected error: %s', row['id'], exc)
+
+
 def start_scheduler(app):
     global _scheduler
     from .database import get_setting
@@ -2074,6 +2128,14 @@ def start_scheduler(app):
         id='airvpn_check',
         replace_existing=True,
         misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
+        _check_rotation_pools,
+        trigger=IntervalTrigger(minutes=5),
+        args=[app],
+        id='pool_rotation_check',
+        replace_existing=True,
+        misfire_grace_time=120,
     )
     _scheduler.start()
 

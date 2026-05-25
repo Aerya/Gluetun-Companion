@@ -117,6 +117,7 @@
           ('main.servers',   'bi-hdd-network',      t.nav_servers),
           ('main.history',   'bi-graph-up',         t.nav_history),
           ('main.switches',  'bi-arrow-left-right', t.nav_switches),
+          ('main.pools',     'bi-shuffle',          t.nav_pools),
           ('main.settings',  'bi-gear',             t.nav_settings),
         ] %}
         {% for endpoint, icon, label in nav %}
@@ -216,6 +217,67 @@
     const modal   = new bootstrap.Modal(document.getElementById('noticeWgSidecarModal'));
     const check   = document.getElementById('noticeWgSidecarCheck');
     const closeBtn = document.getElementById('noticeWgSidecarClose');
+    check.addEventListener('change', function () {
+      closeBtn.disabled = !this.checked;
+    });
+    closeBtn.addEventListener('click', function () {
+      localStorage.setItem(NOTICE_KEY, '1');
+      modal.hide();
+    });
+    modal.show();
+  });
+})();
+</script>
+
+{# ── Notice : nouveautés testeurs v2 ────────────────────────────────────────
+   Shown once per browser (localStorage key notice_new_features_v2).
+   Requires checking the checkbox before the Close button becomes active.
+   ────────────────────────────────────────────────────────────────────────── #}
+<div class="modal fade" id="noticeNewFeaturesModal" tabindex="-1"
+     data-bs-backdrop="static" data-bs-keyboard="false"
+     aria-labelledby="noticeNewFeaturesLabel" aria-modal="true" role="dialog">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-info">
+      <div class="modal-header border-info pb-2">
+        <h5 class="modal-title fw-bold text-info" id="noticeNewFeaturesLabel">
+          {{ t.notice_new_features_title }}
+        </h5>
+      </div>
+      <div class="modal-body" style="font-size:.88rem">
+
+        <h6 class="fw-semibold mb-1">{{ t.notice_new_features_pools_h }}</h6>
+        <p class="mb-3">{{ t.notice_new_features_pools_b | safe }}</p>
+
+        <h6 class="fw-semibold mb-1">{{ t.notice_new_features_wg_h }}</h6>
+        <p class="mb-3">{{ t.notice_new_features_wg_b | safe }}</p>
+
+        <h6 class="fw-semibold mb-1">{{ t.notice_new_features_score_h }}</h6>
+        <p class="mb-3">{{ t.notice_new_features_score_b | safe }}</p>
+
+        <div class="form-check mt-2">
+          <input type="checkbox" class="form-check-input" id="noticeNewFeaturesCheck">
+          <label class="form-check-label" for="noticeNewFeaturesCheck">
+            {{ t.notice_new_features_check }}
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-info fw-semibold text-dark"
+                id="noticeNewFeaturesClose" disabled>
+          {{ t.notice_new_features_close }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  const NOTICE_KEY = 'notice_new_features_v2';
+  if (localStorage.getItem(NOTICE_KEY)) return;          // already dismissed
+  document.addEventListener('DOMContentLoaded', function () {
+    const modal    = new bootstrap.Modal(document.getElementById('noticeNewFeaturesModal'));
+    const check    = document.getElementById('noticeNewFeaturesCheck');
+    const closeBtn = document.getElementById('noticeNewFeaturesClose');
     check.addEventListener('change', function () {
       closeBtn.disabled = !this.checked;
     });

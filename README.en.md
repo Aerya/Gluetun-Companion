@@ -69,6 +69,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [Docker events listener](#docker-events-listener)
   - [Usage profiles](#usage-profiles)
   - [WireGuard VPN profiles](#wireguard-vpn-profiles)
+  - [Rotation pools](#rotation-pools)
   - [Selection score — stability components](#selection-score--stability-components)
   - [Per-server confidence score](#per-server-confidence-score)
   - [Jitter & Packet Loss](#jitter--packet-loss)
@@ -106,6 +107,16 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **5 filter types**: `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - Configurable **retry** per server + global timeout per server
 - **Auto-disable** a server after N consecutive failures
+
+### Rotation pools
+
+- **Rotation without benchmarking** — switch to a server from a predefined group without triggering a full measurement cycle; ideal for periodic rotation or quick one-off changes
+- **Composable criteria** (UNION) — each pool accepts any number of criteria: specific server, Gluetun filter type (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`), WireGuard VPN profile, or all active servers; criteria are combined additively
+- **3 selection modes**: 🎲 random, 🔄 round-robin (persistent cursor across rotations), 🏆 best historical score
+- **Top-N** — restrict the pool to the N servers with the best average score (if unset, all candidates are eligible)
+- **Manual or scheduled** — instant one-click rotation from the UI, or automatic rotation on a configurable interval (in hours; e.g. every 12 h or every 2 days)
+- **Optional quick bench** — after each switch, a fast proxy test measures the new server's speed and records it in the history (method `proxy_qc`)
+- **Notifications** — Discord/Apprise alert on each rotation (manual or automatic), including previous server, new server, and speed if quick bench is enabled
 
 ### Multi-provider WireGuard
 
@@ -174,7 +185,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 
 ### UI & notifications
 - **Web UI** dark/light, FR/EN — auth, dashboard with sparkline, paginated history, charts, switches page with Mbps gain and connection time
-- **Contextual notifications** — 9 independently-configurable alert types (auto/manual switch, auto-exclude, benchmark with no results, benchmark complete, quick check result, new AirVPN servers, catalogue changes, optimal window change) via Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…); severity levels 🔴/🟡/🔵; global Discord mention with configurable severity threshold
+- **Contextual notifications** — 10 independently-configurable alert types (auto/manual switch, auto-exclude, benchmark with no results, benchmark complete, quick check result, pool rotation, new AirVPN servers, catalogue changes, optimal window change) via Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…); severity levels 🔴/🟡/🔵; global Discord mention with configurable severity threshold
 - **Automatic purge** of SQLite history with configurable retention (in days)
 
 ### Integration & infrastructure
@@ -581,6 +592,62 @@ Benchmark cycle with WireGuard profiles
 | **conditional** | Benchmark is global, but a cross-profile switch only happens if `score_global_best > score_best_in_current_profile × (1 + threshold/100)`. Otherwise the best server in the current profile is retained. |
 
 > The `conditional` threshold is configurable from 1 to 100 % in Settings. A threshold of 10 % means: "only switch profiles if the gain exceeds 10 %".
+
+---
+
+### Rotation pools
+
+Rotation pools let you switch to a server from a predefined group **without triggering a full benchmark**. Accessible from the **Rotation** page in the navigation bar.
+
+#### Creating a pool
+
+In **Rotation → New pool**:
+
+1. Give the pool a name (e.g. "Gaming FR", "Fallback EU")
+2. Choose the **selection mode**:
+   - 🎲 **Random** — `random.choice()` from the candidates
+   - 🔄 **Round-robin** — alphabetical cycle with a persistent cursor between rotations
+   - 🏆 **Best score** — candidate with the highest historical average speed
+3. Set an optional **Top-N**: if specified, only the N servers with the best average score are eligible, even if the criteria match more
+4. Add one or more **criteria** (UNION — each criterion adds candidates):
+   - `All active servers` — includes every enabled server in Companion
+   - `Specific server` — type the exact name; autocomplete suggests existing servers
+   - `Gluetun filter type` — choose the variable (`SERVER_COUNTRIES`, `SERVER_NAMES`, etc.) and optionally a value (empty = all servers of that type)
+   - `WireGuard VPN profile` — all servers assigned to a specific WireGuard profile
+5. Configure the **schedule**: automatic rotation every N hours (disabled = manual only)
+6. Enable **quick bench** to record speed after each switch
+
+The candidate preview updates in real time inside the modal as you configure criteria.
+
+#### Rotation execution flow
+
+```
+Rotation triggered (manual or automatic):
+  1. Resolve candidates
+     ├─ UNION of all pool criteria
+     └─ Top-N filter by average score (if set)
+  2. Pick target server (random / round-robin / best-score)
+  3. switch_server() → write docker-compose.override.yml + docker compose up -d
+     └─ If WireGuard profile attached: inject VPN_SERVICE_PROVIDER + WIREGUARD_* into override
+  4. If quick bench enabled:
+     ├─ Wait for VPN reconnection (connection_wait_seconds)
+     ├─ Quick proxy test (proxy_qc)
+     └─ Record in speed_tests (test_trigger='pool_rotation')
+  5. Update pool state (last_rotated_at, next_rotation_at, round-robin cursor)
+  6. Discord/Apprise notification (if enabled)
+```
+
+#### Automatic scheduling
+
+The scheduler checks every **5 minutes** whether any pool has a pending rotation (`next_rotation_at <= now`). If a benchmark is running, the rotation is deferred to the next tick without modifying `next_rotation_at`.
+
+> Pool rotations and benchmarks are **independent** — they do not block each other, but a rotation will not trigger while a benchmark is active.
+
+#### Pool rotation notifications
+
+| Type | Severity | Content |
+|---|---|---|
+| 🟡 Pool rotation | Medium | Pool name, trigger (auto/manual), previous → new server, speed if quick bench enabled, public IP |
 
 ---
 

@@ -3,6 +3,9 @@ import os
 import sqlite3
 from contextlib import contextmanager
 
+# Sentinel for optional parameters that distinguish "not provided" from None
+_UNSET = object()
+
 _db_path = None
 
 
@@ -126,6 +129,41 @@ def init_db(db_path: str):
 
             CREATE INDEX IF NOT EXISTS idx_vpn_profile_vars_profile
                 ON vpn_profile_vars(profile_id);
+
+            -- ── Rotation pools ─────────────────────────────────────────────
+            -- A pool defines a set of candidate servers and a rotation mode.
+            -- Companion periodically (or on demand) picks one and switches Gluetun.
+            CREATE TABLE IF NOT EXISTS rotation_pools (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                name             TEXT    NOT NULL,
+                mode             TEXT    NOT NULL DEFAULT 'random',
+                                          -- 'random' | 'round_robin' | 'best_score'
+                enabled          INTEGER NOT NULL DEFAULT 1,
+                auto_rotate      INTEGER NOT NULL DEFAULT 0,
+                interval_hours   REAL    NOT NULL DEFAULT 6.0,
+                next_rotation_at TEXT,             -- ISO datetime (UTC) of next auto-rotation
+                last_rotated_at  TEXT,             -- ISO datetime (UTC) of last rotation
+                current_rr_idx   INTEGER NOT NULL DEFAULT 0,  -- round-robin cursor
+                quick_bench      INTEGER NOT NULL DEFAULT 0,  -- run proxy_qc after switch
+                notify           INTEGER NOT NULL DEFAULT 1,
+                top_n            INTEGER,          -- if set, restrict to top-N by avg score
+                created_at       TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
+
+            -- Criteria that feed a pool (UNION — each adds candidate servers)
+            CREATE TABLE IF NOT EXISTS rotation_pool_criteria (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                pool_id     INTEGER NOT NULL REFERENCES rotation_pools(id) ON DELETE CASCADE,
+                crit_type   TEXT    NOT NULL,
+                             -- 'all'     : all enabled servers
+                             -- 'server'  : crit_value = server name
+                             -- 'filter'  : crit_value = JSON {"type":"country","value":"France"}
+                             -- 'profile' : crit_value = vpn_profile_id (string)
+                crit_value  TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_pool_criteria_pool
+                ON rotation_pool_criteria(pool_id);
 
             INSERT OR IGNORE INTO settings (key, value) VALUES
                 ('test_interval_hours',      '6'),
@@ -858,3 +896,147 @@ def assign_servers_to_profile(server_ids: list[int], profile_id: int) -> int:
             [profile_id, *server_ids],
         )
     return cur.rowcount
+
+
+# ---------------------------------------------------------------------------
+# Rotation pools CRUD
+# ---------------------------------------------------------------------------
+
+def get_rotation_pools() -> list[dict]:
+    """Return all rotation pools ordered by name, with their criteria."""
+    with get_db() as db:
+        pools = db.execute(
+            'SELECT * FROM rotation_pools ORDER BY name'
+        ).fetchall()
+        result = []
+        for p in pools:
+            pd = dict(p)
+            crits = db.execute(
+                'SELECT * FROM rotation_pool_criteria WHERE pool_id = ? ORDER BY id',
+                (pd['id'],),
+            ).fetchall()
+            pd['criteria'] = [dict(c) for c in crits]
+            result.append(pd)
+    return result
+
+
+def get_rotation_pool(pool_id: int) -> dict | None:
+    """Return a single pool with its criteria, or None."""
+    with get_db() as db:
+        p = db.execute(
+            'SELECT * FROM rotation_pools WHERE id = ?', (pool_id,)
+        ).fetchone()
+        if not p:
+            return None
+        pd = dict(p)
+        crits = db.execute(
+            'SELECT * FROM rotation_pool_criteria WHERE pool_id = ? ORDER BY id',
+            (pool_id,),
+        ).fetchall()
+        pd['criteria'] = [dict(c) for c in crits]
+    return pd
+
+
+def create_rotation_pool(
+    name: str,
+    mode: str = 'random',
+    enabled: bool = True,
+    auto_rotate: bool = False,
+    interval_hours: float = 6.0,
+    quick_bench: bool = False,
+    notify: bool = True,
+    top_n: int | None = None,
+    criteria: list[dict] | None = None,
+) -> int:
+    """Create a rotation pool and its criteria.  Returns the new pool id."""
+    with get_db() as db:
+        cur = db.execute(
+            '''INSERT INTO rotation_pools
+               (name, mode, enabled, auto_rotate, interval_hours, quick_bench, notify, top_n)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+            (name, mode, int(enabled), int(auto_rotate),
+             interval_hours, int(quick_bench), int(notify), top_n),
+        )
+        pool_id = cur.lastrowid
+        if criteria:
+            for c in criteria:
+                db.execute(
+                    'INSERT INTO rotation_pool_criteria (pool_id, crit_type, crit_value) '
+                    'VALUES (?, ?, ?)',
+                    (pool_id, c['crit_type'], c.get('crit_value')),
+                )
+    return pool_id
+
+
+def update_rotation_pool(
+    pool_id: int,
+    name: str | None = None,
+    mode: str | None = None,
+    enabled: bool | None = None,
+    auto_rotate: bool | None = None,
+    interval_hours: float | None = None,
+    quick_bench: bool | None = None,
+    notify: bool | None = None,
+    top_n=_UNSET,   # None = clear top_n; _UNSET = don't touch
+    criteria: list[dict] | None = None,
+) -> bool:
+    """Update a pool and optionally replace all its criteria.  Returns False if not found."""
+    with get_db() as db:
+        if not db.execute('SELECT id FROM rotation_pools WHERE id = ?', (pool_id,)).fetchone():
+            return False
+        fields, params = [], []
+        if name           is not None:  fields.append('name = ?');           params.append(name)
+        if mode           is not None:  fields.append('mode = ?');           params.append(mode)
+        if enabled        is not None:  fields.append('enabled = ?');        params.append(int(enabled))
+        if auto_rotate    is not None:  fields.append('auto_rotate = ?');    params.append(int(auto_rotate))
+        if interval_hours is not None:  fields.append('interval_hours = ?'); params.append(interval_hours)
+        if quick_bench    is not None:  fields.append('quick_bench = ?');    params.append(int(quick_bench))
+        if notify         is not None:  fields.append('notify = ?');         params.append(int(notify))
+        # top_n uses _UNSET sentinel: None means "clear it", _UNSET means "don't touch"
+        if top_n is not _UNSET:         fields.append('top_n = ?');          params.append(top_n)
+        if fields:
+            params.append(pool_id)
+            db.execute(f'UPDATE rotation_pools SET {", ".join(fields)} WHERE id = ?', params)
+        if criteria is not None:
+            db.execute('DELETE FROM rotation_pool_criteria WHERE pool_id = ?', (pool_id,))
+            for c in criteria:
+                db.execute(
+                    'INSERT INTO rotation_pool_criteria (pool_id, crit_type, crit_value) '
+                    'VALUES (?, ?, ?)',
+                    (pool_id, c['crit_type'], c.get('crit_value')),
+                )
+    return True
+
+
+def delete_rotation_pool(pool_id: int) -> bool:
+    """Delete a pool and cascade-delete its criteria.  Returns False if not found."""
+    with get_db() as db:
+        if not db.execute('SELECT id FROM rotation_pools WHERE id = ?', (pool_id,)).fetchone():
+            return False
+        db.execute('DELETE FROM rotation_pools WHERE id = ?', (pool_id,))
+    return True
+
+
+def set_pool_rotation_state(
+    pool_id: int,
+    last_rotated_at: str,
+    next_rotation_at: str | None,
+    current_rr_idx: int,
+) -> None:
+    """Update pool rotation state after a successful rotation."""
+    with get_db() as db:
+        db.execute(
+            '''UPDATE rotation_pools
+               SET last_rotated_at = ?, next_rotation_at = ?, current_rr_idx = ?
+               WHERE id = ?''',
+            (last_rotated_at, next_rotation_at, current_rr_idx, pool_id),
+        )
+
+
+def set_pool_next_rotation(pool_id: int, next_rotation_at: str | None) -> None:
+    """Update only next_rotation_at (used when auto_rotate is toggled)."""
+    with get_db() as db:
+        db.execute(
+            'UPDATE rotation_pools SET next_rotation_at = ? WHERE id = ?',
+            (next_rotation_at, pool_id),
+        )

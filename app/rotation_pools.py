@@ -1,0 +1,388 @@
+"""
+Rotation pools — server rotation without full benchmarks.
+
+A pool defines a set of candidate servers (via combinable criteria) and a
+rotation mode. Companion rotates to a picked server on demand or on a
+schedule, optionally running a quick proxy speed test afterwards.
+
+Rotation modes:
+  random      — random.choice(candidates)
+  round_robin — cycle through candidates alphabetically
+  best_score  — server with highest historical average download speed
+"""
+
+import json
+import logging
+import random
+from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Server resolution
+# ---------------------------------------------------------------------------
+
+def resolve_pool_servers(pool_id: int) -> list[dict]:
+    """
+    Return the list of candidate servers for this pool, combining all criteria
+    via UNION (each criterion adds servers to the set).
+
+    If top_n is set on the pool, restrict to the top-N by historical avg
+    download speed (proxy_qc excluded, same window as scoring).
+
+    Each returned dict: {id, name, filter_type, vpn_profile_id, avg_dl}
+    """
+    from .database import get_db
+
+    with get_db() as db:
+        pool = db.execute(
+            'SELECT * FROM rotation_pools WHERE id = ?', (pool_id,)
+        ).fetchone()
+        if not pool:
+            return []
+        pool = dict(pool)
+
+        criteria = db.execute(
+            'SELECT * FROM rotation_pool_criteria WHERE pool_id = ? ORDER BY id',
+            (pool_id,),
+        ).fetchall()
+
+        candidate_names: set[str] = set()
+
+        for crit in criteria:
+            ctype = crit['crit_type']
+            cval  = crit['crit_value']
+
+            if ctype == 'all':
+                rows = db.execute(
+                    'SELECT name FROM servers WHERE enabled = 1'
+                ).fetchall()
+                candidate_names.update(r['name'] for r in rows)
+
+            elif ctype == 'server':
+                # Include even if disabled? No — only active servers.
+                row = db.execute(
+                    'SELECT name FROM servers WHERE name = ? AND enabled = 1',
+                    (cval,),
+                ).fetchone()
+                if row:
+                    candidate_names.add(row['name'])
+
+            elif ctype == 'filter':
+                try:
+                    fdata = json.loads(cval) if cval else {}
+                    ftype = fdata.get('type', '').strip()
+                    fval  = fdata.get('value', '').strip()
+                except (json.JSONDecodeError, AttributeError, TypeError):
+                    logger.warning('Pool %d: malformed filter criterion: %r', pool_id, cval)
+                    continue
+                if ftype and fval:
+                    rows = db.execute(
+                        'SELECT name FROM servers WHERE filter_type = ? AND name = ? AND enabled = 1',
+                        (ftype, fval),
+                    ).fetchall()
+                elif ftype:
+                    # All servers of this filter type
+                    rows = db.execute(
+                        'SELECT name FROM servers WHERE filter_type = ? AND enabled = 1',
+                        (ftype,),
+                    ).fetchall()
+                else:
+                    rows = []
+                candidate_names.update(r['name'] for r in rows)
+
+            elif ctype == 'profile':
+                try:
+                    profile_id = int(cval)
+                except (TypeError, ValueError):
+                    continue
+                rows = db.execute(
+                    'SELECT name FROM servers WHERE vpn_profile_id = ? AND enabled = 1',
+                    (profile_id,),
+                ).fetchall()
+                candidate_names.update(r['name'] for r in rows)
+
+        if not candidate_names:
+            return []
+
+        # Fetch full server data + historical avg_dl for scoring / top-N
+        placeholders = ','.join('?' * len(candidate_names))
+        servers = db.execute(
+            f'''SELECT s.id, s.name, s.filter_type, s.vpn_profile_id,
+                       COALESCE(
+                           AVG(CASE WHEN st.success = 1 AND st.test_method != 'proxy_qc'
+                                    THEN st.download_mbps END),
+                           0.0
+                       ) AS avg_dl
+                FROM servers s
+                LEFT JOIN speed_tests st ON st.server_name = s.name
+                WHERE s.name IN ({placeholders})
+                GROUP BY s.id''',
+            list(candidate_names),
+        ).fetchall()
+
+        candidates = [dict(s) for s in servers]
+
+    # Apply top_n filter
+    top_n = pool.get('top_n')
+    if top_n and isinstance(top_n, int) and top_n > 0 and len(candidates) > top_n:
+        candidates.sort(key=lambda x: x['avg_dl'], reverse=True)
+        candidates = candidates[:top_n]
+
+    return candidates
+
+
+# ---------------------------------------------------------------------------
+# Server selection
+# ---------------------------------------------------------------------------
+
+def pick_server(pool: dict, candidates: list[dict]) -> dict | None:
+    """
+    Pick one server from candidates according to pool mode.
+    round_robin uses pool['current_rr_idx'] as a cursor into the
+    alphabetically-sorted candidate list.
+    """
+    if not candidates:
+        return None
+
+    mode = pool.get('mode', 'random')
+
+    if mode == 'random':
+        return random.choice(candidates)
+
+    elif mode == 'round_robin':
+        sorted_cands = sorted(candidates, key=lambda x: x['name'])
+        idx = int(pool.get('current_rr_idx') or 0) % len(sorted_cands)
+        return sorted_cands[idx]
+
+    elif mode == 'best_score':
+        return max(candidates, key=lambda x: float(x.get('avg_dl') or 0))
+
+    return random.choice(candidates)
+
+
+def _next_rr_idx(pool: dict, candidates: list[dict], picked_name: str) -> int:
+    """Return the next round-robin cursor after picking picked_name."""
+    sorted_cands = sorted(candidates, key=lambda x: x['name'])
+    if not sorted_cands:
+        return 0
+    try:
+        cur_pos = next(i for i, s in enumerate(sorted_cands) if s['name'] == picked_name)
+    except StopIteration:
+        cur_pos = int(pool.get('current_rr_idx') or 0)
+    return (cur_pos + 1) % len(sorted_cands)
+
+
+# ---------------------------------------------------------------------------
+# Full rotation execution
+# ---------------------------------------------------------------------------
+
+def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
+    """
+    Execute one rotation cycle for a pool:
+      1. Resolve candidate servers from pool criteria
+      2. Pick one server (random / round-robin / best-score)
+      3. Switch Gluetun (override Compose + docker compose up -d)
+      4. Optional: wait for VPN + run proxy_qc speed test
+      5. Update pool state (last_rotated_at, next_rotation_at, rr_idx)
+      6. Optional: send Discord/Apprise notification
+
+    Returns {ok: bool, server: str|None, dl_mbps: float|None, error: str|None}
+    """
+    from .database import (
+        get_db, get_setting, get_vpn_profile,
+        set_pool_rotation_state,
+    )
+    from .gluetun import switch_server, wait_for_vpn, get_public_ips, get_current_filters
+    from .crypto import decrypt as crypto_decrypt, is_encrypted as is_enc
+    from .wg_providers import WG_PROVIDERS
+
+    # ── Load pool ────────────────────────────────────────────────────────────
+    pool = None
+    with get_db() as db:
+        row = db.execute('SELECT * FROM rotation_pools WHERE id = ?', (pool_id,)).fetchone()
+        if row:
+            pool = dict(row)
+
+    if not pool:
+        logger.error('Pool rotation: pool %d not found', pool_id)
+        return {'ok': False, 'server': None, 'dl_mbps': None, 'error': 'Pool not found'}
+
+    logger.info(
+        'Pool rotation [%d] "%s": resolving candidates (mode=%s, manual=%s)',
+        pool_id, pool['name'], pool['mode'], manual,
+    )
+
+    candidates = resolve_pool_servers(pool_id)
+    if not candidates:
+        logger.warning('Pool rotation [%d] "%s": no candidates — skipping', pool_id, pool['name'])
+        return {'ok': False, 'server': None, 'dl_mbps': None, 'error': 'No candidates'}
+
+    server = pick_server(pool, candidates)
+    if not server:
+        return {'ok': False, 'server': None, 'dl_mbps': None, 'error': 'No server picked'}
+
+    logger.info(
+        'Pool rotation [%d] "%s": picked %s (avg %.1f Mbps, %d candidates)',
+        pool_id, pool['name'], server['name'], server.get('avg_dl') or 0.0, len(candidates),
+    )
+
+    # ── App config ───────────────────────────────────────────────────────────
+    container   = app.config['GLUETUN_CONTAINER']
+    compose_dir = app.config['COMPOSE_DIR']
+    project     = app.config.get('COMPOSE_PROJECT', '')
+    proxy_host  = app.config['GLUETUN_HOST']
+    proxy_port  = app.config['GLUETUN_PROXY_PORT']
+    proxy_user  = get_setting('proxy_username', '') or None
+    proxy_pass  = get_setting('proxy_password', '') or None
+    wait_secs   = int(get_setting('connection_wait_seconds', '45'))
+
+    # ── Build WireGuard profile override (if server has a VPN profile) ───────
+    wg_profile = None
+    if server.get('vpn_profile_id'):
+        _p = get_vpn_profile(server['vpn_profile_id'])
+        if _p:
+            _prov_key     = _p['provider']
+            _prov_def     = WG_PROVIDERS.get(_prov_key, {})
+            _compose_prov = _prov_def.get('compose_provider', _prov_key)
+            _decrypted: dict[str, str] = {}
+            for _vk, _vv in _p['vars'].items():
+                try:
+                    _decrypted[_vk] = crypto_decrypt(_vv) if is_enc(_vv) else _vv
+                except ValueError as exc:
+                    logger.error('Pool rotation: cannot decrypt %s for profile %d: %s',
+                                 _vk, server['vpn_profile_id'], exc)
+                    _decrypted[_vk] = ''
+            wg_profile = {'compose_provider': _compose_prov, 'vars': _decrypted}
+
+    # ── Snapshot current server for switch logging ────────────────────────
+    _cur_filters  = get_current_filters(container)
+    from_server   = list(_cur_filters.values())[0].split(',')[0].strip() if _cur_filters else None
+
+    # ── Switch Gluetun ────────────────────────────────────────────────────
+    ok, err = switch_server(
+        filter_value=server['name'],
+        filter_type=server['filter_type'],
+        container_name=container,
+        compose_dir=compose_dir,
+        compose_project=project,
+        wg_profile=wg_profile,
+    )
+
+    if not ok:
+        logger.error('Pool rotation [%d]: switch to %s failed: %s',
+                     pool_id, server['name'], err)
+        return {'ok': False, 'server': server['name'], 'dl_mbps': None, 'error': err}
+
+    # Record switch
+    with get_db() as db:
+        db.execute(
+            '''INSERT INTO switches (from_server, to_server, reason, success)
+               VALUES (?, ?, ?, 1)''',
+            (from_server, server['name'],
+             f'pool_rotation:{pool["name"]}:{"manual" if manual else "auto"}'),
+        )
+
+    # ── Optional quick bench ─────────────────────────────────────────────
+    dl_mbps: float | None  = None
+    to_ipv4: str | None    = None
+    to_ipv6: str | None    = None
+
+    if pool['quick_bench']:
+        logger.info('Pool rotation [%d]: waiting %ds for VPN...', pool_id, wait_secs)
+        vpn_up = wait_for_vpn(container, timeout=wait_secs)
+        if vpn_up:
+            try:
+                from .speedtest import test_download as _tdl
+                dl_duration = float(get_setting('speedtest_duration', '8'))
+                dl_samples  = int(get_setting('speedtest_samples', '3'))
+                dl_streams  = int(get_setting('speedtest_streams', '4'))
+                dl_mbps, _ = _tdl(
+                    proxy_host, proxy_port,
+                    duration=dl_duration, samples=dl_samples, warmup=2.0, streams=dl_streams,
+                    proxy_user=proxy_user, proxy_password=proxy_pass,
+                )
+                to_ipv4, to_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
+                # Store result so it appears in history
+                with get_db() as db:
+                    db.execute(
+                        '''INSERT INTO speed_tests
+                           (server_name, download_mbps, public_ip, public_ipv6,
+                            success, test_method, test_trigger)
+                           VALUES (?, ?, ?, ?, 1, 'proxy_qc', 'pool_rotation')''',
+                        (server['name'], dl_mbps, to_ipv4, to_ipv6),
+                    )
+                logger.info(
+                    'Pool rotation [%d]: quick bench %s → %.1f Mbps',
+                    pool_id, server['name'], dl_mbps,
+                )
+            except Exception as exc:
+                logger.warning('Pool rotation [%d]: quick bench failed: %s', pool_id, exc)
+                to_ipv4, to_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
+        else:
+            logger.warning('Pool rotation [%d]: VPN not up within %ds', pool_id, wait_secs)
+            to_ipv4, to_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
+    else:
+        # Get IPs for notification even without quick bench
+        try:
+            to_ipv4, to_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
+        except Exception:
+            pass
+
+    # ── Update pool state ────────────────────────────────────────────────
+    now   = datetime.utcnow()
+    now_s = now.strftime('%Y-%m-%d %H:%M:%S')
+    next_s: str | None = None
+    if pool['auto_rotate'] and pool['interval_hours']:
+        next_s = (now + timedelta(hours=float(pool['interval_hours']))).strftime('%Y-%m-%d %H:%M:%S')
+    new_rr_idx = _next_rr_idx(pool, candidates, server['name'])
+    set_pool_rotation_state(pool_id, now_s, next_s, new_rr_idx)
+
+    # ── Notification ──────────────────────────────────────────────────────
+    if pool['notify']:
+        _send_pool_notification(pool, server['name'], from_server, dl_mbps, to_ipv4, to_ipv6, manual)
+
+    return {'ok': True, 'server': server['name'], 'dl_mbps': dl_mbps, 'error': None}
+
+
+def _send_pool_notification(
+    pool: dict,
+    to_server: str,
+    from_server: str | None,
+    dl_mbps: float | None,
+    to_ipv4: str | None,
+    to_ipv6: str | None,
+    manual: bool,
+) -> None:
+    from .database import get_setting
+    from .notify import send_pool_rotation_notification
+
+    discord_url   = get_setting('discord_webhook_url') or None
+    apprise_urls  = get_setting('apprise_urls') or None
+    if not discord_url and not apprise_urls:
+        return
+
+    lang          = get_setting('ui_lang', 'fr')
+    companion_url = get_setting('companion_url') or None
+    mention       = get_setting('notify_mention', '').strip() or None
+    mention_level = get_setting('notify_mention_level', 'medium')
+
+    try:
+        send_pool_rotation_notification(
+            pool_name=pool['name'],
+            from_server=from_server,
+            to_server=to_server,
+            dl_mbps=dl_mbps,
+            to_ipv4=to_ipv4,
+            to_ipv6=to_ipv6,
+            manual=manual,
+            discord_url=discord_url,
+            apprise_urls=apprise_urls,
+            lang=lang,
+            companion_url=companion_url,
+            mention=mention,
+            mention_level=mention_level,
+        )
+    except Exception as exc:
+        logger.warning('Pool rotation: notification failed: %s', exc)

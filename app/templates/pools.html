@@ -1,0 +1,634 @@
+{% extends 'base.html' %}
+{% block title %}{{ t.pools_title }} — Gluetun Companion{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <h5 class="fw-bold mb-0"><i class="bi bi-shuffle me-2"></i>{{ t.pools_title }}</h5>
+    <p class="text-muted mb-0" style="font-size:.83rem">{{ t.pools_subtitle }}</p>
+  </div>
+  <button class="btn btn-success btn-sm fw-semibold" onclick="openPoolModal()">
+    <i class="bi bi-plus-lg"></i> {{ t.pools_add }}
+  </button>
+</div>
+
+{# ── Pool cards ─────────────────────────────────────────────────────────── #}
+{% if not pools %}
+  <div class="text-muted text-center py-5">
+    <i class="bi bi-collection" style="font-size:2.5rem;opacity:.3"></i>
+    <p class="mt-2">{{ t.pools_empty }}</p>
+  </div>
+{% else %}
+  <div class="row g-3" id="pools-list">
+  {% for p in pools %}
+    <div class="col-12" id="pool-card-{{ p.id }}">
+      <div class="card p-3">
+        <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
+
+          {# Left: name + badges #}
+          <div class="flex-grow-1">
+            <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+              <span class="fw-semibold">{{ p.name }}</span>
+              {# Mode badge #}
+              {% if p.mode == 'random' %}
+                <span class="badge bg-secondary">🎲 {{ t.pools_mode_random }}</span>
+              {% elif p.mode == 'round_robin' %}
+                <span class="badge bg-secondary">🔄 {{ t.pools_mode_round_robin }}</span>
+              {% else %}
+                <span class="badge bg-secondary">🏆 {{ t.pools_mode_best_score }}</span>
+              {% endif %}
+              {# Auto/manual #}
+              {% if p.auto_rotate %}
+                <span class="badge bg-info text-dark">⏱ {{ t.pools_auto_label }}</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ t.pools_manual_label }}</span>
+              {% endif %}
+              {# Enabled #}
+              {% if not p.enabled %}
+                <span class="badge bg-warning text-dark">⏸ Off</span>
+              {% endif %}
+            </div>
+
+            {# Criteria summary #}
+            <div class="text-muted" style="font-size:.8rem">
+              {% for c in p.criteria %}
+                {% if c.crit_type == 'all' %}
+                  <span class="me-2">🌐 Tous</span>
+                {% elif c.crit_type == 'server' %}
+                  <span class="me-2">📍 {{ c.crit_value }}</span>
+                {% elif c.crit_type == 'filter' %}
+                  {% set fdata = c.crit_value | tojson | safe %}
+                  <span class="me-2">🔧 {{ c.crit_value }}</span>
+                {% elif c.crit_type == 'profile' %}
+                  <span class="me-2">🔑 Profil #{{ c.crit_value }}</span>
+                {% endif %}
+              {% else %}
+                <span class="text-warning">{{ t.pools_no_candidates }}</span>
+              {% endfor %}
+              {% if p.top_n %}
+                <span class="ms-1 badge bg-secondary" style="font-size:.7rem">top {{ p.top_n }}</span>
+              {% endif %}
+            </div>
+
+            {# Timing row #}
+            <div class="mt-1 d-flex flex-wrap gap-3" style="font-size:.78rem;color:var(--bs-secondary-color)">
+              <span>
+                <i class="bi bi-clock-history me-1"></i>
+                {{ t.pools_last_rotation }}:
+                <strong>{{ p.last_rotated_at or t.pools_never }}</strong>
+                {% if p.last_rotated_at and p.current_rr_idx is not none %}
+                  — <span class="text-body-secondary">{{ p.name }}</span>
+                {% endif %}
+              </span>
+              {% if p.auto_rotate and p.next_rotation_at %}
+              <span>
+                <i class="bi bi-alarm me-1"></i>
+                {{ t.pools_next_in }}:
+                <strong class="pool-next-timer" data-next="{{ p.next_rotation_at }}">—</strong>
+              </span>
+              {% endif %}
+              <span>
+                <i class="bi bi-server me-1"></i>
+                <strong>{{ p.candidate_count }}</strong> candidat(s)
+              </span>
+            </div>
+          </div>
+
+          {# Right: action buttons #}
+          <div class="d-flex gap-1 flex-wrap align-items-start">
+            <button class="btn btn-sm btn-outline-primary"
+                    onclick="rotateNow({{ p.id }}, '{{ p.name | e }}')"
+                    title="{{ t.pools_rotate_now }}">
+              <i class="bi bi-play-fill"></i> {{ t.pools_rotate_now }}
+            </button>
+            <button class="btn btn-sm btn-outline-secondary"
+                    onclick="openPoolModal({{ p.id }})"
+                    title="{{ t.pools_edit }}">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-{{ 'warning' if p.enabled else 'success' }}"
+                    onclick="togglePool({{ p.id }}, {{ 'false' if p.enabled else 'true' }})"
+                    title="{{ t.pools_disable if p.enabled else t.pools_enable }}">
+              <i class="bi bi-{{ 'pause' if p.enabled else 'play' }}"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-danger"
+                    onclick="deletePool({{ p.id }}, '{{ p.name | e }}')"
+                    title="{{ t.pools_delete }}">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </div>
+
+        {# Rotation result (hidden, shown after rotate-now) #}
+        <div id="pool-result-{{ p.id }}" class="mt-2 d-none"></div>
+      </div>
+    </div>
+  {% endfor %}
+  </div>
+{% endif %}
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Create / Edit Modal
+   ══════════════════════════════════════════════════════════════════════════ #}
+<div class="modal fade" id="poolModal" tabindex="-1" aria-labelledby="poolModalLabel" aria-modal="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold" id="poolModalLabel">{{ t.pools_modal_create }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        {# ① Général #}
+        <div class="mb-3">
+          <label class="form-label small fw-semibold" for="pm-name">{{ t.pools_name_label }}</label>
+          <input type="text" class="form-control form-control-sm" id="pm-name"
+                 placeholder="{{ t.pools_name_hint }}">
+        </div>
+        <div class="row g-3 mb-3">
+          <div class="col-sm-6">
+            <label class="form-label small fw-semibold" for="pm-mode">{{ t.pools_mode_label }}</label>
+            <select class="form-select form-select-sm" id="pm-mode">
+              <option value="random">🎲 {{ t.pools_mode_random }}</option>
+              <option value="round_robin">🔄 {{ t.pools_mode_round_robin }}</option>
+              <option value="best_score">🏆 {{ t.pools_mode_best_score }}</option>
+            </select>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label small fw-semibold" for="pm-topn">{{ t.pools_top_n_label }}</label>
+            <input type="number" class="form-control form-control-sm" id="pm-topn"
+                   min="1" placeholder="—">
+            <div class="form-text" style="font-size:.72rem">{{ t.pools_top_n_hint }}</div>
+          </div>
+        </div>
+
+        <hr class="my-3">
+
+        {# ② Critères #}
+        <div class="mb-1 fw-semibold small">{{ t.pools_criteria_title }}</div>
+        <div id="pm-criteria-list" class="mb-2"></div>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addCriterion()">
+          <i class="bi bi-plus"></i> {{ t.pools_criteria_add }}
+        </button>
+
+        <hr class="my-3">
+
+        {# ③ Planification #}
+        <div class="mb-1 fw-semibold small">{{ t.pools_schedule_title }}</div>
+        <div class="form-check form-switch mb-2">
+          <input type="checkbox" class="form-check-input" id="pm-auto-rotate"
+                 onchange="toggleAutoRotate(this.checked)">
+          <label class="form-check-label" for="pm-auto-rotate">{{ t.pools_auto_rotate }}</label>
+        </div>
+        <div id="pm-interval-row" class="d-none mb-3">
+          <label class="form-label small fw-semibold">{{ t.pools_interval_label }}</label>
+          <div class="d-flex align-items-center gap-2">
+            <input type="number" class="form-control form-control-sm" id="pm-interval"
+                   min="0.5" step="0.5" value="6" style="width:90px">
+            <span class="text-muted small">{{ t.pools_interval_hours }}</span>
+            <span class="text-muted small">({{ t.pools_interval_days }} : <span id="pm-interval-days">0.25</span>)</span>
+          </div>
+        </div>
+
+        <hr class="my-3">
+
+        {# ④ Options #}
+        <div class="mb-1 fw-semibold small">{{ t.pools_options_title }}</div>
+        <div class="form-check form-switch mb-2">
+          <input type="checkbox" class="form-check-input" id="pm-quick-bench">
+          <label class="form-check-label small" for="pm-quick-bench">
+            {{ t.pools_quick_bench }}
+            <span class="text-muted"> — {{ t.pools_quick_bench_hint }}</span>
+          </label>
+        </div>
+        <div class="form-check form-switch mb-2">
+          <input type="checkbox" class="form-check-input" id="pm-notify" checked>
+          <label class="form-check-label small" for="pm-notify">{{ t.pools_notify_label }}</label>
+        </div>
+        <div class="form-check form-switch mb-2">
+          <input type="checkbox" class="form-check-input" id="pm-enabled" checked>
+          <label class="form-check-label small" for="pm-enabled">{{ t.pools_enabled_label }}</label>
+        </div>
+
+        <hr class="my-3">
+
+        {# ⑤ Candidats en temps réel #}
+        <div class="mb-1 fw-semibold small">{{ t.pools_candidates_title }}</div>
+        <div id="pm-candidates-preview" class="text-muted small fst-italic">—</div>
+
+      </div>{# modal-body #}
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+          {{ t.cmn_cancel }}
+        </button>
+        <button type="button" class="btn btn-success btn-sm fw-semibold" onclick="savePool()">
+          <i class="bi bi-save"></i> {{ t.pools_save }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Data for JS #}
+<script>
+const _T = {
+  rotateOk:    {{ t.pools_rotate_ok   | tojson }},
+  rotateErr:   {{ t.pools_rotate_err  | tojson }},
+  rotating:    {{ t.pools_rotating    | tojson }},
+  noMatch:     {{ t.pools_no_candidates | tojson }},
+  delConfirm:  {{ t.pools_delete_confirm | tojson }},
+  critAll:     {{ t.pools_crit_all    | tojson }},
+  critServer:  {{ t.pools_crit_server | tojson }},
+  critFilter:  {{ t.pools_crit_filter | tojson }},
+  critProfile: {{ t.pools_crit_profile | tojson }},
+  critNoProf:  {{ t.pools_crit_no_profiles | tojson }},
+  critFilterType:  {{ t.pools_crit_filter_type  | tojson }},
+  critFilterValue: {{ t.pools_crit_filter_value | tojson }},
+  critRemove:  {{ t.pools_crit_remove | tojson }},
+  modalCreate: {{ t.pools_modal_create | tojson }},
+  modalEdit:   {{ t.pools_modal_edit   | tojson }},
+  modeBest:    {{ t.pools_mode_best_score | tojson }},
+  modeRR:      {{ t.pools_mode_round_robin | tojson }},
+  modeRand:    {{ t.pools_mode_random | tojson }},
+};
+const _ALL_SERVERS  = {{ all_servers | tojson }};
+const _FILTER_VALUES = {{ filter_values_json | safe }};
+const _WG_PROFILES  = {{ wg_profiles | tojson }};
+const _CSRF         = document.querySelector('meta[name="csrf-token"]')?.content || '';
+</script>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ════════════════════════════════════════════════════════════════════════════
+   Pools page JS
+   ════════════════════════════════════════════════════════════════════════════ */
+
+// ── Countdown timers ──────────────────────────────────────────────────────────
+(function updateTimers() {
+  document.querySelectorAll('.pool-next-timer').forEach(el => {
+    const next = new Date(el.dataset.next + ' UTC');
+    const diff = Math.round((next - Date.now()) / 1000);
+    if (diff <= 0) { el.textContent = '< 1 min'; return; }
+    const h = Math.floor(diff / 3600);
+    const m = Math.floor((diff % 3600) / 60);
+    el.textContent = h > 0 ? `${h}h ${m}min` : `${m} min`;
+  });
+  setTimeout(updateTimers, 30000);
+})();
+
+// ── State for modal ───────────────────────────────────────────────────────────
+let _editPoolId = null;
+
+function openPoolModal(poolId) {
+  _editPoolId = poolId || null;
+  document.getElementById('poolModalLabel').textContent =
+    _editPoolId ? _T.modalEdit : _T.modalCreate;
+
+  // Reset form
+  document.getElementById('pm-name').value        = '';
+  document.getElementById('pm-mode').value        = 'random';
+  document.getElementById('pm-topn').value        = '';
+  document.getElementById('pm-auto-rotate').checked = false;
+  document.getElementById('pm-interval').value   = '6';
+  document.getElementById('pm-quick-bench').checked = false;
+  document.getElementById('pm-notify').checked   = true;
+  document.getElementById('pm-enabled').checked  = true;
+  document.getElementById('pm-criteria-list').innerHTML = '';
+  document.getElementById('pm-interval-row').classList.add('d-none');
+  document.getElementById('pm-candidates-preview').textContent = '—';
+
+  if (_editPoolId) {
+    // Fetch pool data and fill form
+    fetch(`/api/pools/${_editPoolId}/candidates`)
+      .then(r => r.json())
+      .catch(() => null);
+
+    // Find pool data from DOM-embedded data (use window._poolsData set below)
+    const pd = window._POOLS_DATA?.find(p => p.id === _editPoolId);
+    if (pd) _fillModalFromPool(pd);
+  }
+
+  _updateCandidatesPreview();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('poolModal')).show();
+}
+
+function _fillModalFromPool(pd) {
+  document.getElementById('pm-name').value   = pd.name;
+  document.getElementById('pm-mode').value   = pd.mode;
+  document.getElementById('pm-topn').value   = pd.top_n || '';
+  document.getElementById('pm-auto-rotate').checked = !!pd.auto_rotate;
+  document.getElementById('pm-interval').value = pd.interval_hours || 6;
+  document.getElementById('pm-quick-bench').checked = !!pd.quick_bench;
+  document.getElementById('pm-notify').checked = !!pd.notify;
+  document.getElementById('pm-enabled').checked = !!pd.enabled;
+  toggleAutoRotate(!!pd.auto_rotate);
+  // Criteria
+  document.getElementById('pm-criteria-list').innerHTML = '';
+  (pd.criteria || []).forEach(c => addCriterion(c));
+  _updateCandidatesPreview();
+}
+
+// ── Criteria builder ──────────────────────────────────────────────────────────
+let _critIdx = 0;
+
+function addCriterion(data) {
+  const idx  = _critIdx++;
+  const row  = document.createElement('div');
+  row.className = 'border rounded p-2 mb-2 position-relative';
+  row.id = `crit-${idx}`;
+  row.dataset.idx = idx;
+
+  const typeOptions = [
+    ['all',     _T.critAll],
+    ['server',  _T.critServer],
+    ['filter',  _T.critFilter],
+    ['profile', _T.critProfile],
+  ];
+  const typeHTML = typeOptions.map(([v, l]) =>
+    `<option value="${v}">${l}</option>`
+  ).join('');
+
+  row.innerHTML = `
+    <button type="button" class="btn-close btn-close-sm position-absolute top-0 end-0 m-1"
+            onclick="removeCriterion(${idx})" title="${_T.critRemove}"></button>
+    <div class="row g-2 align-items-end">
+      <div class="col-sm-4">
+        <label class="form-label small mb-1">Type</label>
+        <select class="form-select form-select-sm" id="crit-type-${idx}"
+                onchange="onCritTypeChange(${idx})">
+          ${typeHTML}
+        </select>
+      </div>
+      <div class="col-sm-8" id="crit-value-area-${idx}"></div>
+    </div>`;
+  document.getElementById('pm-criteria-list').appendChild(row);
+
+  if (data) {
+    document.getElementById(`crit-type-${idx}`).value = data.crit_type || 'all';
+  }
+  onCritTypeChange(idx, data);
+  _updateCandidatesPreview();
+}
+
+function removeCriterion(idx) {
+  document.getElementById(`crit-${idx}`)?.remove();
+  _updateCandidatesPreview();
+}
+
+function onCritTypeChange(idx, preload) {
+  const type  = document.getElementById(`crit-type-${idx}`).value;
+  const area  = document.getElementById(`crit-value-area-${idx}`);
+  area.innerHTML = '';
+
+  if (type === 'all') {
+    // nothing
+  } else if (type === 'server') {
+    const serverNames = _ALL_SERVERS.map(s => s.name);
+    area.innerHTML = `
+      <label class="form-label small mb-1">${_T.critServer}</label>
+      <input type="text" class="form-control form-control-sm crit-server-name"
+             id="crit-server-${idx}" list="server-datalist-${idx}"
+             placeholder="${_T.critServer}" oninput="_updateCandidatesPreview()">
+      <datalist id="server-datalist-${idx}">
+        ${serverNames.map(n => `<option value="${n}">`).join('')}
+      </datalist>`;
+    if (preload?.crit_value) document.getElementById(`crit-server-${idx}`).value = preload.crit_value;
+
+  } else if (type === 'filter') {
+    const ftypes = ['name','country','city','region','hostname'];
+    const ftLabels = {'name':'SERVER_NAMES','country':'SERVER_COUNTRIES','city':'SERVER_CITIES',
+                      'region':'SERVER_REGIONS','hostname':'SERVER_HOSTNAMES'};
+    let preloadType = 'name', preloadVal = '';
+    if (preload?.crit_value) {
+      try {
+        const fd = JSON.parse(preload.crit_value);
+        preloadType = fd.type || 'name';
+        preloadVal  = fd.value || '';
+      } catch(e) {}
+    }
+    const opts = ftypes.map(ft =>
+      `<option value="${ft}" ${ft === preloadType ? 'selected' : ''}>${ftLabels[ft]}</option>`
+    ).join('');
+    area.innerHTML = `
+      <div class="row g-1">
+        <div class="col-5">
+          <label class="form-label small mb-1">${_T.critFilterType}</label>
+          <select class="form-select form-select-sm crit-filter-type"
+                  id="crit-ftype-${idx}" onchange="_rebuildFilterValues(${idx})">${opts}</select>
+        </div>
+        <div class="col-7">
+          <label class="form-label small mb-1">${_T.critFilterValue}</label>
+          <input type="text" class="form-control form-control-sm crit-filter-value"
+                 id="crit-fval-${idx}" list="fval-datalist-${idx}" value="${preloadVal}"
+                 oninput="_updateCandidatesPreview()">
+          <datalist id="fval-datalist-${idx}"></datalist>
+        </div>
+      </div>`;
+    _rebuildFilterValues(idx, preloadType);
+
+  } else if (type === 'profile') {
+    if (!_WG_PROFILES || !_WG_PROFILES.length) {
+      area.innerHTML = `<p class="text-muted small mt-1">${_T.critNoProf}</p>`;
+    } else {
+      const opts = _WG_PROFILES.map(p =>
+        `<option value="${p.id}" ${(preload?.crit_value == p.id) ? 'selected' : ''}>
+           ${p.name} (${p.provider})
+         </option>`
+      ).join('');
+      area.innerHTML = `
+        <label class="form-label small mb-1">${_T.critProfile}</label>
+        <select class="form-select form-select-sm crit-profile-id"
+                id="crit-prof-${idx}" onchange="_updateCandidatesPreview()">${opts}</select>`;
+    }
+  }
+  _updateCandidatesPreview();
+}
+
+function _rebuildFilterValues(idx, forceType) {
+  const ftype  = forceType || document.getElementById(`crit-ftype-${idx}`)?.value || 'name';
+  const dl     = document.getElementById(`fval-datalist-${idx}`);
+  if (!dl) return;
+  const vals   = _FILTER_VALUES[ftype] || [];
+  dl.innerHTML = vals.map(v => `<option value="${v}">`).join('');
+  _updateCandidatesPreview();
+}
+
+// ── Candidate preview (client-side approximation) ─────────────────────────────
+function _buildCriteriaPayload() {
+  const criteria = [];
+  document.querySelectorAll('#pm-criteria-list > div').forEach(row => {
+    const idx   = row.dataset.idx;
+    const type  = document.getElementById(`crit-type-${idx}`)?.value;
+    if (!type) return;
+    let cval = null;
+    if (type === 'server') {
+      cval = document.getElementById(`crit-server-${idx}`)?.value.trim() || '';
+    } else if (type === 'filter') {
+      const ftype = document.getElementById(`crit-ftype-${idx}`)?.value || '';
+      const fval  = document.getElementById(`crit-fval-${idx}`)?.value.trim() || '';
+      cval = JSON.stringify({type: ftype, value: fval});
+    } else if (type === 'profile') {
+      cval = document.getElementById(`crit-prof-${idx}`)?.value || '';
+    }
+    criteria.push({crit_type: type, crit_value: cval});
+  });
+  return criteria;
+}
+
+let _previewTimer = null;
+function _updateCandidatesPreview() {
+  clearTimeout(_previewTimer);
+  _previewTimer = setTimeout(_doPreview, 300);
+}
+
+function _doPreview() {
+  const criteria = _buildCriteriaPayload();
+  const topN = parseInt(document.getElementById('pm-topn').value) || null;
+  if (!criteria.length) {
+    document.getElementById('pm-candidates-preview').textContent = '—';
+    return;
+  }
+  // Client-side approximation (no network call for preview)
+  const candidates = new Set();
+  criteria.forEach(c => {
+    if (c.crit_type === 'all') {
+      _ALL_SERVERS.forEach(s => candidates.add(s.name));
+    } else if (c.crit_type === 'server' && c.crit_value) {
+      if (_ALL_SERVERS.find(s => s.name === c.crit_value)) candidates.add(c.crit_value);
+    } else if (c.crit_type === 'filter') {
+      try {
+        const fd = JSON.parse(c.crit_value);
+        _ALL_SERVERS.forEach(s => {
+          if (s.filter_type === fd.type && (!fd.value || s.name === fd.value))
+            candidates.add(s.name);
+        });
+      } catch(e) {}
+    } else if (c.crit_type === 'profile') {
+      const pid = parseInt(c.crit_value);
+      _ALL_SERVERS.forEach(s => { if (s.vpn_profile_id === pid) candidates.add(s.name); });
+    }
+  });
+  const arr = [...candidates].sort();
+  let preview = '';
+  if (arr.length === 0) {
+    preview = `<span class="text-warning">${_T.noMatch}</span>`;
+  } else {
+    const show = arr.slice(0, 8);
+    const rest = arr.length - show.length;
+    preview = show.map(n => `<span class="badge bg-secondary me-1">${n}</span>`).join('');
+    if (topN && topN < arr.length) {
+      preview += ` <span class="text-muted ms-1">→ top ${topN}</span>`;
+    }
+    if (rest > 0) preview += ` <span class="text-muted">+${rest}</span>`;
+  }
+  document.getElementById('pm-candidates-preview').innerHTML = preview;
+}
+
+// ── Interval display ──────────────────────────────────────────────────────────
+function toggleAutoRotate(show) {
+  document.getElementById('pm-interval-row').classList.toggle('d-none', !show);
+}
+
+document.getElementById('pm-interval')?.addEventListener('input', function() {
+  const h = parseFloat(this.value) || 0;
+  document.getElementById('pm-interval-days').textContent = (h / 24).toFixed(2);
+});
+
+// ── Save pool ─────────────────────────────────────────────────────────────────
+async function savePool() {
+  const name = document.getElementById('pm-name').value.trim();
+  if (!name) { document.getElementById('pm-name').focus(); return; }
+
+  const payload = {
+    name,
+    mode:           document.getElementById('pm-mode').value,
+    top_n:          document.getElementById('pm-topn').value || null,
+    auto_rotate:    document.getElementById('pm-auto-rotate').checked,
+    interval_hours: parseFloat(document.getElementById('pm-interval').value) || 6,
+    quick_bench:    document.getElementById('pm-quick-bench').checked,
+    notify:         document.getElementById('pm-notify').checked,
+    enabled:        document.getElementById('pm-enabled').checked,
+    criteria:       _buildCriteriaPayload(),
+  };
+
+  const url    = _editPoolId ? `/api/pools/${_editPoolId}` : '/api/pools';
+  const method = _editPoolId ? 'PUT' : 'POST';
+
+  try {
+    const resp = await fetch(url, {
+      method,
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _CSRF},
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('poolModal'))?.hide();
+      location.reload();
+    } else {
+      alert(data.error || 'Error');
+    }
+  } catch(e) {
+    alert(e);
+  }
+}
+
+// ── Delete pool ───────────────────────────────────────────────────────────────
+async function deletePool(poolId, poolName) {
+  if (!confirm(`${_T.delConfirm}\n"${poolName}"`)) return;
+  try {
+    const resp = await fetch(`/api/pools/${poolId}`, {
+      method: 'DELETE',
+      headers: {'X-CSRF-Token': _CSRF},
+    });
+    const data = await resp.json();
+    if (data.ok) document.getElementById(`pool-card-${poolId}`)?.remove();
+    else alert(data.error || 'Error');
+  } catch(e) { alert(e); }
+}
+
+// ── Toggle enable/disable ─────────────────────────────────────────────────────
+async function togglePool(poolId, enable) {
+  try {
+    await fetch(`/api/pools/${poolId}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _CSRF},
+      body: JSON.stringify({enabled: enable}),
+    });
+    location.reload();
+  } catch(e) { alert(e); }
+}
+
+// ── Rotate now ────────────────────────────────────────────────────────────────
+async function rotateNow(poolId, poolName) {
+  const resultDiv = document.getElementById(`pool-result-${poolId}`);
+  resultDiv.className = 'mt-2 alert alert-secondary py-1 px-2';
+  resultDiv.style.fontSize = '.82rem';
+  resultDiv.textContent = `⏳ ${_T.rotating}`;
+
+  try {
+    const resp = await fetch(`/api/pools/${poolId}/rotate`, {
+      method: 'POST',
+      headers: {'X-CSRF-Token': _CSRF},
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      resultDiv.className = 'mt-2 alert alert-success py-1 px-2';
+      let msg = `✅ ${_T.rotateOk} <strong>${data.server}</strong>`;
+      if (data.dl_mbps) msg += ` — ${data.dl_mbps.toFixed(1)} Mbps`;
+      resultDiv.innerHTML = msg;
+    } else {
+      resultDiv.className = 'mt-2 alert alert-danger py-1 px-2';
+      resultDiv.textContent = `❌ ${_T.rotateErr}: ${data.error || '?'}`;
+    }
+  } catch(e) {
+    resultDiv.className = 'mt-2 alert alert-danger py-1 px-2';
+    resultDiv.textContent = `❌ ${e}`;
+  }
+}
+
+// ── Pool data for edit modal ──────────────────────────────────────────────────
+window._POOLS_DATA = {{ pools | tojson }};
+</script>
+{% endblock %}

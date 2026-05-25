@@ -179,6 +179,11 @@
   <div class="text-muted mt-1" style="font-size:.75rem">
     <i class="bi bi-info-circle text-info me-1"></i>{{ t.srv_profile_info }}
   </div>
+  {% if profile_scores_limited %}
+  <div class="text-warning mt-1" style="font-size:.75rem">
+    <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ t.srv_profile_data_limited }}
+  </div>
+  {% endif %}
 </div>
 
 <form method="get" class="row g-2 mb-3 align-items-end" id="srv-sort-form">
