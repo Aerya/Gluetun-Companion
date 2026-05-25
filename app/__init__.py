@@ -88,10 +88,45 @@ def create_app():
     os.makedirs(app.config['DATA_DIR'], exist_ok=True)
     init_db(app.config['DB_PATH'])
 
-    # Reset stale benchmark flags left by a previous crash/restart
-    from .database import set_setting
+    # Reset stale benchmark flags left by a previous crash/restart.
+    # If the app was killed mid-benchmark, 'benchmark_running' is still '1' in
+    # the DB — the finally block that restarts paused containers never ran.
+    # We detect this case and restart them now so the user's stack resumes.
+    from .database import get_setting, set_setting
+    import json as _json
+
+    _was_running = get_setting('benchmark_running', '0') == '1'
     set_setting('benchmark_running', '0')
     set_setting('benchmark_current_server', '')
+
+    if _was_running:
+        _log = logging.getLogger(__name__)
+        _log.warning(
+            'App restarted while a benchmark was in progress — '
+            'checking for containers to resume'
+        )
+        _pause_raw = get_setting('pause_bench_containers', '[]')
+        try:
+            _pause_list = _json.loads(_pause_raw)
+        except Exception:
+            _pause_list = []
+        if _pause_list:
+            _log.warning(
+                'Restarting %d container(s) that were paused mid-benchmark: %s',
+                len(_pause_list), ', '.join(_pause_list),
+            )
+            try:
+                from .gluetun import start_stopped_containers
+                start_stopped_containers(
+                    _pause_list,
+                    compose_dir=app.config.get('COMPOSE_DIR', '/compose'),
+                    compose_project=app.config.get('COMPOSE_PROJECT', ''),
+                    pull_set=set(),
+                )
+            except Exception as _exc:
+                _log.error(
+                    'Could not restart paused containers after app restart: %s', _exc
+                )
 
     app.jinja_env.filters['localtime'] = _utc_to_local
 
