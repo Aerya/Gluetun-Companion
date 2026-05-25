@@ -387,9 +387,29 @@
       <p class="text-muted mb-3" style="font-size:.82rem">{{ t.set_wg_subtitle }}</p>
 
       {% if wg_orphan_count > 0 %}
-      <div class="alert alert-warning py-2 px-3 mb-3 d-flex align-items-center gap-2" style="font-size:.82rem">
-        <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>
-        <span><strong>{{ wg_orphan_count }}</strong> {{ t.set_wg_orphan_warning }}</span>
+      <div class="alert alert-warning py-2 px-3 mb-3" style="font-size:.82rem">
+        <div class="d-flex align-items-start gap-2 mb-2">
+          <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
+          <span><strong>{{ wg_orphan_count }}</strong> {{ t.set_wg_orphan_warning }}</span>
+        </div>
+        {% if wg_profiles %}
+        <form method="post" action="{{ url_for('main.bulk_assign_server_profile') }}"
+              class="d-flex align-items-center gap-2 flex-wrap ms-4">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <label class="text-dark fw-semibold text-nowrap" style="font-size:.8rem">
+            {{ t.set_wg_orphan_bulk_label }}
+          </label>
+          <select name="vpn_profile_id" class="form-select form-select-sm"
+                  style="width:auto;min-width:160px">
+            {% for profile in wg_profiles %}
+            <option value="{{ profile.id }}">{{ profile.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-sm btn-warning fw-semibold text-dark">
+            <i class="bi bi-arrow-right-circle-fill"></i> {{ t.set_wg_orphan_bulk_btn }}
+          </button>
+        </form>
+        {% endif %}
       </div>
       {% endif %}
 

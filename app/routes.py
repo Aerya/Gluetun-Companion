@@ -637,6 +637,33 @@ def assign_server_profile(server_id):
     return redirect(request.referrer or url_for('main.servers'))
 
 
+@bp.route('/servers/bulk-assign-profile', methods=['POST'])
+@login_required
+def bulk_assign_server_profile():
+    """Assign all servers that have no VPN profile to a given profile."""
+    pid_raw = request.form.get('vpn_profile_id', '').strip()
+    try:
+        pid = int(pid_raw)
+        if pid <= 0:
+            raise ValueError
+    except ValueError:
+        flash('Profil invalide.', 'danger')
+        return redirect(url_for('main.settings'))
+    with get_db() as db:
+        # Verify the profile exists
+        row = db.execute('SELECT id FROM vpn_profiles WHERE id = ?', (pid,)).fetchone()
+        if not row:
+            flash('Profil introuvable.', 'danger')
+            return redirect(url_for('main.settings'))
+        cur = db.execute(
+            'UPDATE servers SET vpn_profile_id = ? WHERE vpn_profile_id IS NULL',
+            (pid,),
+        )
+        count = cur.rowcount
+    flash(f'{count} serveur(s) assigné(s) au profil.', 'success')
+    return redirect(url_for('main.settings'))
+
+
 @bp.route('/servers/switch/<int:server_id>', methods=['POST'])
 @login_required
 def manual_switch(server_id):
