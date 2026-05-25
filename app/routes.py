@@ -296,6 +296,9 @@ _SERVERS_SORT = {
     'users_asc':      'airvpn_users ASC  NULLS LAST, s.name',
 }
 
+_SERVERS_VALID_PER_PAGE = {10, 20, 50, 100, 0}   # 0 = all
+
+
 @bp.route('/servers')
 @login_required
 def servers():
@@ -305,9 +308,13 @@ def servers():
     q           = request.args.get('q',    '').strip()
     from_date   = request.args.get('from_date', '').strip()
     to_date     = request.args.get('to_date',   '').strip()
+    per_page    = request.args.get('per_page', 50, type=int)
+    page        = max(1, request.args.get('page', 1, type=int))
 
     if sort not in _SERVERS_SORT:
         sort = 'avg_dl'
+    if per_page not in _SERVERS_VALID_PER_PAGE:
+        per_page = 50
     order_sql = _SERVERS_SORT[sort]
 
     where_parts: list[str] = []
@@ -405,6 +412,18 @@ def servers():
         _scores = _score_servers(rows, profile_key, _stability)
         profile_bests[profile_key] = max(_scores, key=_scores.get) if _scores else None
 
+    # ── Pagination (Python-side slice — full rows needed for scores above) ───
+    total_servers = len(rows)
+    if per_page == 0:
+        srv_pages  = 1
+        page       = 1
+        page_rows  = rows
+    else:
+        srv_pages = max(1, (total_servers + per_page - 1) // per_page)
+        page      = min(page, srv_pages)
+        _offset   = (page - 1) * per_page
+        page_rows = rows[_offset:_offset + per_page]
+
     # AirVPN new-server data (banner + badge) — only if feature enabled
     new_airvpn: list[dict] = []
     new_airvpn_names: list[str] = []
@@ -418,13 +437,14 @@ def servers():
         new_airvpn_countries = ', '.join(sorted(cc_set))
 
     return render_template(
-        'servers.html', servers=rows,
+        'servers.html', servers=page_rows,
         filter_labels=FILTER_LABELS, filter_vars=FILTER_VARS,
         existing_names=existing_names,
         existing_all_names=existing_all_names,
         sort=sort, type_filter=type_filter, q=q,
         from_date=from_date, to_date=to_date,
         filter_types=filter_types,
+        page=page, pages=srv_pages, total=total_servers, per_page=per_page,
         active_server=active_server,
         confidence=compute_confidence_all(_score_window),
         stability=_stability,
