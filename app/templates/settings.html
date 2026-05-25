@@ -413,6 +413,11 @@
                   <i class="bi bi-arrow-repeat"></i> rotation
                 </span>
                 {% endif %}
+                {% if profile.sidecar_private_key %}
+                <span class="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-25 ms-1" style="font-size:.7rem">
+                  <i class="bi bi-key-fill"></i> {{ t.set_wg_profile_sidecar_badge }}
+                </span>
+                {% endif %}
               </div>
               <div class="d-flex gap-1">
                 <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2"
@@ -489,6 +494,46 @@
           <input type="number" class="form-control form-control-sm" name="wg_rotation_priority"
                  id="wg_rotation_priority" value="0" min="0" style="max-width:100px">
           <div class="form-text" style="font-size:.72rem">{{ t.set_wg_rotation_priority_hint }}</div>
+        </div>
+
+        {# ── Clé sidecar par profil (optionnel) ─────────────────────────── #}
+        <div class="p-3 mb-3 rounded" style="background:var(--bs-tertiary-bg);border:1px solid var(--bs-border-color)">
+          <div class="fw-semibold mb-1" style="font-size:.82rem">
+            <i class="bi bi-key text-secondary me-1"></i>{{ t.set_wg_profile_sidecar_title }}
+          </div>
+          <p class="text-muted mb-2" style="font-size:.74rem">{{ t.set_wg_profile_sidecar_hint }}</p>
+
+          <div class="mb-2">
+            <label class="form-label small" for="wg_sidecar_pk_profile">
+              {{ t.set_wg_profile_sidecar_pk }}
+              <span id="wg_sidecar_pk_profile_badge" class="badge bg-secondary ms-1" style="font-size:.65rem;display:none">{{ t.set_wg_secret_set }}</span>
+            </label>
+            <input type="password" autocomplete="new-password"
+                   class="form-control form-control-sm font-monospace"
+                   id="wg_sidecar_pk_profile" name="wg_sidecar_pk_profile"
+                   placeholder="">
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label small" for="wg_sidecar_addr_profile">
+              {{ t.set_wg_profile_sidecar_addr }}
+            </label>
+            <input type="text"
+                   class="form-control form-control-sm font-monospace"
+                   id="wg_sidecar_addr_profile" name="wg_sidecar_addr_profile"
+                   placeholder="10.x.x.x/32">
+          </div>
+
+          <div class="mb-0">
+            <label class="form-label small" for="wg_sidecar_psk_profile">
+              {{ t.set_wg_profile_sidecar_psk }}
+              <span id="wg_sidecar_psk_profile_badge" class="badge bg-secondary ms-1" style="font-size:.65rem;display:none">{{ t.set_wg_secret_set }}</span>
+            </label>
+            <input type="password" autocomplete="new-password"
+                   class="form-control form-control-sm font-monospace"
+                   id="wg_sidecar_psk_profile" name="wg_sidecar_psk_profile"
+                   placeholder="">
+          </div>
         </div>
 
         <div class="d-flex gap-2 flex-wrap">
@@ -2098,6 +2143,18 @@ function _wgEditProfile(profile) {
     '<i class="bi bi-pencil me-1"></i>{{ t.set_wg_edit_title }}';
   document.getElementById('wg_cancel_btn').style.display = '';
 
+  // Sidecar per-profile fields
+  const pkBadge  = document.getElementById('wg_sidecar_pk_profile_badge');
+  const pskBadge = document.getElementById('wg_sidecar_psk_profile_badge');
+  const pkInput  = document.getElementById('wg_sidecar_pk_profile');
+  const pskInput = document.getElementById('wg_sidecar_psk_profile');
+  const addrInput = document.getElementById('wg_sidecar_addr_profile');
+  if (pkInput)  { pkInput.value  = ''; pkInput.placeholder  = profile.sidecar_pk_set  ? '{{ t.set_wg_secret_keep }}' : ''; }
+  if (pskInput) { pskInput.value = ''; pskInput.placeholder = profile.sidecar_psk_set ? '{{ t.set_wg_secret_keep }}' : ''; }
+  if (addrInput) addrInput.value = profile.sidecar_addresses || '';
+  if (pkBadge)  pkBadge.style.display  = profile.sidecar_pk_set  ? '' : 'none';
+  if (pskBadge) pskBadge.style.display = profile.sidecar_psk_set ? '' : 'none';
+
   // Scroll to form
   document.getElementById('form-wg-profile').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -2109,6 +2166,15 @@ function _wgCancelEdit() {
   document.getElementById('wg_provider_hint').style.display = 'none';
   document.getElementById('wg_provider_help').style.display = 'none';
   document.getElementById('wg_priority_row').style.display = 'none';
+  // Reset sidecar fields
+  const pkBadge  = document.getElementById('wg_sidecar_pk_profile_badge');
+  const pskBadge = document.getElementById('wg_sidecar_psk_profile_badge');
+  const pkInput  = document.getElementById('wg_sidecar_pk_profile');
+  const pskInput = document.getElementById('wg_sidecar_psk_profile');
+  if (pkInput)  { pkInput.value = '';  pkInput.placeholder  = ''; }
+  if (pskInput) { pskInput.value = ''; pskInput.placeholder = ''; }
+  if (pkBadge)  pkBadge.style.display  = 'none';
+  if (pskBadge) pskBadge.style.display = 'none';
   document.getElementById('wg-form-title').innerHTML =
     '<i class="bi bi-plus-circle me-1"></i>{{ t.set_wg_add_title }}';
   document.getElementById('wg_cancel_btn').style.display = 'none';

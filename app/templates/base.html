@@ -173,8 +173,10 @@
 
 {# ── Notice : clé WireGuard dédiée sidecar ──────────────────────────────────
    Shown once per browser (localStorage key notice_wg_sidecar_key_v1).
+   Only rendered when at least one WireGuard profile is configured.
    Requires checking the checkbox before the Close button becomes active.
    ────────────────────────────────────────────────────────────────────────── #}
+{% if _g_has_wg_profiles %}
 <div class="modal fade" id="noticeWgSidecarModal" tabindex="-1"
      data-bs-backdrop="static" data-bs-keyboard="false"
      aria-labelledby="noticeWgSidecarLabel" aria-modal="true" role="dialog">
@@ -228,6 +230,7 @@
   });
 })();
 </script>
+{% endif %}{# _g_has_wg_profiles #}
 
 {# ── Notice : nouveautés testeurs v2 ────────────────────────────────────────
    Shown once per browser (localStorage key notice_new_features_v2).

@@ -646,7 +646,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── WireGuard sidecar test key ──
         'set_wg_sidecar_title':         'Clé WireGuard dédiée aux tests',
-        'set_wg_sidecar_subtitle':      'Les containers de test sidecar ont besoin d\'une paire de clés WireGuard distincte. Sans ça, chaque benchmark crée un conflit de peer WireGuard et fait tomber votre VPN principal.',
+        'set_wg_sidecar_subtitle':      'Clé sidecar globale (fallback). Utilisée pour tous les profils sans clé sidecar dédiée. Les containers de test ont besoin d\'une paire de clés distincte — sinon chaque benchmark crée un conflit de peer WireGuard et fait tomber votre VPN principal.',
         'set_wg_sidecar_warn':          '⚠️ Non configurée — les benchmarks sidecar mettront votre VPN Gluetun hors ligne ! Remplissez ce bloc avant de lancer des benchmarks.',
         'set_wg_sidecar_configured':    '✅ Clé de test configurée — les benchmarks n\'affecteront pas votre VPN principal.',
         'set_wg_sidecar_pk':            'Clé privée WireGuard (tests)',
@@ -655,6 +655,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_wg_sidecar_addr_hint':     'Adresse IP assignée à cette clé par votre fournisseur (format CIDR, ex : 10.x.x.x/32).',
         'set_wg_sidecar_psk':           'Clé pré-partagée (optionnelle)',
         'set_wg_sidecar_clear':         'Effacer la clé de test',
+
+        # ── Per-profile sidecar key ──
+        'set_wg_profile_sidecar_title': 'Clé sidecar dédiée par profil (optionnel)',
+        'set_wg_profile_sidecar_hint':  'Remplace la clé sidecar globale pour ce profil uniquement. Laissez vide pour utiliser la clé sidecar globale.',
+        'set_wg_profile_sidecar_pk':    'Clé privée sidecar',
+        'set_wg_profile_sidecar_addr':  'Adresse IP sidecar',
+        'set_wg_profile_sidecar_psk':   'Clé pré-partagée sidecar (optionnelle)',
+        'set_wg_profile_sidecar_badge': 'sidecar perso',
 
         # ── Hourly patterns ──
         'pat_title':        'Patterns horaires',
@@ -1410,7 +1418,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── WireGuard sidecar test key ──
         'set_wg_sidecar_title':         'Dedicated WireGuard test key',
-        'set_wg_sidecar_subtitle':      'Sidecar test containers need a separate WireGuard key pair. Without it, every benchmark creates a WireGuard peer conflict that takes your main VPN offline.',
+        'set_wg_sidecar_subtitle':      'Global sidecar key (fallback). Used for all profiles that have no per-profile dedicated sidecar key. Test containers need a separate key pair — otherwise every benchmark creates a WireGuard peer conflict that takes your main VPN offline.',
         'set_wg_sidecar_warn':          '⚠️ Not configured — sidecar benchmarks will disconnect your Gluetun VPN! Fill in this section before running benchmarks.',
         'set_wg_sidecar_configured':    '✅ Test key configured — benchmarks will not affect your main VPN.',
         'set_wg_sidecar_pk':            'WireGuard private key (tests)',
@@ -1419,6 +1427,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_wg_sidecar_addr_hint':     'IP address assigned to this key by your provider (CIDR format, e.g. 10.x.x.x/32).',
         'set_wg_sidecar_psk':           'Pre-shared key (optional)',
         'set_wg_sidecar_clear':         'Clear test key',
+
+        # ── Per-profile sidecar key ──
+        'set_wg_profile_sidecar_title': 'Per-profile dedicated sidecar key (optional)',
+        'set_wg_profile_sidecar_hint':  'Overrides the global sidecar key for this profile only. Leave empty to use the global sidecar key.',
+        'set_wg_profile_sidecar_pk':    'Sidecar private key',
+        'set_wg_profile_sidecar_addr':  'Sidecar IP address',
+        'set_wg_profile_sidecar_psk':   'Sidecar pre-shared key (optional)',
+        'set_wg_profile_sidecar_badge': 'custom sidecar',
 
         # ── Hourly patterns ──
         'pat_title':        'Hourly patterns',

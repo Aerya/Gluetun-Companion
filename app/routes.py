@@ -65,6 +65,9 @@ _EXPORT_KEYS = frozenset({
     'catalogue_import_mode', 'catalogue_import_provider',
     'catalogue_bench_on_import', 'catalogue_import_filter_type',
     'ui_lang',
+    # WireGuard rotation + bench filters (non-secret, safe to export)
+    'wg_rotation_mode', 'wg_rotation_threshold',
+    'bench_include_types', 'airvpn_bench_max_load', 'airvpn_bench_max_users',
 })
 
 # ---------------------------------------------------------------------------
@@ -619,7 +622,13 @@ def assign_server_profile(server_id):
 def manual_switch(server_id):
     cfg = current_app.config
     with get_db() as db:
-        row = db.execute('SELECT name, filter_type FROM servers WHERE id=?', (server_id,)).fetchone()
+        row = db.execute(
+            'SELECT s.name, s.filter_type, s.vpn_profile_id, '
+            '       vp.provider AS vp_provider '
+            'FROM servers s '
+            'LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id '
+            'WHERE s.id = ?', (server_id,)
+        ).fetchone()
     if not row:
         flash('Serveur introuvable.', 'danger')
         return redirect(url_for('main.servers'))
@@ -639,9 +648,29 @@ def manual_switch(server_id):
     # Capture the old server's IP before switching
     from_ipv4, from_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
 
+    # Build WireGuard profile dict if this server has an assigned VPN profile (P1-3)
+    _manual_wg_profile = None
+    if row['vpn_profile_id'] is not None:
+        from .database import get_vpn_profile as _get_vp_manual
+        from .crypto import decrypt as _dec_manual, is_encrypted as _is_enc_manual
+        from .wg_providers import WG_PROVIDERS as _WGP_manual
+        _mp = _get_vp_manual(row['vpn_profile_id'])
+        if _mp:
+            _mp_prov_key = _mp['provider']
+            _mp_prov_def = _WGP_manual.get(_mp_prov_key, {})
+            _mp_compose_prov = _mp_prov_def.get('compose_provider', _mp_prov_key)
+            _mp_vars: dict[str, str] = {}
+            for _k, _v in _mp['vars'].items():
+                try:
+                    _mp_vars[_k] = _dec_manual(_v) if _is_enc_manual(_v) else _v
+                except ValueError:
+                    _mp_vars[_k] = ''
+            _manual_wg_profile = {'compose_provider': _mp_compose_prov, 'vars': _mp_vars}
+
     ok, err = switch_server(
         row['name'], row['filter_type'],
         container, compose_dir, project,
+        wg_profile=_manual_wg_profile,
     )
     to_label = f"{FILTER_VARS[row['filter_type']]}={row['name']}"
     with get_db() as db:
@@ -1252,6 +1281,16 @@ def settings():
                     if _val:
                         _vars[_fkey] = crypto_encrypt(_val) if _fkey in _secret_keys else _val
 
+                # ── Per-profile sidecar key fields ──────────────────────────
+                _sc_pk_raw  = request.form.get('wg_sidecar_pk_profile', '').strip()
+                _sc_addr    = request.form.get('wg_sidecar_addr_profile', '').strip()
+                _sc_psk_raw = request.form.get('wg_sidecar_psk_profile', '').strip()
+                # Encrypt secrets when provided; empty = keep existing (handled below)
+                _sc_pk  = crypto_encrypt(_sc_pk_raw)  if _sc_pk_raw  else None
+                _sc_psk = crypto_encrypt(_sc_psk_raw) if _sc_psk_raw else None
+                # Addresses are not secret
+                _sc_addr_val = _sc_addr if _sc_addr else None   # None = keep existing in edit mode
+
                 if _pid_raw:
                     # Update existing profile
                     try:
@@ -1266,6 +1305,9 @@ def settings():
                         enabled=_enabled,
                         rotation_allowed=_rotation,
                         rotation_priority=_priority,
+                        sidecar_private_key=_sc_pk,
+                        sidecar_addresses=_sc_addr_val,
+                        sidecar_preshared_key=_sc_psk,
                     ):
                         flash_t('flash_settings_saved', 'success')
                     else:
@@ -1279,6 +1321,9 @@ def settings():
                         enabled=_enabled,
                         rotation_allowed=_rotation,
                         rotation_priority=_priority,
+                        sidecar_private_key=_sc_pk  or '',
+                        sidecar_addresses=_sc_addr_val or '',
+                        sidecar_preshared_key=_sc_psk or '',
                     )
                     flash_t('flash_settings_saved', 'success')
 
@@ -1406,13 +1451,22 @@ def settings():
     }
     # WireGuard profiles — loaded separately (with masked secrets for display)
     _raw_profiles = get_vpn_profiles()
+    _has_wg_profiles = len(_raw_profiles) > 0
     _wg_profiles_display = []
     for _p in _raw_profiles:
         _display_vars = {}
         for _k, _v in _p['vars'].items():
             from .crypto import is_encrypted as _is_enc
             _display_vars[_k] = crypto_mask(_v) if _is_enc(_v) else _v
-        _wg_profiles_display.append({**_p, 'vars_display': _display_vars})
+        # Exclude raw 'vars' (ciphertexts) and sidecar raw keys from the dict
+        # sent to the browser — only vars_display (masked) is needed by the JS.
+        _safe_profile = {k: v for k, v in _p.items()
+                         if k not in ('vars', 'sidecar_private_key', 'sidecar_preshared_key')}
+        _safe_profile['vars_display'] = _display_vars
+        # Boolean flags so JS can show "configured (hidden)" hints
+        _safe_profile['sidecar_pk_set']  = bool(_p.get('sidecar_private_key'))
+        _safe_profile['sidecar_psk_set'] = bool(_p.get('sidecar_preshared_key'))
+        _wg_profiles_display.append(_safe_profile)
     _orphan_count = len(get_servers_without_profile())
     from .database import get_hourly_benchmark_stats
     from .catalogue import catalogue_stats
@@ -1450,6 +1504,7 @@ def settings():
         }),
         wg_orphan_count=_orphan_count,
         wg_sidecar=_wg_sidecar,
+        has_wg_profiles=_has_wg_profiles,
     )
 
 
@@ -1951,7 +2006,9 @@ def config_import():
 
     if _needs_reschedule:
         try:
-            reschedule(current_app._get_current_object())
+            _h = float(get_setting('test_interval_hours', '6') or '6')
+            _en = get_setting('auto_benchmark', '0') == '1'
+            reschedule(_h, enabled=_en)
         except Exception as _exc:
             logger.warning('reschedule after config import failed: %s', _exc)
 

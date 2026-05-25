@@ -277,6 +277,11 @@ def init_db(db_path: str):
             "ALTER TABLE speed_tests ADD COLUMN dl_single_mbps REAL",
             # WireGuard multi-provider: link servers to a VPN profile
             "ALTER TABLE servers ADD COLUMN vpn_profile_id INTEGER REFERENCES vpn_profiles(id)",
+            # Per-profile dedicated WireGuard sidecar test keys (replaces global settings)
+            # Stored encrypted with enc: prefix, same as vpn_profile_vars secrets.
+            "ALTER TABLE vpn_profiles ADD COLUMN sidecar_private_key  TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE vpn_profiles ADD COLUMN sidecar_addresses     TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE vpn_profiles ADD COLUMN sidecar_preshared_key TEXT NOT NULL DEFAULT ''",
         ]:
             try:
                 db.execute(stmt)
@@ -289,6 +294,7 @@ def get_db():
     conn = sqlite3.connect(_db_path)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA foreign_keys = ON')   # enable cascade deletes
     try:
         yield conn
         conn.commit()
@@ -734,7 +740,8 @@ def get_vpn_profiles(enabled_only: bool = False) -> list[dict]:
     with get_db() as db:
         profiles = db.execute(
             f'SELECT id, name, provider, enabled, rotation_allowed, '
-            f'rotation_priority, created_at, updated_at '
+            f'rotation_priority, created_at, updated_at, '
+            f'sidecar_private_key, sidecar_addresses, sidecar_preshared_key '
             f'FROM vpn_profiles {where} ORDER BY rotation_priority, id'
         ).fetchall()
 
@@ -745,15 +752,18 @@ def get_vpn_profiles(enabled_only: bool = False) -> list[dict]:
                 (p['id'],),
             ).fetchall()
             result.append({
-                'id':               p['id'],
-                'name':             p['name'],
-                'provider':         p['provider'],
-                'enabled':          bool(p['enabled']),
-                'rotation_allowed': bool(p['rotation_allowed']),
-                'rotation_priority': p['rotation_priority'],
-                'created_at':       p['created_at'],
-                'updated_at':       p['updated_at'],
-                'vars':             {r['var_key']: r['var_value'] for r in vars_rows},
+                'id':                   p['id'],
+                'name':                 p['name'],
+                'provider':             p['provider'],
+                'enabled':              bool(p['enabled']),
+                'rotation_allowed':     bool(p['rotation_allowed']),
+                'rotation_priority':    p['rotation_priority'],
+                'created_at':           p['created_at'],
+                'updated_at':           p['updated_at'],
+                'vars':                 {r['var_key']: r['var_value'] for r in vars_rows},
+                'sidecar_private_key':  p['sidecar_private_key']  or '',
+                'sidecar_addresses':    p['sidecar_addresses']    or '',
+                'sidecar_preshared_key': p['sidecar_preshared_key'] or '',
             })
     return result
 
@@ -763,7 +773,8 @@ def get_vpn_profile(profile_id: int) -> dict | None:
     with get_db() as db:
         p = db.execute(
             'SELECT id, name, provider, enabled, rotation_allowed, '
-            'rotation_priority, created_at, updated_at '
+            'rotation_priority, created_at, updated_at, '
+            'sidecar_private_key, sidecar_addresses, sidecar_preshared_key '
             'FROM vpn_profiles WHERE id = ?',
             (profile_id,),
         ).fetchone()
@@ -774,15 +785,18 @@ def get_vpn_profile(profile_id: int) -> dict | None:
             (profile_id,),
         ).fetchall()
     return {
-        'id':               p['id'],
-        'name':             p['name'],
-        'provider':         p['provider'],
-        'enabled':          bool(p['enabled']),
-        'rotation_allowed': bool(p['rotation_allowed']),
-        'rotation_priority': p['rotation_priority'],
-        'created_at':       p['created_at'],
-        'updated_at':       p['updated_at'],
-        'vars':             {r['var_key']: r['var_value'] for r in vars_rows},
+        'id':                    p['id'],
+        'name':                  p['name'],
+        'provider':              p['provider'],
+        'enabled':               bool(p['enabled']),
+        'rotation_allowed':      bool(p['rotation_allowed']),
+        'rotation_priority':     p['rotation_priority'],
+        'created_at':            p['created_at'],
+        'updated_at':            p['updated_at'],
+        'vars':                  {r['var_key']: r['var_value'] for r in vars_rows},
+        'sidecar_private_key':   p['sidecar_private_key']   or '',
+        'sidecar_addresses':     p['sidecar_addresses']     or '',
+        'sidecar_preshared_key': p['sidecar_preshared_key'] or '',
     }
 
 
@@ -793,6 +807,9 @@ def create_vpn_profile(
     enabled: bool = True,
     rotation_allowed: bool = False,
     rotation_priority: int = 0,
+    sidecar_private_key: str = '',
+    sidecar_addresses: str = '',
+    sidecar_preshared_key: str = '',
 ) -> int:
     """Insert a new VPN profile and its vars.  Returns the new profile id.
 
@@ -801,9 +818,12 @@ def create_vpn_profile(
     """
     with get_db() as db:
         cur = db.execute(
-            'INSERT INTO vpn_profiles (name, provider, enabled, rotation_allowed, rotation_priority) '
-            'VALUES (?, ?, ?, ?, ?)',
-            (name, provider, int(enabled), int(rotation_allowed), rotation_priority),
+            'INSERT INTO vpn_profiles '
+            '(name, provider, enabled, rotation_allowed, rotation_priority, '
+            ' sidecar_private_key, sidecar_addresses, sidecar_preshared_key) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            (name, provider, int(enabled), int(rotation_allowed), rotation_priority,
+             sidecar_private_key, sidecar_addresses, sidecar_preshared_key),
         )
         profile_id = cur.lastrowid
         for var_key, var_value in vars.items():
@@ -823,6 +843,9 @@ def update_vpn_profile(
     enabled: bool | None = None,
     rotation_allowed: bool | None = None,
     rotation_priority: int | None = None,
+    sidecar_private_key: str | None = None,
+    sidecar_addresses: str | None = None,
+    sidecar_preshared_key: str | None = None,
 ) -> bool:
     """Update an existing VPN profile.  Returns False if the profile doesn't exist.
 
@@ -847,6 +870,12 @@ def update_vpn_profile(
             fields.append('rotation_allowed = ?'); params.append(int(rotation_allowed))
         if rotation_priority is not None:
             fields.append('rotation_priority = ?'); params.append(rotation_priority)
+        if sidecar_private_key is not None:
+            fields.append('sidecar_private_key = ?');  params.append(sidecar_private_key)
+        if sidecar_addresses is not None:
+            fields.append('sidecar_addresses = ?');    params.append(sidecar_addresses)
+        if sidecar_preshared_key is not None:
+            fields.append('sidecar_preshared_key = ?'); params.append(sidecar_preshared_key)
 
         if fields:
             params.append(profile_id)
@@ -866,11 +895,19 @@ def update_vpn_profile(
 
 
 def delete_vpn_profile(profile_id: int) -> bool:
-    """Delete a VPN profile and all its vars (cascade).  Returns False if not found."""
+    """Delete a VPN profile, its vars (FK cascade), and unassign servers.
+
+    vpn_profile_vars uses ON DELETE CASCADE → removed automatically when
+    PRAGMA foreign_keys=ON (now set in get_db).
+    servers.vpn_profile_id has no cascade → we NULL it explicitly.
+    """
     with get_db() as db:
         p = db.execute('SELECT id FROM vpn_profiles WHERE id = ?', (profile_id,)).fetchone()
         if not p:
             return False
+        # Unassign servers so they are not left with a dangling FK
+        db.execute('UPDATE servers SET vpn_profile_id = NULL WHERE vpn_profile_id = ?',
+                   (profile_id,))
         db.execute('DELETE FROM vpn_profiles WHERE id = ?', (profile_id,))
     return True
 

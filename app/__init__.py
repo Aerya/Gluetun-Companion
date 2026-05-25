@@ -167,6 +167,17 @@ def create_app():
         lang = session.get('lang', 'fr')
         return {'t': get_translations(lang), 'lang': lang}
 
+    @app.context_processor
+    def inject_globals():
+        """Inject app-wide flags needed in base.html (e.g. for conditional notices)."""
+        from .database import get_vpn_profiles
+        try:
+            _profiles = get_vpn_profiles()
+            _has_wg = len(_profiles) > 0
+        except Exception:
+            _has_wg = False
+        return {'_g_has_wg_profiles': _has_wg}
+
     from .routes import bp
     app.register_blueprint(bp)
 

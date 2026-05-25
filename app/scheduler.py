@@ -122,9 +122,14 @@ def _test_one_server(
     lat_samples: int,
     warmup: float,
     dl_streams: int,
+    wg_profile: 'dict | None' = None,
 ) -> dict:
     """
     Full test cycle for one server: switch → wait → probe IPs → DL → UL → LAT.
+    *wg_profile* (optional) is forwarded to switch_server() so that WireGuard
+    provider credentials are written to the compose override alongside the
+    server filter.  Without it, proxy-mode tests silently use whatever
+    credentials are already present in Gluetun's environment.
     Returns a result dict on success, raises on failure.
     """
     import json as _json
@@ -145,7 +150,8 @@ def _test_one_server(
     # NetworkMode stores the old container ID (not the name) are not missed.
     pre_switch_deps = list_network_dependents(container)
 
-    ok, err = switch_server(server_name, filter_type, container, compose_dir, project)
+    ok, err = switch_server(server_name, filter_type, container, compose_dir, project,
+                            wg_profile=wg_profile)
     if not ok:
         raise RuntimeError(f'Switch failed: {err}')
 
@@ -591,6 +597,7 @@ def _test_server_with_retry(
     dl_streams: int,
     max_retries: int,
     timeout_secs: int,
+    wg_profile: 'dict | None' = None,
 ) -> dict | None:
     """
     Wraps _test_one_server with retry logic and a hard wall-clock timeout.
@@ -598,21 +605,28 @@ def _test_server_with_retry(
     """
     last_err = 'Unknown error'
     for attempt in range(max_retries + 1):
+        ex = ThreadPoolExecutor(max_workers=1)
+        future = ex.submit(
+            _test_one_server,
+            server_name, filter_type, container, compose_dir, project,
+            proxy_host, proxy_port, proxy_user, proxy_pass,
+            wait_secs, dl_duration, dl_samples, lat_samples, warmup, dl_streams,
+            wg_profile,
+        )
         try:
-            with ThreadPoolExecutor(max_workers=1) as ex:
-                future = ex.submit(
-                    _test_one_server,
-                    server_name, filter_type, container, compose_dir, project,
-                    proxy_host, proxy_port, proxy_user, proxy_pass,
-                    wait_secs, dl_duration, dl_samples, lat_samples, warmup, dl_streams,
-                )
-                return future.result(timeout=timeout_secs)
+            result = future.result(timeout=timeout_secs)
+            ex.shutdown(wait=False)   # don't block — thread is done
+            return result
         except FuturesTimeout:
             last_err = f'Timed out after {timeout_secs}s'
-            logger.warning('  %s timed out (%ds) — skipping retries', server_name, timeout_secs)
-            break   # timeout = don't retry (server is just gone)
+            logger.warning('  %s timed out (%ds) — abandoning thread', server_name, timeout_secs)
+            # shutdown(wait=False) lets us move on immediately; the daemon thread
+            # will eventually be reaped without blocking the benchmark cycle.
+            ex.shutdown(wait=False, cancel_futures=True)
+            break   # timeout = don't retry
         except Exception as exc:
             last_err = str(exc)
+            ex.shutdown(wait=False)
             if attempt < max_retries:
                 logger.warning(
                     '  Retry %d/%d for %s: %s', attempt + 1, max_retries, server_name, exc
@@ -920,10 +934,14 @@ def _do_benchmark(app, skip_quick_check: bool = False):
         with get_db() as db:
             servers = db.execute(
                 'SELECT s.name, s.filter_type, s.vpn_profile_id, '
-                '       vp.provider AS vp_provider, vp.name AS vp_name '
+                '       vp.provider AS vp_provider, vp.name AS vp_name, '
+                '       vp.enabled AS vp_enabled, vp.rotation_allowed AS vp_rotation_allowed '
                 'FROM servers s '
                 'LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id '
-                'WHERE s.enabled = 1 ORDER BY s.name'
+                # Only include servers whose assigned profile is enabled (or no profile assigned)
+                'WHERE s.enabled = 1 '
+                '  AND (s.vpn_profile_id IS NULL OR vp.enabled = 1) '
+                'ORDER BY s.name'
             ).fetchall()
             cycle_id = db.execute(
                 'INSERT INTO benchmark_cycles (started_at) VALUES (CURRENT_TIMESTAMP)'
@@ -932,6 +950,21 @@ def _do_benchmark(app, skip_quick_check: bool = False):
         if not servers:
             logger.info('No enabled servers — skipping benchmark')
             return
+
+        # ── Pre-filter 0: exclude orphan servers when WireGuard profiles exist ─
+        # If ANY vpn_profiles exist the user has set up WireGuard multi-provider.
+        # Servers without vpn_profile_id cannot be benchmarked correctly in that
+        # context (they would run with whatever credentials are already in Gluetun).
+        _any_profiles = any(s['vpn_profile_id'] is not None for s in servers)
+        if _any_profiles:
+            _before_orphan = len(servers)
+            servers = [s for s in servers if s['vpn_profile_id'] is not None]
+            _excluded = _before_orphan - len(servers)
+            if _excluded:
+                logger.info(
+                    'Orphan pre-filter: excluded %d server(s) with no VPN profile assigned',
+                    _excluded,
+                )
 
         # ── Pre-filter 1: include only selected filter types ─────────────────
         # Setting: bench_include_types — JSON list of types, e.g. ["name","country"]
@@ -998,44 +1031,31 @@ def _do_benchmark(app, skip_quick_check: bool = False):
         from .crypto import decrypt as _crypto_decrypt, is_encrypted as _is_enc
         from .database import get_vpn_profile as _get_profile, get_setting as _get_set
 
-        # ── Load dedicated WireGuard sidecar test key (prevents VPN conflict) ─
-        # When sidecar containers clone the main Gluetun env (including its
-        # WIREGUARD_PRIVATE_KEY), they initiate a new WireGuard handshake from a
-        # different endpoint. The provider re-routes the peer, dropping the main
-        # Gluetun tunnel. A dedicated key pair avoids this conflict entirely.
-        _sidecar_pk_raw  = _get_set('wg_sidecar_private_key', '')
-        _sidecar_addr    = _get_set('wg_sidecar_addresses', '')
-        _sidecar_psk_raw = _get_set('wg_sidecar_preshared_key', '')
-        _wg_sidecar_override: dict[str, str] = {}
-        if _sidecar_pk_raw:
+        # ── Fallback global sidecar key (used for servers with no VPN profile) ──
+        # Per-profile keys (see below) take priority; this is kept for backward
+        # compat when a server has no assigned profile but sidecar mode is active.
+        _global_sidecar_pk_raw  = _get_set('wg_sidecar_private_key', '')
+        _global_sidecar_addr    = _get_set('wg_sidecar_addresses', '')
+        _global_sidecar_psk_raw = _get_set('wg_sidecar_preshared_key', '')
+        _global_sidecar_override: dict[str, str] = {}
+        if _global_sidecar_pk_raw:
             try:
-                _wg_sidecar_override['WIREGUARD_PRIVATE_KEY'] = (
-                    _crypto_decrypt(_sidecar_pk_raw) if _is_enc(_sidecar_pk_raw)
-                    else _sidecar_pk_raw
+                _global_sidecar_override['WIREGUARD_PRIVATE_KEY'] = (
+                    _crypto_decrypt(_global_sidecar_pk_raw) if _is_enc(_global_sidecar_pk_raw)
+                    else _global_sidecar_pk_raw
                 )
             except ValueError as _exc:
-                logger.error('Cannot decrypt wg_sidecar_private_key: %s', _exc)
-        if _sidecar_addr:
-            _wg_sidecar_override['WIREGUARD_ADDRESSES'] = _sidecar_addr
-        if _sidecar_psk_raw:
+                logger.error('Cannot decrypt global wg_sidecar_private_key: %s', _exc)
+        if _global_sidecar_addr:
+            _global_sidecar_override['WIREGUARD_ADDRESSES'] = _global_sidecar_addr
+        if _global_sidecar_psk_raw:
             try:
-                _wg_sidecar_override['WIREGUARD_PRESHARED_KEY_PASSPHRASE'] = (
-                    _crypto_decrypt(_sidecar_psk_raw) if _is_enc(_sidecar_psk_raw)
-                    else _sidecar_psk_raw
+                _global_sidecar_override['WIREGUARD_PRESHARED_KEY'] = (  # correct var name
+                    _crypto_decrypt(_global_sidecar_psk_raw) if _is_enc(_global_sidecar_psk_raw)
+                    else _global_sidecar_psk_raw
                 )
             except ValueError as _exc:
-                logger.error('Cannot decrypt wg_sidecar_preshared_key: %s', _exc)
-        if _wg_sidecar_override:
-            logger.info(
-                'WireGuard sidecar test key loaded — overriding %s for all test containers',
-                ', '.join(_wg_sidecar_override.keys()),
-            )
-        else:
-            logger.warning(
-                'WireGuard sidecar test key NOT configured — sidecar benchmarks may '
-                'disconnect the main Gluetun VPN if WireGuard is in use. '
-                'Configure it in Settings → WireGuard VPN Profiles.',
-            )
+                logger.error('Cannot decrypt global wg_sidecar_preshared_key: %s', _exc)
 
         _distinct_profile_ids = {
             row['vpn_profile_id']
@@ -1061,9 +1081,41 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                 except ValueError as _exc:
                     logger.error('Cannot decrypt %s for profile %d: %s', _vk, _pid, _exc)
                     _extra[_vk] = ''
+            # ── Per-profile dedicated sidecar WireGuard key ───────────────
+            # Each WireGuard provider uses its own account/key-pair.
+            # Applying a Mullvad key to an AirVPN sidecar would fail silently.
+            _sidecar_ovr: dict[str, str] = {}
+            _sc_pk_raw  = _p.get('sidecar_private_key',  '')
+            _sc_addr    = _p.get('sidecar_addresses',    '')
+            _sc_psk_raw = _p.get('sidecar_preshared_key', '')
+            if _sc_pk_raw:
+                try:
+                    _sidecar_ovr['WIREGUARD_PRIVATE_KEY'] = (
+                        _crypto_decrypt(_sc_pk_raw) if _is_enc(_sc_pk_raw) else _sc_pk_raw
+                    )
+                except ValueError as _exc:
+                    logger.error('Cannot decrypt sidecar_private_key for profile %d: %s', _pid, _exc)
+            if _sc_addr:
+                _sidecar_ovr['WIREGUARD_ADDRESSES'] = _sc_addr
+            if _sc_psk_raw:
+                try:
+                    _sidecar_ovr['WIREGUARD_PRESHARED_KEY'] = (   # correct var name
+                        _crypto_decrypt(_sc_psk_raw) if _is_enc(_sc_psk_raw) else _sc_psk_raw
+                    )
+                except ValueError as _exc:
+                    logger.error('Cannot decrypt sidecar_preshared_key for profile %d: %s', _pid, _exc)
+            if not _sidecar_ovr and sidecar_mode:
+                logger.warning(
+                    'Profile #%d (%s/%s): no dedicated sidecar WireGuard key configured — '
+                    'sidecar benchmarks will use the profile credentials directly and may '
+                    'disconnect the main Gluetun VPN. Set a sidecar key in Settings.',
+                    _pid, _compose_prov, _p.get('name', '?'),
+                )
+
             _profile_env_cache[_pid] = {
                 'compose_provider': _compose_prov,
-                'extra_env': _extra,
+                'extra_env':        _extra,
+                'sidecar_override': _sidecar_ovr,
             }
         if _distinct_profile_ids:
             logger.info(
@@ -1093,9 +1145,13 @@ def _do_benchmark(app, skip_quick_check: bool = False):
             # For sidecar tests, apply the dedicated sidecar WireGuard key on top of
             # the profile env. This prevents the peer conflict that would otherwise
             # bring the main Gluetun tunnel down.
-            if sidecar_mode and _wg_sidecar_override:
+            # Use the per-profile sidecar key when available; fall back to the global
+            # key (for servers without a profile) for backward compat.
+            _per_profile_sidecar = _penv.get('sidecar_override', {}) if _penv else {}
+            _effective_sidecar = _per_profile_sidecar or _global_sidecar_override
+            if sidecar_mode and _effective_sidecar:
                 _sidecar_env: dict[str, str] = dict(_extra_env) if _extra_env else {}
-                _sidecar_env.update(_wg_sidecar_override)
+                _sidecar_env.update(_effective_sidecar)
                 _sidecar_extra = _sidecar_env
             else:
                 _sidecar_extra = _extra_env
@@ -1116,6 +1172,7 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                         proxy_host, proxy_port, proxy_user, proxy_pass,
                         wait_secs, dl_duration, dl_samples, lat_samples,
                         warmup, dl_streams, max_retries, timeout_secs,
+                        wg_profile=_penv,   # pass profile so switch_server writes WG creds
                     )
             else:
                 result = _test_server_with_retry(
@@ -1124,6 +1181,7 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                     proxy_host, proxy_port, proxy_user, proxy_pass,
                     wait_secs, dl_duration, dl_samples, lat_samples,
                     warmup, dl_streams, max_retries, timeout_secs,
+                    wg_profile=_penv,   # pass profile so switch_server writes WG creds
                 )
             if result:
                 results.append(result)
@@ -1209,11 +1267,17 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                     None,
                 )
 
+                # Build lookup helpers: profile id and rotation_allowed flag per server name
+                _srv_profile_map = {
+                    row['name']: (row['vpn_profile_id'], bool(row.get('vp_rotation_allowed', False)))
+                    for row in servers
+                }
+
                 def _row_profile(name):
-                    return next(
-                        (row['vpn_profile_id'] for row in servers if row['name'] == name),
-                        'X',  # sentinel — never equals None or a real int
-                    )
+                    return _srv_profile_map.get(name, ('X', False))[0]
+
+                def _row_rotation_allowed(name):
+                    return _srv_profile_map.get(name, ('X', False))[1]
 
                 if _wg_rotation_mode == 'none':
                     # Stay in current profile: only consider servers with the same profile id
@@ -1234,30 +1298,44 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                     _wg_thr = float(get_setting('wg_rotation_threshold', '10')) / 100.0
                     _best_pid = _row_profile(best['server'])
                     if _best_pid != _cur_profile_id:
-                        # Global best is cross-profile — check gain vs current profile best
-                        _same = [r for r in results if _row_profile(r['server']) == _cur_profile_id]
-                        if _same:
-                            _cur_pb = max(_same, key=lambda r: _profile_scores.get(r['server'], 0.0))
-                            _cur_pb_score  = _profile_scores.get(_cur_pb['server'], 0.0)
-                            _global_score  = _profile_scores.get(best['server'], 0.0)
-                            _required      = _cur_pb_score * (1.0 + _wg_thr)
-                            if _global_score <= _required:
-                                logger.info(
-                                    'Rotation=conditional: cross-profile gain %.2f%% < threshold %.0f%% '
-                                    '→ staying in profile #%s',
-                                    (_global_score - _cur_pb_score) / max(_cur_pb_score, 1e-9) * 100,
-                                    _wg_thr * 100,
-                                    _cur_profile_id,
-                                )
-                                best = _cur_pb
-                            else:
-                                logger.info(
-                                    'Rotation=conditional: cross-profile gain %.2f%% ≥ threshold %.0f%% '
-                                    '→ switching to profile #%s',
-                                    (_global_score - _cur_pb_score) / max(_cur_pb_score, 1e-9) * 100,
-                                    _wg_thr * 100,
-                                    _best_pid,
-                                )
+                        # Only rotate to a different profile if it has rotation_allowed=True
+                        if not _row_rotation_allowed(best['server']):
+                            logger.info(
+                                'Rotation=conditional: cross-profile best %s is in profile #%s '
+                                'which has rotation_allowed=False → staying in current profile',
+                                best['server'], _best_pid,
+                            )
+                            _best_pid = _cur_profile_id  # force same-profile fallback below
+                        if _best_pid != _cur_profile_id:
+                            # Global best is a rotation-allowed cross-profile — check gain
+                            _same = [r for r in results if _row_profile(r['server']) == _cur_profile_id]
+                            if _same:
+                                _cur_pb = max(_same, key=lambda r: _profile_scores.get(r['server'], 0.0))
+                                _cur_pb_score  = _profile_scores.get(_cur_pb['server'], 0.0)
+                                _global_score  = _profile_scores.get(best['server'], 0.0)
+                                _required      = _cur_pb_score * (1.0 + _wg_thr)
+                                if _global_score <= _required:
+                                    logger.info(
+                                        'Rotation=conditional: cross-profile gain %.2f%% < threshold %.0f%% '
+                                        '→ staying in profile #%s',
+                                        (_global_score - _cur_pb_score) / max(_cur_pb_score, 1e-9) * 100,
+                                        _wg_thr * 100,
+                                        _cur_profile_id,
+                                    )
+                                    best = _cur_pb
+                                else:
+                                    logger.info(
+                                        'Rotation=conditional: cross-profile gain %.2f%% ≥ threshold %.0f%% '
+                                        '→ switching to profile #%s',
+                                        (_global_score - _cur_pb_score) / max(_cur_pb_score, 1e-9) * 100,
+                                        _wg_thr * 100,
+                                        _best_pid,
+                                    )
+                        else:
+                            # Forced back to same profile — pick best within it
+                            _same = [r for r in results if _row_profile(r['server']) == _cur_profile_id]
+                            if _same:
+                                best = max(_same, key=lambda r: _profile_scores.get(r['server'], 0.0))
 
             best_server_name  = best['server']   # bare name, for result lookup
             best_label = f"{FILTER_VARS.get(best['filter_type'], 'SERVER_NAMES')}={best_server_name}"
@@ -1479,7 +1557,9 @@ def test_single_server(app, server_name: str, filter_type: str):
 
 
 def _do_single_server(app, server_name: str, filter_type: str):
-    from .database import get_db, get_setting, set_setting
+    from .database import get_db, get_setting, set_setting, get_vpn_profile as _get_prof_ss
+    from .crypto import decrypt as _dec_ss, is_encrypted as _is_enc_ss
+    from .wg_providers import WG_PROVIDERS as _WGP_SS
     from .gluetun import (
         switch_server, wait_for_vpn,
         get_current_filters, restart_network_dependents, list_network_dependents,
@@ -1513,13 +1593,64 @@ def _do_single_server(app, server_name: str, filter_type: str):
         sidecar_iperf_fallback = get_setting('sidecar_iperf_fallback', '1')
         sidecar_proxy_fallback = get_setting('sidecar_proxy_fallback', '0') == '1'
 
+        # ── Load WireGuard profile for this server (profile-aware switch) ────
+        with get_db() as _db_ss:
+            _srv_row = _db_ss.execute(
+                'SELECT vpn_profile_id FROM servers WHERE name = ?', (server_name,)
+            ).fetchone()
+        _ss_profile_id = _srv_row['vpn_profile_id'] if _srv_row else None
+        _ss_wg_profile = None
+        _ss_sidecar_override: dict[str, str] = {}
+        if _ss_profile_id is not None:
+            _ss_p = _get_prof_ss(_ss_profile_id)
+            if _ss_p:
+                _ss_prov_key = _ss_p['provider']
+                _ss_prov_def = _WGP_SS.get(_ss_prov_key, {})
+                _ss_compose_prov = _ss_prov_def.get('compose_provider', _ss_prov_key)
+                _ss_vars: dict[str, str] = {}
+                for _k, _v in _ss_p['vars'].items():
+                    try:
+                        _ss_vars[_k] = _dec_ss(_v) if _is_enc_ss(_v) else _v
+                    except ValueError:
+                        _ss_vars[_k] = ''
+                _ss_wg_profile = {'compose_provider': _ss_compose_prov, 'vars': _ss_vars}
+                # Per-profile sidecar key
+                _sc_pk = _ss_p.get('sidecar_private_key', '')
+                _sc_ad = _ss_p.get('sidecar_addresses', '')
+                _sc_ps = _ss_p.get('sidecar_preshared_key', '')
+                if _sc_pk:
+                    try:
+                        _ss_sidecar_override['WIREGUARD_PRIVATE_KEY'] = (
+                            _dec_ss(_sc_pk) if _is_enc_ss(_sc_pk) else _sc_pk
+                        )
+                    except ValueError:
+                        pass
+                if _sc_ad:
+                    _ss_sidecar_override['WIREGUARD_ADDRESSES'] = _sc_ad
+                if _sc_ps:
+                    try:
+                        _ss_sidecar_override['WIREGUARD_PRESHARED_KEY'] = (
+                            _dec_ss(_sc_ps) if _is_enc_ss(_sc_ps) else _sc_ps
+                        )
+                    except ValueError:
+                        pass
+
         if sidecar_mode:
             # ── Sidecar mode: test in isolation, switch only on success ──────
+            # Build sidecar env: profile vars + sidecar key override
+            _ss_sidecar_env: dict[str, str] = {}
+            if _ss_wg_profile:
+                _ss_sidecar_env.update({'VPN_SERVICE_PROVIDER': _ss_wg_profile['compose_provider'],
+                                         'VPN_TYPE': 'wireguard'})
+                _ss_sidecar_env.update(_ss_wg_profile['vars'])
+            if _ss_sidecar_override:
+                _ss_sidecar_env.update(_ss_sidecar_override)
             result = _test_server_sidecar_with_retry(
                 server_name, filter_type,
                 container, sidecar_image, proxy_host, sidecar_port,
                 wait_secs, dl_duration, dl_streams, max_retries, timeout_secs,
                 sidecar_method, sidecar_iperf_fallback,
+                extra_env=_ss_sidecar_env or None,
             )
             if result is None and sidecar_proxy_fallback:
                 logger.info('Sidecar failed for %s — falling back to HTTP proxy', server_name)
@@ -1545,7 +1676,8 @@ def _do_single_server(app, server_name: str, filter_type: str):
                 logger.info('Single-server test passed (%.1f Mbps) → switching Gluetun to %s',
                             result['dl'], server_name)
                 pre_deps = list_network_dependents(container)
-                ok, err = switch_server(server_name, filter_type, container, compose_dir, project)
+                ok, err = switch_server(server_name, filter_type, container, compose_dir, project,
+                                        wg_profile=_ss_wg_profile)
                 if ok:
                     connected, _ = wait_for_vpn(
                         proxy_host, proxy_port, timeout=wait_secs,
@@ -1572,6 +1704,7 @@ def _do_single_server(app, server_name: str, filter_type: str):
                 proxy_host, proxy_port, proxy_user, proxy_pass,
                 wait_secs, dl_duration, dl_samples, lat_samples,
                 warmup, dl_streams, max_retries, timeout_secs,
+                wg_profile=_ss_wg_profile,
             )
             if result is None and orig_filters:
                 # Test failed → revert Gluetun to the server it was on before
