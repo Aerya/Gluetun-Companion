@@ -3,29 +3,6 @@
 
 {% block content %}
 <style>
-  .server-card-metric {
-    border: 1px solid var(--bs-border-color);
-    border-radius: 8px;
-    background: rgba(139,148,158,.07);
-    padding: .45rem .5rem;
-    min-height: 52px;
-  }
-  .server-card-metric .label {
-    color: var(--bs-secondary-color);
-    font-size: .68rem;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-  }
-  .server-card-metric .value {
-    font-size: .86rem;
-    font-weight: 700;
-    margin-top: .08rem;
-  }
-  .ul-highlight {
-    color: #fbbf24;
-    background: rgba(251,191,36,.12);
-    border-color: rgba(251,191,36,.32);
-  }
   .server-actions {
     align-items: center;
   }
@@ -60,17 +37,6 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h5 class="mb-0"><i class="bi bi-hdd-network"></i> {{ t.srv_title }}</h5>
   <div class="d-flex gap-2 flex-wrap server-actions">
-    {# View toggle #}
-    <div class="btn-group btn-group-sm" role="group" id="viewToggle">
-      <button type="button" class="btn btn-outline-secondary active" id="btn-table-view"
-              onclick="setView('table')" title="{{ t.ui_view_table }}">
-        <i class="bi bi-table"></i>
-      </button>
-      <button type="button" class="btn btn-outline-secondary" id="btn-card-view"
-              onclick="setView('cards')" title="{{ t.ui_view_cards }}">
-        <i class="bi bi-grid-3x3-gap"></i>
-      </button>
-    </div>
     {% if adaptive_stats.has_enough_data %}
     <button class="btn btn-sm btn-outline-info"
             type="button"
@@ -571,215 +537,6 @@
   {% endif %}
 </div>
 
-{# ────────────────────────────────────────────────────────────────────────── #}
-{# VUE CARTES ──────────────────────────────────────────────────────────── #}
-{# ────────────────────────────────────────────────────────────────────────── #}
-<div id="view-cards" class="d-none">
-  {% if servers %}
-  <div class="row g-3">
-    {% for s in servers %}
-    {% set is_active = active_server and s.name == active_server %}
-    {%- set _conf  = confidence.get(s.name, {'level': 'LOW', 'nb': 0, 'cv_pct': None, 'consec': 0}) -%}
-    {%- set _stab  = stability.get(s.name, {}) -%}
-    <div class="col-12 col-sm-6 col-lg-4 col-xl-3" data-srv="{{ s.name }}">
-      <div class="card h-100 {{ '' if s.enabled else 'opacity-50' }}"
-           style="{{ 'border-left:3px solid var(--bs-success)' if is_active else '' }}">
-        <div class="card-body p-3">
-          {# Server name + status #}
-          <div class="d-flex justify-content-between align-items-start mb-2">
-            <div style="min-width:0">
-              <code class="d-block text-truncate fw-semibold" title="{{ s.name }}" style="font-size:.95rem">{{ s.name }}</code>
-              <small class="text-muted">{{ filter_vars.get(s.filter_type, s.filter_type) }}</small>
-            </div>
-            <div class="d-flex gap-1 flex-shrink-0 ms-2">
-              {% if is_active %}
-                <span class="badge bg-success" style="font-size:.65rem">{{ t.srv_active_badge }}</span>
-              {% endif %}
-              {% if profile_best and s.name == profile_best %}
-                <span class="badge bg-warning text-dark profile-trophy" style="font-size:.65rem" title="{{ t.srv_profile_best }}">
-                  <i class="bi bi-trophy-fill"></i>
-                </span>
-              {% elif not s.enabled %}
-                <span class="badge bg-secondary" style="font-size:.65rem">OFF</span>
-              {% endif %}
-            </div>
-          </div>
-
-          {# Speed — big number #}
-          {% if s.avg_dl %}
-            {% set cls = 'speed-good' if s.avg_dl > 50 else ('speed-ok' if s.avg_dl > 15 else 'speed-bad') %}
-            <div class="fw-bold {{ cls }}" style="font-size:1.6rem;line-height:1">
-              {{ s.avg_dl }} <span style="font-size:.75rem;font-weight:400">Mbps ↓</span>
-            </div>
-            {% if s.max_dl %}
-            <div class="text-muted" style="font-size:.75rem">max {{ s.max_dl }} Mbps</div>
-            {% endif %}
-          {% else %}
-            <div class="text-muted" style="font-size:1.4rem">—</div>
-          {% endif %}
-
-          {# Confidence + Stability badges #}
-          <div class="d-flex gap-2 align-items-center mt-2 mb-2">
-            {%- if _conf.nb >= 7 -%}
-              {%- if _conf.level == 'HIGH' -%}{%- set _conf_cls = 'text-success' -%}
-              {%- elif _conf.level == 'MEDIUM' -%}{%- set _conf_cls = 'text-warning' -%}
-              {%- else -%}{%- set _conf_cls = 'text-danger' -%}
-              {%- endif -%}
-              <i class="bi bi-circle-fill {{ _conf_cls }}" style="font-size:.6rem"
-                 title="{{ t.conf_col_header }}" data-bs-toggle="tooltip"></i>
-            {%- else -%}
-              <i class="bi bi-circle text-muted" style="font-size:.6rem" title="{{ t.conf_col_header }}" data-bs-toggle="tooltip"></i>
-            {%- endif -%}
-            {%- if _stab.n and _stab.avg_jitter is not none -%}
-              {%- if _stab.avg_jitter < 15 and (_stab.avg_loss is none or _stab.avg_loss < 1) -%}
-                {%- set _sc = 'text-success' -%}
-              {%- elif _stab.avg_jitter < 50 -%}
-                {%- set _sc = 'text-warning' -%}
-              {%- else -%}
-                {%- set _sc = 'text-danger' -%}
-              {%- endif -%}
-              <i class="bi bi-shield-fill {{ _sc }}" style="font-size:.6rem"
-                 title="{{ t.stab_col_header }}" data-bs-toggle="tooltip"></i>
-            {%- endif -%}
-          </div>
-
-          {# Key metrics row #}
-          <div class="row g-1 text-center mt-1" style="font-size:.75rem">
-            <div class="col-4">
-              <div class="text-muted">Latence</div>
-              <div>{{ (s.avg_lat|int|string + ' ms') if s.avg_lat else '—' }}</div>
-            </div>
-            <div class="col-4">
-              <div class="text-muted">Tests</div>
-              <div>{{ s.ok_tests }}/{{ s.total_tests }}</div>
-            </div>
-            <div class="col-4">
-              <div class="text-muted">
-                {{ t.hist_col_jitter }}
-                <i class="bi bi-info-circle ms-1" style="font-size:.65rem;cursor:help"
-                   data-bs-toggle="tooltip" title="{{ t.hist_col_jitter_tooltip }}"></i>
-              </div>
-              <div>
-                {%- if _stab.n and _stab.avg_jitter is not none -%}
-                  {%- set _jcls = 'text-success' if _stab.avg_jitter < 15 else ('text-warning' if _stab.avg_jitter < 50 else 'text-danger') -%}
-                  <span class="{{ _jcls }}">{{ '%.0f'|format(_stab.avg_jitter) }}ms</span>
-                {%- else -%}—{%- endif -%}
-              </div>
-            </div>
-          </div>
-
-          <div class="row g-2 text-center mt-2">
-            <div class="col-4">
-              <div class="server-card-metric ul-highlight">
-                <div class="label">Avg UL</div>
-                <div class="value">{{ (s.avg_ul|string + ' Mbps') if s.avg_ul else '-' }}</div>
-              </div>
-            </div>
-            <div class="col-4">
-              <div class="server-card-metric">
-                <div class="label">
-                  {{ t.hist_col_loss }}
-                  <i class="bi bi-info-circle ms-1" style="font-size:.65rem;cursor:help"
-                     data-bs-toggle="tooltip" title="{{ t.hist_col_loss_tooltip }}"></i>
-                </div>
-                <div class="value">
-                {%- if _stab.n and _stab.avg_loss is not none -%}
-                  {%- set _lcls = 'text-success' if _stab.avg_loss < 1 else ('text-warning' if _stab.avg_loss < 5 else 'text-danger') -%}
-                  <span class="{{ _lcls }}">{{ '%.1f'|format(_stab.avg_loss) }}%</span>
-                {%- else -%}-{%- endif -%}
-                </div>
-              </div>
-            </div>
-            <div class="col-4">
-              <div class="server-card-metric">
-                <div class="label">
-                  {{ t.hist_col_dns }}
-                  <i class="bi bi-info-circle ms-1" style="font-size:.65rem;cursor:help"
-                     data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}"></i>
-                </div>
-                <div class="value">
-                {%- if _stab.n and _stab.avg_dns is not none -%}
-                  {%- set _dcls = 'text-success' if _stab.avg_dns < 50 else ('text-warning' if _stab.avg_dns < 150 else 'text-danger') -%}
-                  <span class="{{ _dcls }}">{{ '%.0f'|format(_stab.avg_dns) }}ms</span>
-                {%- else -%}-{%- endif -%}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {# Last + IP #}
-          <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center" style="font-size:.75rem;color:var(--muted)">
-            <code style="font-size:.75rem">{{ s.last_ipv4 or '' }}</code>
-            <span>{{ (s.last_tested | localtime | truncate(13, True, '')) if s.last_tested else t.cmn_never }}</span>
-          </div>
-        </div>
-        <div class="card-footer p-2 d-flex gap-1 justify-content-end">
-          <form method="post" action="{{ url_for('main.test_server_now', server_id=s.id) }}"
-                onsubmit="return confirm('{{ t.srv_confirm_test_a }} {{ s.name }} {{ t.srv_confirm_test_b }}')">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-info btn-sm px-2" title="{{ t.srv_test_now }}">
-              <i class="bi bi-speedometer2"></i>
-            </button>
-          </form>
-          <form method="post" action="{{ url_for('main.manual_switch', server_id=s.id) }}"
-                onsubmit="return confirm('{{ t.srv_confirm_switch_a }} {{ filter_vars.get(s.filter_type) }}={{ s.name }} {{ t.srv_confirm_switch_b }}')">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-success btn-sm px-2" title="{{ t.srv_switch_now }}">
-              <i class="bi bi-arrow-right-circle-fill"></i>
-            </button>
-          </form>
-          <form method="post" action="{{ url_for('main.toggle_server', server_id=s.id) }}">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-secondary btn-sm px-2">
-              <i class="bi bi-toggle-{{ 'off' if not s.enabled else 'on text-success' }}"></i>
-            </button>
-          </form>
-          <form method="post" action="{{ url_for('main.delete_server', server_id=s.id) }}"
-                onsubmit="return confirm('{{ t.srv_confirm_delete_a }} {{ s.name }} {{ t.srv_confirm_delete_b }}')">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-danger btn-sm px-2" title="{{ t.srv_delete }}">
-              <i class="bi bi-trash3"></i>
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div class="text-center text-muted py-5">
-    <i class="bi bi-hdd-network" style="font-size:3rem;opacity:.3"></i>
-    <div class="mt-2">{{ t.srv_empty }}</div>
-  </div>
-  {% endif %}
-  {# ── Pagination (carte view) ── #}
-  {% if pages > 1 %}
-  {%- set pg_args = {'sort': sort, 'type': type_filter, 'q': q, 'from_date': from_date, 'to_date': to_date, 'per_page': per_page} %}
-  <nav class="mt-3 mb-1 d-flex justify-content-center">
-    <ul class="pagination pagination-sm mb-0">
-      <li class="page-item {{ 'disabled' if page == 1 }}">
-        <a class="page-link" href="{{ url_for('main.servers', page=page-1, **pg_args) }}">‹</a>
-      </li>
-      {% for p in range(1, pages+1) %}
-        {% if p == page or p == 1 or p == pages or (p >= page-2 and p <= page+2) %}
-          <li class="page-item {{ 'active' if p == page }}">
-            <a class="page-link" href="{{ url_for('main.servers', page=p, **pg_args) }}">{{ p }}</a>
-          </li>
-        {% elif p == page-3 or p == page+3 %}
-          <li class="page-item disabled"><span class="page-link">…</span></li>
-        {% endif %}
-      {% endfor %}
-      <li class="page-item {{ 'disabled' if page == pages }}">
-        <a class="page-link" href="{{ url_for('main.servers', page=page+1, **pg_args) }}">›</a>
-      </li>
-    </ul>
-  </nav>
-  <div class="text-center text-muted mb-2" style="font-size:.75rem">
-    {{ (page-1)*per_page+1 }}–{{ [page*per_page, total]|min }} / {{ total }}
-  </div>
-  {% endif %}
-</div>
-
 {# ── Named servers notice modal (shown once, dismissed via localStorage) ─── #}
 <div class="modal fade" id="namedServersNoticeModal" tabindex="-1"
      data-bs-backdrop="static" data-bs-keyboard="false" aria-labelledby="namedServersNoticeTitle" aria-hidden="true">
@@ -1044,16 +801,6 @@
       }
     }
 
-    // Card view trophy
-    const col = document.querySelector('#view-cards [data-srv="' + CSS.escape(best) + '"] .d-flex.gap-1');
-    if (col) {
-      const sp = document.createElement('span');
-      sp.className = 'badge bg-warning text-dark profile-trophy';
-      sp.style.fontSize = '.65rem';
-      sp.title = _tBest;
-      sp.innerHTML = '<i class="bi bi-trophy-fill"></i>';
-      col.appendChild(sp);
-    }
   }
 
   document.querySelectorAll('#profilePreview [data-profile]').forEach(btn => {
@@ -1083,21 +830,6 @@
       }).catch(() => {});
     });
   });
-})();
-
-// ── View toggle ───────────────────────────────────────────────────────────
-function setView(v) {
-  const isCards = v === 'cards';
-  document.getElementById('view-table').classList.toggle('d-none', isCards);
-  document.getElementById('view-cards').classList.toggle('d-none', !isCards);
-  document.getElementById('btn-table-view').classList.toggle('active', !isCards);
-  document.getElementById('btn-card-view').classList.toggle('active', isCards);
-  localStorage.setItem('srvTestView', v);
-}
-// Restore last view preference
-(function() {
-  const saved = localStorage.getItem('srvTestView');
-  if (saved === 'cards') setView('cards');
 })();
 
 // ── HTML escape helper ────────────────────────────────────────────────────

@@ -80,8 +80,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'dash_benchmark_count': 'benchmarks',
 
         # ── Shared benchmark pattern labels ──
-        'ui_view_table':          'Vue tableau',
-        'ui_view_cards':          'Vue cartes',
         'chart_row_mbps':         'Mbps',
         'chart_row_hour':         'Heure',
         'chart_row_benchmarks':   'Bench.',
@@ -701,8 +699,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'dash_benchmark_count': 'benchmarks',
 
         # ── Shared benchmark pattern labels ──
-        'ui_view_table':          'Table view',
-        'ui_view_cards':          'Card view',
         'chart_row_mbps':         'Mbps',
         'chart_row_hour':         'Hour',
         'chart_row_benchmarks':   'Bench.',
