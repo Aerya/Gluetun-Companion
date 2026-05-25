@@ -29,7 +29,7 @@ from .gluetun import (
     list_docker_containers,
 )
 from .i18n import flash_t, get_t
-from .scheduler import get_next_run, reschedule, trigger_now, trigger_quick_now, trigger_single_server
+from .scheduler import get_next_run, reschedule, trigger_now, trigger_quick_now, trigger_single_server, request_stop
 
 bp = Blueprint('main', __name__)
 
@@ -836,6 +836,13 @@ def history():
                 ORDER BY tested_at ASC
                 LIMIT 200
             ''', (server_filter,)).fetchall()
+        # Last completed benchmark cycle (for duration display)
+        last_bench_cycle = db.execute(
+            '''SELECT started_at, finished_at, duration_secs, servers_tested, best_server
+               FROM benchmark_cycles
+               WHERE finished_at IS NOT NULL
+               ORDER BY id DESC LIMIT 1'''
+        ).fetchone()
 
     pages = max(1, (total + _HISTORY_PER_PAGE - 1) // _HISTORY_PER_PAGE)
     return render_template(
@@ -845,6 +852,7 @@ def history():
         sort=sort, server_filter=server_filter, method_filter=method_filter,
         from_date=from_date, to_date=to_date,
         show_failed=show_failed,
+        last_bench_cycle=last_bench_cycle,
         server_names=server_names,
         timeline_data=timeline_data,
         confidence=compute_confidence_all(),
@@ -1577,6 +1585,16 @@ def api_trigger_quick():
     set_setting('benchmark_running', '1')
     trigger_quick_now(current_app._get_current_object())
     return jsonify({'status': 'started'})
+
+
+@bp.route('/api/stop-benchmark', methods=['POST'])
+@login_required
+def api_stop_benchmark():
+    """Request the running benchmark to stop after the current server test."""
+    if get_setting('benchmark_running', '0') != '1':
+        return jsonify({'status': 'not_running'}), 409
+    request_stop()
+    return jsonify({'status': 'stop_requested'})
 
 
 @bp.route('/api/notify-test', methods=['POST'])

@@ -10,6 +10,24 @@
 {# ── Header + Patterns toggle ──────────────────────────────────────────────── #}
 <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
   <h5 class="mb-0"><i class="bi bi-graph-up"></i> {{ t.hist_title }}</h5>
+  {% if last_bench_cycle and last_bench_cycle.duration_secs %}
+  {%- set _dur = last_bench_cycle.duration_secs | int -%}
+  {%- set _h = (_dur // 3600) -%}
+  {%- set _m = ((_dur % 3600) // 60) -%}
+  {%- set _s = (_dur % 60) -%}
+  <span class="text-muted" style="font-size:.78rem">
+    <i class="bi bi-stopwatch text-secondary"></i>
+    {{ t.hist_last_bench }}
+    <strong>
+      {%- if _h > 0 %}{{ _h }}h {{ '%02d'|format(_m) }}m{{ '%02d'|format(_s) }}s
+      {%- elif _m > 0 %}{{ _m }}m {{ '%02d'|format(_s) }}s
+      {%- else %}{{ _s }}s
+      {%- endif %}
+    </strong>
+    {% if last_bench_cycle.servers_tested %}&nbsp;·&nbsp;{{ last_bench_cycle.servers_tested }} {{ t.dash_servers_tested }}{% endif %}
+    {% if last_bench_cycle.best_server %}&nbsp;·&nbsp;<i class="bi bi-trophy-fill text-warning" style="font-size:.75rem"></i> <code style="font-size:.75rem">{{ last_bench_cycle.best_server.split('=')[-1] if '=' in last_bench_cycle.best_server else last_bench_cycle.best_server }}</code>{% endif %}
+  </span>
+  {% endif %}
   <div class="ms-auto d-flex gap-2">
     {% if adaptive_stats.has_enough_data %}
     <button class="btn btn-sm btn-outline-info"

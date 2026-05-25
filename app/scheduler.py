@@ -10,6 +10,18 @@ logger = logging.getLogger(__name__)
 _scheduler: BackgroundScheduler | None = None
 _lock = threading.Lock()
 
+# ── Stop-benchmark signal ──────────────────────────────────────────────────
+# Set via request_stop() from the REST API; cleared at the start of every
+# benchmark cycle so stale signals don't bleed into the next run.
+_stop_event = threading.Event()
+
+
+def request_stop() -> None:
+    """Signal the running benchmark to stop after the current server test."""
+    _stop_event.set()
+    logger.info('Stop requested by user — benchmark will abort after current server')
+
+
 # Docker event listener state
 _last_docker_event_ts: float = 0.0   # epoch of last event-triggered quick check
 _DOCKER_EVENT_COOLDOWN = 300          # minimum seconds between two event-triggered checks
@@ -762,6 +774,7 @@ def _do_benchmark(app, skip_quick_check: bool = False):
         list_network_dependents,
     )
 
+    _stop_event.clear()   # reset any leftover stop signal from a previous run
     set_setting('benchmark_running', '1')
     cycle_start = time.time()
 
@@ -915,6 +928,12 @@ def _do_benchmark(app, skip_quick_check: bool = False):
         results: list[dict] = []
 
         for row in servers:
+            if _stop_event.is_set():
+                logger.info(
+                    'Benchmark aborted by user — %d/%d server(s) tested',
+                    len(results), len(servers),
+                )
+                break
             if sidecar_mode:
                 result = _test_server_sidecar_with_retry(
                     row['name'], row['filter_type'],

@@ -58,6 +58,10 @@
      style="font-size:.85rem">
   <span class="spinner-border spinner-border-sm flex-shrink-0"></span>
   <span>{{ t.dash_testing_server }} <strong><span id="live-testing"></span></strong></span>
+  <button class="btn btn-sm btn-outline-light ms-auto" id="btn-stop-bench"
+          onclick="stopBenchmark()" style="font-size:.8rem;padding:.15rem .55rem">
+    <i class="bi bi-stop-fill"></i> {{ t.dash_stop_bench }}
+  </button>
 </div>
 
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
@@ -379,6 +383,7 @@ function pollStatus() {
       const btn      = document.getElementById('btn-trigger');
       const btnQuick = document.getElementById('btn-trigger-quick');
       const liveEl   = document.getElementById('live-testing');
+      const btnStop = document.getElementById('btn-stop-bench');
       if (d.benchmark_running) {
         if (btn)      { btn.disabled = true;      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning; }
         if (btnQuick) { btnQuick.disabled = true; btnQuick.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning; }
@@ -390,6 +395,7 @@ function pollStatus() {
         if (btn)      { btn.disabled = false;      btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow; }
         if (btnQuick) { btnQuick.disabled = false; btnQuick.innerHTML = '<i class="bi bi-speedometer"></i> ' + _msgRunQuick; }
         if (liveEl) liveEl.closest('.live-banner').classList.add('d-none');
+        if (btnStop)  { btnStop.disabled = false; btnStop.innerHTML = '<i class="bi bi-stop-fill"></i> {{ t.dash_stop_bench }}'; }
       }
     })
     .catch(() => {});
@@ -423,6 +429,25 @@ function triggerQuick() {
       }
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning;
+    });
+}
+
+function stopBenchmark() {
+  const btn = document.getElementById('btn-stop-bench');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> {{ t.dash_stop_requested }}';
+  fetch('{{ url_for("main.api_stop_benchmark") }}', { method: 'POST' })
+    .then(r => {
+      if (r.ok) {
+        btn.innerHTML = '<i class="bi bi-check-lg"></i> {{ t.dash_stop_requested }}';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-stop-fill"></i> {{ t.dash_stop_bench }}';
+      }
+    })
+    .catch(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-stop-fill"></i> {{ t.dash_stop_bench }}';
     });
 }
 

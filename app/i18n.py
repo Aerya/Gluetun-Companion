@@ -57,6 +57,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'dash_last_cycle':      'Dernier cycle :',
         'dash_servers_tested':  'serveurs',
         'dash_running':         'En cours…',
+        'dash_stop_bench':      'Arrêter',
+        'dash_stop_requested':  'Arrêt demandé…',
         'dash_run_now':         'Benchmark complet',
         'dash_run_quick':       'Benchmark rapide',
         'dash_run_quick_hint':  'Proxy HTTP · quelques secondes',
@@ -193,7 +195,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'conf_failures':     'échecs consécutifs',
 
         # ── History ──
-        'hist_title':       'Historique des tests de vitesse',
+        'hist_title':           'Historique des tests de vitesse',
+        'hist_last_bench':      'Dernier benchmark :',
+        'hist_last_bench_in':   'il y a',
         'hist_avg':         'moy.',
         'hist_tests':       'tests',
         'hist_comparison':  'Comparaison des serveurs',
@@ -672,6 +676,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'dash_last_cycle':      'Last cycle:',
         'dash_servers_tested':  'servers',
         'dash_running':         'Running…',
+        'dash_stop_bench':      'Stop',
+        'dash_stop_requested':  'Stop requested…',
         'dash_run_now':         'Full benchmark',
         'dash_run_quick':       'Quick benchmark',
         'dash_run_quick_hint':  'HTTP proxy · a few seconds',
@@ -808,7 +814,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'conf_failures':     'consecutive failures',
 
         # ── History ──
-        'hist_title':       'Speed test history',
+        'hist_title':           'Speed test history',
+        'hist_last_bench':      'Last benchmark:',
+        'hist_last_bench_in':   'ago',
         'hist_avg':         'avg.',
         'hist_tests':       'tests',
         'hist_comparison':  'Server comparison',
