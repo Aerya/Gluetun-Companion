@@ -215,7 +215,8 @@
   </div>
 </div>
 
-<form method="get" class="row g-2 mb-3 align-items-end">
+<form method="get" class="row g-2 mb-3 align-items-end" id="srv-sort-form">
+  <input type="hidden" name="sort" id="srv-sort-val" value="{{ sort }}">
   <div class="col-auto">
     <input type="text" name="q" class="form-control form-control-sm"
            value="{{ q }}" placeholder="{{ t.srv_search_ph }}" style="width:180px">
@@ -230,15 +231,6 @@
     </select>
   </div>
   {% endif %}
-  <div class="col-auto">
-    <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
-      <option value="avg_dl"  {{ 'selected' if sort == 'avg_dl'  }}>{{ t.srv_sort_avg_dl }}</option>
-      <option value="avg_ul"  {{ 'selected' if sort == 'avg_ul'  }}>{{ t.srv_sort_avg_ul }}</option>
-      <option value="max_dl"  {{ 'selected' if sort == 'max_dl'  }}>{{ t.srv_sort_max_dl }}</option>
-      <option value="latency" {{ 'selected' if sort == 'latency' }}>{{ t.srv_sort_latency }}</option>
-      <option value="name"    {{ 'selected' if sort == 'name'    }}>{{ t.srv_sort_name }}</option>
-    </select>
-  </div>
   <div class="col-auto d-flex align-items-center gap-1">
     <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.hist_date_from }}</label>
     <input type="date" name="from_date" class="form-control form-control-sm"
@@ -254,7 +246,7 @@
       <i class="bi bi-funnel-fill"></i>
     </button>
   </div>
-  {% if q or type_filter or from_date or to_date or sort != 'avg_dl' %}
+  {% if q or type_filter or from_date or to_date or sort not in ('avg_dl', 'avg_dl_desc') %}
   <div class="col-auto">
     <a href="{{ url_for('main.servers') }}" class="btn btn-sm btn-outline-secondary">✕</a>
   </div>
@@ -268,22 +260,35 @@
   <div class="card">
     <div class="table-responsive">
       <table class="table table-hover mb-0">
+        {%- macro srv_th(label, col, default_dir='desc', extra_style='') -%}
+          {%- set active = sort in (col ~ '_asc', col ~ '_desc') or sort == col -%}
+          {%- set icon   = '▲' if sort == col ~ '_asc' else ('▼' if sort in (col ~ '_desc', col) else '⇅') -%}
+          <th class="{{ 'text-primary' if active else '' }}"
+              style="cursor:pointer;user-select:none;white-space:nowrap{{ ';' ~ extra_style if extra_style }}"
+              onclick="_srvSort('{{ col }}','{{ default_dir }}')">
+            {{ label }}
+            <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if active else 'var(--bs-secondary-color)' }}">{{ icon }}</span>
+          </th>
+        {%- endmacro -%}
         <thead>
           <tr>
-            <th>{{ t.srv_col_value }}</th>
-            <th>{{ t.srv_col_type }}</th>
+            {{ srv_th(t.srv_col_value,   'name',    'asc') }}
+            {{ srv_th(t.srv_col_type,    'type',    'asc') }}
             <th style="min-width:130px">{{ t.srv_airvpn_col_load }}</th>
             <th>{{ t.srv_airvpn_col_users }}</th>
-            <th>{{ t.cmn_public_ip }}</th>
-            <th>{{ t.srv_col_avg_dl }}</th>
-            <th>{{ t.srv_col_avg_ul }}</th>
-            <th>{{ t.srv_col_max_dl }}</th>
-            <th>{{ t.srv_col_latency }}</th>
-            <th>
+            {{ srv_th(t.cmn_public_ip,   'ip',      'asc') }}
+            {{ srv_th(t.srv_col_avg_dl,  'avg_dl',  'desc') }}
+            {{ srv_th(t.srv_col_avg_ul,  'avg_ul',  'desc') }}
+            {{ srv_th(t.srv_col_max_dl,  'max_dl',  'desc') }}
+            {{ srv_th(t.srv_col_latency, 'latency', 'asc') }}
+            <th style="cursor:pointer;user-select:none;white-space:nowrap"
+                onclick="_srvSort('tests','desc')">
               {{ t.srv_col_tests }}
-              <i class="bi bi-info-circle text-muted ms-1" style="font-size:.75rem;cursor:help"
+              <i class="bi bi-info-circle text-muted ms-1" style="font-size:.75rem"
                  data-bs-toggle="tooltip" data-bs-placement="bottom"
-                 title="{{ t.srv_col_tests_tooltip }}"></i>
+                 title="{{ t.srv_col_tests_tooltip }}"
+                 onclick="event.stopPropagation()"></i>
+              <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('tests_asc','tests_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='tests_asc' else ('▼' if sort=='tests_desc' else '⇅') }}</span>
             </th>
             <th class="text-center">
               {{ t.conf_col_header }}
@@ -1722,5 +1727,17 @@ document.addEventListener('click', function(e) {
     });
   }
 });
+
+// ── Clickable column sort ─────────────────────────────────────────────────
+function _srvSort(col, defaultDir) {
+  const inp = document.getElementById('srv-sort-val');
+  const cur = inp.value;
+  let next;
+  if (cur === col + '_desc' || cur === col) next = col + '_asc';
+  else if (cur === col + '_asc')            next = col + '_desc';
+  else                                      next = col + '_' + defaultDir;
+  inp.value = next;
+  document.getElementById('srv-sort-form').submit();
+}
 </script>
 {% endblock %}

@@ -263,11 +263,29 @@ def dashboard():
 # ---------------------------------------------------------------------------
 
 _SERVERS_SORT = {
+    # legacy keys (kept for backward compat)
     'avg_dl':  'avg_dl  DESC NULLS LAST, s.name',
     'avg_ul':  'avg_ul  DESC NULLS LAST, s.name',
     'max_dl':  'max_dl  DESC NULLS LAST, s.name',
     'latency': 'avg_lat ASC  NULLS LAST, s.name',
     'name':    's.name ASC',
+    # direction-aware keys used by clickable headers
+    'name_asc':       's.name ASC',
+    'name_desc':      's.name DESC',
+    'type_asc':       's.filter_type ASC,  s.name ASC',
+    'type_desc':      's.filter_type DESC, s.name ASC',
+    'ip_asc':         'last_ipv4 ASC  NULLS LAST, s.name',
+    'ip_desc':        'last_ipv4 DESC NULLS LAST, s.name',
+    'avg_dl_desc':    'avg_dl  DESC NULLS LAST, s.name',
+    'avg_dl_asc':     'avg_dl  ASC  NULLS LAST, s.name',
+    'avg_ul_desc':    'avg_ul  DESC NULLS LAST, s.name',
+    'avg_ul_asc':     'avg_ul  ASC  NULLS LAST, s.name',
+    'max_dl_desc':    'max_dl  DESC NULLS LAST, s.name',
+    'max_dl_asc':     'max_dl  ASC  NULLS LAST, s.name',
+    'latency_asc':    'avg_lat ASC  NULLS LAST, s.name',
+    'latency_desc':   'avg_lat DESC NULLS LAST, s.name',
+    'tests_desc':     'total_tests DESC, s.name',
+    'tests_asc':      'total_tests ASC,  s.name',
 }
 
 @bp.route('/servers')
@@ -715,12 +733,28 @@ def history_patterns():
 # ---------------------------------------------------------------------------
 
 _SORT_COLS = {
-    'date_desc':   'tested_at DESC',
-    'date_asc':    'tested_at ASC',
-    'server_asc':  'server_name ASC, tested_at DESC',
-    'server_desc': 'server_name DESC, tested_at DESC',
-    'dl_desc':     'download_mbps DESC',
-    'dl_asc':      'download_mbps ASC',
+    'date_desc':      'tested_at DESC',
+    'date_asc':       'tested_at ASC',
+    'server_asc':     'server_name ASC,  tested_at DESC',
+    'server_desc':    'server_name DESC, tested_at DESC',
+    'dl_desc':        'download_mbps DESC NULLS LAST',
+    'dl_asc':         'download_mbps ASC  NULLS LAST',
+    'ul_desc':        'upload_mbps   DESC NULLS LAST',
+    'ul_asc':         'upload_mbps   ASC  NULLS LAST',
+    'latency_asc':    'latency_ms    ASC  NULLS LAST',
+    'latency_desc':   'latency_ms    DESC NULLS LAST',
+    'ip_asc':         'public_ip     ASC  NULLS LAST',
+    'ip_desc':        'public_ip     DESC NULLS LAST',
+    'jitter_asc':     'jitter_ms     ASC  NULLS LAST',
+    'jitter_desc':    'jitter_ms     DESC NULLS LAST',
+    'loss_asc':       'packet_loss_pct ASC  NULLS LAST',
+    'loss_desc':      'packet_loss_pct DESC NULLS LAST',
+    'dns_asc':        'dns_latency_ms ASC  NULLS LAST',
+    'dns_desc':       'dns_latency_ms DESC NULLS LAST',
+    'method_asc':     'test_method   ASC,  tested_at DESC',
+    'method_desc':    'test_method   DESC, tested_at DESC',
+    'status_asc':     'success ASC,  tested_at DESC',
+    'status_desc':    'success DESC, tested_at DESC',
 }
 
 @bp.route('/history')

@@ -138,7 +138,7 @@
 {% endif %}
 
 {# ── Filters + sort bar ──────────────────────────────────────────────────── #}
-<form method="get" class="row g-2 mb-3 align-items-end">
+<form method="get" class="row g-2 mb-3 align-items-end" id="hist-sort-form">
   <input type="hidden" name="page" value="1">
   <div class="col-auto">
     <select name="server" class="form-select form-select-sm" onchange="this.form.submit()">
@@ -156,16 +156,7 @@
       <option value="proxy_qc" {{ 'selected' if method_filter == 'proxy_qc' }}>{{ t.hist_method_proxy_qc }}</option>
     </select>
   </div>
-  <div class="col-auto">
-    <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
-      <option value="date_desc"  {{ 'selected' if sort == 'date_desc'  }}>{{ t.hist_sort_date_desc }}</option>
-      <option value="date_asc"   {{ 'selected' if sort == 'date_asc'   }}>{{ t.hist_sort_date_asc }}</option>
-      <option value="server_asc" {{ 'selected' if sort == 'server_asc' }}>{{ t.hist_sort_server }} A→Z</option>
-      <option value="server_desc"{{ 'selected' if sort == 'server_desc'}}>{{ t.hist_sort_server }} Z→A</option>
-      <option value="dl_desc"    {{ 'selected' if sort == 'dl_desc'    }}>{{ t.hist_sort_dl_desc }}</option>
-      <option value="dl_asc"     {{ 'selected' if sort == 'dl_asc'     }}>{{ t.hist_sort_dl_asc }}</option>
-    </select>
-  </div>
+  <input type="hidden" name="sort" id="hist-sort-val" value="{{ sort }}">
   <div class="col-auto d-flex align-items-center gap-1">
     <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.hist_date_from }}</label>
     <input type="date" name="from_date" class="form-control form-control-sm"
@@ -214,31 +205,55 @@
   </div>
   <div class="table-responsive">
     <table class="table table-hover mb-0" style="font-size:.875rem">
+      {%- macro sort_th(label, col, default_dir='desc', extra='') -%}
+        {%- set asc_key  = col ~ '_asc' -%}
+        {%- set desc_key = col ~ '_desc' -%}
+        {%- set active   = sort in (asc_key, desc_key) -%}
+        {%- set icon     = '▲' if sort == asc_key else ('▼' if sort == desc_key else '⇅') -%}
+        <th class="hist-sort-th{% if active %} text-primary{% endif %}"
+            style="cursor:pointer;user-select:none;white-space:nowrap{{ ';' ~ extra if extra }}"
+            onclick="_histSort('{{ col }}','{{ default_dir }}')">
+          {{ label }}
+          <span style="font-size:.7rem;{% if active %}color:var(--bs-primary){% else %}color:var(--bs-secondary-color){% endif %}">{{ icon }}</span>
+        </th>
+      {%- endmacro -%}
       <thead>
         <tr>
-          <th>{{ t.cmn_server }}</th>
-          <th>{{ t.cmn_download }}</th>
-          <th>{{ t.cmn_upload }}</th>
-          <th>{{ t.cmn_latency }}</th>
-          <th>{{ t.cmn_public_ip }}</th>
-          <th>
+          {{ sort_th(t.cmn_server,     'server',  'asc') }}
+          {{ sort_th(t.cmn_download,   'dl',      'desc') }}
+          {{ sort_th(t.cmn_upload,     'ul',      'desc') }}
+          {{ sort_th(t.cmn_latency,    'latency', 'asc') }}
+          {{ sort_th(t.cmn_public_ip,  'ip',      'asc') }}
+          <th class="hist-sort-th{% if sort in ('jitter_asc','jitter_desc') %} text-primary{% endif %}"
+              style="cursor:pointer;user-select:none;white-space:nowrap"
+              onclick="_histSort('jitter','asc')">
             {{ t.hist_col_jitter }}
-            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
-               data-bs-toggle="tooltip" title="{{ t.hist_col_jitter_tooltip }}"></i>
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem"
+               data-bs-toggle="tooltip" title="{{ t.hist_col_jitter_tooltip }}"
+               onclick="event.stopPropagation()"></i>
+            <span style="font-size:.7rem;{% if sort in ('jitter_asc','jitter_desc') %}color:var(--bs-primary){% else %}color:var(--bs-secondary-color){% endif %}">{{ '▲' if sort=='jitter_asc' else ('▼' if sort=='jitter_desc' else '⇅') }}</span>
           </th>
-          <th>
+          <th class="hist-sort-th{% if sort in ('loss_asc','loss_desc') %} text-primary{% endif %}"
+              style="cursor:pointer;user-select:none;white-space:nowrap"
+              onclick="_histSort('loss','asc')">
             {{ t.hist_col_loss }}
-            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
-               data-bs-toggle="tooltip" title="{{ t.hist_col_loss_tooltip }}"></i>
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem"
+               data-bs-toggle="tooltip" title="{{ t.hist_col_loss_tooltip }}"
+               onclick="event.stopPropagation()"></i>
+            <span style="font-size:.7rem;{% if sort in ('loss_asc','loss_desc') %}color:var(--bs-primary){% else %}color:var(--bs-secondary-color){% endif %}">{{ '▲' if sort=='loss_asc' else ('▼' if sort=='loss_desc' else '⇅') }}</span>
           </th>
-          <th>
+          <th class="hist-sort-th{% if sort in ('dns_asc','dns_desc') %} text-primary{% endif %}"
+              style="cursor:pointer;user-select:none;white-space:nowrap"
+              onclick="_histSort('dns','asc')">
             {{ t.hist_col_dns }}
-            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
-               data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}"></i>
+            <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem"
+               data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}"
+               onclick="event.stopPropagation()"></i>
+            <span style="font-size:.7rem;{% if sort in ('dns_asc','dns_desc') %}color:var(--bs-primary){% else %}color:var(--bs-secondary-color){% endif %}">{{ '▲' if sort=='dns_asc' else ('▼' if sort=='dns_desc' else '⇅') }}</span>
           </th>
-          <th>{{ t.hist_col_method }}</th>
-          <th>{{ t.cmn_status }}</th>
-          <th>{{ t.cmn_date }}</th>
+          {{ sort_th(t.hist_col_method, 'method', 'asc') }}
+          {{ sort_th(t.cmn_status,      'status',  'desc') }}
+          {{ sort_th(t.cmn_date,        'date',    'desc') }}
         </tr>
       </thead>
       <tbody>
@@ -519,5 +534,17 @@ new Chart(document.getElementById('chartAvg'), {
 {% endif %}
 
 document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+
+// ── Clickable column sort ─────────────────────────────────────────────────
+function _histSort(col, defaultDir) {
+  const inp = document.getElementById('hist-sort-val');
+  const cur = inp.value;
+  let next;
+  if (cur === col + '_desc') next = col + '_asc';
+  else if (cur === col + '_asc') next = col + '_desc';
+  else next = col + '_' + defaultDir;
+  inp.value = next;
+  document.getElementById('hist-sort-form').submit();
+}
 </script>
 {% endblock %}
