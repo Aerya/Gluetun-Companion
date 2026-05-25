@@ -287,6 +287,10 @@ _SERVERS_SORT = {
     'latency_desc':   'avg_lat DESC NULLS LAST, s.name',
     'tests_desc':     'total_tests DESC, s.name',
     'tests_asc':      'total_tests ASC,  s.name',
+    'load_desc':      'airvpn_load DESC NULLS LAST, s.name',
+    'load_asc':       'airvpn_load ASC  NULLS LAST, s.name',
+    'users_desc':     'airvpn_users DESC NULLS LAST, s.name',
+    'users_asc':      'airvpn_users ASC  NULLS LAST, s.name',
 }
 
 @bp.route('/servers')
@@ -343,9 +347,12 @@ def servers():
                 (SELECT public_ip   FROM speed_tests
                  WHERE server_name=s.name AND success=1 ORDER BY tested_at DESC LIMIT 1) AS last_ipv4,
                 (SELECT public_ipv6 FROM speed_tests
-                 WHERE server_name=s.name AND success=1 ORDER BY tested_at DESC LIMIT 1) AS last_ipv6
+                 WHERE server_name=s.name AND success=1 ORDER BY tested_at DESC LIMIT 1) AS last_ipv6,
+                av.load  AS airvpn_load,
+                av.users AS airvpn_users
             FROM servers s
             LEFT JOIN speed_tests st ON st.server_name = s.name
+            LEFT JOIN airvpn_snapshot av ON av.name = s.name
             {where_sql}
             GROUP BY s.id
             {having_sql}
