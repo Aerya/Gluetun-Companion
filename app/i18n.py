@@ -609,6 +609,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'dash_run_now_hint': 'Passe par le proxy HTTP — résultat en quelques secondes.',
         'set_run_now_hint':  'Passe par le proxy HTTP — résultat en quelques secondes.',
 
+        # ── Notice : clé WireGuard sidecar ──
+        'notice_wg_sidecar_title':   '⚠️ Action requise — Clé WireGuard dédiée aux tests',
+        'notice_wg_sidecar_body':    'Une modification récente de Companion nécessite que vous configuriez une <strong>paire de clés WireGuard distincte</strong> pour les containers de test sidecar. Sans cette clé, chaque benchmark déconnecte votre VPN Gluetun principal.',
+        'notice_wg_sidecar_action':  'Rendez-vous dans <strong>Paramètres → Profils VPN WireGuard → Clé WireGuard dédiée aux tests</strong> pour la configurer.',
+        'notice_wg_sidecar_readme':  'Lire la documentation',
+        'notice_wg_sidecar_check':   'J\'ai lu, je vais configurer la clé',
+        'notice_wg_sidecar_close':   'Fermer',
+
         # ── Jitter / Packet Loss ──
         'stab_col_header':        'Stabilité',
         'stab_col_tooltip':       'Jitter (écart-type de la latence) et taux de perte de paquets mesurés lors du dernier benchmark. Un jitter élevé ou une perte > 0 % dégrade légèrement le score de sélection.',
@@ -1285,6 +1293,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ── Run Now hints ──
         'dash_run_now_hint': 'Uses the HTTP proxy — result in a few seconds.',
         'set_run_now_hint':  'Uses the HTTP proxy — result in a few seconds.',
+
+        # ── Notice: WireGuard sidecar key ──
+        'notice_wg_sidecar_title':   '⚠️ Action required — Dedicated WireGuard test key',
+        'notice_wg_sidecar_body':    'A recent Companion update requires you to configure a <strong>separate WireGuard key pair</strong> for sidecar test containers. Without it, every benchmark disconnects your main Gluetun VPN.',
+        'notice_wg_sidecar_action':  'Go to <strong>Settings → WireGuard VPN Profiles → Dedicated WireGuard test key</strong> to set it up.',
+        'notice_wg_sidecar_readme':  'Read the documentation',
+        'notice_wg_sidecar_check':   'I\'ve read this, I\'ll configure the key',
+        'notice_wg_sidecar_close':   'Close',
 
         # ── Jitter / Packet Loss ──
         'stab_col_header':        'Stability',
