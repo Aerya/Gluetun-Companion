@@ -763,7 +763,16 @@
           <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ t.srv_catalogue_error }}
         </div>
         <div id="cat-empty" class="alert alert-warning d-none py-2" style="font-size:.85rem">
-          {{ t.srv_catalogue_empty }}
+          <div>{{ t.srv_catalogue_empty }}</div>
+          <div class="mt-2">
+            <button class="btn btn-sm btn-primary" id="cat-refresh-btn"
+                    onclick="catalogueRefresh()">
+              <i class="bi bi-arrow-clockwise me-1"></i>{{ t.srv_catalogue_refresh_btn }}
+            </button>
+            <span id="cat-refresh-spinner" class="d-none ms-2 text-muted small">
+              <span class="spinner-border spinner-border-sm me-1"></span>{{ t.srv_catalogue_refreshing }}
+            </span>
+          </div>
         </div>
 
         {# ── Table ── #}
@@ -1522,6 +1531,50 @@ function _catUpdateBulkBar() {
   if (selAll && allChecks.length > 0) {
     selAll.indeterminate = n > 0 && n < allChecks.length;
     selAll.checked       = n === allChecks.length;
+  }
+}
+
+// Force catalogue refresh via sidecar (called from empty-state button)
+async function catalogueRefresh() {
+  const btn     = document.getElementById('cat-refresh-btn');
+  const spinner = document.getElementById('cat-refresh-spinner');
+  btn.disabled = true;
+  spinner.classList.remove('d-none');
+
+  try {
+    const resp = await fetch('{{ url_for("main.api_catalogue_refresh") }}', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': '{{ csrf_token() }}' },
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      // Refresh providers list and reload catalogue
+      _catProviders = [];
+      const sel = document.getElementById('cat-provider-select');
+      // Clear all provider options except the "all" placeholder
+      while (sel.options.length > 1) sel.remove(1);
+      // Re-fetch providers then reload table
+      fetch('{{ url_for("main.api_catalogue_providers") }}')
+        .then(r => r.json())
+        .then(pdata => {
+          _catProviders = pdata.providers || [];
+          _catProviders.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.name;
+            opt.textContent = p.name + ' (' + p.count + ')';
+            sel.appendChild(opt);
+          });
+          loadCatalogue();
+        })
+        .catch(() => loadCatalogue());
+    } else {
+      alert('Erreur : ' + (data.error || 'Échec du rafraîchissement'));
+    }
+  } catch (e) {
+    alert('Erreur réseau : ' + e);
+  } finally {
+    btn.disabled = false;
+    spinner.classList.add('d-none');
   }
 }
 
