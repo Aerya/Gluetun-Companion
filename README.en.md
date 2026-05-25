@@ -528,6 +528,19 @@ In **Settings → WireGuard VPN profiles**:
 
 > **Key security**: encrypted values are stored with the prefix `enc:` in the database. They are only decrypted at the moment the Compose override is written or a sidecar container is launched — never exposed in logs or configuration exports.
 
+#### ⚠️ Dedicated WireGuard test key (required)
+
+> **If you use sidecar mode for benchmarks with WireGuard, you must configure a separate WireGuard key pair in Settings → WireGuard VPN Profiles → Dedicated WireGuard test key.**
+
+**Why this is necessary:** sidecar test containers clone the full environment of your main Gluetun container, including its `WIREGUARD_PRIVATE_KEY`. When a test container initiates a new WireGuard handshake from a different IP address using the same key, the VPN provider updates the peer routing… and your main Gluetun tunnel drops. The result: the VPN goes *unhealthy*, and Companion shows "VPN down" in red.
+
+**Solution:** generate a second WireGuard key pair from your provider (same process as your initial setup — one extra key in your client account), then fill in Companion:
+- **WireGuard private key (tests)** — a new private key, separate from your main profile key
+- **WireGuard IP address (tests)** — the IP address assigned to this key by your provider (CIDR format, e.g. `10.x.x.x/32`)
+- **Pre-shared key (optional)** — only if your provider requires one
+
+This dedicated key is injected into all test containers in place of the main key. It applies to all WireGuard providers. **Until it is configured, a red alert is shown in Settings.**
+
 #### Server ↔ profile assignment
 
 On the **Servers** page:

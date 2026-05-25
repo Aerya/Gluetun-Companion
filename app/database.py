@@ -192,7 +192,11 @@ def init_db(db_path: str):
                 -- WireGuard multi-provider rotation
                 ('wg_rotation_mode',           'none'),   -- none | free | conditional
                 ('wg_rotation_threshold',      '10'),     -- % score gain required (conditional mode)
-                ('wg_active_profile_id',       '');
+                ('wg_active_profile_id',       ''),
+                -- WireGuard dedicated sidecar test key (prevents VPN disconnect during benchmarks)
+                ('wg_sidecar_private_key',     ''),       -- encrypted WIREGUARD_PRIVATE_KEY for test containers
+                ('wg_sidecar_addresses',       ''),       -- WIREGUARD_ADDRESSES for test containers
+                ('wg_sidecar_preshared_key',   '');
         ''')
         # Data migration: legacy airvpn_notify_mention → notify_mention
         _legacy = db.execute(

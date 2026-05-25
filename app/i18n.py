@@ -576,6 +576,18 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_wg_rotation_threshold':    'Seuil de gain minimal (%)',
         'set_wg_rotation_threshold_hint':'Rotation conditionnelle : bascule vers un autre profil seulement si son score est supérieur d\'au moins X % au profil courant.',
 
+        # ── WireGuard sidecar test key ──
+        'set_wg_sidecar_title':         'Clé WireGuard dédiée aux tests',
+        'set_wg_sidecar_subtitle':      'Les containers de test sidecar ont besoin d\'une paire de clés WireGuard distincte. Sans ça, chaque benchmark crée un conflit de peer WireGuard et fait tomber votre VPN principal.',
+        'set_wg_sidecar_warn':          '⚠️ Non configurée — les benchmarks sidecar mettront votre VPN Gluetun hors ligne ! Remplissez ce bloc avant de lancer des benchmarks.',
+        'set_wg_sidecar_configured':    '✅ Clé de test configurée — les benchmarks n\'affecteront pas votre VPN principal.',
+        'set_wg_sidecar_pk':            'Clé privée WireGuard (tests)',
+        'set_wg_sidecar_pk_hint':       'Clé privée dédiée, générée séparément (ex : wg genkey). Ne jamais réutiliser la clé du profil principal.',
+        'set_wg_sidecar_addr':          'Adresse IP WireGuard (tests)',
+        'set_wg_sidecar_addr_hint':     'Adresse IP assignée à cette clé par votre fournisseur (format CIDR, ex : 10.x.x.x/32).',
+        'set_wg_sidecar_psk':           'Clé pré-partagée (optionnelle)',
+        'set_wg_sidecar_clear':         'Effacer la clé de test',
+
         # ── Hourly patterns ──
         'pat_title':        'Patterns horaires',
         'pat_server_label': 'Serveur',
@@ -1240,6 +1252,18 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_wg_rotation_conditional':  'Conditional — switch only if gain exceeds threshold',
         'set_wg_rotation_threshold':    'Minimum gain threshold (%)',
         'set_wg_rotation_threshold_hint':'Conditional rotation: switch to another profile only if its score is at least X% higher than the current one.',
+
+        # ── WireGuard sidecar test key ──
+        'set_wg_sidecar_title':         'Dedicated WireGuard test key',
+        'set_wg_sidecar_subtitle':      'Sidecar test containers need a separate WireGuard key pair. Without it, every benchmark creates a WireGuard peer conflict that takes your main VPN offline.',
+        'set_wg_sidecar_warn':          '⚠️ Not configured — sidecar benchmarks will disconnect your Gluetun VPN! Fill in this section before running benchmarks.',
+        'set_wg_sidecar_configured':    '✅ Test key configured — benchmarks will not affect your main VPN.',
+        'set_wg_sidecar_pk':            'WireGuard private key (tests)',
+        'set_wg_sidecar_pk_hint':       'A dedicated private key generated separately (e.g. wg genkey). Never reuse your main profile key.',
+        'set_wg_sidecar_addr':          'WireGuard IP address (tests)',
+        'set_wg_sidecar_addr_hint':     'IP address assigned to this key by your provider (CIDR format, e.g. 10.x.x.x/32).',
+        'set_wg_sidecar_psk':           'Pre-shared key (optional)',
+        'set_wg_sidecar_clear':         'Clear test key',
 
         # ── Hourly patterns ──
         'pat_title':        'Hourly patterns',

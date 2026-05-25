@@ -996,7 +996,46 @@ def _do_benchmark(app, skip_quick_check: bool = False):
         # server test can pass the correct env vars to create_test_gluetun().
         from .wg_providers import WG_PROVIDERS as _WGP
         from .crypto import decrypt as _crypto_decrypt, is_encrypted as _is_enc
-        from .database import get_vpn_profile as _get_profile
+        from .database import get_vpn_profile as _get_profile, get_setting as _get_set
+
+        # ── Load dedicated WireGuard sidecar test key (prevents VPN conflict) ─
+        # When sidecar containers clone the main Gluetun env (including its
+        # WIREGUARD_PRIVATE_KEY), they initiate a new WireGuard handshake from a
+        # different endpoint. The provider re-routes the peer, dropping the main
+        # Gluetun tunnel. A dedicated key pair avoids this conflict entirely.
+        _sidecar_pk_raw  = _get_set('wg_sidecar_private_key', '')
+        _sidecar_addr    = _get_set('wg_sidecar_addresses', '')
+        _sidecar_psk_raw = _get_set('wg_sidecar_preshared_key', '')
+        _wg_sidecar_override: dict[str, str] = {}
+        if _sidecar_pk_raw:
+            try:
+                _wg_sidecar_override['WIREGUARD_PRIVATE_KEY'] = (
+                    _crypto_decrypt(_sidecar_pk_raw) if _is_enc(_sidecar_pk_raw)
+                    else _sidecar_pk_raw
+                )
+            except ValueError as _exc:
+                logger.error('Cannot decrypt wg_sidecar_private_key: %s', _exc)
+        if _sidecar_addr:
+            _wg_sidecar_override['WIREGUARD_ADDRESSES'] = _sidecar_addr
+        if _sidecar_psk_raw:
+            try:
+                _wg_sidecar_override['WIREGUARD_PRESHARED_KEY_PASSPHRASE'] = (
+                    _crypto_decrypt(_sidecar_psk_raw) if _is_enc(_sidecar_psk_raw)
+                    else _sidecar_psk_raw
+                )
+            except ValueError as _exc:
+                logger.error('Cannot decrypt wg_sidecar_preshared_key: %s', _exc)
+        if _wg_sidecar_override:
+            logger.info(
+                'WireGuard sidecar test key loaded — overriding %s for all test containers',
+                ', '.join(_wg_sidecar_override.keys()),
+            )
+        else:
+            logger.warning(
+                'WireGuard sidecar test key NOT configured — sidecar benchmarks may '
+                'disconnect the main Gluetun VPN if WireGuard is in use. '
+                'Configure it in Settings → WireGuard VPN Profiles.',
+            )
 
         _distinct_profile_ids = {
             row['vpn_profile_id']
@@ -1051,13 +1090,23 @@ def _do_benchmark(app, skip_quick_check: bool = False):
             _penv = _profile_env_cache.get(_pid) if _pid is not None else None
             _extra_env = _penv['extra_env'] if _penv else None
 
+            # For sidecar tests, apply the dedicated sidecar WireGuard key on top of
+            # the profile env. This prevents the peer conflict that would otherwise
+            # bring the main Gluetun tunnel down.
+            if sidecar_mode and _wg_sidecar_override:
+                _sidecar_env: dict[str, str] = dict(_extra_env) if _extra_env else {}
+                _sidecar_env.update(_wg_sidecar_override)
+                _sidecar_extra = _sidecar_env
+            else:
+                _sidecar_extra = _extra_env
+
             if sidecar_mode:
                 result = _test_server_sidecar_with_retry(
                     row['name'], row['filter_type'],
                     container, sidecar_image, proxy_host, sidecar_port,
                     wait_secs, dl_duration, dl_streams, max_retries, timeout_secs,
                     sidecar_method, sidecar_iperf_fallback,
-                    extra_env=_extra_env,
+                    extra_env=_sidecar_extra,
                 )
                 if result is None and sidecar_proxy_fallback:
                     logger.info('Sidecar failed for %s — falling back to HTTP proxy', row['name'])

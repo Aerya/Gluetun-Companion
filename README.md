@@ -529,6 +529,19 @@ Dans **Paramètres → Profils VPN WireGuard** :
 
 > **Sécurité des clés** : les valeurs chiffrées sont préfixées `enc:` en base. Elles ne sont déchiffrées qu'au moment de la construction de l'override Compose ou du lancement d'un container sidecar — jamais exposées dans les logs ni dans l'export de configuration.
 
+#### ⚠️ Clé WireGuard dédiée aux tests sidecar (obligatoire)
+
+> **Si vous utilisez le mode sidecar pour les benchmarks avec WireGuard, vous devez configurer une paire de clés WireGuard distincte dans Paramètres → Profils VPN WireGuard → Clé WireGuard dédiée aux tests.**
+
+**Pourquoi c'est nécessaire :** les containers sidecar de test clonent l'environnement complet de votre container Gluetun principal, y compris sa `WIREGUARD_PRIVATE_KEY`. Quand un container de test initie un nouveau handshake WireGuard depuis une adresse IP différente avec la même clé, le fournisseur VPN met à jour la route du peer… et le tunnel de votre Gluetun principal tombe. Résultat : le VPN passe en état *unhealthy*, et Companion affiche « VPN down » en rouge.
+
+**Solution :** générez une seconde paire de clés WireGuard auprès de votre fournisseur (procédure identique à la configuration initiale — une clé supplémentaire dans votre compte client), puis renseignez dans Companion :
+- **Clé privée WireGuard (tests)** — nouvelle clé privée, distincte de celle de votre profil principal
+- **Adresse IP WireGuard (tests)** — l'adresse IP assignée à cette clé par votre fournisseur (format CIDR, ex. `10.x.x.x/32`)
+- **Clé pré-partagée (optionnelle)** — uniquement si votre fournisseur en exige une
+
+Cette clé dédiée est injectée dans tous les containers de test à la place de la clé principale. Elle s'applique à tous les fournisseurs WireGuard. **Tant qu'elle n'est pas configurée, une alerte rouge s'affiche dans les paramètres.**
+
 #### Liaison serveurs ↔ profils
 
 Sur la page **Serveurs** :

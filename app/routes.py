@@ -1267,6 +1267,28 @@ def settings():
                 pass
             flash_t('flash_settings_saved', 'success')
 
+        elif action == 'save_wg_sidecar_key':
+            from .crypto import encrypt as _crypto_enc, is_encrypted as _is_enc_chk
+            # Private key — encrypt if non-empty, keep existing if blank
+            _new_pk = request.form.get('wg_sidecar_private_key', '').strip()
+            if _new_pk:
+                set_setting('wg_sidecar_private_key', _crypto_enc(_new_pk))
+            # Addresses — plain text
+            _new_addr = request.form.get('wg_sidecar_addresses', '').strip()
+            if _new_addr:
+                set_setting('wg_sidecar_addresses', _new_addr)
+            # Pre-shared key — encrypt if non-empty, keep existing if blank
+            _new_psk = request.form.get('wg_sidecar_preshared_key', '').strip()
+            if _new_psk:
+                set_setting('wg_sidecar_preshared_key', _crypto_enc(_new_psk))
+            flash_t('flash_settings_saved', 'success')
+
+        elif action == 'clear_wg_sidecar_key':
+            set_setting('wg_sidecar_private_key', '')
+            set_setting('wg_sidecar_addresses', '')
+            set_setting('wg_sidecar_preshared_key', '')
+            flash_t('flash_settings_saved', 'success')
+
         return redirect(url_for('main.settings'))
 
     cfg = {
@@ -1335,6 +1357,17 @@ def settings():
         'wg_rotation_mode':               get_setting('wg_rotation_mode', 'none'),
         'wg_rotation_threshold':          get_setting('wg_rotation_threshold', '10'),
     }
+    # WireGuard sidecar test key — load and mask for display
+    from .crypto import is_encrypted as _is_enc_disp, decrypt as _crypto_dec_disp
+    _raw_sidecar_pk  = get_setting('wg_sidecar_private_key', '')
+    _raw_sidecar_psk = get_setting('wg_sidecar_preshared_key', '')
+    _wg_sidecar_configured = bool(_raw_sidecar_pk)
+    _wg_sidecar = {
+        'private_key_set':    bool(_raw_sidecar_pk),
+        'addresses':          get_setting('wg_sidecar_addresses', ''),
+        'preshared_key_set':  bool(_raw_sidecar_psk),
+        'configured':         _wg_sidecar_configured,
+    }
     # WireGuard profiles — loaded separately (with masked secrets for display)
     _raw_profiles = get_vpn_profiles()
     _wg_profiles_display = []
@@ -1380,6 +1413,7 @@ def settings():
             for k, p in WG_PROVIDERS.items()
         }),
         wg_orphan_count=_orphan_count,
+        wg_sidecar=_wg_sidecar,
     )
 
 
