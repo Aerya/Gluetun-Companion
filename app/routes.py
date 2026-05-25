@@ -19,7 +19,12 @@ from .database import (
     get_new_airvpn_servers, dismiss_new_airvpn_servers,
     get_stability_all, get_server_filtered_stats,
     get_airvpn_snapshot, update_airvpn_snapshot,
+    get_vpn_profiles, get_vpn_profile,
+    create_vpn_profile, update_vpn_profile, delete_vpn_profile,
+    get_servers_without_profile,
 )
+from .wg_providers import WG_PROVIDERS, get_all_providers, get_fields, get_secret_field_keys
+from .crypto import encrypt as crypto_encrypt, decrypt as crypto_decrypt, mask as crypto_mask
 from .profiles import PROFILES, score_servers as _score_servers, score_servers_detail as _score_servers_detail
 from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
@@ -303,13 +308,14 @@ _SERVERS_VALID_PER_PAGE = {10, 20, 50, 100, 0}   # 0 = all
 @login_required
 def servers():
     from .database import get_hourly_benchmark_stats
-    sort        = request.args.get('sort', 'avg_dl')
-    type_filter = request.args.get('type', '').strip()
-    q           = request.args.get('q',    '').strip()
-    from_date   = request.args.get('from_date', '').strip()
-    to_date     = request.args.get('to_date',   '').strip()
-    per_page    = request.args.get('per_page', 50, type=int)
-    page        = max(1, request.args.get('page', 1, type=int))
+    sort           = request.args.get('sort', 'avg_dl')
+    type_filter    = request.args.get('type', '').strip()
+    q              = request.args.get('q',    '').strip()
+    from_date      = request.args.get('from_date', '').strip()
+    to_date        = request.args.get('to_date',   '').strip()
+    per_page       = request.args.get('per_page', 50, type=int)
+    page           = max(1, request.args.get('page', 1, type=int))
+    profile_filter = request.args.get('profile', '').strip()  # filter by vpn_profile_id
 
     if sort not in _SERVERS_SORT:
         sort = 'avg_dl'
@@ -327,6 +333,14 @@ def servers():
     if q:
         where_parts.append('s.name LIKE ?')
         params.append(f'%{q}%')
+    if profile_filter == '__none__':
+        where_parts.append('s.vpn_profile_id IS NULL')
+    elif profile_filter:
+        try:
+            where_parts.append('s.vpn_profile_id = ?')
+            params.append(int(profile_filter))
+        except ValueError:
+            pass
 
     having_params: list = []
     if from_date:
@@ -345,6 +359,9 @@ def servers():
             SELECT
                 s.id, s.name, s.filter_type, s.enabled,
                 s.consecutive_failures, s.created_at,
+                s.vpn_profile_id,
+                vp.name     AS vp_name,
+                vp.provider AS vp_provider,
                 ROUND(AVG(CASE WHEN st.success=1 THEN st.download_mbps END), 1)   AS avg_dl,
                 ROUND(AVG(CASE WHEN st.success=1 THEN st.upload_mbps   END), 1)   AS avg_ul,
                 ROUND(AVG(CASE WHEN st.success=1 THEN st.latency_ms    END), 0)   AS avg_lat,
@@ -363,6 +380,7 @@ def servers():
             FROM servers s
             LEFT JOIN speed_tests st ON st.server_name = s.name
             LEFT JOIN airvpn_snapshot av ON av.name = s.name
+            LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
             {where_sql}
             GROUP BY s.id
             {having_sql}
@@ -436,6 +454,7 @@ def servers():
                   for s in new_airvpn}
         new_airvpn_countries = ', '.join(sorted(cc_set))
 
+    _all_vpn_profiles = get_vpn_profiles()
     return render_template(
         'servers.html', servers=page_rows,
         filter_labels=FILTER_LABELS, filter_vars=FILTER_VARS,
@@ -460,6 +479,9 @@ def servers():
         adaptive_stats=get_hourly_benchmark_stats(),
         scoring_window_days=_score_window or 0,
         outlier_detection=_outlier_on,
+        vpn_profiles=_all_vpn_profiles,
+        profile_filter=profile_filter,
+        wg_providers=WG_PROVIDERS,
     )
 
 
@@ -537,6 +559,23 @@ def delete_server(server_id):
         db.execute('DELETE FROM servers WHERE id = ?', (server_id,))
     flash_t('flash_server_deleted', 'success')
     return redirect(url_for('main.servers'))
+
+
+@bp.route('/servers/assign-profile/<int:server_id>', methods=['POST'])
+@login_required
+def assign_server_profile(server_id):
+    """Assign (or unassign) a VPN profile to a single server."""
+    pid_raw = request.form.get('vpn_profile_id', '').strip()
+    with get_db() as db:
+        if pid_raw == '' or pid_raw == '0':
+            db.execute('UPDATE servers SET vpn_profile_id = NULL WHERE id = ?', (server_id,))
+        else:
+            try:
+                pid = int(pid_raw)
+                db.execute('UPDATE servers SET vpn_profile_id = ? WHERE id = ?', (pid, server_id))
+            except ValueError:
+                pass
+    return redirect(request.referrer or url_for('main.servers'))
 
 
 @bp.route('/servers/switch/<int:server_id>', methods=['POST'])
@@ -829,7 +868,15 @@ def history():
             f'SELECT COUNT(*) AS n FROM speed_tests {where_sql}', params
         ).fetchone()['n']
         tests = db.execute(
-            f'SELECT * FROM speed_tests {where_sql} ORDER BY {order_sql} LIMIT ? OFFSET ?',
+            f'''SELECT st.*,
+                       s.vpn_profile_id,
+                       vp.name     AS vp_name,
+                       vp.provider AS vp_provider
+                FROM speed_tests st
+                LEFT JOIN servers s        ON s.name = st.server_name
+                LEFT JOIN vpn_profiles vp  ON vp.id  = s.vpn_profile_id
+                {where_sql}
+                ORDER BY {order_sql} LIMIT ? OFFSET ?''',
             params + [_HISTORY_PER_PAGE, offset],
         ).fetchall()
         per_server = db.execute('''
@@ -846,6 +893,7 @@ def history():
         server_names = [r['server_name'] for r in db.execute(
             'SELECT DISTINCT server_name FROM speed_tests ORDER BY server_name'
         ).fetchall()]
+        hist_vpn_profiles = get_vpn_profiles()
         # Chronological data for timeline chart (only when a server is selected)
         timeline_data = []
         if server_filter:
@@ -878,6 +926,8 @@ def history():
         confidence=compute_confidence_all(),
         stability=get_stability_all(),
         adaptive_stats=get_hourly_benchmark_stats(),
+        vpn_profiles=hist_vpn_profiles,
+        wg_providers=get_all_providers(),
     )
 
 
@@ -1139,6 +1189,84 @@ def settings():
             set_setting('pull_network_containers', json.dumps(pull_list))
             flash_t('flash_post_switch_saved', 'success')  # reuse generic "saved" flash
 
+        # ── WireGuard profiles ──────────────────────────────────────────────
+        elif action == 'wg_profile_save':
+            _provider = request.form.get('wg_provider', '').strip()
+            _name     = request.form.get('wg_profile_name', '').strip()
+            _pid_raw  = request.form.get('wg_profile_id', '').strip()
+            _enabled  = bool(request.form.get('wg_enabled'))
+            _rotation = bool(request.form.get('wg_rotation_allowed'))
+            try:
+                _priority = int(request.form.get('wg_rotation_priority', '0') or '0')
+            except ValueError:
+                _priority = 0
+
+            if _provider not in WG_PROVIDERS or not _name:
+                flash('Fournisseur ou nom de profil invalide.', 'danger')
+            else:
+                _secret_keys = get_secret_field_keys(_provider)
+                _all_fields  = get_fields(_provider)
+                _vars: dict[str, str] = {}
+                for _f in _all_fields:
+                    _fkey = _f['key']
+                    _val  = request.form.get(f'wg_var_{_fkey}', '').strip()
+                    if not _val and _pid_raw:
+                        # Edit mode: keep existing value if field left empty
+                        continue
+                    if _val:
+                        _vars[_fkey] = crypto_encrypt(_val) if _fkey in _secret_keys else _val
+
+                if _pid_raw:
+                    # Update existing profile
+                    try:
+                        _pid = int(_pid_raw)
+                    except ValueError:
+                        _pid = 0
+                    if _pid and update_vpn_profile(
+                        _pid,
+                        name=_name,
+                        provider=_provider,
+                        vars=_vars if _vars else None,
+                        enabled=_enabled,
+                        rotation_allowed=_rotation,
+                        rotation_priority=_priority,
+                    ):
+                        flash_t('flash_settings_saved', 'success')
+                    else:
+                        flash('Profil introuvable.', 'danger')
+                else:
+                    # Create new profile
+                    create_vpn_profile(
+                        name=_name,
+                        provider=_provider,
+                        vars=_vars,
+                        enabled=_enabled,
+                        rotation_allowed=_rotation,
+                        rotation_priority=_priority,
+                    )
+                    flash_t('flash_settings_saved', 'success')
+
+        elif action == 'wg_profile_delete':
+            try:
+                _pid = int(request.form.get('wg_profile_id', '0') or '0')
+            except ValueError:
+                _pid = 0
+            if _pid and delete_vpn_profile(_pid):
+                flash_t('flash_settings_saved', 'success')
+            else:
+                flash('Profil introuvable.', 'danger')
+
+        elif action == 'save_wg_rotation':
+            _mode = request.form.get('wg_rotation_mode', 'none')
+            if _mode in ('none', 'free', 'conditional'):
+                set_setting('wg_rotation_mode', _mode)
+            try:
+                _thr = int(request.form.get('wg_rotation_threshold', '10') or '10')
+                set_setting('wg_rotation_threshold', str(max(1, min(_thr, 100))))
+            except ValueError:
+                pass
+            flash_t('flash_settings_saved', 'success')
+
         return redirect(url_for('main.settings'))
 
     cfg = {
@@ -1204,7 +1332,19 @@ def settings():
         'bench_include_types':            json.loads(get_setting('bench_include_types', '[]')),
         'airvpn_bench_max_load':          get_setting('airvpn_bench_max_load', '0'),
         'airvpn_bench_max_users':         get_setting('airvpn_bench_max_users', '0'),
+        'wg_rotation_mode':               get_setting('wg_rotation_mode', 'none'),
+        'wg_rotation_threshold':          get_setting('wg_rotation_threshold', '10'),
     }
+    # WireGuard profiles — loaded separately (with masked secrets for display)
+    _raw_profiles = get_vpn_profiles()
+    _wg_profiles_display = []
+    for _p in _raw_profiles:
+        _display_vars = {}
+        for _k, _v in _p['vars'].items():
+            from .crypto import is_encrypted as _is_enc
+            _display_vars[_k] = crypto_mask(_v) if _is_enc(_v) else _v
+        _wg_profiles_display.append({**_p, 'vars_display': _display_vars})
+    _orphan_count = len(get_servers_without_profile())
     from .database import get_hourly_benchmark_stats
     from .catalogue import catalogue_stats
     adaptive_stats = get_hourly_benchmark_stats()
@@ -1216,6 +1356,30 @@ def settings():
         adaptive_stats=adaptive_stats,
         profiles=PROFILES,
         catalogue_stats=catalogue_stats(),
+        wg_profiles=_wg_profiles_display,
+        wg_providers=get_all_providers(),
+        wg_providers_json=json.dumps({
+            k: {
+                'label':      p['label'],
+                'native_wg':  p['native_wg'],
+                'via_custom': p['via_custom'],
+                'hint_fr':    p.get('hint_fr', ''),
+                'hint_en':    p.get('hint_en', ''),
+                'help_url':   p.get('help_url', ''),
+                'fields': [
+                    {
+                        'key':       f['key'],
+                        'label_fr':  f['label_fr'],
+                        'label_en':  f['label_en'],
+                        'required':  f['required'],
+                        'secret':    f['secret'],
+                    }
+                    for f in p['fields']
+                ],
+            }
+            for k, p in WG_PROVIDERS.items()
+        }),
+        wg_orphan_count=_orphan_count,
     )
 
 

@@ -279,6 +279,7 @@ def _test_one_server_sidecar(
     dl_streams: int,
     sidecar_method: str = 'dual',
     sidecar_iperf_fallback: str = '1',
+    extra_env: 'dict[str, str] | None' = None,
 ) -> dict:
     """
     Full sidecar test cycle for one server:
@@ -308,8 +309,9 @@ def _test_one_server_sidecar(
     token = _secrets.token_hex(32)
 
     try:
-        # Step 1 — launch test Gluetun with the target server
-        ok, err = create_test_gluetun(real_container, filter_type, server_name, sidecar_port)
+        # Step 1 — launch test Gluetun with the target server (+ optional WG profile env)
+        ok, err = create_test_gluetun(real_container, filter_type, server_name, sidecar_port,
+                                      extra_env=extra_env)
         if not ok:
             raise RuntimeError(f'Test Gluetun creation failed: {err}')
 
@@ -635,6 +637,7 @@ def _test_server_sidecar_with_retry(
     timeout_secs: int,
     sidecar_method: str = 'dual',
     sidecar_iperf_fallback: str = '1',
+    extra_env: 'dict[str, str] | None' = None,
 ) -> dict | None:
     last_err = 'Unknown error'
     for attempt in range(max_retries + 1):
@@ -646,6 +649,7 @@ def _test_server_sidecar_with_retry(
                     real_container, sidecar_image, sidecar_host, sidecar_port,
                     wait_secs, dl_duration, dl_streams, sidecar_method,
                     sidecar_iperf_fallback,
+                    extra_env,
                 )
                 return future.result(timeout=timeout_secs)
         except FuturesTimeout:
@@ -915,7 +919,11 @@ def _do_benchmark(app, skip_quick_check: bool = False):
     try:
         with get_db() as db:
             servers = db.execute(
-                'SELECT name, filter_type FROM servers WHERE enabled = 1 ORDER BY name'
+                'SELECT s.name, s.filter_type, s.vpn_profile_id, '
+                '       vp.provider AS vp_provider, vp.name AS vp_name '
+                'FROM servers s '
+                'LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id '
+                'WHERE s.enabled = 1 ORDER BY s.name'
             ).fetchall()
             cycle_id = db.execute(
                 'INSERT INTO benchmark_cycles (started_at) VALUES (CURRENT_TIMESTAMP)'
@@ -983,6 +991,51 @@ def _do_benchmark(app, skip_quick_check: bool = False):
             logger.info('No servers left after pre-filters — skipping benchmark')
             return
 
+        # ── Load WireGuard profile vars for each distinct vpn_profile_id ─────
+        # Decrypts secrets once per profile and builds a lookup table so each
+        # server test can pass the correct env vars to create_test_gluetun().
+        from .wg_providers import WG_PROVIDERS as _WGP
+        from .crypto import decrypt as _crypto_decrypt, is_encrypted as _is_enc
+        from .database import get_vpn_profile as _get_profile
+
+        _distinct_profile_ids = {
+            row['vpn_profile_id']
+            for row in servers
+            if row['vpn_profile_id'] is not None
+        }
+        # {profile_id: {'compose_provider': str, 'extra_env': {var: decrypted_val}}}
+        _profile_env_cache: dict[int, dict] = {}
+        for _pid in _distinct_profile_ids:
+            _p = _get_profile(_pid)
+            if not _p:
+                continue
+            _prov_key = _p['provider']
+            _prov_def = _WGP.get(_prov_key, {})
+            _compose_prov = _prov_def.get('compose_provider', _prov_key)
+            _extra: dict[str, str] = {
+                'VPN_SERVICE_PROVIDER': _compose_prov,
+                'VPN_TYPE': 'wireguard',
+            }
+            for _vk, _vv in _p['vars'].items():
+                try:
+                    _extra[_vk] = _crypto_decrypt(_vv) if _is_enc(_vv) else _vv
+                except ValueError as _exc:
+                    logger.error('Cannot decrypt %s for profile %d: %s', _vk, _pid, _exc)
+                    _extra[_vk] = ''
+            _profile_env_cache[_pid] = {
+                'compose_provider': _compose_prov,
+                'extra_env': _extra,
+            }
+        if _distinct_profile_ids:
+            logger.info(
+                'Loaded WireGuard env for %d profile(s): %s',
+                len(_profile_env_cache),
+                ', '.join(
+                    f"#{pid}({_profile_env_cache[pid]['compose_provider']})"
+                    for pid in sorted(_profile_env_cache)
+                ),
+            )
+
         results: list[dict] = []
 
         for row in servers:
@@ -992,12 +1045,19 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                     len(results), len(servers),
                 )
                 break
+
+            # Resolve WireGuard extra_env for this server's profile (None if no profile)
+            _pid = row['vpn_profile_id']
+            _penv = _profile_env_cache.get(_pid) if _pid is not None else None
+            _extra_env = _penv['extra_env'] if _penv else None
+
             if sidecar_mode:
                 result = _test_server_sidecar_with_retry(
                     row['name'], row['filter_type'],
                     container, sidecar_image, proxy_host, sidecar_port,
                     wait_secs, dl_duration, dl_streams, max_retries, timeout_secs,
                     sidecar_method, sidecar_iperf_fallback,
+                    extra_env=_extra_env,
                 )
                 if result is None and sidecar_proxy_fallback:
                     logger.info('Sidecar failed for %s — falling back to HTTP proxy', row['name'])
@@ -1082,9 +1142,74 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                     )
                     for r in results
                 }
-            # Profile-based normalised score → pick best
+            # Profile-based normalised score → pick best (unconstrained first)
             _profile_scores = _score_results(results, active_profile, _ws_map)
             best = max(results, key=lambda r: _profile_scores.get(r['server'], 0.0))
+
+            # ── WireGuard rotation policy ─────────────────────────────────────
+            # Applied only when multiple VPN profiles are configured.
+            _wg_rotation_mode = get_setting('wg_rotation_mode', 'none')
+            _has_wg_profiles  = bool(_distinct_profile_ids)
+            if _wg_rotation_mode != 'free' and _has_wg_profiles:
+                # Determine current Gluetun server's profile
+                _cur_filter_map  = get_current_filters(container)
+                _cur_sv_name     = next(iter(_cur_filter_map.values()), '').split(',')[0].strip() \
+                                   if _cur_filter_map else ''
+                _cur_profile_id  = next(
+                    (row['vpn_profile_id'] for row in servers if row['name'] == _cur_sv_name),
+                    None,
+                )
+
+                def _row_profile(name):
+                    return next(
+                        (row['vpn_profile_id'] for row in servers if row['name'] == name),
+                        'X',  # sentinel — never equals None or a real int
+                    )
+
+                if _wg_rotation_mode == 'none':
+                    # Stay in current profile: only consider servers with the same profile id
+                    _same = [r for r in results if _row_profile(r['server']) == _cur_profile_id]
+                    if _same:
+                        best = max(_same, key=lambda r: _profile_scores.get(r['server'], 0.0))
+                        logger.info(
+                            'Rotation=none: constrained to profile #%s (%d candidates)',
+                            _cur_profile_id, len(_same),
+                        )
+                    else:
+                        logger.warning(
+                            'Rotation=none but no results in current profile #%s — using global best',
+                            _cur_profile_id,
+                        )
+
+                elif _wg_rotation_mode == 'conditional':
+                    _wg_thr = float(get_setting('wg_rotation_threshold', '10')) / 100.0
+                    _best_pid = _row_profile(best['server'])
+                    if _best_pid != _cur_profile_id:
+                        # Global best is cross-profile — check gain vs current profile best
+                        _same = [r for r in results if _row_profile(r['server']) == _cur_profile_id]
+                        if _same:
+                            _cur_pb = max(_same, key=lambda r: _profile_scores.get(r['server'], 0.0))
+                            _cur_pb_score  = _profile_scores.get(_cur_pb['server'], 0.0)
+                            _global_score  = _profile_scores.get(best['server'], 0.0)
+                            _required      = _cur_pb_score * (1.0 + _wg_thr)
+                            if _global_score <= _required:
+                                logger.info(
+                                    'Rotation=conditional: cross-profile gain %.2f%% < threshold %.0f%% '
+                                    '→ staying in profile #%s',
+                                    (_global_score - _cur_pb_score) / max(_cur_pb_score, 1e-9) * 100,
+                                    _wg_thr * 100,
+                                    _cur_profile_id,
+                                )
+                                best = _cur_pb
+                            else:
+                                logger.info(
+                                    'Rotation=conditional: cross-profile gain %.2f%% ≥ threshold %.0f%% '
+                                    '→ switching to profile #%s',
+                                    (_global_score - _cur_pb_score) / max(_cur_pb_score, 1e-9) * 100,
+                                    _wg_thr * 100,
+                                    _best_pid,
+                                )
+
             best_server_name  = best['server']   # bare name, for result lookup
             best_label = f"{FILTER_VARS.get(best['filter_type'], 'SERVER_NAMES')}={best_server_name}"
             logger.info(
@@ -1113,8 +1238,25 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                     logger.info('Gluetun pull: %s — %s', img, 'updated' if upd else 'up to date' if ok_p else 'failed')
                     if upd:
                         updated_images.append(img)
+                # Build wg_profile arg for the best server (None if no profile)
+                _best_pid = next(
+                    (row['vpn_profile_id'] for row in servers
+                     if row['name'] == best['server']),
+                    None,
+                )
+                _best_wg = None
+                if _best_pid is not None and _best_pid in _profile_env_cache:
+                    _best_penv = _profile_env_cache[_best_pid]
+                    _best_wg = {
+                        'compose_provider': _best_penv['compose_provider'],
+                        'vars': {
+                            k: v for k, v in _best_penv['extra_env'].items()
+                            if k not in ('VPN_SERVICE_PROVIDER', 'VPN_TYPE')
+                        },
+                    }
                 ok, err = switch_server(
-                    best['server'], best['filter_type'], container, compose_dir, project
+                    best['server'], best['filter_type'], container, compose_dir, project,
+                    wg_profile=_best_wg,
                 )
                 if ok:
                     connected, connect_secs = wait_for_vpn(
