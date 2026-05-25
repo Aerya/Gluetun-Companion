@@ -115,7 +115,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
   — pour chacun de ces modes, option de **lancer un bench Sidecar** sur les serveurs importés immédiatement après l'import
 - **Tous les types de filtre** — chaque serveur est importé avec ses attributs complets : `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`
 - **Sélection multi-filtre depuis `/servers`** — sélectionnez des serveurs en mixant librement les types de filtre (ex : noms + pays + villes simultanément) ; Companion applique le bon filtre dans Gluetun et change le type à la volée si nécessaire
-- ⚠️ **ProtonVPN non supporté** — les fichiers ProtonVPN nécessitent des identifiants Proton (compte payant pour les serveurs premium) et ne sont pas disponibles publiquement — voir [la documentation Gluetun](https://github.com/qdm12/gluetun-wiki/blob/main/setup/servers.md#list-of-vpn-servers)
+- ⚠️ **ProtonVPN** — Les serveurs gratuits ProtonVPN sont disponibles via le **Catalogue**. Pour accéder aux serveurs Premium, utilisez **Importer depuis Gluetun** afin de récupérer les serveurs déjà configurés dans votre compose Gluetun (compte payant requis).
 
 **Prérequis** — le sidecar catalogue a uniquement besoin d'un accès HTTPS sortant (réseau bridge Docker, activé par défaut). **Aucune modification de `docker-compose.yml` requise.**
 
