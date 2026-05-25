@@ -53,16 +53,6 @@
   .rank-legend-max { background: rgba(96,165,250,.34); border: 1px solid rgba(96,165,250,.58); }
 </style>
 
-{# ── Live benchmark banner ─────────────────────────────────────────────────── #}
-<div class="live-banner alert alert-success d-flex align-items-center gap-2 py-2 px-3 mb-3 {{ '' if benchmark_running else 'd-none' }}"
-     style="font-size:.85rem">
-  <span class="spinner-border spinner-border-sm flex-shrink-0"></span>
-  <span>{{ t.dash_testing_server }} <strong><span id="live-testing"></span></strong></span>
-  <button class="btn btn-sm btn-outline-light ms-auto" id="btn-stop-bench"
-          onclick="stopBenchmark()" style="font-size:.8rem;padding:.15rem .55rem">
-    <i class="bi bi-stop-fill"></i> {{ t.dash_stop_bench }}
-  </button>
-</div>
 
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
 {# ROW 1 — VPN status + Active server + Benchmark controls ───────────────── #}
@@ -395,32 +385,18 @@ const _chartDl = '#2dd4bf';
 const _chartDlFill = 'rgba(45,212,191,.16)';
 const _chartUl = '#fbbf24';
 
-// ── Live status polling ──────────────────────────────────────────────────
-function pollStatus() {
-  fetch('{{ url_for("main.api_status") }}')
-    .then(r => r.json())
-    .then(d => {
-      const btn      = document.getElementById('btn-trigger');
-      const btnQuick = document.getElementById('btn-trigger-quick');
-      const liveEl   = document.getElementById('live-testing');
-      const btnStop = document.getElementById('btn-stop-bench');
-      if (d.benchmark_running) {
-        if (btn)      { btn.disabled = true;      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning; }
-        if (btnQuick) { btnQuick.disabled = true; btnQuick.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning; }
-        if (liveEl && d.current_server_testing) {
-          liveEl.textContent = d.current_server_testing;
-          liveEl.closest('.live-banner').classList.remove('d-none');
-        }
-      } else {
-        if (btn)      { btn.disabled = false;      btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow; }
-        if (btnQuick) { btnQuick.disabled = false; btnQuick.innerHTML = '<i class="bi bi-speedometer"></i> ' + _msgRunQuick; }
-        if (liveEl) liveEl.closest('.live-banner').classList.add('d-none');
-        if (btnStop)  { btnStop.disabled = false; btnStop.innerHTML = '<i class="bi bi-stop-fill"></i> {{ t.dash_stop_bench }}'; }
-      }
-    })
-    .catch(() => {});
-}
-setInterval(pollStatus, 3000);
+// ── Page hook: update trigger buttons from global benchmark poller ───────
+window._onBenchmarkStatus = function(d) {
+  const btn      = document.getElementById('btn-trigger');
+  const btnQuick = document.getElementById('btn-trigger-quick');
+  if (d.benchmark_running) {
+    if (btn)      { btn.disabled = true;      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning; }
+    if (btnQuick) { btnQuick.disabled = true; btnQuick.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning; }
+  } else {
+    if (btn)      { btn.disabled = false;      btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow; }
+    if (btnQuick) { btnQuick.disabled = false; btnQuick.innerHTML = '<i class="bi bi-speedometer"></i> ' + _msgRunQuick; }
+  }
+};
 
 function triggerBenchmark() {
   const btn = document.getElementById('btn-trigger');
@@ -449,25 +425,6 @@ function triggerQuick() {
       }
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning;
-    });
-}
-
-function stopBenchmark() {
-  const btn = document.getElementById('btn-stop-bench');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> {{ t.dash_stop_requested }}';
-  fetch('{{ url_for("main.api_stop_benchmark") }}', { method: 'POST' })
-    .then(r => {
-      if (r.ok) {
-        btn.innerHTML = '<i class="bi bi-check-lg"></i> {{ t.dash_stop_requested }}';
-      } else {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-stop-fill"></i> {{ t.dash_stop_bench }}';
-      }
-    })
-    .catch(() => {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-stop-fill"></i> {{ t.dash_stop_bench }}';
     });
 }
 

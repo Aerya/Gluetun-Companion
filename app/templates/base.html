@@ -168,6 +168,17 @@
     {% endfor %}
   {% endwith %}
 
+  {# ── Global live benchmark banner ────────────────────────────────────── #}
+  <div id="global-bench-banner" class="alert alert-success d-flex align-items-center gap-2 py-2 px-3 mb-3 d-none"
+       style="font-size:.85rem">
+    <span class="spinner-border spinner-border-sm flex-shrink-0"></span>
+    <span>{{ t.dash_testing_server }} <strong><span id="live-testing"></span></strong></span>
+    <button class="btn btn-sm btn-outline-light ms-auto" id="btn-stop-bench"
+            onclick="stopBenchmark()" style="font-size:.8rem;padding:.15rem .55rem">
+      <i class="bi bi-stop-fill"></i> {{ t.dash_stop_bench }}
+    </button>
+  </div>
+
   {% block content %}{% endblock %}
 </div>
 
@@ -350,6 +361,58 @@ function toggleTheme() {
   }
   setInterval(checkVpn, 30000);
 })();
+</script>
+<script>
+// ── Global benchmark banner poller ───────────────────────────────────────
+window._onBenchmarkStatus = function(d) {};   // page-level hook (no-op default)
+(function () {
+  const _stopLabel    = '{{ t.dash_stop_bench }}';
+  const _stopReqLabel = '{{ t.dash_stop_requested }}';
+  function _pollBench() {
+    fetch('{{ url_for("main.api_status") }}')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return;
+        const banner  = document.getElementById('global-bench-banner');
+        const liveEl  = document.getElementById('live-testing');
+        const stopBtn = document.getElementById('btn-stop-bench');
+        if (d.benchmark_running) {
+          if (banner)  banner.classList.remove('d-none');
+          if (liveEl && d.current_server_testing) liveEl.textContent = d.current_server_testing;
+        } else {
+          if (banner)  banner.classList.add('d-none');
+          if (stopBtn && stopBtn.disabled) {
+            stopBtn.disabled = false;
+            stopBtn.innerHTML = '<i class="bi bi-stop-fill"></i> ' + _stopLabel;
+          }
+        }
+        window._onBenchmarkStatus(d);
+      })
+      .catch(() => {});
+  }
+  setInterval(_pollBench, 3000);
+})();
+
+function stopBenchmark() {
+  const btn = document.getElementById('btn-stop-bench');
+  const _stopReqLabel = '{{ t.dash_stop_requested }}';
+  const _stopLabel    = '{{ t.dash_stop_bench }}';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _stopReqLabel;
+  }
+  fetch('{{ url_for("main.api_stop_benchmark") }}', { method: 'POST' })
+    .then(r => {
+      if (r.ok) {
+        if (btn) btn.innerHTML = '<i class="bi bi-check-lg"></i> ' + _stopReqLabel;
+      } else {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-stop-fill"></i> ' + _stopLabel; }
+      }
+    })
+    .catch(() => {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-stop-fill"></i> ' + _stopLabel; }
+    });
+}
 </script>
 {% block scripts %}{% endblock %}
 {% block footer %}{% endblock %}
