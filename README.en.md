@@ -104,7 +104,9 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 
 ### Gluetun server catalogue
 - **GitHub download** — the catalogue Sidecar downloads server lists directly from the public [`qdm12/gluetun-servers`](https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers) repository; **no volume to mount**, no changes to your Gluetun configuration required
-- **Automatic refresh** — the list is updated at every Sidecar launch (cyclic benchmark); a dedicated button in Settings and in the `/servers` modal lets you force an immediate refresh
+- **Automatic refresh** — the list is updated **at every benchmark cycle** (configurable interval in Settings → Scheduling & Cycle, default: 6 h); a dedicated button in Settings and in the `/servers` modal lets you force an immediate refresh
+- **Auto-add new servers** *(option)* — when new servers appear in the catalogue for a **country**, **region** or **city** you already have configured, Companion automatically adds them to your server list (as `SERVER_NAMES` entries) without any manual action; disabled by default, enable in **Settings → Catalogue**
+- **Change notifications** *(option)* — Discord/Apprise alert sent on each refresh when servers are added to or removed from the catalogue, with per-provider detail (+N/−N); enable in **Settings → Notifications**
 - **3 import modes in Settings**:
   1. **All providers** — imports servers from every provider available on GitHub
   2. **Chosen provider** — imports only the servers of a provider selected manually
@@ -129,12 +131,13 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 ### Analysis & history
 - **Per-server confidence score** — 🟢/🟡/🔴 indicator on the Servers page and in History; based on measurement count and result variability; factored into the automatic selection score (light weighting)
 - **Hourly patterns** (`/history/patterns`) — 0h–23h bar chart showing average speed by hour of day, color-coded by relative performance; best and worst hour displayed; helps identify server saturation windows
+- **Sortable columns** — click any column header in `/history` (11 columns) and `/servers` (8 columns) to sort; clicking again reverses the order; ▲/▼/⇅ visual indicators; sort persists across pages
 - **On-demand test** of a single server from the UI without waiting for the next cycle
 - **CSV export** of the full history
 
 ### UI & notifications
 - **Web UI** dark/light, FR/EN — auth, dashboard with sparkline, paginated history, charts, switches page with Mbps gain and connection time
-- **Contextual notifications** — 7 independently-configurable alert types (auto/manual switch, auto-exclude, benchmark with no results, benchmark complete, quick check result, new AirVPN servers) via Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…); severity levels 🔴/🟡/🔵; global Discord mention with configurable severity threshold
+- **Contextual notifications** — 9 independently-configurable alert types (auto/manual switch, auto-exclude, benchmark with no results, benchmark complete, quick check result, new AirVPN servers, catalogue changes, optimal window change) via Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…); severity levels 🔴/🟡/🔵; global Discord mention with configurable severity threshold
 - **Automatic purge** of SQLite history with configurable retention (in days)
 
 ### Integration & infrastructure
@@ -508,6 +511,8 @@ Companion sends targeted alerts via **Discord webhook** and/or **[Apprise](https
 | 🔵 Benchmark complete | Info | ❌ | Benchmark cycle finished successfully |
 | 🔵 Already on best | Info | ❌ | Active server is already the best — no change |
 | 🔵 Quick check result | Info | ✅ | Manual quick benchmark completed (server, speed, delta vs baseline) |
+| 🔵 Catalogue changes | Info | ❌ | Servers added or removed during a catalogue refresh (per-provider detail) |
+| 🔵 Optimal window changed | Info | ❌ | The global optimal benchmark hour has changed (based on historical patterns) |
 
 **Global Discord mention**: a single `Discord mention` field (e.g. `<@123456789>` for a user, `<@&987654321>` for a role) applies to all alerts. A severity threshold is configurable:
 - **Critical only** (default) — mention only for 🔴 alerts
@@ -711,7 +716,7 @@ Thanks to **[qdm12](https://github.com/qdm12/gluetun)** for Gluetun, without whi
 
 Thanks to **[Tecnativa](https://github.com/Tecnativa/docker-socket-proxy)** for docker-socket-proxy, used to secure access to the Docker socket.
 
-Thanks to **Zup** for ideas and testing.
+Thanks to **[brashenfr](https://github.com/brashenfr)**, **[lnksilver5](https://github.com/lnksilver5)**, **[Ptite Pomme](https://github.com/ptitzgeg-on-git)**, **[zlimteck](https://github.com/zlimteck)** and **[Zup](https://github.com/Gusdezup)** for their ideas and testing.
 
 ---
 

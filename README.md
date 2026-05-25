@@ -105,7 +105,9 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 
 ### Catalogue de serveurs Gluetun
 - **Téléchargement GitHub** — le Sidecar catalogue télécharge les listes de serveurs directement depuis le dépôt public [`qdm12/gluetun-servers`](https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers) ; **aucun volume à monter**, aucune modification de votre configuration Gluetun requise
-- **Mise à jour automatique** — la liste est rafraîchie à chaque lancement du Sidecar (benchmark cyclique) ; un bouton dédié dans les Paramètres et dans le modal `/servers` permet de forcer une mise à jour immédiate
+- **Mise à jour automatique** — la liste est rafraîchie **à chaque cycle de benchmark** (intervalle configurable dans Paramètres → Planification & Cycle, défaut : 6 h) ; un bouton dédié dans les Paramètres et dans le modal `/servers` permet de forcer une mise à jour immédiate
+- **Auto-ajout des nouveaux serveurs** *(option)* — quand de nouveaux serveurs apparaissent dans le catalogue pour un **pays**, une **région** ou une **ville** que vous avez déjà configuré, Companion les ajoute automatiquement à votre liste (type `SERVER_NAMES`) sans intervention manuelle ; désactivé par défaut, activable dans **Paramètres → Catalogue**
+- **Notification de changements** *(option)* — Discord/Apprise envoyés à chaque refresh si des serveurs sont ajoutés ou supprimés du catalogue, avec le détail par provider (+N/-N) ; activable dans **Paramètres → Notifications**
 - **3 modes d'import dans les Paramètres** :
   1. **Tous les providers** — importe les serveurs de tous les providers disponibles sur GitHub
   2. **Provider au choix** — importe uniquement les serveurs du provider sélectionné manuellement
@@ -130,12 +132,13 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 ### Analyse & historique
 - **Score de confiance par serveur** — indicateur 🟢/🟡/🔴 sur la page Serveurs et dans l'historique ; basé sur le nombre de mesures et la variabilité des résultats ; intégré dans le score de sélection automatique (pondération légère)
 - **Patterns horaires** (`/history/patterns`) — graphique barres 0h–23h du débit moyen par tranche horaire, coloré selon les performances relatives ; meilleure et pire heure affichées ; permet de repérer les créneaux de saturation serveur
+- **Colonnes triables** — cliquez sur n'importe quel en-tête de colonne dans `/history` (11 colonnes) et `/servers` (8 colonnes) pour trier ; une seconde presse inverse l'ordre ; indicateurs ▲/▼/⇅ visuels ; tri persistant via pagination
 - **Test unitaire** d'un serveur depuis l'UI sans attendre le prochain cycle
 - **Export CSV** de l'historique complet
 
 ### Interface & notifications
 - **Web UI** dark/light, FR/EN — auth, dashboard avec sparkline, historique paginé, graphiques, page bascules avec gain Mbps et temps de connexion
-- **Notifications contextuelles** — 7 types d'alertes configurables indépendamment (bascule auto/manuelle, auto-exclusion, benchmark sans résultat, fin de benchmark, résultat quick check, nouveaux serveurs AirVPN) via webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…) ; sévérité 🔴/🟡/🔵 ; mention Discord globale avec seuil de sévérité configurable
+- **Notifications contextuelles** — 9 types d'alertes configurables indépendamment (bascule auto/manuelle, auto-exclusion, benchmark sans résultat, fin de benchmark, résultat quick check, nouveaux serveurs AirVPN, changements catalogue, changement fenêtre optimale) via webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…) ; sévérité 🔴/🟡/🔵 ; mention Discord globale avec seuil de sévérité configurable
 - **Purge automatique** de l'historique SQLite configurable (rétention en jours)
 
 ### Intégration & infrastructure
@@ -509,6 +512,8 @@ Companion envoie des alertes ciblées via **webhook Discord** et/ou **[Apprise](
 | 🔵 Fin de benchmark | Info | ❌ | Cycle de benchmark terminé avec succès |
 | 🔵 Déjà sur le meilleur | Info | ❌ | Le serveur actif est déjà le meilleur — aucun changement |
 | 🔵 Résultat quick check | Info | ✅ | Benchmark rapide manuel terminé (serveur, vitesse, delta vs baseline) |
+| 🔵 Changements catalogue | Info | ❌ | Serveurs ajoutés ou supprimés lors d'un refresh catalogue (détail par provider) |
+| 🔵 Fenêtre optimale changée | Info | ❌ | L'heure globale optimale de benchmark a changé (basé sur les patterns historiques) |
 
 **Mention Discord globale** : un seul champ `Mention Discord` (ex. `<@123456789>` pour un utilisateur, `<@&987654321>` pour un rôle) s'applique à toutes les alertes. Un seuil de sévérité est configurable :
 - **Critique uniquement** (défaut) — mention uniquement pour les alertes 🔴
@@ -712,7 +717,7 @@ Merci à **[qdm12](https://github.com/qdm12/gluetun)** pour Gluetun, sans lequel
 
 Merci à **[Tecnativa](https://github.com/Tecnativa/docker-socket-proxy)** pour docker-socket-proxy, utilisé pour sécuriser l'accès au socket Docker.
 
-Merci à **Zup** pour les idées et les tests.
+Merci à **[brashenfr](https://github.com/brashenfr)**, **[lnksilver5](https://github.com/lnksilver5)**, **[Ptite Pomme](https://github.com/ptitzgeg-on-git)**, **[zlimteck](https://github.com/zlimteck)** et **[Zup](https://github.com/Gusdezup)** pour les idées et les tests.
 
 ---
 
