@@ -50,6 +50,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - [Features](#features)
   - [Speed testing](#speed-testing)
   - [Server selection & automatic switching](#server-selection--automatic-switching)
+  - [Multi-provider WireGuard](#multi-provider-wireguard)
   - [Gluetun server catalogue](#gluetun-server-catalogue)
   - [Docker container management](#docker-container-management)
   - [AirVPN](#airvpn)
@@ -67,6 +68,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [AirVPN pre-filter before benchmark](#airvpn-pre-filter-before-benchmark-option-dedicated-to-airvpn)
   - [Docker events listener](#docker-events-listener)
   - [Usage profiles](#usage-profiles)
+  - [WireGuard VPN profiles](#wireguard-vpn-profiles)
   - [Selection score — stability components](#selection-score--stability-components)
   - [Per-server confidence score](#per-server-confidence-score)
   - [Jitter & Packet Loss](#jitter--packet-loss)
@@ -104,6 +106,36 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **5 filter types**: `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - Configurable **retry** per server + global timeout per server
 - **Auto-disable** a server after N consecutive failures
+
+### Multi-provider WireGuard
+
+- **WireGuard VPN profiles** — create multiple sets of WireGuard credentials from **Settings → WireGuard VPN profiles**; each profile is linked to a provider (AirVPN, Mullvad, ProtonVPN, NordVPN, IVPN, Surfshark, Windscribe, or Custom WireGuard for any other compatible provider)
+- **Secret encryption** — private keys and other sensitive fields are encrypted at rest (Fernet/AES-128, key derived from `SECRET_KEY` via PBKDF2HMAC-SHA256 with 480 000 iterations); changing `SECRET_KEY` makes existing profiles unreadable (documented behavior)
+- **Server ↔ profile assignment** — on the **Servers** page, assign a VPN profile to each server via a dropdown; a *Provider* column shows the linked profile; the `?profile=` filter limits the view to a single profile or to unassigned servers
+- **Orphan server alert** — a badge warns when servers have no assigned profile while at least one WireGuard profile is configured; those servers continue to work normally but cannot be selected by the multi-profile benchmark
+- **Multi-profile benchmark** — in sidecar mode, each server is tested with its profile's WireGuard credentials injected into the temporary container; on the final switch, Companion automatically writes `VPN_SERVICE_PROVIDER`, `VPN_TYPE=wireguard` and all `WIREGUARD_*` variables to `docker-compose.override.yml`
+- **Rotation policy** — three modes configurable in **Settings → WireGuard VPN profiles → Rotation policy**:
+  - `none` — Companion always stays in the currently active profile; servers from other profiles are never selected
+  - `free` — picks the best server across all profiles (default behavior without profiles)
+  - `conditional` — switches to another profile only if its best server outperforms the best server in the current profile by more than N % (configurable threshold, default 10 %)
+- **Provider column in `/history`** — each history row shows the WireGuard profile associated with the tested server (only visible when at least one profile is configured)
+
+**Supported providers:**
+
+| Provider | Type | Gluetun variables |
+|---|---|---|
+| AirVPN | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_PRESHARED_KEY`, `WIREGUARD_ADDRESSES` |
+| Mullvad | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
+| ProtonVPN | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
+| NordVPN | Native | `WIREGUARD_PRIVATE_KEY` |
+| IVPN | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
+| Surfshark | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
+| Windscribe | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_PRESHARED_KEY`, `WIREGUARD_ADDRESSES` |
+| Custom WireGuard | Via `custom` | Endpoint IP/port, public key, private key, addresses, pre-shared key (optional) |
+
+> Custom WireGuard covers any provider not listed above (CyberGhost, PrivateVPN, PureVPN, TorGuard, VPN Unlimited…) as long as they provide a standard WireGuard configuration file.
+
+---
 
 ### Gluetun server catalogue
 - **GitHub download** — the catalogue Sidecar downloads server lists directly from the public [`qdm12/gluetun-servers`](https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers) repository; **no volume to mount**, no changes to your Gluetun configuration required
@@ -479,6 +511,62 @@ The active profile determines **how the best server is selected** at the end of 
 **Scoring time window**: by default, the averages used to rank servers are computed over the **last 30 days**. This can be adjusted in **Settings → Automatic switching → Scoring window**: 7 d, 14 d, 30 d, or all data. A shorter window favours recent performance; a longer window smooths out one-off spikes.
 
 **Outlier detection**: enable in **Settings → Automatic switching → Filter outlier values**. When active, each per-server, per-metric result series is filtered using the IQR method (interquartile range × 1.5) before computing averages. Clearly aberrant measurements (network spike, transient saturation) are excluded from scoring — they remain visible in the history. Requires at least 4 measurements per server to take effect.
+
+### WireGuard VPN profiles
+
+WireGuard profiles let you manage multiple VPN providers or identities in a single Companion instance, with automatic optimised switching between them.
+
+#### Creating a profile
+
+In **Settings → WireGuard VPN profiles**:
+
+1. Choose a provider from the dropdown → credential fields appear dynamically based on what Gluetun requires for that provider
+2. Fill in the fields (private key, IP addresses, etc.) — fields marked 🔒 are encrypted before storage
+3. Name the profile (e.g. "Mullvad — Sweden", "ProtonVPN — Gaming")
+4. The *Active* and *Rotation allowed* toggles include or exclude the profile from automatic cycles
+
+> **Key security**: encrypted values are stored with the prefix `enc:` in the database. They are only decrypted at the moment the Compose override is written or a sidecar container is launched — never exposed in logs or configuration exports.
+
+#### Server ↔ profile assignment
+
+On the **Servers** page:
+
+- The *Provider* column shows the WireGuard profile assigned to each server
+- If no profile is assigned, a dropdown lets you assign one directly from the table
+- The `?profile=<id>` filter (dropdown in the filter bar) limits the display to servers from a given profile or to unassigned servers (`__none__`)
+- Servers without a profile when at least one profile is configured are flagged as *(orphan servers)*
+
+#### Multi-profile benchmark — execution flow
+
+```
+Benchmark cycle with WireGuard profiles
+  ├─ Load and decrypt WireGuard vars
+  │    for each distinct profile_id in the server list
+  │    → in-memory cache for the duration of the cycle (decrypted keys, not persisted)
+  └─ For each enabled server:
+       1. Retrieve extra_env from the associated profile
+          (VPN_SERVICE_PROVIDER, VPN_TYPE=wireguard, WIREGUARD_*)
+       2. Launch gluetun-companion-test with those variables injected
+          (profile vars are merged on top of the real Gluetun container vars)
+       3. Speed test via gluetun-companion-sidecar (identical to standard mode)
+  └─ Select the best server according to the rotation policy:
+       ├─ none        → constrained to the profile of the currently active Gluetun server
+       ├─ conditional → cross-profile switch if gain > threshold (default 10 %)
+       └─ free        → global best across all profiles
+  └─ Gluetun switch:
+       → writes VPN_SERVICE_PROVIDER + VPN_TYPE + WIREGUARD_* to the Compose override
+       → docker compose up -d (single Gluetun restart)
+```
+
+#### Rotation policy
+
+| Mode | Behavior |
+|---|---|
+| **none** | Companion finds the best server within the currently active profile. If no results are available for that profile (all excluded, all orphaned), no switch occurs. |
+| **free** | All tested servers are candidates — the global best is selected regardless of profile. |
+| **conditional** | Benchmark is global, but a cross-profile switch only happens if `score_global_best > score_best_in_current_profile × (1 + threshold/100)`. Otherwise the best server in the current profile is retained. |
+
+> The `conditional` threshold is configurable from 1 to 100 % in Settings. A threshold of 10 % means: "only switch profiles if the gain exceeds 10 %".
 
 ---
 

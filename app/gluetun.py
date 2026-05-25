@@ -169,11 +169,21 @@ def switch_server(
     container_name: str,
     compose_dir: str,
     compose_project: str = '',
+    wg_profile: 'dict | None' = None,
 ) -> tuple[bool, str | None]:
     """
     Write a docker-compose.override.yml that sets the correct Gluetun filter
     variable to `filter_value` and clears all other filter variables (so they
     don't conflict with values from the main compose file).
+
+    If *wg_profile* is provided, it must be a dict with:
+        compose_provider : str   — value of VPN_SERVICE_PROVIDER (e.g. "airvpn")
+        vars             : dict  — WireGuard env vars, secrets already decrypted
+                                   e.g. {"WIREGUARD_PRIVATE_KEY": "...", ...}
+
+    When *wg_profile* is provided, VPN_SERVICE_PROVIDER, VPN_TYPE=wireguard and
+    all profile vars are also written to the override so that Gluetun switches
+    both the server filter AND the WireGuard credentials in a single restart.
 
     Returns (success, error_message).
     """
@@ -185,13 +195,24 @@ def switch_server(
     project = compose_project or _detect_compose_project(container_name)
     service = _detect_compose_service(container_name)
 
-    # Build environment block: set target var, blank-out all others
+    def _safe(raw: str) -> str:
+        """Sanitise a value against YAML injection."""
+        return raw.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '').replace('\r', '')
+
+    # Build environment block: set target filter var, blank-out all others
     env_lines = ''
     for label, var in FILTER_VARS.items():
-        raw   = filter_value if var == env_var else ''
-        # Sanitise against YAML injection: strip newlines, escape backslash and quote
-        safe  = raw.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '').replace('\r', '')
-        env_lines += f'      {var}: "{safe}"\n'
+        raw = filter_value if var == env_var else ''
+        env_lines += f'      {var}: "{_safe(raw)}"\n'
+
+    # WireGuard profile vars (provider + credentials)
+    if wg_profile:
+        compose_provider = wg_profile.get('compose_provider', '')
+        if compose_provider:
+            env_lines += f'      VPN_SERVICE_PROVIDER: "{_safe(compose_provider)}"\n'
+        env_lines += '      VPN_TYPE: "wireguard"\n'
+        for k, v in (wg_profile.get('vars') or {}).items():
+            env_lines += f'      {k}: "{_safe(v)}"\n'
 
     # Use the Compose service name (not the container name) as the YAML key so
     # that the override is applied to the correct service even when service name
@@ -782,12 +803,19 @@ def create_test_gluetun(
     filter_type: str,
     filter_value: str,
     sidecar_port: int = 8766,
+    extra_env: 'dict[str, str] | None' = None,
 ) -> tuple[bool, str | None]:
     """
     Clone the real Gluetun container config, override the SERVER_* filter
     for the target server, and start a new test container.
     The sidecar port is published on the host so the companion can reach the
     sidecar API via host.docker.internal:<sidecar_port>.
+
+    *extra_env* is an optional dict of additional env vars to set/override,
+    typically the WireGuard credential vars for a VPN profile
+    (e.g. {"VPN_SERVICE_PROVIDER": "airvpn", "VPN_TYPE": "wireguard",
+            "WIREGUARD_PRIVATE_KEY": "...", ...}).
+    Secret values must already be decrypted by the caller.
     """
     try:
         client = docker.from_env()
@@ -803,6 +831,10 @@ def create_test_gluetun(
         for label, var in FILTER_VARS.items():
             env[var] = ''
         env[FILTER_VARS.get(filter_type, 'SERVER_NAMES')] = filter_value
+
+        # Apply WireGuard profile vars (provider, credentials) if provided
+        if extra_env:
+            env.update(extra_env)
 
         image    = attrs['Config']['Image']
         cap_add  = attrs['HostConfig'].get('CapAdd') or []
