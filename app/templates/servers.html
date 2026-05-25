@@ -734,7 +734,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted small mb-3">{{ t.srv_catalogue_modal_subtitle }}</p>
+        <p class="text-muted small mb-3">{{ t.srv_catalogue_modal_subtitle | safe }}</p>
 
         {# ── Filters row ── #}
         <div class="d-flex gap-2 flex-wrap mb-3">
@@ -1399,9 +1399,16 @@ const _catT = {
 
 let _catEntries = [];
 let _catProviders = [];
+let _catAddedCount = 0;   // tracks servers added during this modal session
 
-// Load providers once when modal opens
+// Reload page if servers were added when the modal closes
+document.getElementById('catalogueModal').addEventListener('hidden.bs.modal', () => {
+  if (_catAddedCount > 0) { _catAddedCount = 0; location.reload(); }
+});
+
+// Reset counter when modal opens
 document.getElementById('catalogueModal').addEventListener('show.bs.modal', () => {
+  _catAddedCount = 0;
   if (_catProviders.length === 0) {
     fetch('{{ url_for("main.api_catalogue_providers") }}')
       .then(r => r.json())
@@ -1603,6 +1610,7 @@ async function catalogueBulkAdd() {
       const d = await r.json();
       if (d.added) {
         totalAdded += d.added;
+        _catAddedCount += d.added;
         names.forEach(n => _catExisting.add(n));
       }
     } catch { /* skip on error */ }
@@ -1645,7 +1653,7 @@ function catalogueAdd(value, filterType) {
     body: JSON.stringify({ names: [value], filter_type: filterType }),
   })
   .then(r => r.json())
-  .then(() => { _catExisting.add(value); _renderCatalogueTable(_catEntries); })
+  .then(d => { if (d.added) { _catAddedCount += d.added; } _catExisting.add(value); _renderCatalogueTable(_catEntries); })
   .catch(console.warn);
 }
 
@@ -1660,6 +1668,7 @@ function catalogueSwitch(value, filterType) {
   .then(d => {
     if (d.ok) {
       _catExisting.add(value);
+      _catAddedCount += 1;
       _renderCatalogueTable(_catEntries);
       bootstrap.Modal.getInstance(document.getElementById('catalogueModal')).hide();
     } else {
