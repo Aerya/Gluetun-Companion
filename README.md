@@ -540,18 +540,20 @@ Dans **Paramètres → Profils VPN WireGuard** :
 
 > **Sécurité des clés** : les valeurs chiffrées sont préfixées `enc:` en base. Elles ne sont déchiffrées qu'au moment de la construction de l'override Compose ou du lancement d'un container sidecar — jamais exposées dans les logs ni dans l'export de configuration.
 
-#### ⚠️ Clé WireGuard dédiée aux tests sidecar (obligatoire)
+#### ⚠️ Clé WireGuard sidecar par profil (obligatoire)
 
-> **Si vous utilisez le mode sidecar pour les benchmarks avec WireGuard, vous devez configurer une paire de clés WireGuard distincte dans Paramètres → Profils VPN WireGuard → Clé WireGuard dédiée aux tests.**
+> **Si vous utilisez le mode sidecar pour les benchmarks avec WireGuard, chaque profil WireGuard doit avoir sa propre clé sidecar dédiée. Sans elle, les serveurs de ce profil sont ignorés lors des benchmarks sidecar.**
 
-**Pourquoi c'est nécessaire :** les containers sidecar de test clonent l'environnement complet de votre container Gluetun principal, y compris sa `WIREGUARD_PRIVATE_KEY`. Quand un container de test initie un nouveau handshake WireGuard depuis une adresse IP différente avec la même clé, le fournisseur VPN met à jour la route du peer… et le tunnel de votre Gluetun principal tombe. Résultat : le VPN passe en état *unhealthy*, et Companion affiche « VPN down » en rouge.
+**Pourquoi c'est nécessaire :** les containers sidecar de test clonent l'environnement de votre container Gluetun principal, y compris sa `WIREGUARD_PRIVATE_KEY`. Quand un container de test initie un nouveau handshake WireGuard avec la même clé depuis une adresse IP différente, le fournisseur VPN met à jour la route du peer… et le tunnel de votre Gluetun principal tombe.
 
-**Solution :** générez une seconde paire de clés WireGuard auprès de votre fournisseur (procédure identique à la configuration initiale — une clé supplémentaire dans votre compte client), puis renseignez dans Companion :
-- **Clé privée WireGuard (tests)** — nouvelle clé privée, distincte de celle de votre profil principal
-- **Adresse IP WireGuard (tests)** — l'adresse IP assignée à cette clé par votre fournisseur (format CIDR, ex. `10.x.x.x/32`)
-- **Clé pré-partagée (optionnelle)** — uniquement si votre fournisseur en exige une
+**Pourquoi il n'y a pas de clé globale :** une clé AirVPN ne peut pas s'authentifier auprès de Mullvad ou Proton, et inversement. Une clé sidecar partagée entre plusieurs providers est donc invalide par nature — chaque profil doit avoir sa propre paire de clés.
 
-Cette clé dédiée est injectée dans tous les containers de test à la place de la clé principale. Elle s'applique à tous les fournisseurs WireGuard. **Tant qu'elle n'est pas configurée, une alerte rouge s'affiche dans les paramètres.**
+**Solution :** dans **Paramètres → Profils VPN WireGuard**, modifiez chaque profil et renseignez la section *Clé sidecar dédiée* :
+- **Clé privée sidecar** — nouvelle clé privée générée auprès du même fournisseur que le profil (ex. `wg genkey` pour les providers qui l'acceptent, ou depuis votre espace client)
+- **Adresse IP sidecar** — l'adresse IP assignée à cette clé par votre fournisseur (format CIDR, ex. `10.x.x.x/32`)
+- **Clé pré-partagée sidecar** — uniquement si votre fournisseur en exige une
+
+Si un profil n'a pas de clé sidecar configurée, ses serveurs sont **ignorés** en mode sidecar (aucun résultat d'échec enregistré — ils sont simplement exclus du cycle). Si le fallback proxy est activé, ils basculent automatiquement en mode proxy.
 
 #### Liaison serveurs ↔ profils
 
@@ -572,9 +574,12 @@ Cycle de benchmark avec profils WireGuard
   └─ Pour chaque serveur activé :
        1. Récupération de l'extra_env du profil associé
           (VPN_SERVICE_PROVIDER, VPN_TYPE=wireguard, WIREGUARD_*)
-       2. Lancement de gluetun-companion-test avec ces variables injectées
-          (les vars du profil s'ajoutent aux vars du container réel Gluetun)
-       3. Test de débit via gluetun-companion-sidecar (identique au mode standard)
+       2. Mode sidecar :
+          ├─ profil a une clé sidecar dédiée → container sidecar lancé avec la clé sidecar
+          │   (évite le conflit de peer avec le tunnel Gluetun principal)
+          └─ profil sans clé sidecar → serveur IGNORÉ pour ce cycle
+             (si fallback proxy activé → test en mode proxy à la place)
+       3. Mode proxy : test via le proxy HTTP Gluetun (pas de container sidecar)
   └─ Sélection du meilleur serveur selon la politique de rotation :
        ├─ none        → contraint au profil du serveur Gluetun actuellement actif
        ├─ conditional → bascule cross-profil si gain > seuil (défaut 10 %)
@@ -929,7 +934,7 @@ Merci à **[qdm12](https://github.com/qdm12/gluetun)** pour Gluetun, sans lequel
 
 Merci à **[Tecnativa](https://github.com/Tecnativa/docker-socket-proxy)** pour docker-socket-proxy, utilisé pour sécuriser l'accès au socket Docker.
 
-Merci à **[brashenfr](https://github.com/brashenfr)**, **[dje33](https://github.com/the-real-dje33)**, **[lnksilver5](https://github.com/lnksilver5)**, **[Ptite Pomme](https://github.com/ptitzgeg-on-git)**, **[x0gen](https://github.com/x0gen)**, **[zlimteck](https://github.com/zlimteck)** et **[Zup](https://github.com/Gusdezup)** pour les idées et les tests.
+Merci à **[brashenfr](https://github.com/brashenfr)**, **[dje33](https://github.com/the-real-dje33)**, **[lnksilver5](https://github.com/lnksilver5)**, **[prismillon](https://github.com/prismillon)**, **[Ptite Pomme](https://github.com/ptitzgeg-on-git)**, **[x0gen](https://github.com/x0gen)**, **[zlimteck](https://github.com/zlimteck)** et **[Zup](https://github.com/Gusdezup)** pour les idées et les tests.
 
 ---
 

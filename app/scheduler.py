@@ -1031,31 +1031,6 @@ def _do_benchmark(app, skip_quick_check: bool = False):
         from .crypto import decrypt as _crypto_decrypt, is_encrypted as _is_enc
         from .database import get_vpn_profile as _get_profile, get_setting as _get_set
 
-        # ── Fallback global sidecar key (used for servers with no VPN profile) ──
-        # Per-profile keys (see below) take priority; this is kept for backward
-        # compat when a server has no assigned profile but sidecar mode is active.
-        _global_sidecar_pk_raw  = _get_set('wg_sidecar_private_key', '')
-        _global_sidecar_addr    = _get_set('wg_sidecar_addresses', '')
-        _global_sidecar_psk_raw = _get_set('wg_sidecar_preshared_key', '')
-        _global_sidecar_override: dict[str, str] = {}
-        if _global_sidecar_pk_raw:
-            try:
-                _global_sidecar_override['WIREGUARD_PRIVATE_KEY'] = (
-                    _crypto_decrypt(_global_sidecar_pk_raw) if _is_enc(_global_sidecar_pk_raw)
-                    else _global_sidecar_pk_raw
-                )
-            except ValueError as _exc:
-                logger.error('Cannot decrypt global wg_sidecar_private_key: %s', _exc)
-        if _global_sidecar_addr:
-            _global_sidecar_override['WIREGUARD_ADDRESSES'] = _global_sidecar_addr
-        if _global_sidecar_psk_raw:
-            try:
-                _global_sidecar_override['WIREGUARD_PRESHARED_KEY'] = (  # correct var name
-                    _crypto_decrypt(_global_sidecar_psk_raw) if _is_enc(_global_sidecar_psk_raw)
-                    else _global_sidecar_psk_raw
-                )
-            except ValueError as _exc:
-                logger.error('Cannot decrypt global wg_sidecar_preshared_key: %s', _exc)
 
         _distinct_profile_ids = {
             row['vpn_profile_id']
@@ -1107,8 +1082,8 @@ def _do_benchmark(app, skip_quick_check: bool = False):
             if not _sidecar_ovr and sidecar_mode:
                 logger.warning(
                     'Profile #%d (%s/%s): no dedicated sidecar WireGuard key configured — '
-                    'sidecar benchmarks will use the profile credentials directly and may '
-                    'disconnect the main Gluetun VPN. Set a sidecar key in Settings.',
+                    'servers in this profile will be skipped in sidecar mode '
+                    '(configure a sidecar key in Settings → WireGuard profiles).',
                     _pid, _compose_prov, _p.get('name', '?'),
                 )
 
@@ -1142,38 +1117,58 @@ def _do_benchmark(app, skip_quick_check: bool = False):
             _penv = _profile_env_cache.get(_pid) if _pid is not None else None
             _extra_env = _penv['extra_env'] if _penv else None
 
-            # For sidecar tests, apply the dedicated sidecar WireGuard key on top of
-            # the profile env. This prevents the peer conflict that would otherwise
-            # bring the main Gluetun tunnel down.
-            # Use the per-profile sidecar key when available; fall back to the global
-            # key (for servers without a profile) for backward compat.
-            _per_profile_sidecar = _penv.get('sidecar_override', {}) if _penv else {}
-            _effective_sidecar = _per_profile_sidecar or _global_sidecar_override
-            if sidecar_mode and _effective_sidecar:
-                _sidecar_env: dict[str, str] = dict(_extra_env) if _extra_env else {}
-                _sidecar_env.update(_effective_sidecar)
-                _sidecar_extra = _sidecar_env
-            else:
-                _sidecar_extra = _extra_env
+            # Each WireGuard provider uses its own key-pair: a Mullvad key cannot
+            # authenticate against AirVPN (and vice-versa). There is therefore no
+            # global fallback sidecar key — only the per-profile dedicated key is used.
+            _effective_sidecar = _penv.get('sidecar_override', {}) if _penv else {}
 
             if sidecar_mode:
-                result = _test_server_sidecar_with_retry(
-                    row['name'], row['filter_type'],
-                    container, sidecar_image, proxy_host, sidecar_port,
-                    wait_secs, dl_duration, dl_streams, max_retries, timeout_secs,
-                    sidecar_method, sidecar_iperf_fallback,
-                    extra_env=_sidecar_extra,
-                )
-                if result is None and sidecar_proxy_fallback:
-                    logger.info('Sidecar failed for %s — falling back to HTTP proxy', row['name'])
-                    result = _test_server_with_retry(
-                        row['name'], row['filter_type'],
-                        container, compose_dir, project,
-                        proxy_host, proxy_port, proxy_user, proxy_pass,
-                        wait_secs, dl_duration, dl_samples, lat_samples,
-                        warmup, dl_streams, max_retries, timeout_secs,
-                        wg_profile=_penv,   # pass profile so switch_server writes WG creds
+                if not _effective_sidecar:
+                    # No per-profile sidecar key → running sidecar would reuse the
+                    # profile's main key and cause a WireGuard peer conflict.
+                    _skip_reason = (
+                        f'no sidecar key for profile #{_pid}'
+                        if _pid else 'server has no VPN profile'
                     )
+                    if sidecar_proxy_fallback:
+                        logger.info(
+                            'Server %s: skipping sidecar (%s) — proxy fallback',
+                            row['name'], _skip_reason,
+                        )
+                        result = _test_server_with_retry(
+                            row['name'], row['filter_type'],
+                            container, compose_dir, project,
+                            proxy_host, proxy_port, proxy_user, proxy_pass,
+                            wait_secs, dl_duration, dl_samples, lat_samples,
+                            warmup, dl_streams, max_retries, timeout_secs,
+                            wg_profile=_penv,
+                        )
+                    else:
+                        logger.info(
+                            'Server %s: skipping (%s, no proxy fallback configured)',
+                            row['name'], _skip_reason,
+                        )
+                        continue   # not a failure — just untestable in this mode
+                else:
+                    _sidecar_env: dict[str, str] = dict(_extra_env) if _extra_env else {}
+                    _sidecar_env.update(_effective_sidecar)
+                    result = _test_server_sidecar_with_retry(
+                        row['name'], row['filter_type'],
+                        container, sidecar_image, proxy_host, sidecar_port,
+                        wait_secs, dl_duration, dl_streams, max_retries, timeout_secs,
+                        sidecar_method, sidecar_iperf_fallback,
+                        extra_env=_sidecar_env,
+                    )
+                    if result is None and sidecar_proxy_fallback:
+                        logger.info('Sidecar failed for %s — falling back to HTTP proxy', row['name'])
+                        result = _test_server_with_retry(
+                            row['name'], row['filter_type'],
+                            container, compose_dir, project,
+                            proxy_host, proxy_port, proxy_user, proxy_pass,
+                            wait_secs, dl_duration, dl_samples, lat_samples,
+                            warmup, dl_streams, max_retries, timeout_secs,
+                            wg_profile=_penv,
+                        )
             else:
                 result = _test_server_with_retry(
                     row['name'], row['filter_type'],

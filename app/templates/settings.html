@@ -581,88 +581,6 @@
       {% endif %}
     </div>{# end card-wg-profiles #}
 
-    {# ── Clé WireGuard dédiée aux tests sidecar ────────────────────────────── #}
-    <div class="card p-4 mb-4" id="card-wg-sidecar-key">
-      <h6 class="fw-bold mb-1">
-        <i class="bi bi-key-fill"></i> {{ t.set_wg_sidecar_title }}
-      </h6>
-      <p class="text-muted mb-3" style="font-size:.85rem">{{ t.set_wg_sidecar_subtitle }}</p>
-
-      {# Status badge #}
-      {% if wg_sidecar.configured %}
-        <div class="alert alert-success py-2 px-3 mb-3" style="font-size:.85rem">
-          {{ t.set_wg_sidecar_configured }}
-        </div>
-      {% else %}
-        <div class="alert alert-danger py-2 px-3 mb-3" style="font-size:.85rem">
-          {{ t.set_wg_sidecar_warn }}
-        </div>
-      {% endif %}
-
-      <form method="post">
-        <input type="hidden" name="action" value="save_wg_sidecar_key">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-
-        {# Private key #}
-        <div class="mb-3">
-          <label class="form-label small fw-semibold" for="wg_sidecar_private_key">
-            {{ t.set_wg_sidecar_pk }}
-            {% if wg_sidecar.private_key_set %}
-              <span class="badge bg-secondary ms-1" style="font-size:.7rem">{{ t.set_wg_secret_set }}</span>
-            {% endif %}
-          </label>
-          <input type="password" autocomplete="new-password"
-                 class="form-control form-control-sm font-monospace"
-                 id="wg_sidecar_private_key" name="wg_sidecar_private_key"
-                 placeholder="{{ t.set_wg_secret_keep if wg_sidecar.private_key_set else '' }}">
-          <div class="form-text" style="font-size:.72rem">{{ t.set_wg_sidecar_pk_hint }}</div>
-        </div>
-
-        {# Addresses #}
-        <div class="mb-3">
-          <label class="form-label small fw-semibold" for="wg_sidecar_addresses">
-            {{ t.set_wg_sidecar_addr }}
-          </label>
-          <input type="text"
-                 class="form-control form-control-sm font-monospace"
-                 id="wg_sidecar_addresses" name="wg_sidecar_addresses"
-                 value="{{ wg_sidecar.addresses }}"
-                 placeholder="10.x.x.x/32">
-          <div class="form-text" style="font-size:.72rem">{{ t.set_wg_sidecar_addr_hint }}</div>
-        </div>
-
-        {# Pre-shared key (optional) #}
-        <div class="mb-3">
-          <label class="form-label small fw-semibold" for="wg_sidecar_preshared_key">
-            {{ t.set_wg_sidecar_psk }}
-            {% if wg_sidecar.preshared_key_set %}
-              <span class="badge bg-secondary ms-1" style="font-size:.7rem">{{ t.set_wg_secret_set }}</span>
-            {% endif %}
-          </label>
-          <input type="password" autocomplete="new-password"
-                 class="form-control form-control-sm font-monospace"
-                 id="wg_sidecar_preshared_key" name="wg_sidecar_preshared_key"
-                 placeholder="{{ t.set_wg_secret_keep if wg_sidecar.preshared_key_set else '' }}">
-        </div>
-
-        <button type="submit" class="btn btn-sm btn-success fw-semibold">
-          <i class="bi bi-save"></i> {{ t.cmn_save }}
-        </button>
-      </form>
-
-      {# Clear button #}
-      {% if wg_sidecar.configured %}
-      <form method="post" class="mt-2"
-            onsubmit="return confirm('{{ t.set_wg_delete_confirm }}')">
-        <input type="hidden" name="action" value="clear_wg_sidecar_key">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-sm btn-outline-danger">
-          <i class="bi bi-trash"></i> {{ t.set_wg_sidecar_clear }}
-        </button>
-      </form>
-      {% endif %}
-    </div>{# end card-wg-sidecar-key #}
-
     {# ── Mesure de vitesse ──────────────────────────────────────────────────── #}
     <form method="post">
       <input type="hidden" name="action" value="save_switch">
@@ -1680,7 +1598,6 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
   [
     form('save_planning'),
     source.querySelector('#card-wg-profiles'),
-    source.querySelector('#card-wg-sidecar-key'),
     form('save_switch'),
     form('save_speed'),
     cardWithAction('db_retention'),

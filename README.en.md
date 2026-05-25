@@ -539,18 +539,20 @@ In **Settings → WireGuard VPN profiles**:
 
 > **Key security**: encrypted values are stored with the prefix `enc:` in the database. They are only decrypted at the moment the Compose override is written or a sidecar container is launched — never exposed in logs or configuration exports.
 
-#### ⚠️ Dedicated WireGuard test key (required)
+#### ⚠️ Per-profile WireGuard sidecar key (required)
 
-> **If you use sidecar mode for benchmarks with WireGuard, you must configure a separate WireGuard key pair in Settings → WireGuard VPN Profiles → Dedicated WireGuard test key.**
+> **If you use sidecar mode for benchmarks with WireGuard, each WireGuard profile must have its own dedicated sidecar key pair. Without it, servers in that profile are skipped during sidecar benchmarks.**
 
-**Why this is necessary:** sidecar test containers clone the full environment of your main Gluetun container, including its `WIREGUARD_PRIVATE_KEY`. When a test container initiates a new WireGuard handshake from a different IP address using the same key, the VPN provider updates the peer routing… and your main Gluetun tunnel drops. The result: the VPN goes *unhealthy*, and Companion shows "VPN down" in red.
+**Why this is necessary:** sidecar test containers clone the environment of your main Gluetun container, including its `WIREGUARD_PRIVATE_KEY`. When a test container initiates a new WireGuard handshake using the same key from a different IP address, the VPN provider updates the peer routing… and your main Gluetun tunnel drops.
 
-**Solution:** generate a second WireGuard key pair from your provider (same process as your initial setup — one extra key in your client account), then fill in Companion:
-- **WireGuard private key (tests)** — a new private key, separate from your main profile key
-- **WireGuard IP address (tests)** — the IP address assigned to this key by your provider (CIDR format, e.g. `10.x.x.x/32`)
-- **Pre-shared key (optional)** — only if your provider requires one
+**Why there is no global key:** an AirVPN key cannot authenticate against Mullvad or Proton, and vice-versa. A shared sidecar key across multiple providers is inherently invalid — each profile must have its own dedicated key pair.
 
-This dedicated key is injected into all test containers in place of the main key. It applies to all WireGuard providers. **Until it is configured, a red alert is shown in Settings.**
+**Solution:** in **Settings → WireGuard VPN Profiles**, edit each profile and fill in the *Dedicated sidecar key* section:
+- **Sidecar private key** — a new private key generated from the same provider as the profile (e.g. `wg genkey` for providers that support it, or from your client account)
+- **Sidecar IP address** — the IP address assigned to this key by your provider (CIDR format, e.g. `10.x.x.x/32`)
+- **Sidecar pre-shared key** — only if your provider requires one
+
+If a profile has no sidecar key configured, its servers are **skipped** in sidecar mode (no failure recorded — they are simply excluded from the cycle). If the proxy fallback is enabled, they automatically fall back to proxy mode instead.
 
 #### Server ↔ profile assignment
 
@@ -571,9 +573,12 @@ Benchmark cycle with WireGuard profiles
   └─ For each enabled server:
        1. Retrieve extra_env from the associated profile
           (VPN_SERVICE_PROVIDER, VPN_TYPE=wireguard, WIREGUARD_*)
-       2. Launch gluetun-companion-test with those variables injected
-          (profile vars are merged on top of the real Gluetun container vars)
-       3. Speed test via gluetun-companion-sidecar (identical to standard mode)
+       2. Sidecar mode:
+          ├─ profile has a dedicated sidecar key → sidecar container launched with sidecar key
+          │   (prevents peer conflict with the main Gluetun tunnel)
+          └─ profile has no sidecar key → server SKIPPED for this cycle
+             (if proxy fallback enabled → tested in proxy mode instead)
+       3. Proxy mode: test via Gluetun HTTP proxy (no sidecar container)
   └─ Select the best server according to the rotation policy:
        ├─ none        → constrained to the profile of the currently active Gluetun server
        ├─ conditional → cross-profile switch if gain > threshold (default 10 %)
@@ -927,7 +932,7 @@ Thanks to **[qdm12](https://github.com/qdm12/gluetun)** for Gluetun, without whi
 
 Thanks to **[Tecnativa](https://github.com/Tecnativa/docker-socket-proxy)** for docker-socket-proxy, used to secure access to the Docker socket.
 
-Thanks to **[brashenfr](https://github.com/brashenfr)**, **[dje33](https://github.com/the-real-dje33)**, **[lnksilver5](https://github.com/lnksilver5)**, **[Ptite Pomme](https://github.com/ptitzgeg-on-git)**, **[x0gen](https://github.com/x0gen)**, **[zlimteck](https://github.com/zlimteck)** and **[Zup](https://github.com/Gusdezup)** for their ideas and testing.
+Thanks to **[brashenfr](https://github.com/brashenfr)**, **[dje33](https://github.com/the-real-dje33)**, **[lnksilver5](https://github.com/lnksilver5)**, **[prismillon](https://github.com/prismillon)**, **[Ptite Pomme](https://github.com/ptitzgeg-on-git)**, **[x0gen](https://github.com/x0gen)**, **[zlimteck](https://github.com/zlimteck)** and **[Zup](https://github.com/Gusdezup)** for their ideas and testing.
 
 ---
 

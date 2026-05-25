@@ -48,7 +48,9 @@
     align-items: center;
     min-width: 300px;
   }
-  .flow-server { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .flow-server { min-width: 0; overflow: hidden; }
+  .flow-server code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .flow-provider { font-size: .68rem; color: var(--bs-secondary-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .gain-pill {
     display: inline-flex;
     align-items: center;
@@ -132,6 +134,17 @@
         {% endfor %}
       </select>
     </div>
+    {% if vpn_profiles %}
+    <div class="col-12 col-sm-auto">
+      <label class="form-label text-muted small mb-1">{{ t.sw_filter_provider }}</label>
+      <select name="provider_filter" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value="" {{ 'selected' if not provider_filter }}>{{ t.sw_filter_all_providers }}</option>
+        {% for vp in vpn_profiles %}
+        <option value="{{ vp.id }}" {{ 'selected' if provider_filter == vp.id | string }}>{{ vp.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
     <div class="col-6 col-sm-auto">
       <label class="form-label text-muted small mb-1">{{ t.hist_date_from }}</label>
       <input type="date" name="from_date" class="form-control form-control-sm" value="{{ from_date }}">
@@ -143,7 +156,7 @@
     <div class="col-auto">
       <button type="submit" class="btn btn-sm btn-outline-info" title="{{ t.ui_filter }}"><i class="bi bi-funnel-fill"></i></button>
     </div>
-    {% if from_date or to_date or status_filter or reason_filter %}
+    {% if from_date or to_date or status_filter or reason_filter or provider_filter %}
     <div class="col-auto">
       <a href="{{ url_for('main.switches') }}" class="btn btn-sm btn-outline-secondary" title="{{ t.ui_reset }}"><i class="bi bi-x-lg"></i></a>
     </div>
@@ -172,9 +185,19 @@
         <tr>
           <td>
             <div class="server-flow">
-              <code class="flow-server text-muted" title="{{ s.from_server or '-' }}">{{ s.from_server or '-' }}</code>
+              <div class="flow-server">
+                <code class="text-muted" title="{{ s.from_server or '-' }}">{{ s.from_server or '-' }}</code>
+                {% if s.from_profile_name %}
+                <div class="flow-provider">{{ s.from_profile_name }}</div>
+                {% endif %}
+              </div>
               <i class="bi bi-arrow-right text-muted text-center"></i>
-              <code class="flow-server text-success" title="{{ s.to_server }}">{{ s.to_server }}</code>
+              <div class="flow-server">
+                <code class="text-success" title="{{ s.to_server }}">{{ s.to_server }}</code>
+                {% if s.to_profile_name %}
+                <div class="flow-provider">{{ s.to_profile_name }}</div>
+                {% endif %}
+              </div>
             </div>
           </td>
           <td>

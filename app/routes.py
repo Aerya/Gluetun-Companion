@@ -1051,36 +1051,54 @@ def history_export():
 @bp.route('/switches')
 @login_required
 def switches():
-    from_date     = request.args.get('from_date',     '').strip()
-    to_date       = request.args.get('to_date',       '').strip()
-    status_filter = request.args.get('status_filter', '')
-    reason_filter = request.args.get('reason_filter', '').strip()
+    from_date       = request.args.get('from_date',       '').strip()
+    to_date         = request.args.get('to_date',         '').strip()
+    status_filter   = request.args.get('status_filter',   '')
+    reason_filter   = request.args.get('reason_filter',   '').strip()
+    provider_filter = request.args.get('provider_filter', '').strip()
 
     where_parts: list[str] = []
     params: list = []
     if from_date:
-        where_parts.append("DATE(switched_at) >= ?")
+        where_parts.append("DATE(sw.switched_at) >= ?")
         params.append(from_date)
     if to_date:
-        where_parts.append("DATE(switched_at) <= ?")
+        where_parts.append("DATE(sw.switched_at) <= ?")
         params.append(to_date)
     if status_filter == 'ok':
-        where_parts.append("success = 1")
+        where_parts.append("sw.success = 1")
     elif status_filter == 'fail':
-        where_parts.append("success = 0")
+        where_parts.append("sw.success = 0")
     if reason_filter:
-        where_parts.append("reason = ?")
+        where_parts.append("sw.reason = ?")
         params.append(reason_filter)
+    if provider_filter:
+        try:
+            _pid = int(provider_filter)
+            where_parts.append("s_to.vpn_profile_id = ?")
+            params.append(_pid)
+        except ValueError:
+            provider_filter = ''
     where_sql = ('WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
 
     with get_db() as db:
         rows = db.execute(
-            f'SELECT * FROM switches {where_sql} ORDER BY switched_at DESC LIMIT 500',
+            f'''SELECT sw.*,
+                       vp_to.name   AS to_profile_name,
+                       vp_from.name AS from_profile_name
+                FROM switches sw
+                LEFT JOIN servers s_to    ON s_to.name    = sw.to_server
+                LEFT JOIN vpn_profiles vp_to   ON vp_to.id   = s_to.vpn_profile_id
+                LEFT JOIN servers s_from  ON s_from.name  = sw.from_server
+                LEFT JOIN vpn_profiles vp_from ON vp_from.id = s_from.vpn_profile_id
+                {where_sql}
+                ORDER BY sw.switched_at DESC LIMIT 500''',
             params,
         ).fetchall()
         reason_values = [r['reason'] for r in db.execute(
             'SELECT DISTINCT reason FROM switches WHERE reason IS NOT NULL AND reason != "" ORDER BY reason'
         ).fetchall()]
+        vpn_profiles = get_vpn_profiles()
 
     total = len(rows)
     ok_count = sum(1 for r in rows if r['success'])
@@ -1100,7 +1118,9 @@ def switches():
         to_date=to_date,
         status_filter=status_filter,
         reason_filter=reason_filter,
+        provider_filter=provider_filter,
         reason_values=reason_values,
+        vpn_profiles=vpn_profiles,
         total=total,
         ok_count=ok_count,
         failed_count=failed_count,
@@ -1368,28 +1388,6 @@ def settings():
                 pass
             flash_t('flash_settings_saved', 'success')
 
-        elif action == 'save_wg_sidecar_key':
-            from .crypto import encrypt as _crypto_enc, is_encrypted as _is_enc_chk
-            # Private key — encrypt if non-empty, keep existing if blank
-            _new_pk = request.form.get('wg_sidecar_private_key', '').strip()
-            if _new_pk:
-                set_setting('wg_sidecar_private_key', _crypto_enc(_new_pk))
-            # Addresses — plain text
-            _new_addr = request.form.get('wg_sidecar_addresses', '').strip()
-            if _new_addr:
-                set_setting('wg_sidecar_addresses', _new_addr)
-            # Pre-shared key — encrypt if non-empty, keep existing if blank
-            _new_psk = request.form.get('wg_sidecar_preshared_key', '').strip()
-            if _new_psk:
-                set_setting('wg_sidecar_preshared_key', _crypto_enc(_new_psk))
-            flash_t('flash_settings_saved', 'success')
-
-        elif action == 'clear_wg_sidecar_key':
-            set_setting('wg_sidecar_private_key', '')
-            set_setting('wg_sidecar_addresses', '')
-            set_setting('wg_sidecar_preshared_key', '')
-            flash_t('flash_settings_saved', 'success')
-
         return redirect(url_for('main.settings'))
 
     cfg = {
@@ -1458,17 +1456,6 @@ def settings():
         'wg_rotation_mode':               get_setting('wg_rotation_mode', 'none'),
         'wg_rotation_threshold':          get_setting('wg_rotation_threshold', '10'),
     }
-    # WireGuard sidecar test key — load and mask for display
-    from .crypto import is_encrypted as _is_enc_disp, decrypt as _crypto_dec_disp
-    _raw_sidecar_pk  = get_setting('wg_sidecar_private_key', '')
-    _raw_sidecar_psk = get_setting('wg_sidecar_preshared_key', '')
-    _wg_sidecar_configured = bool(_raw_sidecar_pk)
-    _wg_sidecar = {
-        'private_key_set':    bool(_raw_sidecar_pk),
-        'addresses':          get_setting('wg_sidecar_addresses', ''),
-        'preshared_key_set':  bool(_raw_sidecar_psk),
-        'configured':         _wg_sidecar_configured,
-    }
     # WireGuard profiles — loaded separately (with masked secrets for display)
     _raw_profiles = get_vpn_profiles()
     _has_wg_profiles = len(_raw_profiles) > 0
@@ -1523,7 +1510,6 @@ def settings():
             for k, p in WG_PROVIDERS.items()
         }),
         wg_orphan_count=_orphan_count,
-        wg_sidecar=_wg_sidecar,
         has_wg_profiles=_has_wg_profiles,
     )
 

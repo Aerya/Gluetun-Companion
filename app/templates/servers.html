@@ -265,10 +265,8 @@
         <thead>
           <tr>
             {{ srv_th(t.srv_col_value,   'name',    'asc') }}
-            {{ srv_th(t.srv_col_type,    'type',    'asc') }}
-            {% if vpn_profiles %}
             <th>{{ t.srv_col_provider }}</th>
-            {% endif %}
+            {{ srv_th(t.srv_col_type,    'type',    'asc') }}
             <th style="cursor:pointer;user-select:none;white-space:nowrap;min-width:130px"
                 onclick="_srvSort('load','desc')">
               {{ t.srv_airvpn_col_load }}
@@ -386,33 +384,35 @@
                 </button>
               {% endif %}
             </td>
+            <td style="white-space:nowrap">
+              {% if vpn_profiles %}
+                {% if s.vp_name %}
+                  {%- set _pkey = s.vp_provider -%}
+                  {%- set _plabel = wg_providers[_pkey].label if _pkey in wg_providers else _pkey -%}
+                  <span class="badge bg-primary bg-opacity-25 text-primary border border-primary border-opacity-25"
+                        style="font-size:.7rem" title="{{ s.vp_name }}">{{ _plabel }}</span>
+                {% else %}
+                  {# No profile assigned — show assign dropdown #}
+                  <form method="post" action="{{ url_for('main.assign_server_profile', server_id=s.id) }}"
+                        class="d-inline-flex align-items-center gap-1">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <select name="vpn_profile_id" class="form-select form-select-sm py-0"
+                            style="font-size:.72rem;height:22px;min-width:110px"
+                            onchange="this.form.submit()">
+                      <option value="">{{ t.srv_no_profile }}</option>
+                      {% for vp in vpn_profiles %}
+                      <option value="{{ vp.id }}">{{ vp.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </form>
+                {% endif %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
             <td>
               <small class="text-muted font-monospace">{{ filter_vars.get(s.filter_type, s.filter_type) }}</small>
             </td>
-            {% if vpn_profiles %}
-            <td style="white-space:nowrap">
-              {% if s.vp_name %}
-                {%- set _pkey = s.vp_provider -%}
-                {%- set _plabel = wg_providers[_pkey].label if _pkey in wg_providers else _pkey -%}
-                <span class="badge bg-primary bg-opacity-25 text-primary border border-primary border-opacity-25"
-                      style="font-size:.7rem" title="{{ s.vp_name }}">{{ _plabel }}</span>
-              {% else %}
-                {# No profile assigned — show assign dropdown #}
-                <form method="post" action="{{ url_for('main.assign_server_profile', server_id=s.id) }}"
-                      class="d-inline-flex align-items-center gap-1">
-                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                  <select name="vpn_profile_id" class="form-select form-select-sm py-0"
-                          style="font-size:.72rem;height:22px;min-width:110px"
-                          onchange="this.form.submit()">
-                    <option value="">{{ t.srv_no_profile }}</option>
-                    {% for vp in vpn_profiles %}
-                    <option value="{{ vp.id }}">{{ vp.name }}</option>
-                    {% endfor %}
-                  </select>
-                </form>
-              {% endif %}
-            </td>
-            {% endif %}
             {% if s.filter_type == 'name' %}
             <td class="srv-col-load" data-srv="{{ s.name }}">
               <span class="spinner-border spinner-border-sm text-muted opacity-50" role="status"></span>
