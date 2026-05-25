@@ -224,6 +224,24 @@
     <input type="date" name="to_date" class="form-control form-control-sm"
            value="{{ to_date }}" style="width:145px">
   </div>
+  <div class="col-auto">
+    <select name="conf" class="form-select form-select-sm" onchange="this.form.submit()"
+            title="{{ t.srv_filter_conf_hint }}">
+      <option value=""       {{ 'selected' if not conf_filter }}>{{ t.srv_filter_conf_all }}</option>
+      <option value="HIGH"   {{ 'selected' if conf_filter == 'HIGH' }}>✅ {{ t.srv_filter_conf_high }}</option>
+      <option value="MEDIUM" {{ 'selected' if conf_filter == 'MEDIUM' }}>🟡 {{ t.srv_filter_conf_medium }}</option>
+      <option value="LOW"    {{ 'selected' if conf_filter == 'LOW' }}>🔴 {{ t.srv_filter_conf_low }}</option>
+    </select>
+  </div>
+  <div class="col-auto d-flex align-items-center gap-1">
+    <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.srv_filter_top_n }}</label>
+    <select name="top_n" class="form-select form-select-sm" style="width:80px" onchange="this.form.submit()">
+      <option value="0" {{ 'selected' if not top_n }}>{{ t.srv_per_page_all }}</option>
+      {% for n in [5, 10, 20, 50] %}
+      <option value="{{ n }}" {{ 'selected' if top_n == n }}>{{ t.srv_top_n_opt.replace('{n}', n|string) }}</option>
+      {% endfor %}
+    </select>
+  </div>
   <div class="col-auto d-flex align-items-center gap-1">
     <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.srv_per_page }}</label>
     <select name="per_page" class="form-select form-select-sm" style="width:90px" onchange="this.form.submit()">
@@ -238,7 +256,7 @@
       <i class="bi bi-funnel-fill"></i>
     </button>
   </div>
-  {% if q or type_filter or from_date or to_date or sort not in ('avg_dl', 'avg_dl_desc') %}
+  {% if q or type_filter or from_date or to_date or conf_filter or top_n or sort not in ('avg_dl', 'avg_dl_desc') %}
   <div class="col-auto">
     <a href="{{ url_for('main.servers', per_page=per_page) }}" class="btn btn-sm btn-outline-secondary">✕</a>
   </div>
@@ -311,20 +329,29 @@
                  data-bs-toggle="tooltip" data-bs-placement="bottom"
                  title="{{ t.stab_col_tooltip }}"></i>
             </th>
-            <th>
+            <th style="cursor:pointer;user-select:none;white-space:nowrap"
+                onclick="_srvSort('jitter','asc')">
               {{ t.hist_col_jitter }}
+              <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('jitter_asc','jitter_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='jitter_asc' else ('▼' if sort=='jitter_desc' else '⇅') }}</span>
               <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
-                 data-bs-toggle="tooltip" title="{{ t.hist_col_jitter_tooltip }}"></i>
+                 data-bs-toggle="tooltip" title="{{ t.hist_col_jitter_tooltip }}"
+                 onclick="event.stopPropagation()"></i>
             </th>
-            <th>
+            <th style="cursor:pointer;user-select:none;white-space:nowrap"
+                onclick="_srvSort('loss','asc')">
               {{ t.hist_col_loss }}
+              <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('loss_asc','loss_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='loss_asc' else ('▼' if sort=='loss_desc' else '⇅') }}</span>
               <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
-                 data-bs-toggle="tooltip" title="{{ t.hist_col_loss_tooltip }}"></i>
+                 data-bs-toggle="tooltip" title="{{ t.hist_col_loss_tooltip }}"
+                 onclick="event.stopPropagation()"></i>
             </th>
-            <th>
+            <th style="cursor:pointer;user-select:none;white-space:nowrap"
+                onclick="_srvSort('dns','asc')">
               {{ t.hist_col_dns }}
+              <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('dns_asc','dns_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='dns_asc' else ('▼' if sort=='dns_desc' else '⇅') }}</span>
               <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
-                 data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}"></i>
+                 data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}"
+                 onclick="event.stopPropagation()"></i>
             </th>
             <th>{{ t.srv_col_last_test }}</th>
             <th class="text-end">{{ t.srv_col_actions }}</th>

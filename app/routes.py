@@ -325,6 +325,13 @@ _SERVERS_SORT = {
     'load_asc':       'airvpn_load ASC  NULLS LAST, s.name',
     'users_desc':     'airvpn_users DESC NULLS LAST, s.name',
     'users_asc':      'airvpn_users ASC  NULLS LAST, s.name',
+    # stability / quality sorts
+    'jitter_asc':     'avg_jitter ASC  NULLS LAST, s.name',
+    'jitter_desc':    'avg_jitter DESC NULLS LAST, s.name',
+    'loss_asc':       'avg_loss   ASC  NULLS LAST, s.name',
+    'loss_desc':      'avg_loss   DESC NULLS LAST, s.name',
+    'dns_asc':        'avg_dns    ASC  NULLS LAST, s.name',
+    'dns_desc':       'avg_dns    DESC NULLS LAST, s.name',
 }
 
 _SERVERS_VALID_PER_PAGE = {10, 20, 50, 100, 0}   # 0 = all
@@ -342,6 +349,8 @@ def servers():
     per_page       = request.args.get('per_page', 50, type=int)
     page           = max(1, request.args.get('page', 1, type=int))
     profile_filter = request.args.get('profile', '').strip()  # filter by vpn_profile_id
+    conf_filter    = request.args.get('conf', '').strip().upper()    # HIGH / MEDIUM / LOW
+    top_n          = request.args.get('top_n', 0, type=int)         # 0 = all
 
     if sort not in _SERVERS_SORT:
         sort = 'avg_dl'
@@ -394,6 +403,12 @@ def servers():
                 ROUND(MAX(CASE WHEN st.success=1 THEN st.download_mbps END), 1)   AS max_dl,
                 ROUND(AVG(CASE WHEN st.success=1 AND st.dl_single_mbps IS NOT NULL
                                THEN st.dl_single_mbps END), 1)                    AS avg_dl_single,
+                ROUND(AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
+                               THEN st.jitter_ms END), 1)                         AS avg_jitter,
+                ROUND(AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
+                               THEN st.packet_loss_pct END), 1)                   AS avg_loss,
+                ROUND(AVG(CASE WHEN st.success=1 AND st.test_method!='proxy_qc'
+                               THEN st.dns_latency_ms END), 0)                    AS avg_dns,
                 MAX(st.tested_at)                                                  AS last_tested,
                 COUNT(st.id)                                                       AS total_tests,
                 SUM(CASE WHEN st.success=1 THEN 1 ELSE 0 END)                     AS ok_tests,
@@ -488,6 +503,19 @@ def servers():
         r.pop('_raw_avg_ul',  None)
         r.pop('_raw_avg_lat', None)
 
+    # ── Confidence filter (Python-side — computed from benchmark history) ────
+    _confidence_all = compute_confidence_all(_score_window)
+    if conf_filter in ('HIGH', 'MEDIUM', 'LOW'):
+        rows = [r for r in rows
+                if _confidence_all.get(r['name'], {}).get('level') == conf_filter]
+
+    # ── Top-N limiter (applied after sort + conf filter, before pagination) ──
+    _valid_top_n = {5, 10, 20, 50}
+    if top_n not in _valid_top_n:
+        top_n = 0
+    if top_n:
+        rows = rows[:top_n]
+
     # ── Pagination (Python-side slice — full rows needed for scores above) ───
     total_servers = len(rows)
     if per_page == 0:
@@ -523,7 +551,7 @@ def servers():
         filter_types=filter_types,
         page=page, pages=srv_pages, total=total_servers, per_page=per_page,
         active_server=active_server,
-        confidence=compute_confidence_all(_score_window),
+        confidence=_confidence_all,
         stability=_stability,
         new_airvpn=new_airvpn,
         new_airvpn_names=new_airvpn_names,
@@ -540,6 +568,8 @@ def servers():
         outlier_detection=_outlier_on,
         vpn_profiles=_all_vpn_profiles,
         profile_filter=profile_filter,
+        conf_filter=conf_filter,
+        top_n=top_n,
         wg_providers=WG_PROVIDERS,
     )
 
