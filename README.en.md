@@ -125,15 +125,16 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 | Provider | Type | Gluetun variables |
 |---|---|---|
 | AirVPN | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_PRESHARED_KEY`, `WIREGUARD_ADDRESSES` |
-| Mullvad | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
-| ProtonVPN | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
-| NordVPN | Native | `WIREGUARD_PRIVATE_KEY` |
+| FastestVPN | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
 | IVPN | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
+| Mullvad | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
+| NordVPN | Native | `WIREGUARD_PRIVATE_KEY` |
+| ProtonVPN | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
 | Surfshark | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
 | Windscribe | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_PRESHARED_KEY`, `WIREGUARD_ADDRESSES` |
 | Custom WireGuard | Via `custom` | Endpoint IP/port, public key, private key, addresses, pre-shared key (optional) |
 
-> Custom WireGuard covers any provider not listed above (CyberGhost, PrivateVPN, PureVPN, TorGuard, VPN Unlimited…) as long as they provide a standard WireGuard configuration file.
+> Custom WireGuard covers any provider not listed above (CyberGhost, PrivateVPN, PureVPN, TorGuard, VPN Unlimited, VyprVPN…) as long as they provide a standard WireGuard configuration file.
 
 ---
 
@@ -846,7 +847,7 @@ Thanks to **[qdm12](https://github.com/qdm12/gluetun)** for Gluetun, without whi
 
 Thanks to **[Tecnativa](https://github.com/Tecnativa/docker-socket-proxy)** for docker-socket-proxy, used to secure access to the Docker socket.
 
-Thanks to **[brashenfr](https://github.com/brashenfr)**, **[lnksilver5](https://github.com/lnksilver5)**, **[Ptite Pomme](https://github.com/ptitzgeg-on-git)**, **[zlimteck](https://github.com/zlimteck)** and **[Zup](https://github.com/Gusdezup)** for their ideas and testing.
+Thanks to **[brashenfr](https://github.com/brashenfr)**, **[dje33](https://github.com/the-real-dje33)**, **[lnksilver5](https://github.com/lnksilver5)**, **[Ptite Pomme](https://github.com/ptitzgeg-on-git)**, **[x0gen](https://github.com/x0gen)**, **[zlimteck](https://github.com/zlimteck)** and **[Zup](https://github.com/Gusdezup)** for their ideas and testing.
 
 ---
 

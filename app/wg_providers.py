@@ -145,6 +145,25 @@ WG_PROVIDERS: dict[str, dict] = {
         'hint_en': 'Get your private key and IP address from the Surfshark Manual Setup section.',
     },
 
+    'fastestvpn': {
+        'label':            'FastestVPN',
+        'compose_provider': 'fastestvpn',
+        'native_wg':        True,
+        'via_custom':       False,
+        'fields': [
+            _F(key='WIREGUARD_PRIVATE_KEY',
+               label_fr='Clé privée',        label_en='Private key',
+               required=True,  secret=True),
+            _F(key='WIREGUARD_ADDRESSES',
+               label_fr='Adresse IP (CIDR)', label_en='IP address (CIDR)',
+               required=True,  secret=False),
+        ],
+        'server_filters': ['SERVER_COUNTRIES', 'SERVER_CITIES', 'SERVER_HOSTNAMES'],
+        'help_url': 'https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/fastestvpn.md',
+        'hint_fr': 'Contactez le support FastestVPN pour obtenir un fichier de configuration WireGuard contenant votre clé privée et votre adresse IP.',
+        'hint_en': 'Contact FastestVPN support to get a WireGuard config file containing your private key and IP address.',
+    },
+
     'windscribe': {
         'label':            'Windscribe',
         'compose_provider': 'windscribe',
@@ -171,7 +190,7 @@ WG_PROVIDERS: dict[str, dict] = {
     # These providers support WireGuard but Gluetun has no built-in server
     # list for them — the user must provide endpoint IP, port and public key.
     # Covered: CyberGhost, PrivateVPN, PureVPN, VPN Unlimited, TorGuard,
-    #          and any other provider not listed above.
+    #          VyprVPN, and any other provider not listed above.
 
     'custom': {
         'label':            'Custom WireGuard',
@@ -201,11 +220,11 @@ WG_PROVIDERS: dict[str, dict] = {
         'server_filters': [],
         'help_url': 'https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/custom.md',
         'hint_fr': (
-            'Pour CyberGhost, PrivateVPN, PureVPN, VPN Unlimited, TorGuard '
+            'Pour CyberGhost, PrivateVPN, PureVPN, VPN Unlimited, TorGuard, VyprVPN '
             'et tout fournisseur sans support WireGuard natif dans Gluetun.'
         ),
         'hint_en': (
-            'For CyberGhost, PrivateVPN, PureVPN, VPN Unlimited, TorGuard, '
+            'For CyberGhost, PrivateVPN, PureVPN, VPN Unlimited, TorGuard, VyprVPN, '
             'and any provider without native WireGuard support in Gluetun.'
         ),
     },

@@ -1509,6 +1509,30 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 </div>{# end notifications + maintenance row #}
 </section>
 
+
+  {# ── Export / Import ──────────────────────────────────────────────────── #}
+  <div id="card-export-import" class="card p-4">
+    <h6 class="fw-bold mb-1">
+      <i class="bi bi-arrow-left-right"></i> {{ t.set_export_title }}
+    </h6>
+    <p class="text-muted mb-3" style="font-size:.85rem">{{ t.set_export_subtitle }}</p>
+
+    <a href="{{ url_for('main.config_export') }}" class="btn btn-outline-secondary btn-sm mb-3">
+      <i class="bi bi-download"></i> {{ t.set_export_btn }}
+    </a>
+
+    <form method="post" action="{{ url_for('main.config_import') }}" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="input-group input-group-sm">
+        <input type="file" class="form-control form-control-sm" name="config_file" accept=".json" required>
+        <button type="submit" class="btn btn-outline-primary">
+          <i class="bi bi-upload"></i> {{ t.set_import_btn }}
+        </button>
+      </div>
+      <div class="form-text mt-1">{{ t.set_import_hint }}</div>
+    </form>
+  </div>
+
 </div>
 
 <script>
@@ -1533,7 +1557,6 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
     form('save_speed'),
     cardWithAction('db_retention'),
     form('save_vpn'),
-    cardWithAction('credentials'),
   ].forEach(el => move(left, el));
 
   [
@@ -1544,6 +1567,8 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
     cardWithForm('form-pause-bench'),
     cardWithAction('notifications'),
     cardWithAction('save_api_token'),
+    cardWithAction('credentials'),
+    source.querySelector('#card-export-import'),
   ].forEach(el => move(right, el));
 })();
 </script>
@@ -1551,55 +1576,24 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 </div>{# end settings-board #}
 
 {# ══════════════════════════════════════════════════════════════════════════
-   Outils — Export/Import · Grafana
-   (hors settings-source pour rester visible)
+   Dashboard Grafana — pleine largeur sous la grille
    ══════════════════════════════════════════════════════════════════════════ #}
-<div class="row g-4 mt-2">
+<div class="mt-2">
+  <div class="card p-4">
+    <h6 class="fw-bold mb-1">
+      <i class="bi bi-bar-chart-line"></i> {{ t.set_grafana_title }}
+    </h6>
+    <p class="text-muted mb-3" style="font-size:.85rem">{{ t.set_grafana_subtitle }}</p>
 
-  {# ── Export / Import ──────────────────────────────────────────────────── #}
-  <div class="col-lg-6">
-    <div class="card p-4 h-100">
-      <h6 class="fw-bold mb-1">
-        <i class="bi bi-arrow-left-right"></i> {{ t.set_export_title }}
-      </h6>
-      <p class="text-muted mb-3" style="font-size:.85rem">{{ t.set_export_subtitle }}</p>
+    <a href="{{ url_for('main.grafana_dashboard') }}" class="btn btn-outline-warning btn-sm mb-3" style="width:fit-content">
+      <i class="bi bi-download"></i> {{ t.set_grafana_btn }}
+    </a>
 
-      <a href="{{ url_for('main.config_export') }}" class="btn btn-outline-secondary btn-sm mb-3">
-        <i class="bi bi-download"></i> {{ t.set_export_btn }}
-      </a>
-
-      <form method="post" action="{{ url_for('main.config_import') }}" enctype="multipart/form-data">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-        <div class="input-group input-group-sm">
-          <input type="file" class="form-control form-control-sm" name="config_file" accept=".json" required>
-          <button type="submit" class="btn btn-outline-primary">
-            <i class="bi bi-upload"></i> {{ t.set_import_btn }}
-          </button>
-        </div>
-        <div class="form-text mt-1">{{ t.set_import_hint }}</div>
-      </form>
-    </div>
+    <p class="text-muted mb-0" style="font-size:.8rem">
+      <i class="bi bi-info-circle me-1"></i>{{ t.set_grafana_metrics_hint }}
+    </p>
   </div>
-
-  {# ── Grafana + Prometheus ──────────────────────────────────────────────── #}
-  <div class="col-lg-6">
-    <div class="card p-4 h-100">
-      <h6 class="fw-bold mb-1">
-        <i class="bi bi-bar-chart-line"></i> {{ t.set_grafana_title }}
-      </h6>
-      <p class="text-muted mb-3" style="font-size:.85rem">{{ t.set_grafana_subtitle }}</p>
-
-      <a href="{{ url_for('main.grafana_dashboard') }}" class="btn btn-outline-warning btn-sm mb-3" style="width:fit-content">
-        <i class="bi bi-download"></i> {{ t.set_grafana_btn }}
-      </a>
-
-      <p class="text-muted mb-0" style="font-size:.8rem">
-        <i class="bi bi-info-circle me-1"></i>{{ t.set_grafana_metrics_hint }}
-      </p>
-    </div>
-  </div>
-
-</div>{# end row #}
+</div>
 
 {% endblock %}
 
