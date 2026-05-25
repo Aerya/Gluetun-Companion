@@ -790,6 +790,18 @@
           </label>
         </div>
 
+        <div class="mb-3 form-check">
+          <input type="checkbox" name="catalogue_auto_add" class="form-check-input"
+                 id="catalogue_auto_add" {{ 'checked' if cfg.catalogue_auto_add == '1' }}>
+          <label class="form-check-label small" for="catalogue_auto_add">
+            {{ t.set_catalogue_auto_add_label }}
+            <span class="text-muted ms-1" data-bs-toggle="tooltip"
+                  title="{{ t.set_catalogue_auto_add_hint }}">
+              <i class="bi bi-info-circle"></i>
+            </span>
+          </label>
+        </div>
+
         <div class="mb-4">
           <label class="form-label small fw-semibold">{{ t.set_catalogue_filter_type_label }}</label>
           <select name="catalogue_import_filter_type" class="form-select form-select-sm"
@@ -1038,6 +1050,18 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
                   {{ t.set_notif_optimal_hour_label }}
                   <span class="text-muted ms-1" data-bs-toggle="tooltip"
                         title="{{ t.set_notif_optimal_hour_hint }}">
+                    <i class="bi bi-info-circle"></i>
+                  </span>
+                </label>
+              </div>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       name="notif_catalogue_changes" id="notif_catalogue_changes"
+                       {{ 'checked' if cfg.notif_catalogue_changes == '1' }}>
+                <label class="form-check-label small" for="notif_catalogue_changes">
+                  {{ t.set_notif_catalogue_label }}
+                  <span class="text-muted ms-1" data-bs-toggle="tooltip"
+                        title="{{ t.set_notif_catalogue_hint }}">
                     <i class="bi bi-info-circle"></i>
                   </span>
                 </label>

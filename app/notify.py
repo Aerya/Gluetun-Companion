@@ -33,6 +33,7 @@ _SEVERITY: dict[str, str] = {
     'benchmark_end':      'info',
     'quick_check':        'info',
     'optimal_hour':       'info',
+    'catalogue_changes':  'info',
 }
 
 _LEVEL_ORDER: dict[str, int] = {'critical': 0, 'medium': 1, 'info': 2}
@@ -669,6 +670,104 @@ def send_optimal_hour_notification(
             logger.info('Apprise optimal-hour notification sent')
         except Exception as exc:
             logger.warning('Apprise optimal-hour notification failed: %s', exc)
+
+
+def send_catalogue_changes_notification(
+    diff: dict,
+    auto_added: list[str],
+    discord_url: str | None = None,
+    apprise_urls: str | None = None,
+    lang: str = 'fr',
+    companion_url: str | None = None,
+    mention: str | None = None,
+    mention_level: str = 'critical',
+):
+    """
+    Notify when new servers appear in (or are removed from) the Gluetun catalogue.
+
+    diff       — {provider: {added: [names], removed: [names]}}
+    auto_added — server names that were automatically added to the user's list
+    """
+    if not discord_url and not apprise_urls:
+        return
+    if not diff and not auto_added:
+        return
+
+    t = get_translations(lang)
+    title = t.get('notif_catalogue_title', '📋 Catalogue Gluetun mis à jour')
+
+    # Build per-provider summary
+    total_added   = sum(len(v.get('added', []))   for v in diff.values())
+    total_removed = sum(len(v.get('removed', [])) for v in diff.values())
+
+    if discord_url:
+        try:
+            fields = []
+            if total_added:
+                added_lines = []
+                for p, changes in diff.items():
+                    if changes.get('added'):
+                        added_lines.append(f'**{p}** +{len(changes["added"])}')
+                fields.append({
+                    'name':   t.get('notif_catalogue_added', 'Nouveaux serveurs'),
+                    'value':  '\n'.join(added_lines) or str(total_added),
+                    'inline': True,
+                })
+            if total_removed:
+                removed_lines = []
+                for p, changes in diff.items():
+                    if changes.get('removed'):
+                        removed_lines.append(f'**{p}** -{len(changes["removed"])}')
+                fields.append({
+                    'name':   t.get('notif_catalogue_removed', 'Serveurs supprimés'),
+                    'value':  '\n'.join(removed_lines) or str(total_removed),
+                    'inline': True,
+                })
+            if auto_added:
+                fields.append({
+                    'name':   t.get('notif_catalogue_auto_added', 'Ajoutés automatiquement'),
+                    'value':  ', '.join(auto_added[:10]) + (f' … (+{len(auto_added)-10})' if len(auto_added) > 10 else ''),
+                    'inline': False,
+                })
+            payload = _discord_base_payload(title, 0x17a2b8, fields, t, companion_url)
+            _post_discord(discord_url, payload, mention, 'catalogue_changes', mention_level)
+            logger.info(
+                'Discord catalogue notification sent (+%d/-%d auto-add:%d)',
+                total_added, total_removed, len(auto_added),
+            )
+        except Exception as exc:
+            logger.warning('Discord catalogue notification failed: %s', exc)
+
+    if apprise_urls:
+        try:
+            lines = []
+            if total_added:
+                per = ', '.join(
+                    f'{p} +{len(v["added"])}'
+                    for p, v in diff.items() if v.get('added')
+                )
+                lines.append(f'{t.get("notif_catalogue_added", "Nouveaux")}: {per}')
+            if total_removed:
+                per = ', '.join(
+                    f'{p} -{len(v["removed"])}'
+                    for p, v in diff.items() if v.get('removed')
+                )
+                lines.append(f'{t.get("notif_catalogue_removed", "Supprimés")}: {per}')
+            if auto_added:
+                lines.append(
+                    f'{t.get("notif_catalogue_auto_added", "Auto-ajoutés")}: '
+                    + ', '.join(auto_added[:10])
+                )
+            if companion_url:
+                lines.append(companion_url)
+            _notify_apprise(
+                apprise_urls,
+                t.get('notif_catalogue_apprise_title', 'Catalogue Gluetun — Gluetun Companion'),
+                '\n'.join(lines),
+            )
+            logger.info('Apprise catalogue notification sent')
+        except Exception as exc:
+            logger.warning('Apprise catalogue notification failed: %s', exc)
 
 
 def send_test_notification(

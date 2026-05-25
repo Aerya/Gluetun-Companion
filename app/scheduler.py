@@ -770,14 +770,37 @@ def _do_benchmark(app, skip_quick_check: bool = False):
     # No volume mounting required.
     try:
         from .catalogue import refresh_catalogue_from_sidecar
-        _sidecar_img  = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
-        _sidecar_host = app.config['GLUETUN_HOST']
+        _sidecar_img       = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
+        _sidecar_host      = app.config['GLUETUN_HOST']
+        _cat_auto_add      = get_setting('catalogue_auto_add', '0') == '1'
+        _notif_cat_changes = get_setting('notif_catalogue_changes', '0') == '1'
         _cat = refresh_catalogue_from_sidecar(
             sidecar_image=_sidecar_img,
             sidecar_host=_sidecar_host,
+            auto_add=_cat_auto_add,
         )
         if _cat.get('ok'):
             logger.info('catalogue: refreshed via sidecar — %d servers', _cat.get('total', 0))
+            _cat_diff       = _cat.get('diff', {})
+            _cat_auto_added = _cat.get('auto_added', [])
+            if _notif_cat_changes and (_cat_diff or _cat_auto_added):
+                _c_discord_url  = get_setting('discord_webhook_url') or None
+                _c_apprise_urls = get_setting('apprise_urls') or None
+                _c_lang         = get_setting('ui_lang', 'fr')
+                _c_companion    = get_setting('companion_url') or None
+                _c_mention      = get_setting('notify_mention', '').strip() or None
+                _c_mention_lvl  = get_setting('notify_mention_level', 'critical')
+                from .notify import send_catalogue_changes_notification
+                send_catalogue_changes_notification(
+                    diff=_cat_diff,
+                    auto_added=_cat_auto_added,
+                    discord_url=_c_discord_url,
+                    apprise_urls=_c_apprise_urls,
+                    lang=_c_lang,
+                    companion_url=_c_companion,
+                    mention=_c_mention,
+                    mention_level=_c_mention_lvl,
+                )
         else:
             logger.warning('catalogue: refresh failed — %s', _cat.get('error', '?'))
     except Exception as _cat_exc:

@@ -50,7 +50,8 @@ _EXPORT_KEYS = frozenset({
     'stability_weight', 'adaptive_scheduling', 'adaptive_auto_shift',
     'notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
     'notif_auto_exclude', 'notif_benchmark_end', 'notif_benchmark_failure',
-    'notif_quick_check', 'notif_optimal_hour_change', 'notify_mention_level',
+    'notif_quick_check', 'notif_optimal_hour_change', 'notif_catalogue_changes',
+    'catalogue_auto_add', 'notify_mention_level',
     'active_profile', 'single_stream_test', 'airvpn_new_server_notif',
     'proxy_username',
 })
@@ -1026,7 +1027,7 @@ def settings():
             # Per-type toggles
             for _k in ('notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
                        'notif_auto_exclude', 'notif_benchmark_end', 'notif_benchmark_failure',
-                       'notif_quick_check', 'notif_optimal_hour_change'):
+                       'notif_quick_check', 'notif_optimal_hour_change', 'notif_catalogue_changes'):
                 set_setting(_k, '1' if request.form.get(_k) else '0')
             # Global mention
             set_setting('notify_mention',       request.form.get('notify_mention', '').strip())
@@ -1062,6 +1063,7 @@ def settings():
             set_setting('catalogue_import_provider',      request.form.get('catalogue_import_provider', '').strip())
             set_setting('catalogue_bench_on_import',      '1' if request.form.get('catalogue_bench_on_import') else '0')
             set_setting('catalogue_import_filter_type',   request.form.get('catalogue_import_filter_type', 'all'))
+            set_setting('catalogue_auto_add',             '1' if request.form.get('catalogue_auto_add') else '0')
             flash_t('flash_catalogue_saved', 'success')
 
         elif action == 'post_switch':
@@ -1114,6 +1116,7 @@ def settings():
         'notif_benchmark_failure':  get_setting('notif_benchmark_failure', '1'),
         'notif_quick_check':           get_setting('notif_quick_check',            '1'),
         'notif_optimal_hour_change':   get_setting('notif_optimal_hour_change',    '0'),
+        'notif_catalogue_changes':     get_setting('notif_catalogue_changes',      '0'),
         'notify_mention':              get_setting('notify_mention',               ''),
         'notify_mention_level':     get_setting('notify_mention_level',    'critical'),
         'sidecar_mode':             get_setting('sidecar_mode', '1'),
@@ -1143,6 +1146,7 @@ def settings():
         'catalogue_import_provider':      get_setting('catalogue_import_provider', ''),
         'catalogue_bench_on_import':      get_setting('catalogue_bench_on_import', '0'),
         'catalogue_import_filter_type':   get_setting('catalogue_import_filter_type', 'all'),
+        'catalogue_auto_add':             get_setting('catalogue_auto_add', '0'),
         'catalogue_last_refresh':         get_setting('catalogue_last_refresh', ''),
     }
     from .database import get_hourly_benchmark_stats

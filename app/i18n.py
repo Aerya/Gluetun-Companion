@@ -495,6 +495,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_optimal_hour_apprise_title': 'Fenêtre optimale — Gluetun Companion',
         'set_notif_optimal_hour_label':     'Changement de fenêtre optimale de benchmark',
         'set_notif_optimal_hour_hint':      'Notifie quand l\'heure globale optimale de benchmark change (basé sur les patterns horaires de tous les serveurs).',
+        'notif_catalogue_title':            '📋 Catalogue Gluetun mis à jour',
+        'notif_catalogue_added':            'Nouveaux serveurs',
+        'notif_catalogue_removed':          'Serveurs supprimés',
+        'notif_catalogue_auto_added':       'Ajoutés automatiquement à votre liste',
+        'notif_catalogue_apprise_title':    'Catalogue Gluetun — Gluetun Companion',
+        'set_notif_catalogue_label':        'Changements dans le catalogue Gluetun',
+        'set_notif_catalogue_hint':         'Notifie par Discord/Apprise quand des serveurs sont ajoutés ou supprimés dans le catalogue à chaque refresh.',
+        'set_catalogue_auto_add_label':     'Ajouter automatiquement les nouveaux serveurs',
+        'set_catalogue_auto_add_hint':      'Quand de nouveaux serveurs apparaissent dans le catalogue pour un pays, une région ou une ville que vous avez déjà configuré, les ajouter automatiquement à votre liste de serveurs (en tant que serveur individuel, type « nom »).',
 
         # ── Quick check ──
         'set_quick_check_label':     'Vérification rapide avant benchmark',
@@ -1099,6 +1108,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_optimal_hour_apprise_title': 'Optimal window — Gluetun Companion',
         'set_notif_optimal_hour_label':     'Optimal benchmark window change',
         'set_notif_optimal_hour_hint':      'Notifies when the global optimal benchmark hour changes (based on hourly patterns across all servers).',
+        'notif_catalogue_title':            '📋 Gluetun catalogue updated',
+        'notif_catalogue_added':            'New servers',
+        'notif_catalogue_removed':          'Removed servers',
+        'notif_catalogue_auto_added':       'Automatically added to your list',
+        'notif_catalogue_apprise_title':    'Gluetun catalogue — Gluetun Companion',
+        'set_notif_catalogue_label':        'Gluetun catalogue changes',
+        'set_notif_catalogue_hint':         'Sends a Discord/Apprise notification when servers are added or removed from the catalogue at each refresh.',
+        'set_catalogue_auto_add_label':     'Automatically add new servers',
+        'set_catalogue_auto_add_hint':      'When new servers appear in the catalogue for a country, region, or city you have already configured, automatically add them to your server list (as individual name-type servers).',
 
         # ── Quick check ──
         'set_quick_check_label':     'Quick check before benchmark',

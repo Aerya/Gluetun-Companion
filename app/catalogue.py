@@ -324,6 +324,100 @@ def import_to_servers(
     return {'ok': True, 'added': total_added, 'skipped': total_skipped}
 
 
+def _snapshot_catalogue_names(db) -> dict[str, set[str]]:
+    """Return {provider: {server_name, ...}} snapshot of the current catalogue."""
+    rows = db.execute('SELECT provider, name FROM gluetun_catalogue').fetchall()
+    snap: dict[str, set[str]] = {}
+    for r in rows:
+        snap.setdefault(r['provider'], set()).add(r['name'])
+    return snap
+
+
+def _compute_catalogue_diff(
+    before: dict[str, set[str]],
+    after: dict[str, set[str]],
+) -> dict[str, dict[str, list[str]]]:
+    """
+    Compare two {provider: set_of_names} snapshots.
+    Returns {provider: {added: [...], removed: [...]}} — only providers with changes.
+    """
+    diff: dict[str, dict[str, list[str]]] = {}
+    for p in set(before) | set(after):
+        b = before.get(p, set())
+        a = after.get(p, set())
+        added   = sorted(a - b)
+        removed = sorted(b - a)
+        if added or removed:
+            diff[p] = {'added': added, 'removed': removed}
+    return diff
+
+
+def _auto_add_matched_servers(
+    new_entries: list[dict],
+    db,
+) -> list[str]:
+    """
+    For each newly appeared catalogue entry, check whether the user has already
+    configured a country / region / city server whose value matches.  If so,
+    add the new server as a ``filter_type='name'`` entry (individual benchmark).
+
+    Returns the list of server names that were inserted.
+
+    Matching rules
+    ──────────────
+    User server  (name="France",  filter_type="country") →
+        matches any catalogue entry where  country == "France"  (case-insensitive)
+
+    User server  (name="Île-de-France", filter_type="region") →
+        matches any catalogue entry where  region == "Île-de-France"
+
+    User server  (name="Paris", filter_type="city") →
+        matches any catalogue entry where  city == "Paris"
+
+    ``filter_type='name'`` and ``filter_type='hostname'`` user entries are not
+    used for matching (they are already pointing at specific servers).
+    """
+    # Build {filter_type: set_of_lowercase_values} from user's servers table
+    user_rows = db.execute(
+        "SELECT name, filter_type FROM servers WHERE filter_type IN ('country', 'region', 'city')"
+    ).fetchall()
+    if not user_rows:
+        return []
+
+    matchers: dict[str, set[str]] = {}
+    for row in user_rows:
+        matchers.setdefault(row['filter_type'], set()).add(row['name'].strip().lower())
+
+    # Existing server names (to avoid duplicates)
+    existing: set[str] = {
+        r['name'].strip().lower()
+        for r in db.execute('SELECT name FROM servers').fetchall()
+    }
+
+    inserted: list[str] = []
+    for entry in new_entries:
+        srv_name = (entry.get('name') or '').strip()
+        if not srv_name or srv_name.lower() in existing:
+            continue
+
+        matched = any(
+            (entry.get(ft) or '').strip().lower() in vals
+            for ft, vals in matchers.items()
+        )
+        if matched:
+            try:
+                db.execute(
+                    'INSERT OR IGNORE INTO servers (name, filter_type, enabled) VALUES (?, ?, 1)',
+                    (srv_name, 'name'),
+                )
+                existing.add(srv_name.lower())
+                inserted.append(srv_name)
+            except Exception as exc:
+                logger.warning('auto-add catalogue server %s: %s', srv_name, exc)
+
+    return inserted
+
+
 def _wait_for_catalogue_sidecar(host: str, port: int, timeout: int = 60, token: str = '') -> bool:
     """
     Poll the sidecar /ready endpoint until it responds 200 or timeout expires.
@@ -349,6 +443,7 @@ def refresh_catalogue_from_sidecar(
     sidecar_image: str,
     sidecar_host: str,
     catalogue_port: int = 8767,
+    auto_add: bool = False,
 ) -> dict:
     """
     Spin up a catalogue-only sidecar container, call its /catalogue endpoint,
@@ -358,7 +453,12 @@ def refresh_catalogue_from_sidecar(
       https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers
     No volume mounting or Gluetun API required — pure HTTPS download.
 
-    Returns {ok, total, providers} or {ok: False, error}.
+    Returns {ok, total, providers, diff, auto_added} or {ok: False, error}.
+
+    diff       — {provider: {added: [...], removed: [...]}} (empty dict when no change)
+    auto_added — list of server names inserted into the servers table (only when
+                 auto_add=True and the server matches a user-configured country /
+                 region / city filter).
     """
     from .gluetun import create_catalogue_sidecar, cleanup_catalogue_sidecar, _CATALOGUE_SIDECAR_PORT
 
@@ -397,8 +497,14 @@ def refresh_catalogue_from_sidecar(
         # ── 4. Save to DB ────────────────────────────────────────────────────
         total = 0
         provider_counts: dict[str, int] = {}
+        diff: dict[str, dict[str, list[str]]] = {}
+        auto_added_names: list[str] = []
 
         with get_db() as db:
+            # Snapshot before overwrite so we can compute the diff
+            before_snap = _snapshot_catalogue_names(db)
+
+            now_iso = datetime.utcnow().isoformat()
             for provider, servers in providers_data.items():
                 db.execute('DELETE FROM gluetun_catalogue WHERE provider=?', (provider,))
                 for s in servers:
@@ -414,19 +520,53 @@ def refresh_catalogue_from_sidecar(
                             s.get('region', ''),
                             s.get('city', ''),
                             s.get('hostname', ''),
-                            datetime.utcnow().isoformat(),
+                            now_iso,
                         ),
                     )
                     total += 1
                 provider_counts[provider] = len(servers)
 
+            # Compute diff (after snapshot → what changed)
+            after_snap: dict[str, set[str]] = {
+                p: {s['name'] for s in srvs}
+                for p, srvs in providers_data.items()
+            }
+            diff = _compute_catalogue_diff(before_snap, after_snap)
+
+            # Auto-add new servers that match user's country/region/city filters
+            if auto_add and diff:
+                new_entries: list[dict] = []
+                for p, changes in diff.items():
+                    added_names = set(changes.get('added', []))
+                    for s in providers_data.get(p, []):
+                        if s.get('name') in added_names:
+                            new_entries.append(s)
+                if new_entries:
+                    auto_added_names = _auto_add_matched_servers(new_entries, db)
+
         set_setting('catalogue_last_refresh', datetime.utcnow().isoformat())
+
+        if diff:
+            change_summary = ', '.join(
+                f'{p}: +{len(v["added"])}/-{len(v["removed"])}'
+                for p, v in diff.items()
+            )
+            logger.info('catalogue diff: %s', change_summary)
+        if auto_added_names:
+            logger.info('catalogue auto-add: %d server(s): %s',
+                        len(auto_added_names), ', '.join(auto_added_names))
         logger.info(
             'catalogue refresh via sidecar: %d servers (%s)',
             total,
             ', '.join(f'{p}:{n}' for p, n in provider_counts.items()),
         )
-        return {'ok': True, 'total': total, 'providers': provider_counts}
+        return {
+            'ok':         True,
+            'total':      total,
+            'providers':  provider_counts,
+            'diff':       diff,
+            'auto_added': auto_added_names,
+        }
 
     except Exception as exc:
         logger.error('refresh_catalogue_from_sidecar: %s', exc)
