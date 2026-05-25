@@ -54,9 +54,13 @@ def status():
     from .scheduler import get_next_run
 
     filters     = get_current_filters(current_app.config['GLUETUN_CONTAINER'])
+    px_user     = get_setting('proxy_username') or None
+    px_pass     = get_setting('proxy_password') or None
     vpn_status  = get_vpn_status(
         current_app.config['GLUETUN_HOST'],
         current_app.config['GLUETUN_PROXY_PORT'],
+        px_user,
+        px_pass,
     )
     next_run    = get_next_run()
 

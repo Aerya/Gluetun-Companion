@@ -54,6 +54,9 @@ _EXPORT_KEYS = frozenset({
     'catalogue_auto_add', 'notify_mention_level',
     'active_profile', 'single_stream_test', 'airvpn_new_server_notif',
     'proxy_username',
+    'catalogue_import_mode', 'catalogue_import_provider',
+    'catalogue_bench_on_import', 'catalogue_import_filter_type',
+    'ui_lang',
 })
 
 # ---------------------------------------------------------------------------
@@ -1645,12 +1648,22 @@ def config_import():
         return redirect(url_for('main.settings'))
 
     imported = skipped = 0
+    _schedule_keys = {'test_interval_hours', 'auto_benchmark'}
+    _needs_reschedule = False
     for key, value in data['settings'].items():
         if key in _EXPORT_KEYS:
             set_setting(key, str(value))
             imported += 1
+            if key in _schedule_keys:
+                _needs_reschedule = True
         else:
             skipped += 1
+
+    if _needs_reschedule:
+        try:
+            reschedule(current_app._get_current_object())
+        except Exception as _exc:
+            logger.warning('reschedule after config import failed: %s', _exc)
 
     flash(
         f'{imported} paramètre(s) importé(s).'

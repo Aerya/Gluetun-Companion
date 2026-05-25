@@ -179,6 +179,12 @@ def switch_server(
     """
     env_var = FILTER_VARS.get(filter_type, 'SERVER_NAMES')
 
+    # Resolve project and service name BEFORE writing the override so that the
+    # YAML key matches the actual Compose service name (which may differ from
+    # the container_name when an explicit container_name: is set in the compose).
+    project = compose_project or _detect_compose_project(container_name)
+    service = _detect_compose_service(container_name)
+
     # Build environment block: set target var, blank-out all others
     env_lines = ''
     for label, var in FILTER_VARS.items():
@@ -187,9 +193,12 @@ def switch_server(
         safe  = raw.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '').replace('\r', '')
         env_lines += f'      {var}: "{safe}"\n'
 
+    # Use the Compose service name (not the container name) as the YAML key so
+    # that the override is applied to the correct service even when service name
+    # and container_name differ.
     override = (
         f'services:\n'
-        f'  {container_name}:\n'
+        f'  {service}:\n'
         f'    environment:\n'
         f'{env_lines}'
     )
@@ -199,11 +208,6 @@ def switch_server(
             fh.write(override)
     except OSError as exc:
         return False, f'Cannot write override file: {exc}'
-
-    # Use provided project name, or auto-detect from container labels
-    project = compose_project or _detect_compose_project(container_name)
-    # Detect the Compose service name (may differ from the container name)
-    service = _detect_compose_service(container_name)
 
     # Pass only the gluetun service name so that Compose recreates exclusively
     # that service.  This prevents the Companion (or any other service in the

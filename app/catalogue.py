@@ -31,8 +31,8 @@ from .database import get_db, get_setting, set_setting
 
 logger = logging.getLogger(__name__)
 
-# ProtonVPN requires credentials → excluded from auto-import
-_EXCLUDED_PROVIDERS = {'protonvpn', 'proton'}
+# Providers excluded from catalogue auto-import (empty = all allowed)
+_EXCLUDED_PROVIDERS: set[str] = set()
 
 # Gluetun VPN_SERVICE_PROVIDER value → JSON filename mapping
 # (most match directly, a few differ)

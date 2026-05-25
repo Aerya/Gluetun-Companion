@@ -111,7 +111,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   1. **All providers** — imports servers from every provider available on GitHub
   2. **Chosen provider** — imports only the servers of a provider selected manually
   3. **Active provider** — automatically detects the provider configured in your Gluetun and imports its servers only
-  — for each mode, an option to **run a Sidecar benchmark** on the imported servers immediately after import
+  — for each mode, an option to **run a full benchmark** immediately after import (using the configured method in Settings, across all servers in the list)
 - **All filter types** — each server is imported with its full attributes: `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`
 - **Multi-filter selection from `/servers`** — select servers by freely mixing filter types (e.g. names + countries + cities at the same time); Companion applies the right filter in Gluetun and changes the filter type on the fly if needed
 - ⚠️ **ProtonVPN** — Free ProtonVPN servers are available via the **Catalogue**. To access Premium servers, use **Import from Gluetun** to retrieve the servers already configured in your Gluetun compose (paid account required).
@@ -459,7 +459,7 @@ raw_stability = jitter_factor × loss_factor × reconnect_factor
 | **Jitter** | Measured each test (jitter_ms) | −15 % at 150 ms |
 | **Packet loss** | Measured each test (packet_loss_pct) | −25 % at 10 % loss |
 | **Involuntary reconnects** | Docker events over 30 d (test_trigger=docker_event) | −10 % per reconnect, max −30 % |
-| **Confidence** (historical variance) | Coefficient of variation over last 5 tests | −15 % (LOW) · −5 % (MEDIUM) |
+| **Confidence** (historical variance) | Coefficient of variation over all tests in the scoring window (proxy_qc excluded) | −15 % (LOW) · −5 % (MEDIUM) |
 
 **Speed vs stability slider** (Settings → Automatic switching):
 - **0** — speed only, all stability penalties disabled
@@ -568,7 +568,7 @@ The `GET /metrics` endpoint exposes key metrics in Prometheus text format, with 
 - `gluetun_companion_benchmark_running` — 1 if a benchmark is currently running
 - `gluetun_companion_last_switch_timestamp_seconds` — Unix timestamp of the last switch
 
-**Authentication**: open by default (standard for internal networks). Set `METRICS_TOKEN` to require a Bearer token.
+**Authentication**: open by default (standard for internal networks). Two ways to protect `/metrics` with a Bearer token: set the `METRICS_TOKEN` environment variable, or configure an **API token** in Settings → API (both are supported; `METRICS_TOKEN` takes precedence).
 
 **Prometheus scrape config** (add to `prometheus.yml`):
 ```yaml
@@ -635,7 +635,7 @@ In **Settings → Scheduling & Benchmark**: the automatic cycle can be disabled 
 
 ## Configuration export / import
 
-Available from **Settings**, the **Export configuration** button generates a `companion-config.json` file containing all settings *excluding secrets* (passwords, tokens, webhooks). This file can be re-imported on another instance via the **Import** button.
+Available from **Settings**, the **Export configuration** button generates a `companion-config.json` file containing settings *excluding secrets* (passwords, tokens, webhooks are not exported). This file can be re-imported on another instance via the **Import** button. If the import changes the benchmark interval or the automatic cycle, the scheduler reloads immediately.
 
 ---
 

@@ -65,8 +65,8 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s %(name)s %(message
 logger = logging.getLogger(__name__)
 
 _PROBE_URL    = 'https://www.cloudflare.com/cdn-cgi/trace'
-# ProtonVPN requires Proton credentials — excluded from catalogue
-_CAT_EXCLUDED = {'protonvpn', 'proton'}
+# Providers excluded from catalogue fetch (empty = all fetched)
+_CAT_EXCLUDED: set[str] = set()
 # Directory where Gluetun writes per-provider JSON files
 # (set via SERVERS_DIR env var when Companion creates this container)
 # Public GitHub repository that holds per-provider server JSON files.
