@@ -50,7 +50,7 @@ _EXPORT_KEYS = frozenset({
     'stability_weight', 'adaptive_scheduling', 'adaptive_auto_shift',
     'notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
     'notif_auto_exclude', 'notif_benchmark_end', 'notif_benchmark_failure',
-    'notif_quick_check', 'notify_mention_level',
+    'notif_quick_check', 'notif_optimal_hour_change', 'notify_mention_level',
     'active_profile', 'single_stream_test', 'airvpn_new_server_notif',
     'proxy_username',
 })
@@ -1026,7 +1026,7 @@ def settings():
             # Per-type toggles
             for _k in ('notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
                        'notif_auto_exclude', 'notif_benchmark_end', 'notif_benchmark_failure',
-                       'notif_quick_check'):
+                       'notif_quick_check', 'notif_optimal_hour_change'):
                 set_setting(_k, '1' if request.form.get(_k) else '0')
             # Global mention
             set_setting('notify_mention',       request.form.get('notify_mention', '').strip())
@@ -1112,8 +1112,9 @@ def settings():
         'notif_auto_exclude':       get_setting('notif_auto_exclude',   '1'),
         'notif_benchmark_end':      get_setting('notif_benchmark_end',     '0'),
         'notif_benchmark_failure':  get_setting('notif_benchmark_failure', '1'),
-        'notif_quick_check':        get_setting('notif_quick_check',       '1'),
-        'notify_mention':           get_setting('notify_mention',          ''),
+        'notif_quick_check':           get_setting('notif_quick_check',            '1'),
+        'notif_optimal_hour_change':   get_setting('notif_optimal_hour_change',    '0'),
+        'notify_mention':              get_setting('notify_mention',               ''),
         'notify_mention_level':     get_setting('notify_mention_level',    'critical'),
         'sidecar_mode':             get_setting('sidecar_mode', '1'),
         'sidecar_image':            get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest'),

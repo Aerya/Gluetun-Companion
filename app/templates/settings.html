@@ -1030,6 +1030,18 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
                        {{ 'checked' if cfg.notif_quick_check == '1' }}>
                 <label class="form-check-label small" for="notif_quick_check">{{ t.notif_quick_check_label }}</label>
               </div>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       name="notif_optimal_hour_change" id="notif_optimal_hour_change"
+                       {{ 'checked' if cfg.notif_optimal_hour_change == '1' }}>
+                <label class="form-check-label small" for="notif_optimal_hour_change">
+                  {{ t.set_notif_optimal_hour_label }}
+                  <span class="text-muted ms-1" data-bs-toggle="tooltip"
+                        title="{{ t.set_notif_optimal_hour_hint }}">
+                    <i class="bi bi-info-circle"></i>
+                  </span>
+                </label>
+              </div>
             </div>
           </div>
         </div>

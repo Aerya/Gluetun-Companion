@@ -488,6 +488,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_quick_check_baseline':     'Baseline proxy',
         'notif_quick_check_label':        'Résultat quick check',
         'notif_quick_check_apprise_title':'Quick check — Gluetun Companion',
+        'notif_optimal_hour_title':         '🕐 Fenêtre optimale de benchmark',
+        'notif_optimal_hour_old':           'Heure précédente',
+        'notif_optimal_hour_new':           'Nouvelle heure optimale',
+        'notif_optimal_hour_body':          'Meilleure heure : {old} → {new}',
+        'notif_optimal_hour_apprise_title': 'Fenêtre optimale — Gluetun Companion',
+        'set_notif_optimal_hour_label':     'Changement de fenêtre optimale de benchmark',
+        'set_notif_optimal_hour_hint':      'Notifie quand l\'heure globale optimale de benchmark change (basé sur les patterns horaires de tous les serveurs).',
 
         # ── Quick check ──
         'set_quick_check_label':     'Vérification rapide avant benchmark',
@@ -1085,6 +1092,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notif_quick_check_label':        'Quick check result',
         'notif_quick_check_apprise_title':'Quick check — Gluetun Companion',
         'notif_qc_triggered_field': 'Drift detected',
+        'notif_optimal_hour_title':         '🕐 Optimal benchmark window',
+        'notif_optimal_hour_old':           'Previous hour',
+        'notif_optimal_hour_new':           'New optimal hour',
+        'notif_optimal_hour_body':          'Best hour: {old} → {new}',
+        'notif_optimal_hour_apprise_title': 'Optimal window — Gluetun Companion',
+        'set_notif_optimal_hour_label':     'Optimal benchmark window change',
+        'set_notif_optimal_hour_hint':      'Notifies when the global optimal benchmark hour changes (based on hourly patterns across all servers).',
 
         # ── Quick check ──
         'set_quick_check_label':     'Quick check before benchmark',

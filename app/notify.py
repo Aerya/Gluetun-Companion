@@ -32,6 +32,7 @@ _SEVERITY: dict[str, str] = {
     'already_best':       'info',
     'benchmark_end':      'info',
     'quick_check':        'info',
+    'optimal_hour':       'info',
 }
 
 _LEVEL_ORDER: dict[str, int] = {'critical': 0, 'medium': 1, 'info': 2}
@@ -608,6 +609,66 @@ def send_quick_check_notification(
             logger.info('Apprise quick-check notification sent for %s', server_label)
         except Exception as exc:
             logger.warning('Apprise quick-check notification failed: %s', exc)
+
+
+def send_optimal_hour_notification(
+    old_hour: int | None,
+    new_hour: int,
+    discord_url: str | None = None,
+    apprise_urls: str | None = None,
+    lang: str = 'fr',
+    companion_url: str | None = None,
+    mention: str | None = None,
+    mention_level: str = 'critical',
+):
+    """Notify when the global optimal benchmark hour changes."""
+    if not discord_url and not apprise_urls:
+        return
+    t = get_translations(lang)
+    title = t.get('notif_optimal_hour_title', '🕐 Fenêtre optimale de benchmark')
+    old_str = f'{old_hour:02d}:00' if old_hour is not None else '—'
+    new_str = f'{new_hour:02d}:00'
+
+    if discord_url:
+        try:
+            fields = []
+            if old_hour is not None:
+                fields.append({
+                    'name':   t.get('notif_optimal_hour_old', 'Heure précédente'),
+                    'value':  old_str,
+                    'inline': True,
+                })
+            fields.append({
+                'name':   t.get('notif_optimal_hour_new', 'Nouvelle heure optimale'),
+                'value':  new_str,
+                'inline': True,
+            })
+            payload = _discord_base_payload(title, 0x58a6ff, fields, t, companion_url)
+            _post_discord(discord_url, payload, mention, 'optimal_hour', mention_level)
+            logger.info(
+                'Discord optimal-hour notification sent (old=%s → new=%dh)',
+                old_str, new_hour,
+            )
+        except Exception as exc:
+            logger.warning('Discord optimal-hour notification failed: %s', exc)
+
+    if apprise_urls:
+        try:
+            body = t.get(
+                'notif_optimal_hour_body',
+                'Meilleure heure : {old} → {new}',
+            ).replace('{old}', old_str).replace('{new}', new_str)
+            if companion_url:
+                body += f'\n{companion_url}'
+            _notify_apprise(
+                apprise_urls,
+                t.get('notif_optimal_hour_apprise_title',
+                      'Fenêtre optimale — Gluetun Companion'),
+                body,
+            )
+            logger.info('Apprise optimal-hour notification sent')
+        except Exception as exc:
+            logger.warning('Apprise optimal-hour notification failed: %s', exc)
 
 
 def send_test_notification(

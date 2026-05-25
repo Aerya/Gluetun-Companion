@@ -1128,6 +1128,35 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                 mention_level=_mention_level,
             )
 
+        # ── Optimal benchmark hour change notification ────────────────────────
+        if get_setting('notif_optimal_hour_change', '0') == '1':
+            from .database import get_hourly_benchmark_stats as _hour_stats_fn
+            try:
+                _hour_stats = _hour_stats_fn()
+                if _hour_stats.get('has_enough_data') and _hour_stats.get('best_hour') is not None:
+                    _new_hour = _hour_stats['best_hour']
+                    _old_hour_str = get_setting('last_optimal_hour', '')
+                    _old_hour = int(_old_hour_str) if _old_hour_str.lstrip('-').isdigit() else None
+                    if _old_hour != _new_hour:
+                        set_setting('last_optimal_hour', str(_new_hour))
+                        from .notify import send_optimal_hour_notification
+                        send_optimal_hour_notification(
+                            old_hour=_old_hour,
+                            new_hour=_new_hour,
+                            discord_url=_discord_url,
+                            apprise_urls=_apprise_urls,
+                            lang=_notif_lang,
+                            companion_url=_companion_url,
+                            mention=_mention,
+                            mention_level=_mention_level,
+                        )
+                        logger.info(
+                            'Optimal benchmark hour changed: %s → %02dh',
+                            _old_hour_str or '(none)', _new_hour,
+                        )
+            except Exception as _hour_exc:
+                logger.warning('Optimal hour notification error: %s', _hour_exc)
+
     finally:
         # Always restart paused containers — even if the benchmark failed or
         # was interrupted — so the user's downloads resume automatically.
