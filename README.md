@@ -4,7 +4,7 @@
 
 # Gluetun Companion
 
-Benchmark automatique de vos serveurs VPN [Gluetun](https://github.com/qdm12/gluetun), bascule vers le plus rapide, Web UI complète.
+Gérez automatiquement vos serveurs VPN WireGuard dans [Gluetun](https://github.com/qdm12/gluetun) : benchmark de vitesse, rotation planifiée par pools, métriques de stabilité (jitter, perte, DNS) et Web UI complète.
 
 > 🇬🇧 [English version](README.en.md)
 
@@ -28,7 +28,7 @@ Benchmark automatique de vos serveurs VPN [Gluetun](https://github.com/qdm12/glu
 
 ## Compatibilité
 
-Gluetun Companion fonctionne avec **tous les fournisseurs VPN compatibles Gluetun** dès lors qu'au moins une de ces variables de filtre est présente dans votre configuration :
+Gluetun Companion fonctionne avec **tous les fournisseurs VPN WireGuard compatibles Gluetun** dès lors qu'au moins une de ces variables de filtre est présente dans votre configuration :
 
 | Variable Gluetun | Filtre |
 |---|---|
@@ -38,7 +38,7 @@ Gluetun Companion fonctionne avec **tous les fournisseurs VPN compatibles Gluetu
 | `SERVER_CITIES` | Ville |
 | `SERVER_HOSTNAMES` | Hostname |
 
-Indépendant de la technologie de tunnel : fonctionne identiquement avec OpenVPN, WireGuard ou toute autre tech supportée par Gluetun.
+Conçu pour le protocole **WireGuard** — le mode sidecar (par défaut) requiert des clés WireGuard. Le mode proxy seul peut fonctionner avec d'autres protocoles, sans les fonctionnalités avancées.
 
 Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=483746)** *(lien affilié)* — [variables de filtre AirVPN](https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/airvpn.md#optional-environment-variables).
 
