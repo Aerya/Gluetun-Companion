@@ -159,6 +159,7 @@ def init_db(db_path: str):
                              -- 'server'  : crit_value = server name
                              -- 'filter'  : crit_value = JSON {"type":"country","value":"France"}
                              -- 'profile' : crit_value = vpn_profile_id (string)
+                             -- 'top_metric' : crit_value = JSON {"metric":"dl","n":5}
                 crit_value  TEXT
             );
 
@@ -229,13 +230,17 @@ def init_db(db_path: str):
                 ('catalogue_last_refresh',     ''),
                 -- WireGuard multi-provider rotation
                 ('wg_rotation_mode',           'none'),   -- none | free | conditional
-                ('wg_rotation_threshold',      '10'),     -- % score gain required (conditional mode)
-                ('wg_active_profile_id',       ''),
-                -- WireGuard dedicated sidecar test key (prevents VPN disconnect during benchmarks)
-                ('wg_sidecar_private_key',     ''),       -- encrypted WIREGUARD_PRIVATE_KEY for test containers
-                ('wg_sidecar_addresses',       ''),       -- WIREGUARD_ADDRESSES for test containers
-                ('wg_sidecar_preshared_key',   '');
+                ('wg_rotation_threshold',      '10');     -- % score gain required (conditional mode)
         ''')
+        db.execute(
+            """DELETE FROM settings
+               WHERE key IN (
+                   'wg_active_profile_id',
+                   'wg_sidecar_private_key',
+                   'wg_sidecar_addresses',
+                   'wg_sidecar_preshared_key'
+               )"""
+        )
         # Data migration: legacy airvpn_notify_mention → notify_mention
         _legacy = db.execute(
             "SELECT value FROM settings WHERE key='airvpn_notify_mention'"

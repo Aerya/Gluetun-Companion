@@ -655,23 +655,27 @@ def _test_server_sidecar_with_retry(
 ) -> dict | None:
     last_err = 'Unknown error'
     for attempt in range(max_retries + 1):
+        ex = ThreadPoolExecutor(max_workers=1)
+        future = ex.submit(
+            _test_one_server_sidecar,
+            server_name, filter_type,
+            real_container, sidecar_image, sidecar_host, sidecar_port,
+            wait_secs, dl_duration, dl_streams, sidecar_method,
+            sidecar_iperf_fallback,
+            extra_env,
+        )
         try:
-            with ThreadPoolExecutor(max_workers=1) as ex:
-                future = ex.submit(
-                    _test_one_server_sidecar,
-                    server_name, filter_type,
-                    real_container, sidecar_image, sidecar_host, sidecar_port,
-                    wait_secs, dl_duration, dl_streams, sidecar_method,
-                    sidecar_iperf_fallback,
-                    extra_env,
-                )
-                return future.result(timeout=timeout_secs)
+            result = future.result(timeout=timeout_secs)
+            ex.shutdown(wait=False)
+            return result
         except FuturesTimeout:
             last_err = f'Timed out after {timeout_secs}s'
             logger.warning('  %s sidecar timed out (%ds)', server_name, timeout_secs)
+            ex.shutdown(wait=False, cancel_futures=True)
             break
         except Exception as exc:
             last_err = str(exc)
+            ex.shutdown(wait=False)
             if attempt < max_retries:
                 logger.warning(
                     '  Sidecar retry %d/%d for %s: %s', attempt + 1, max_retries, server_name, exc
@@ -1829,7 +1833,7 @@ def _update_consecutive_failures(
 
 def purge_old_tests(app):
     """Delete speed_tests older than db_retention_days. 0 = disabled."""
-    from .database import get_db, get_setting
+    from .database import get_db, get_setting, set_setting
     with app.app_context():
         days = int(get_setting('db_retention_days', '30'))
     if days <= 0:
@@ -2177,7 +2181,7 @@ def _check_rotation_pools(app):
     Pool rotations are intentionally NOT locked by _lock to avoid blocking the
     benchmark; instead we check benchmark_running before switching.
     """
-    from .database import get_db, get_setting
+    from .database import get_db, get_setting, set_setting
     from .rotation_pools import do_pool_rotation
 
     with app.app_context():
@@ -2204,6 +2208,12 @@ def _check_rotation_pools(app):
                     row['id'], row['name'],
                 )
                 continue
+            if not _lock.acquire(blocking=False):
+                logger.info(
+                    'Pool rotation [%d] "%s": scheduler lock busy; deferring',
+                    row['id'], row['name'],
+                )
+                continue
             logger.info(
                 'Pool rotation [%d] "%s": auto-rotation due — executing',
                 row['id'], row['name'],
@@ -2222,6 +2232,10 @@ def _check_rotation_pools(app):
                     )
             except Exception as exc:
                 logger.error('Pool rotation [%d]: unexpected error: %s', row['id'], exc)
+                set_setting('benchmark_running', '0')
+                set_setting('benchmark_current_server', '')
+            finally:
+                _lock.release()
 
 
 def start_scheduler(app):

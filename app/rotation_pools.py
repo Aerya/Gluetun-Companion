@@ -56,14 +56,22 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
 
             if ctype == 'all':
                 rows = db.execute(
-                    'SELECT name FROM servers WHERE enabled = 1'
+                    '''SELECT s.name
+                       FROM servers s
+                       LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
+                       WHERE s.enabled = 1
+                         AND (s.vpn_profile_id IS NULL OR vp.enabled = 1)'''
                 ).fetchall()
                 candidate_names.update(r['name'] for r in rows)
 
             elif ctype == 'server':
                 # Include even if disabled? No — only active servers.
                 row = db.execute(
-                    'SELECT name FROM servers WHERE name = ? AND enabled = 1',
+                    '''SELECT s.name
+                       FROM servers s
+                       LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
+                       WHERE s.name = ? AND s.enabled = 1
+                         AND (s.vpn_profile_id IS NULL OR vp.enabled = 1)''',
                     (cval,),
                 ).fetchone()
                 if row:
@@ -79,13 +87,21 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
                     continue
                 if ftype and fval:
                     rows = db.execute(
-                        'SELECT name FROM servers WHERE filter_type = ? AND name = ? AND enabled = 1',
+                        '''SELECT s.name
+                           FROM servers s
+                           LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
+                           WHERE s.filter_type = ? AND s.name = ? AND s.enabled = 1
+                             AND (s.vpn_profile_id IS NULL OR vp.enabled = 1)''',
                         (ftype, fval),
                     ).fetchall()
                 elif ftype:
                     # All servers of this filter type
                     rows = db.execute(
-                        'SELECT name FROM servers WHERE filter_type = ? AND enabled = 1',
+                        '''SELECT s.name
+                           FROM servers s
+                           LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
+                           WHERE s.filter_type = ? AND s.enabled = 1
+                             AND (s.vpn_profile_id IS NULL OR vp.enabled = 1)''',
                         (ftype,),
                     ).fetchall()
                 else:
@@ -98,7 +114,10 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
                 except (TypeError, ValueError):
                     continue
                 rows = db.execute(
-                    'SELECT name FROM servers WHERE vpn_profile_id = ? AND enabled = 1',
+                    '''SELECT s.name
+                       FROM servers s
+                       JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
+                       WHERE s.vpn_profile_id = ? AND s.enabled = 1 AND vp.enabled = 1''',
                     (profile_id,),
                 ).fetchall()
                 candidate_names.update(r['name'] for r in rows)
@@ -124,8 +143,10 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
                 rows = db.execute(
                     f'''SELECT s.name
                         FROM servers s
+                        LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
                         LEFT JOIN speed_tests st ON st.server_name = s.name
                         WHERE s.enabled = 1
+                          AND (s.vpn_profile_id IS NULL OR vp.enabled = 1)
                         GROUP BY s.id
                         HAVING {_metric_col} IS NOT NULL
                         ORDER BY {_metric_col} {_order}
@@ -147,8 +168,11 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
                            0.0
                        ) AS avg_dl
                 FROM servers s
+                LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
                 LEFT JOIN speed_tests st ON st.server_name = s.name
                 WHERE s.name IN ({placeholders})
+                  AND s.enabled = 1
+                  AND (s.vpn_profile_id IS NULL OR vp.enabled = 1)
                 GROUP BY s.id''',
             list(candidate_names),
         ).fetchall()
@@ -225,7 +249,10 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
         get_db, get_setting, set_setting, get_vpn_profile,
         set_pool_rotation_state,
     )
-    from .gluetun import switch_server, wait_for_vpn, get_public_ips, get_current_filters
+    from .gluetun import (
+        switch_server, wait_for_vpn, get_public_ips, get_current_filters,
+        list_network_dependents, restart_network_dependents,
+    )
     from .crypto import decrypt as crypto_decrypt, is_encrypted as is_enc
     from .wg_providers import WG_PROVIDERS
 
@@ -239,6 +266,9 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     if not pool:
         logger.error('Pool rotation: pool %d not found', pool_id)
         return {'ok': False, 'server': None, 'dl_mbps': None, 'error': 'Pool not found'}
+    if not pool.get('enabled'):
+        logger.info('Pool rotation [%d] "%s": disabled', pool_id, pool['name'])
+        return {'ok': False, 'server': None, 'dl_mbps': None, 'error': 'Pool disabled'}
 
     logger.info(
         'Pool rotation [%d] "%s": resolving candidates (mode=%s, manual=%s)',
@@ -273,6 +303,16 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     wg_profile = None
     if server.get('vpn_profile_id'):
         _p = get_vpn_profile(server['vpn_profile_id'])
+        if _p and not _p.get('enabled', False):
+            logger.warning(
+                'Pool rotation [%d]: profile %d is disabled', pool_id, server['vpn_profile_id']
+            )
+            return {
+                'ok': False,
+                'server': server['name'],
+                'dl_mbps': None,
+                'error': 'VPN profile disabled',
+            }
         if _p:
             _prov_key     = _p['provider']
             _prov_def     = WG_PROVIDERS.get(_prov_key, {})
@@ -290,6 +330,7 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     # ── Snapshot current server for switch logging ────────────────────────
     _cur_filters  = get_current_filters(container)
     from_server   = list(_cur_filters.values())[0].split(',')[0].strip() if _cur_filters else None
+    pre_deps      = list_network_dependents(container)
 
     # ── Acquire benchmark mutex (prevents concurrent scheduler benchmark) ──
     set_setting('benchmark_running', '1')
@@ -312,13 +353,34 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
         set_setting('benchmark_current_server', '')
         return {'ok': False, 'server': server['name'], 'dl_mbps': None, 'error': err}
 
+    vpn_up, _elapsed = wait_for_vpn(
+        proxy_host, proxy_port,
+        timeout=wait_secs,
+        proxy_user=proxy_user,
+        proxy_password=proxy_pass,
+    )
+    if vpn_up:
+        restarted, _ = restart_network_dependents(
+            container, compose_dir, project, explicit_list=pre_deps,
+        )
+        logger.info(
+            'Pool rotation [%d]: VPN up in %.0fs; recreated %d network dependent(s): %s',
+            pool_id, _elapsed, len(restarted), ', '.join(restarted) or 'none',
+        )
+    else:
+        logger.warning(
+            'Pool rotation [%d]: VPN not up within %ds; network dependents not recreated',
+            pool_id, wait_secs,
+        )
+
     # Record switch
     with get_db() as db:
         db.execute(
-            '''INSERT INTO switches (from_server, to_server, reason, success)
-               VALUES (?, ?, ?, 1)''',
+            '''INSERT INTO switches (from_server, to_server, reason, success, connect_secs)
+               VALUES (?, ?, ?, 1, ?)''',
             (from_server, server['name'],
-             f'pool_rotation:{pool["name"]}:{"manual" if manual else "auto"}'),
+             f'pool_rotation:{pool["name"]}:{"manual" if manual else "auto"}',
+             _elapsed if vpn_up else None),
         )
 
     # ── Optional quick bench ─────────────────────────────────────────────
@@ -327,13 +389,6 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     to_ipv6: str | None    = None
 
     if pool['quick_bench']:
-        logger.info('Pool rotation [%d]: waiting %ds for VPN...', pool_id, wait_secs)
-        vpn_up, _elapsed = wait_for_vpn(
-            proxy_host, proxy_port,
-            timeout=wait_secs,
-            proxy_user=proxy_user,
-            proxy_password=proxy_pass,
-        )
         if vpn_up:
             try:
                 from .speedtest import test_download as _tdl

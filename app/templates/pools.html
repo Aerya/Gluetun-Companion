@@ -78,9 +78,6 @@
                 <i class="bi bi-clock-history me-1"></i>
                 {{ t.pools_last_rotation }}:
                 <strong>{{ p.last_rotated_at or t.pools_never }}</strong>
-                {% if p.last_rotated_at and p.current_rr_idx is not none %}
-                  — <span class="text-body-secondary">{{ p.name }}</span>
-                {% endif %}
               </span>
               {% if p.auto_rotate and p.next_rotation_at %}
               <span>

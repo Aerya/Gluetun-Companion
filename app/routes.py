@@ -37,7 +37,10 @@ from .gluetun import (
     list_docker_containers,
 )
 from .i18n import flash_t, get_t
-from .scheduler import get_next_run, reschedule, trigger_now, trigger_quick_now, trigger_single_server, request_stop
+from .scheduler import (
+    get_next_run, reschedule, trigger_now, trigger_quick_now,
+    trigger_single_server, request_stop, _lock as scheduler_lock,
+)
 
 bp = Blueprint('main', __name__)
 
@@ -2353,9 +2356,23 @@ def api_pool_rotate(pool_id: int):
     pool = get_rotation_pool(pool_id)
     if not pool:
         return jsonify({'ok': False, 'error': 'Not found'}), 404
+    if not pool.get('enabled'):
+        return jsonify({'ok': False, 'error': 'Pool disabled'}), 409
     if get_setting('benchmark_running', '0') == '1':
         return jsonify({'ok': False, 'error': 'Benchmark in progress'}), 409
-    result = do_pool_rotation(pool_id, current_app._get_current_object(), manual=True)
+    if not scheduler_lock.acquire(blocking=False):
+        return jsonify({'ok': False, 'error': 'Benchmark in progress'}), 409
+    try:
+        if get_setting('benchmark_running', '0') == '1':
+            return jsonify({'ok': False, 'error': 'Benchmark in progress'}), 409
+        result = do_pool_rotation(pool_id, current_app._get_current_object(), manual=True)
+    except Exception as exc:
+        logger.error('Pool rotation [%d]: unexpected error: %s', pool_id, exc)
+        set_setting('benchmark_running', '0')
+        set_setting('benchmark_current_server', '')
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+    finally:
+        scheduler_lock.release()
     return jsonify(result)
 
 
