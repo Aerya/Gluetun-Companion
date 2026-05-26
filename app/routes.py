@@ -1662,13 +1662,15 @@ def settings():
     from .catalogue import catalogue_stats
     adaptive_stats = get_hourly_benchmark_stats()
     active_auto_pools = _active_auto_pool_count()
-    bench_est_settings = _bench_estimate(
-        _benchmark_scope_estimated_count(observation=(cfg['continuous_observation'] == '1'))
+    benchmark_estimated_count_settings = _benchmark_scope_estimated_count(
+        observation=(cfg['continuous_observation'] == '1')
     )
+    bench_est_settings = _bench_estimate(benchmark_estimated_count_settings)
     return render_template(
         'settings.html',
         cfg=cfg,
         bench_est=bench_est_settings,
+        benchmark_estimated_count=benchmark_estimated_count_settings,
         next_run=None if active_auto_pools else get_next_run(),
         gluetun_container=current_app.config['GLUETUN_CONTAINER'],
         adaptive_stats=adaptive_stats,

@@ -6,16 +6,61 @@
 
 <style>
   .settings-board {
+    display: block;
+  }
+  .settings-overview {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .75rem;
+    margin-bottom: 1rem;
+  }
+  .settings-status-card {
+    border: 1px solid var(--bs-border-color);
+    background: var(--bs-tertiary-bg);
+    border-radius: .5rem;
+    padding: .85rem .95rem;
+    min-width: 0;
+  }
+  .settings-status-card .label {
+    color: var(--bs-secondary-color);
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    margin-bottom: .2rem;
+  }
+  .settings-status-card .value {
+    font-weight: 700;
+    line-height: 1.25;
+  }
+  .settings-tabs {
+    gap: .35rem;
+    border-bottom: 1px solid var(--bs-border-color);
+    margin-bottom: 1rem;
+  }
+  .settings-tabs .nav-link {
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--bs-secondary-color);
+    border-radius: 0;
+    padding: .7rem .8rem;
+    font-weight: 650;
+  }
+  .settings-tabs .nav-link.active {
+    color: var(--bs-body-color);
+    background: transparent;
+    border-bottom-color: var(--bs-success);
+  }
+  .settings-pane-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 1.5rem;
+    gap: 1rem;
     align-items: start;
   }
-  .settings-column {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+  .settings-pane-grid > form,
+  .settings-pane-grid > .card {
     min-width: 0;
+    margin-bottom: 0 !important;
   }
   #settings-source {
     display: none;
@@ -37,54 +82,49 @@
     flex: 1;
     border-top: 1px solid var(--bs-border-color);
   }
-  .settings-column > form,
-  .settings-column > .card {
-    min-width: 0;
-    margin-bottom: 0 !important;
-  }
-  .settings-column .card {
+  .settings-pane-grid .card {
     padding: 1.15rem 1.25rem !important;
   }
-  .settings-column .card h6 {
+  .settings-pane-grid .card h6 {
     margin-bottom: .85rem !important;
     line-height: 1.25;
   }
-  .settings-column .form-label {
+  .settings-pane-grid .form-label {
     margin-bottom: .35rem;
   }
-  .settings-column .form-text,
-  .settings-column .text-muted.small,
-  .settings-column p.text-muted {
+  .settings-pane-grid .form-text,
+  .settings-pane-grid .text-muted.small,
+  .settings-pane-grid p.text-muted {
     line-height: 1.35;
   }
-  .settings-column .form-text {
+  .settings-pane-grid .form-text {
     font-size: .76rem;
   }
-  .settings-column .mb-3 {
+  .settings-pane-grid .mb-3 {
     margin-bottom: .85rem !important;
   }
-  .settings-column .mb-4 {
+  .settings-pane-grid .mb-4 {
     margin-bottom: 1rem !important;
   }
-  .settings-column hr {
+  .settings-pane-grid hr {
     margin: .85rem 0 !important;
   }
-  .settings-column .alert {
+  .settings-pane-grid .alert {
     line-height: 1.35;
   }
-  .settings-column .border-warning .alert {
+  .settings-pane-grid .border-warning .alert {
     padding: .55rem .75rem !important;
     font-size: .78rem !important;
   }
-  .settings-column details {
+  .settings-pane-grid details {
     margin-top: .6rem !important;
   }
-  .settings-column details p {
+  .settings-pane-grid details p {
     margin-bottom: .45rem;
   }
-  .settings-column .input-group[style*="max-width:160px"],
-  .settings-column .input-group[style*="max-width:180px"],
-  .settings-column .input-group[style*="max-width:200px"] {
+  .settings-pane-grid .input-group[style*="max-width:160px"],
+  .settings-pane-grid .input-group[style*="max-width:180px"],
+  .settings-pane-grid .input-group[style*="max-width:200px"] {
     max-width: 145px !important;
   }
   .settings-api-endpoints {
@@ -94,24 +134,21 @@
     min-width: 520px;
   }
   @media (max-width: 991.98px) {
-    .settings-board {
+    .settings-overview,
+    .settings-pane-grid {
       grid-template-columns: minmax(0, 1fr);
-      gap: 1rem;
     }
-    .settings-column {
-      width: 100%;
-    }
-    .settings-column .card {
+    .settings-pane-grid .card {
       padding: 1rem !important;
     }
-    .settings-column .input-group,
-    .settings-column input,
-    .settings-column select,
-    .settings-column textarea {
+    .settings-pane-grid .input-group,
+    .settings-pane-grid input,
+    .settings-pane-grid select,
+    .settings-pane-grid textarea {
       min-width: 0;
       max-width: 100%;
     }
-    .settings-column .input-group[style*="max-width"] {
+    .settings-pane-grid .input-group[style*="max-width"] {
       max-width: 100% !important;
     }
     .settings-api-endpoints {
@@ -145,8 +182,102 @@
 </div>
 
 <div class="settings-board">
-  <div id="settings-left" class="settings-column"></div>
-  <div id="settings-right" class="settings-column"></div>
+  <div class="settings-overview">
+    <div class="settings-status-card">
+      <div class="label">{{ t.set_overview_cycle }}</div>
+      <div class="value">
+        {% if active_auto_pools %}
+          <span class="text-warning"><i class="bi bi-pause-circle"></i> {{ t.set_overview_pool_standby }}</span>
+        {% elif cfg.auto_benchmark == '1' %}
+          <span class="text-success"><i class="bi bi-check-circle"></i> {{ t.set_overview_auto_on }}</span>
+        {% else %}
+          <span class="text-muted"><i class="bi bi-slash-circle"></i> {{ t.set_overview_auto_off }}</span>
+        {% endif %}
+      </div>
+      <div class="small text-muted mt-1">
+        {% if next_run %}{{ t.set_interval_next }} {{ next_run.strftime('%d/%m/%Y %H:%M') }}{% else %}{{ t.set_overview_manual_only }}{% endif %}
+      </div>
+    </div>
+    <div class="settings-status-card">
+      <div class="label">{{ t.set_overview_strategy }}</div>
+      <div class="value">
+        {% if cfg.continuous_observation == '1' %}
+          <span class="text-info"><i class="bi bi-layers-half"></i> {{ t.set_observation_label }}</span>
+        {% elif cfg.benchmark_scope_mode == 'smart' %}
+          <span class="text-success"><i class="bi bi-bullseye"></i> {{ t.set_scope_smart }}</span>
+        {% else %}
+          <span><i class="bi bi-list-check"></i> {{ t.set_scope_all }}</span>
+        {% endif %}
+      </div>
+      <div class="small text-muted mt-1">{{ benchmark_estimated_count if benchmark_estimated_count is defined else '?' }} {{ t.dash_bench_est_srvs }}</div>
+    </div>
+    <div class="settings-status-card">
+      <div class="label">{{ t.set_overview_test_mode }}</div>
+      <div class="value">
+        {% if cfg.sidecar_mode == '1' %}
+          <span class="text-primary"><i class="bi bi-boxes"></i> sidecar</span>
+        {% else %}
+          <span><i class="bi bi-globe2"></i> proxy</span>
+        {% endif %}
+      </div>
+      <div class="small text-muted mt-1">~{{ bench_est.per_min_s }}–{{ bench_est.per_max_s }} {{ t.dash_bench_est_per }}</div>
+    </div>
+    <div class="settings-status-card">
+      <div class="label">{{ t.set_profile_label }}</div>
+      <div class="value">
+        {% set _p = profiles.get(cfg.active_profile) %}
+        {% if _p %}{{ _p.label_fr if session.get('lang','fr') == 'fr' else _p.label_en }}{% else %}{{ cfg.active_profile }}{% endif %}
+      </div>
+      <div class="small text-muted mt-1">{{ t.set_overview_profile_hint }}</div>
+    </div>
+  </div>
+
+  <ul class="nav nav-tabs settings-tabs" id="settings-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="tab-measure" data-bs-toggle="tab" data-bs-target="#settings-measure" type="button" role="tab">
+        <i class="bi bi-speedometer2 me-1"></i>{{ t.set_tab_measure }}
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-decide" data-bs-toggle="tab" data-bs-target="#settings-decide" type="button" role="tab">
+        <i class="bi bi-shuffle me-1"></i>{{ t.set_tab_decide }}
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-wireguard" data-bs-toggle="tab" data-bs-target="#settings-wireguard" type="button" role="tab">
+        <i class="bi bi-shield-lock me-1"></i>{{ t.set_tab_wireguard }}
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-notifications" data-bs-toggle="tab" data-bs-target="#settings-notifications" type="button" role="tab">
+        <i class="bi bi-bell me-1"></i>{{ t.set_tab_notifications }}
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-maintenance" data-bs-toggle="tab" data-bs-target="#settings-maintenance" type="button" role="tab">
+        <i class="bi bi-tools me-1"></i>{{ t.set_tab_maintenance }}
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content mb-3">
+    <div class="tab-pane fade show active" id="settings-measure" role="tabpanel" aria-labelledby="tab-measure">
+      <div id="settings-measure-grid" class="settings-pane-grid"></div>
+    </div>
+    <div class="tab-pane fade" id="settings-decide" role="tabpanel" aria-labelledby="tab-decide">
+      <div id="settings-decide-grid" class="settings-pane-grid"></div>
+    </div>
+    <div class="tab-pane fade" id="settings-wireguard" role="tabpanel" aria-labelledby="tab-wireguard">
+      <div id="settings-wireguard-grid" class="settings-pane-grid"></div>
+    </div>
+    <div class="tab-pane fade" id="settings-notifications" role="tabpanel" aria-labelledby="tab-notifications">
+      <div id="settings-notifications-grid" class="settings-pane-grid"></div>
+    </div>
+    <div class="tab-pane fade" id="settings-maintenance" role="tabpanel" aria-labelledby="tab-maintenance">
+      <div id="settings-maintenance-grid" class="settings-pane-grid"></div>
+    </div>
+  </div>
+
   <div id="settings-source">
 
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -1758,11 +1889,9 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 </div>
 
 <script>
-(function arrangeSettingsColumns() {
+(function arrangeSettingsTabs() {
   const source = document.getElementById('settings-source');
-  const left = document.getElementById('settings-left');
-  const right = document.getElementById('settings-right');
-  if (!source || !left || !right) return;
+  if (!source) return;
 
   const form = action =>
     source.querySelector(`form:has(input[name="action"][value="${action}"])`);
@@ -1771,29 +1900,38 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
   const cardWithForm = id =>
     source.querySelector(`.card:has(form#${id})`);
   const move = (target, el) => { if (el) target.appendChild(el); };
+  const pane = id => document.getElementById(id);
 
-  [form('save_planning'), form('sidecar')].forEach((el, idx) => move(idx ? right : left, el));
-
-  const balancedCards = [
-    source.querySelector('#card-wg-profiles'),
-    form('save_switch'),
+  [
+    form('save_planning'),
     form('save_speed'),
     form('save_vpn'),
-    form('proxy_credentials'),
-    cardWithForm('form-pull-network'),
-    cardWithAction('catalogue'),
-    cardWithForm('form-post-switch'),
+    form('sidecar'),
     cardWithForm('form-pause-bench'),
+  ].forEach(el => move(pane('settings-measure-grid'), el));
+
+  [
+    form('save_switch'),
+    cardWithForm('form-post-switch'),
+    cardWithForm('form-pull-network'),
+  ].forEach(el => move(pane('settings-decide-grid'), el));
+
+  [
+    source.querySelector('#card-wg-profiles'),
+    form('proxy_credentials'),
+  ].forEach(el => move(pane('settings-wireguard-grid'), el));
+
+  [
     cardWithAction('notifications'),
+  ].forEach(el => move(pane('settings-notifications-grid'), el));
+
+  [
+    cardWithAction('catalogue'),
     cardWithAction('db_retention'),
     cardWithAction('save_api_token'),
     cardWithAction('credentials'),
     source.querySelector('#card-export-import'),
-  ].filter(Boolean);
-
-  balancedCards.forEach(el => {
-    move(left.offsetHeight <= right.offsetHeight ? left : right, el);
-  });
+  ].forEach(el => move(pane('settings-maintenance-grid'), el));
 })();
 </script>
 

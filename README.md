@@ -124,12 +124,12 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 
 ### Multi-provider WireGuard
 
-- **Profils VPN WireGuard** — créez plusieurs profils d'identifiants WireGuard depuis **Paramètres → Profils VPN WireGuard** ; chaque profil est associé à un fournisseur (AirVPN, Mullvad, ProtonVPN, NordVPN, IVPN, Surfshark, Windscribe, ou Custom WireGuard pour tout autre fournisseur compatible)
+- **Profils VPN WireGuard** — créez plusieurs profils d'identifiants WireGuard depuis **Paramètres → WireGuard** ; chaque profil est associé à un fournisseur (AirVPN, Mullvad, ProtonVPN, NordVPN, IVPN, Surfshark, Windscribe, ou Custom WireGuard pour tout autre fournisseur compatible)
 - **Chiffrement des secrets** — les clés privées et autres champs sensibles sont chiffrés en base (Fernet/AES-128, clé dérivée de `SECRET_KEY` via PBKDF2HMAC-SHA256 avec 480 000 itérations) ; changer `SECRET_KEY` rend les profils illisibles (comportement documenté)
 - **Liaison serveurs ↔ profils** — sur la page **Serveurs**, assignez un profil VPN à chaque serveur via un menu déroulant ; une colonne *Provider* affiche le profil associé ; le filtre `?profile=` permet de ne voir que les serveurs d'un profil donné ou les serveurs non assignés
 - **Alerte serveurs orphelins** — un badge d'alerte signale les serveurs sans profil assigné dès qu'au moins un profil WireGuard est configuré ; ces serveurs continuent de fonctionner normalement mais ne pourront pas être retenus par le benchmark multi-profil
 - **Benchmark multi-profil** — en mode sidecar, chaque serveur est testé avec les identifiants WireGuard de son profil injectés dans le container temporaire ; lors de la bascule finale, Companion écrit automatiquement `VPN_SERVICE_PROVIDER`, `VPN_TYPE=wireguard` et toutes les variables `WIREGUARD_*` dans `docker-compose.override.yml`
-- **Politique de rotation** — trois modes configurables dans **Paramètres → Profils VPN WireGuard → Politique de rotation** :
+- **Politique de rotation** — trois modes configurables dans **Paramètres → WireGuard → Politique de rotation** :
   - `none` — Companion reste toujours dans le profil actuellement actif ; les serveurs d'autres profils ne sont jamais retenus à la fin du benchmark
   - `free` — choisit le meilleur serveur tous profils confondus (comportement par défaut sans profils)
   - `conditional` — bascule vers un autre profil uniquement si son meilleur serveur est supérieur de plus de N % au meilleur serveur du profil actif (seuil configurable, défaut 10 %)
@@ -155,8 +155,8 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 
 ### Catalogue de serveurs Gluetun
 - **Téléchargement GitHub** — le Sidecar catalogue télécharge les listes de serveurs directement depuis le dépôt public [`qdm12/gluetun-servers`](https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers) ; **aucun volume à monter**, aucune modification de votre configuration Gluetun requise
-- **Mise à jour automatique** — la liste est rafraîchie **à chaque cycle de benchmark** (intervalle configurable dans Paramètres → Planification & Cycle, défaut : 6 h) ; un bouton dédié dans les Paramètres et dans le modal `/servers` permet de forcer une mise à jour immédiate
-- **Auto-ajout des nouveaux serveurs** *(option)* — quand de nouveaux serveurs apparaissent dans le catalogue pour un **pays**, une **région** ou une **ville** que vous avez déjà configuré, Companion les ajoute automatiquement à votre liste (type `SERVER_NAMES`) sans intervention manuelle ; désactivé par défaut, activable dans **Paramètres → Catalogue**
+- **Mise à jour automatique** — la liste est rafraîchie **à chaque cycle de benchmark** (intervalle configurable dans Paramètres → Mesurer, défaut : 6 h) ; un bouton dédié dans les Paramètres et dans le modal `/servers` permet de forcer une mise à jour immédiate
+- **Auto-ajout des nouveaux serveurs** *(option)* — quand de nouveaux serveurs apparaissent dans le catalogue pour un **pays**, une **région** ou une **ville** que vous avez déjà configuré, Companion les ajoute automatiquement à votre liste (type `SERVER_NAMES`) sans intervention manuelle ; désactivé par défaut, activable dans **Paramètres → Maintenance → Catalogue**
 - **Notification de changements** *(option)* — Discord/Apprise envoyés à chaque refresh si des serveurs sont ajoutés ou supprimés du catalogue, avec le détail par provider (+N/-N) ; activable dans **Paramètres → Notifications**
 - **3 modes d'import dans les Paramètres** :
   1. **Tous les providers** — importe les serveurs de tous les providers disponibles sur GitHub
@@ -177,7 +177,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 
 ### AirVPN
 - **Sélecteur de serveurs AirVPN intégré** — bouton *+ Ajouter un serveur AirVPN* sur la page Serveurs : données en direct depuis `airvpn.org/api/status/` (cache 5 min), quatre onglets — liste complète searchable, répartition géographique par pays, onglet **Recommandés** (charge < 50 %, santé OK, < 30 utilisateurs) et onglet **Changements** (nouveaux serveurs détectés, serveurs disparus, évolutions de charge, top 5 pays les plus sains) ; ajout multi-sélection en un clic
-- **Éviter les serveurs AirVPN chargés** *(optionnel, dédié [AirVPN](https://airvpn.org/?referred_by=483746))* — au démarrage du benchmark, les serveurs **[AirVPN](https://airvpn.org/?referred_by=483746)** de type `SERVER_NAMES` dont la **charge** ou le **nombre d'utilisateurs** dépasse un seuil configurable sont automatiquement ignorés ; données issues du cache AirVPN (mis à jour toutes les 5 min) ; les serveurs sans données AirVPN ne sont jamais exclus ; seuils configurables dans Paramètres → Planification & Cycle → Quels serveurs autoriser
+- **Éviter les serveurs AirVPN chargés** *(optionnel, dédié [AirVPN](https://airvpn.org/?referred_by=483746))* — au démarrage du benchmark, les serveurs **[AirVPN](https://airvpn.org/?referred_by=483746)** de type `SERVER_NAMES` dont la **charge** ou le **nombre d'utilisateurs** dépasse un seuil configurable sont automatiquement ignorés ; données issues du cache AirVPN (mis à jour toutes les 5 min) ; les serveurs sans données AirVPN ne sont jamais exclus ; seuils configurables dans Paramètres → Mesurer → Quels serveurs autoriser
 - **Détection de nouveaux serveurs AirVPN** *(optionnel)* — compare l'API AirVPN avec vos serveurs configurés toutes les 24 h ; bannière et badge sur la page Serveurs + onglet *Changements* dans le modal d'ajout ; notification Discord/Apprise avec mention optionnelle
 
 ### Analyse & historique
@@ -340,7 +340,7 @@ Cycle de benchmark (toutes les X heures)
   └─ Notification Discord / Apprise (si configurée)
 ```
 
-**Moteurs de test disponibles (Paramètres → Mode Sidecar) :**
+**Moteurs de test disponibles (Paramètres → Mesurer → Mode Sidecar) :**
 - **Dual** (défaut) — Ookla + librespeed en parallèle ; résultats des deux sources stockés séparément
 - **Ookla uniquement** — CLI Speedtest.net, rarement bloqué par les IPs VPN
 - **librespeed uniquement** — librespeed-cli, serveurs librespeed.org (HTTP)
@@ -367,15 +367,15 @@ Cycle de benchmark (toutes les X heures)
   └─ Score pondéré → bascule → notification
 ```
 
-Activer via **Paramètres → Mode Sidecar → désactiver**.
+Activer via **Paramètres → Mesurer → Mode Sidecar → désactiver**.
 
 ### Containers à redémarrer après bascule
 
-Dans **Paramètres → Containers à redémarrer après bascule** : liste ordonnée de containers recréés via `docker compose up -d --force-recreate` après chaque bascule VPN. Drag & drop pour réordonner. Utile pour `qbittorrent`, `radarr`, `sonarr`, ou tout service avec `network_mode: service:gluetun`.
+Dans **Paramètres → Décider → Containers à redémarrer après bascule** : liste ordonnée de containers recréés via `docker compose up -d --force-recreate` après chaque bascule VPN. Drag & drop pour réordonner. Utile pour `qbittorrent`, `radarr`, `sonarr`, ou tout service avec `network_mode: service:gluetun`.
 
 ### Containers à stopper pendant le benchmark
 
-Dans **Paramètres → Containers à stopper pendant le benchmark** : liste de containers stoppés avant le benchmark et relancés après — dans tous les cas, même si le benchmark plante. Si un container est dans les deux listes, la liste de pause a priorité (pas de doublon). Utile pour `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`.
+Dans **Paramètres → Mesurer → Containers à stopper pendant le benchmark** : liste de containers stoppés avant le benchmark et relancés après — dans tous les cas, même si le benchmark plante. Si un container est dans les deux listes, la liste de pause a priorité (pas de doublon). Utile pour `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`.
 
 ### Sélecteur de serveurs AirVPN
 
@@ -389,7 +389,7 @@ Les serveurs déjà dans la base sont grisés et leur case à cocher est désact
 
 ### Vérification rapide avant benchmark *(option)*
 
-Activer via **Paramètres → Planification & Cycle → Éviter les tests inutiles**.
+Activer via **Paramètres → Mesurer → Éviter les tests inutiles**.
 
 Lorsque cette option est activée, chaque cycle commence par un test de débit sur le **serveur actuellement actif uniquement** — avant de stopper des containers ou de relancer Gluetun :
 
@@ -404,7 +404,7 @@ Idéal pour des intervalles fréquents (ex. toutes les 2–3 h) où l'on veut un
 
 ### Optimisation horaire *(option)*
 
-Activer via **Paramètres → Planification & Cycle → Optimiser l’heure**.
+Activer via **Paramètres → Mesurer → Optimiser l’heure**.
 
 Companion analyse l'historique des tests pour calculer, pour chaque tranche horaire (0h–23h), le **débit moyen** et le **coefficient de variation** (CV = σ/μ). Une heure avec un débit élevé et une faible variance est une bonne fenêtre de benchmark — les mesures y sont représentatives et reproductibles.
 
@@ -421,7 +421,7 @@ Companion analyse l'historique des tests pour calculer, pour chaque tranche hora
 
 ### Sélection intelligente du benchmark *(recommandée pour les gros catalogues)*
 
-Activer via **Paramètres → Planification & Cycle → Combien de serveurs tester**.
+Activer via **Paramètres → Mesurer → Combien de serveurs tester**.
 
 Deux modes sont disponibles :
 
@@ -438,7 +438,7 @@ Mettre un quota à `0` désactive cette partie. Le dashboard rappelle le mode ut
 
 #### Observation continue pyramidale
 
-Activer via **Paramètres → Planification & Cycle → Combien de serveurs tester → Observation continue pyramidale**.
+Activer via **Paramètres → Mesurer → Combien de serveurs tester → Observation continue pyramidale**.
 
 Ce mode sert à rendre les profils d'usage sérieux sans lancer un benchmark gigantesque à chaque fois. Il transforme le cycle automatique en collecte progressive :
 
@@ -453,7 +453,7 @@ Les profils ne doivent pas être compris comme une magie immédiate : avec une o
 
 ### Serveurs autorisés avant benchmark *(option)*
 
-Activer via **Paramètres → Planification & Cycle → Quels serveurs autoriser**.
+Activer via **Paramètres → Mesurer → Quels serveurs autoriser**.
 
 Ces règles réduisent la liste avant un benchmark complet. Les serveurs exclus restent visibles dans `/servers` et peuvent toujours être testés manuellement.
 
@@ -474,7 +474,7 @@ Par défaut, le benchmark teste **toutes** les entrées activées dans `/servers
 
 ### Éviter les serveurs AirVPN chargés *(option, dédié [AirVPN](https://airvpn.org/?referred_by=483746))*
 
-Activer via **Paramètres → Planification & Cycle → Quels serveurs autoriser → Éviter les serveurs AirVPN chargés**.
+Activer via **Paramètres → Mesurer → Quels serveurs autoriser → Éviter les serveurs AirVPN chargés**.
 
 Lorsque vous avez ajouté un grand nombre de serveurs **[AirVPN](https://airvpn.org/?referred_by=483746)** (type `SERVER_NAMES`), le benchmark complet peut être très long. Ce pré-filtre permet d'**ignorer automatiquement les serveurs surchargés** au moment du lancement du cycle :
 
@@ -537,11 +537,11 @@ Le score influence légèrement la sélection automatique du meilleur serveur : 
 
 ### Profils d'usage
 
-Companion propose 6 **profils d'usage** sélectionnables depuis la page **Serveurs** (barre de pills) ou depuis **Paramètres → Bascule automatique → Profil d'usage**.
+Companion propose 6 **profils d'usage** sélectionnables depuis la page **Serveurs** (barre de pills) ou depuis **Paramètres → Décider → Profil d'usage**.
 
 Le profil actif détermine **comment le meilleur serveur est sélectionné** à la fin de chaque cycle de benchmark, en pondérant différemment les métriques mesurées.
 
-Important : un profil d'usage n'est fiable que si l'historique est suffisant. Au début, Companion peut surtout comparer le débit disponible ; la latence, le jitter, la perte de paquets, l'upload, le monoflux DDL et la stabilité ne deviennent discriminants qu'après plusieurs benchmarks complets par serveur. Pour construire cet historique sans tester tout le catalogue en boucle, utilisez l'**observation continue pyramidale** dans **Paramètres → Planification & Cycle**.
+Important : un profil d'usage n'est fiable que si l'historique est suffisant. Au début, Companion peut surtout comparer le débit disponible ; la latence, le jitter, la perte de paquets, l'upload, le monoflux DDL et la stabilité ne deviennent discriminants qu'après plusieurs benchmarks complets par serveur. Pour construire cet historique sans tester tout le catalogue en boucle, utilisez l'**observation continue pyramidale** dans **Paramètres → Mesurer**.
 
 | Profil | Critère principal | Usage typique |
 |---|---|---|
@@ -554,15 +554,15 @@ Important : un profil d'usage n'est fiable que si l'historique est suffisant. Au
 
 **Algorithme** : pour chaque résultat du cycle en cours, Companion calcule le `_weighted_score` (débit + historique + stabilité), puis normalise [0,1] l'ensemble des résultats sur chaque axe. La combinaison pondérée des scores normalisés détermine le meilleur serveur selon le profil actif. Le profil **Équilibré** reproduit exactement le comportement antérieur — aucune régression.
 
-**Profil DDL et test monoflux** : le profil DDL exploite une métrique supplémentaire, le **débit monoflux** (`dl_single_mbps`), mesurée après le test principal (connexion VPN déjà établie, sans surcoût de reconnexion). Ce test est **optionnel** et désactivé par défaut — activer via **Paramètres → Mesure de vitesse → Test monoflux (DDL)**.
+**Profil DDL et test monoflux** : le profil DDL exploite une métrique supplémentaire, le **débit monoflux** (`dl_single_mbps`), mesurée après le test principal (connexion VPN déjà établie, sans surcoût de reconnexion). Ce test est **optionnel** et désactivé par défaut — activer via **Paramètres → Mesurer → Mesure de vitesse → Test monoflux (DDL)**.
 
 **Page Serveurs** : la barre de profils affiche le **meilleur serveur pour le profil actif** (calculé sur les moyennes historiques). Ce serveur est mis en évidence par un badge 🏆 sur sa ligne (masqué en profil Équilibré).
 
 **Score explicable** : chaque serveur affiché dans la vue tableau dispose d'un bouton 📊 (icône graphique) à côté de son nom. Un clic ouvre un popover détaillant la contribution de chaque métrique au score final — débit download, upload, latence, jitter, perte de paquets — sous forme de barres de progression pondérées, avec les valeurs brutes mesurées. Seules les métriques effectivement utilisées par le profil actif sont affichées.
 
-**Fenêtre temporelle de scoring** : par défaut, les moyennes utilisées pour le classement des serveurs sont calculées sur les **30 derniers jours**. Ce paramètre est ajustable dans **Paramètres → Bascule automatique → Fenêtre de scoring** : 7 j, 14 j, 30 j, ou toutes les données. Une fenêtre courte favorise les performances récentes ; une fenêtre longue lisse les pics ponctuels.
+**Fenêtre temporelle de scoring** : par défaut, les moyennes utilisées pour le classement des serveurs sont calculées sur les **30 derniers jours**. Ce paramètre est ajustable dans **Paramètres → Décider → Fenêtre de scoring** : 7 j, 14 j, 30 j, ou toutes les données. Une fenêtre courte favorise les performances récentes ; une fenêtre longue lisse les pics ponctuels.
 
-**Détection d'outliers** : option activable dans **Paramètres → Bascule automatique → Filtrage des valeurs aberrantes**. Lorsqu'elle est active, chaque série de résultats par serveur et par métrique est filtrée via la méthode IQR (interquartile range × 1,5) avant le calcul des moyennes. Les mesures manifestement aberrantes (pic réseau, saturation ponctuelle) sont ignorées pour le scoring — elles restent visibles dans l'historique. Requiert au minimum 4 mesures par serveur pour s'appliquer.
+**Détection d'outliers** : option activable dans **Paramètres → Décider → Filtrage des valeurs aberrantes**. Lorsqu'elle est active, chaque série de résultats par serveur et par métrique est filtrée via la méthode IQR (interquartile range × 1,5) avant le calcul des moyennes. Les mesures manifestement aberrantes (pic réseau, saturation ponctuelle) sont ignorées pour le scoring — elles restent visibles dans l'historique. Requiert au minimum 4 mesures par serveur pour s'appliquer.
 
 ### Profils VPN WireGuard
 
@@ -570,7 +570,7 @@ Les profils WireGuard permettent de gérer plusieurs fournisseurs ou identités 
 
 #### Création d'un profil
 
-Dans **Paramètres → Profils VPN WireGuard** :
+Dans **Paramètres → WireGuard** :
 
 1. Choisissez le provider dans le menu déroulant → les champs de configuration apparaissent dynamiquement selon les variables requises par Gluetun pour ce fournisseur
 2. Remplissez les champs (clé privée, adresses IP, etc.) — les champs marqués 🔒 sont chiffrés avant stockage
@@ -587,7 +587,7 @@ Dans **Paramètres → Profils VPN WireGuard** :
 
 **Pourquoi il n'y a pas de clé globale :** une clé AirVPN ne peut pas s'authentifier auprès de Mullvad ou Proton, et inversement. Une clé sidecar partagée entre plusieurs providers est donc invalide par nature — chaque profil doit porter sa propre configuration.
 
-**Solution :** dans **Paramètres → Profils VPN WireGuard**, modifiez chaque profil et renseignez la section *Clé sidecar dédiée* :
+**Solution :** dans **Paramètres → WireGuard**, modifiez chaque profil et renseignez la section *Clé sidecar dédiée* :
 - **Clé privée sidecar** — nouvelle clé privée générée auprès du même fournisseur que le profil (ex. `wg genkey` pour les providers qui l'acceptent, ou depuis votre espace client)
 - **Adresse IP sidecar** — l'adresse IP assignée à cette clé par votre fournisseur (format CIDR, ex. `10.x.x.x/32`)
 - **Clé pré-partagée sidecar** — uniquement si votre fournisseur en exige une
@@ -699,7 +699,7 @@ Le scheduler vérifie toutes les **5 minutes** si des pools ont une rotation en 
 
 > Les rotations de pool et les benchmarks partagent le même verrou opérationnel : une rotation ne se déclenche pas pendant un benchmark actif, et inversement.
 
-Quand au moins un pool de rotation automatique est actif, le cycle automatique classique de **Paramètres → Planification & Cycle** passe en pause : le toggle est désactivé dans l'UI, les benchmarks manuels restent disponibles, et les rotations de pool deviennent le planificateur principal.
+Quand au moins un pool de rotation automatique est actif, le cycle automatique classique de **Paramètres → Mesurer** passe en pause : le toggle est désactivé dans l'UI, les benchmarks manuels restent disponibles, et les rotations de pool deviennent le planificateur principal.
 
 Les rotations de pool sont visibles sur le dashboard `/` et dans `/history`. Une bascule apparaît comme activité de pool ; si l'option **Mesurer après bascule** est activée, le test `proxy_qc` reçoit aussi le badge `pool`.
 
@@ -732,7 +732,7 @@ raw_stability = jitter_factor × loss_factor × reconnect_factor
 | **Reconnexions involontaires** | Docker events sur 30 j (test_trigger=docker_event) | −10 % par reconnexion, max −30 % |
 | **Confiance** (variance historique) | Coefficient de variation sur tous les tests de la fenêtre de scoring (proxy_qc exclus) | −15 % (LOW) · −5 % (MEDIUM) |
 
-**Curseur Priorité débit vs stabilité** (Paramètres → Bascule automatique) :
+**Curseur Priorité débit vs stabilité** (Paramètres → Décider) :
 - **0** — seul le débit compte, toutes les pénalités sont désactivées
 - **30** (défaut) — 30 % des pénalités sont appliquées
 - **100** — pénalités complètes — un serveur à 300 Mbps avec 3 reconnexions involontaires + jitter élevé peut perdre jusqu'à ~40 % de score
@@ -840,7 +840,7 @@ L'endpoint `GET /metrics` expose les métriques clés au format texte Prometheus
 - `gluetun_companion_benchmark_running` — 1 si un benchmark est en cours
 - `gluetun_companion_last_switch_timestamp_seconds` — timestamp Unix de la dernière bascule
 
-**Authentification** : par défaut ouvert (standard pour un réseau interne). Deux façons de protéger `/metrics` par Bearer token : définir la variable d'environnement `METRICS_TOKEN`, ou configurer un **token API** dans Paramètres → API (les deux sont supportés, `METRICS_TOKEN` a la priorité).
+**Authentification** : par défaut ouvert (standard pour un réseau interne). Deux façons de protéger `/metrics` par Bearer token : définir la variable d'environnement `METRICS_TOKEN`, ou configurer un **token API** dans Paramètres → Maintenance → REST API (les deux sont supportés, `METRICS_TOKEN` a la priorité).
 
 **Scrape Prometheus** (à ajouter dans `prometheus.yml`) :
 ```yaml
@@ -856,7 +856,7 @@ scrape_configs:
 
 ### REST API
 
-L'API est **désactivée par défaut**. Pour l'activer : **Paramètres → REST API → Générer un nouveau token**.
+L'API est **désactivée par défaut**. Pour l'activer : **Paramètres → Maintenance → REST API → Générer un nouveau token**.
 
 **Authentification** : toutes les requêtes doivent inclure l'en-tête :
 ```
@@ -898,12 +898,12 @@ curl -H "Authorization: Bearer <token>" \
 
 ### Cycle automatique vs déclenchement manuel
 
-Dans **Paramètres → Planification & Cycle** : le cycle automatique peut être désactivé via le toggle *Activer le cycle de benchmark automatique*. Le champ intervalle est alors grisé. Deux boutons restent disponibles à tout moment (dashboard et paramètres) :
+Dans **Paramètres → Mesurer** : le cycle automatique peut être désactivé via le toggle *Activer le cycle de benchmark automatique*. Le champ intervalle est alors grisé. Deux boutons restent disponibles à tout moment (dashboard et paramètres) :
 
 - **Benchmark rapide** — teste uniquement le serveur actif via le proxy HTTP de Gluetun ; résultat en quelques secondes, aucune interruption VPN, résultat sauvegardé dans l'historique (méthode `proxy_qc`).
 - **Benchmark complet** — lance un cycle complet immédiatement, quels que soient le cycle automatique et l'option *Vérification rapide*. Utilise la méthode configurée (sidecar ou proxy), label affiché entre parenthèses sur le bouton.
 
-> **Estimation de durée** : le dashboard affiche sous les boutons une fourchette `~min–max / serveur` et un total estimé pour la sélection réellement testée, calculés à partir de `wait_secs`, `duration`, `samples`, `retries`, du mode (proxy/sidecar), des filtres et de la sélection intelligente. Une alerte ⚠️ s'affiche automatiquement si le total pessimiste dépasse 30 minutes. La même estimation est recalculée en temps réel dans **Paramètres → Planification & Cycle** après chaque modification.
+> **Estimation de durée** : le dashboard affiche sous les boutons une fourchette `~min–max / serveur` et un total estimé pour la sélection réellement testée, calculés à partir de `wait_secs`, `duration`, `samples`, `retries`, du mode (proxy/sidecar), des filtres et de la sélection intelligente. Une alerte ⚠️ s'affiche automatiquement si le total pessimiste dépasse 30 minutes. La même estimation est recalculée en temps réel dans **Paramètres → Mesurer** après chaque modification.
 
 ---
 
@@ -958,7 +958,7 @@ En plus des métriques de base (`avg_dl`, `avg_ul`, `avg_latency`, `test_count`,
 - **Socket Docker** — Le socket Docker est sécurisé via [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy), qui restreint les appels autorisés : lecture (containers, images, réseaux, volumes) + POST/DELETE pour la gestion des sidecars temporaires. Tout accès direct au daemon Docker (exec, swarm, info…) est bloqué.
 - **Anti brute-force** — Le login bloque une IP après 5 échecs en 5 minutes pendant 15 minutes (compteur en mémoire, remis à zéro à la connexion réussie).
 - **Exposition réseau** — Gunicorn écoute sur `0.0.0.0:8765` (toutes interfaces). **Ne pas exposer ce port directement sur Internet.** Sur un serveur accessible publiquement, placez Companion derrière un reverse proxy (Nginx, Caddy, Traefik) avec HTTPS et authentification forte, ou restreignez le binding à l'interface locale : `127.0.0.1:8765:8765` dans le `docker-compose.yml`.
-- **`/metrics`** — Ouvert par défaut sur le LAN. Si votre machine est accessible depuis l'extérieur, définissez la variable `METRICS_TOKEN` ou configurez un token API dans Paramètres → API : `/metrics` l'utilisera automatiquement pour exiger un Bearer token.
+- **`/metrics`** — Ouvert par défaut sur le LAN. Si votre machine est accessible depuis l'extérieur, définissez la variable `METRICS_TOKEN` ou configurez un token API dans Paramètres → Maintenance → REST API : `/metrics` l'utilisera automatiquement pour exiger un Bearer token.
 - **Sidecar** — Chaque container sidecar (speed-test sur le port `8766`, catalogue sur le port `8767`) reçoit automatiquement un secret aléatoire généré par le Companion (`SIDECAR_SECRET`, 32 octets d'entropie via `secrets.token_hex`). Toutes les requêtes HTTP vers le sidecar exigent ce secret dans l'en-tête `X-Sidecar-Token` — un sidecar sans le bon token répond `403`. Ce secret est unique par instance et détruit avec le container à la fin du test. Ces ports ne doivent pas être accessibles depuis l'extérieur : si votre hôte est public, restreignez le binding ou isolez ces ports par firewall.
 - **Secrets dans /settings** — Le token API, le mot de passe proxy et les URLs de webhook sont affichés en clair dans l'interface d'administration. Tout accès à l'UI admin équivaut à un accès total à ces secrets.
 
