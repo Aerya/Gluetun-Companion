@@ -604,6 +604,7 @@ def _test_server_with_retry(
     Returns result dict on success, None on final failure (error already recorded).
     """
     last_err = 'Unknown error'
+    _STOP_POLL = 2.0  # seconds between stop-event checks while waiting for a result
     for attempt in range(max_retries + 1):
         ex = ThreadPoolExecutor(max_workers=1)
         future = ex.submit(
@@ -614,7 +615,25 @@ def _test_server_with_retry(
             wg_profile,
         )
         try:
-            result = future.result(timeout=timeout_secs)
+            # Poll in short intervals so a stop request interrupts mid-test
+            # instead of waiting for the full timeout_secs wall-clock.
+            deadline = time.monotonic() + timeout_secs
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise FuturesTimeout()
+                try:
+                    result = future.result(timeout=min(_STOP_POLL, remaining))
+                    break   # completed successfully
+                except FuturesTimeout:
+                    if _stop_event.is_set():
+                        logger.info(
+                            '  %s: stop requested mid-test — abandoning thread',
+                            server_name,
+                        )
+                        ex.shutdown(wait=False, cancel_futures=True)
+                        return None
+                    # Not timed out globally yet — keep waiting
             ex.shutdown(wait=False)   # don't block — thread is done
             return result
         except FuturesTimeout:
@@ -631,7 +650,10 @@ def _test_server_with_retry(
                 logger.warning(
                     '  Retry %d/%d for %s: %s', attempt + 1, max_retries, server_name, exc
                 )
-                time.sleep(5)
+                # Interruptible retry delay — honour stop requests immediately
+                if _stop_event.wait(timeout=5):
+                    logger.info('  %s: stop requested during retry delay', server_name)
+                    return None
 
     _record_test(server_name, success=False, error=last_err)
     return None
@@ -654,6 +676,7 @@ def _test_server_sidecar_with_retry(
     extra_env: 'dict[str, str] | None' = None,
 ) -> dict | None:
     last_err = 'Unknown error'
+    _STOP_POLL = 2.0  # seconds between stop-event checks while waiting for a result
     for attempt in range(max_retries + 1):
         ex = ThreadPoolExecutor(max_workers=1)
         future = ex.submit(
@@ -665,7 +688,23 @@ def _test_server_sidecar_with_retry(
             extra_env,
         )
         try:
-            result = future.result(timeout=timeout_secs)
+            # Poll in short intervals so a stop request interrupts mid-test
+            deadline = time.monotonic() + timeout_secs
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise FuturesTimeout()
+                try:
+                    result = future.result(timeout=min(_STOP_POLL, remaining))
+                    break
+                except FuturesTimeout:
+                    if _stop_event.is_set():
+                        logger.info(
+                            '  %s: stop requested mid-sidecar-test — abandoning thread',
+                            server_name,
+                        )
+                        ex.shutdown(wait=False, cancel_futures=True)
+                        return None
             ex.shutdown(wait=False)
             return result
         except FuturesTimeout:
@@ -680,7 +719,10 @@ def _test_server_sidecar_with_retry(
                 logger.warning(
                     '  Sidecar retry %d/%d for %s: %s', attempt + 1, max_retries, server_name, exc
                 )
-                time.sleep(5)
+                # Interruptible retry delay — honour stop requests immediately
+                if _stop_event.wait(timeout=5):
+                    logger.info('  %s: stop requested during sidecar retry delay', server_name)
+                    return None
 
     _record_test(server_name, success=False, error=last_err)
     return None
