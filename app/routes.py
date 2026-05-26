@@ -770,6 +770,11 @@ def manual_switch(server_id):
                     _mp_vars[_k] = ''
             _manual_wg_profile = {'compose_provider': _mp_compose_prov, 'vars': _mp_vars}
 
+    # Capture dependents BEFORE the switch — after Gluetun restarts they will
+    # have stopped, so list_network_dependents() would return an empty list.
+    from .gluetun import list_network_dependents as _list_deps
+    pre_switch_deps = _list_deps(container)
+
     ok, err = switch_server(
         row['name'], row['filter_type'],
         container, compose_dir, project,
@@ -798,6 +803,7 @@ def manual_switch(server_id):
                 if vpn_ok:
                     restarted, _ = restart_network_dependents(
                         container, compose_dir, project,
+                        explicit_list=pre_switch_deps,
                     )
                     logger.info(
                         'Manual switch: VPN up in %.0fs — recreated %d network dependent(s): %s',
