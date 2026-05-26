@@ -543,11 +543,18 @@ def servers():
                 if _confidence_all.get(r['name'], {}).get('level') == conf_filter]
 
     # ── Top-N limiter (applied after sort + conf filter, before pagination) ──
+    # We select the N best servers by profile score (or avg_dl when no score
+    # is available), then filter the already-sorted rows so the display sort
+    # order is preserved.  A plain rows[:top_n] slice would give "first N in
+    # current sort order" which is wrong when the user sorts by name / type.
     _valid_top_n = {5, 10, 20, 50}
     if top_n not in _valid_top_n:
         top_n = 0
     if top_n:
-        rows = rows[:top_n]
+        def _top_n_key(r: dict) -> float:
+            return float(profile_scores.get(r['name']) or r.get('avg_dl') or 0)
+        top_names = {r['name'] for r in sorted(rows, key=_top_n_key, reverse=True)[:top_n]}
+        rows = [r for r in rows if r['name'] in top_names]
 
     # ── Pagination (Python-side slice — full rows needed for scores above) ───
     total_servers = len(rows)
