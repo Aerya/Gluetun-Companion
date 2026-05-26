@@ -1666,11 +1666,61 @@ def settings():
         observation=(cfg['continuous_observation'] == '1')
     )
     bench_est_settings = _bench_estimate(benchmark_estimated_count_settings)
+    settings_sidebar = {
+        'active_server': '',
+        'enabled_servers': 0,
+        'tested_servers': 0,
+        'untested_servers': 0,
+        'last_test': None,
+        'top_servers': [],
+    }
+    try:
+        _cur_filters = get_current_filters(current_app.config['GLUETUN_CONTAINER'])
+        settings_sidebar['active_server'] = format_filters(_cur_filters) if _cur_filters else ''
+    except Exception:
+        settings_sidebar['active_server'] = ''
+    try:
+        with get_db() as db:
+            settings_sidebar['enabled_servers'] = db.execute(
+                'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'
+            ).fetchone()['n']
+            settings_sidebar['tested_servers'] = db.execute(
+                '''SELECT COUNT(DISTINCT s.name) AS n
+                   FROM servers s
+                   JOIN speed_tests st ON st.server_name = s.name
+                   WHERE s.enabled = 1
+                     AND st.success = 1
+                     AND (st.test_method IS NULL OR st.test_method != 'proxy_qc')'''
+            ).fetchone()['n']
+            settings_sidebar['untested_servers'] = max(
+                0,
+                settings_sidebar['enabled_servers'] - settings_sidebar['tested_servers'],
+            )
+            settings_sidebar['last_test'] = db.execute(
+                '''SELECT server_name, download_mbps, upload_mbps, latency_ms,
+                          test_method, test_trigger, tested_at
+                   FROM speed_tests
+                   ORDER BY tested_at DESC LIMIT 1'''
+            ).fetchone()
+            settings_sidebar['top_servers'] = db.execute(
+                '''SELECT server_name,
+                          ROUND(AVG(download_mbps), 1) AS avg_dl,
+                          COUNT(*) AS n
+                   FROM speed_tests
+                   WHERE success = 1
+                     AND (test_method IS NULL OR test_method != 'proxy_qc')
+                   GROUP BY server_name
+                   ORDER BY avg_dl DESC
+                   LIMIT 5'''
+            ).fetchall()
+    except Exception as exc:
+        logger.debug('settings sidebar stats unavailable: %s', exc)
     return render_template(
         'settings.html',
         cfg=cfg,
         bench_est=bench_est_settings,
         benchmark_estimated_count=benchmark_estimated_count_settings,
+        settings_sidebar=settings_sidebar,
         next_run=None if active_auto_pools else get_next_run(),
         gluetun_container=current_app.config['GLUETUN_CONTAINER'],
         adaptive_stats=adaptive_stats,

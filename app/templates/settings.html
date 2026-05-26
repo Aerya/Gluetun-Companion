@@ -95,6 +95,34 @@
     border-top: 0;
     padding-top: 0;
   }
+  .settings-server-list {
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+  }
+  .settings-server-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .5rem;
+    align-items: baseline;
+    padding-top: .45rem;
+    border-top: 1px solid var(--bs-border-color);
+  }
+  .settings-server-row:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .settings-server-row code {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+  .settings-readme-note {
+    border-left: 3px solid var(--bs-info);
+    padding-left: .75rem;
+    color: var(--bs-secondary-color);
+  }
   .settings-pane-main > form,
   .settings-pane-main > .card {
     min-width: 0;
@@ -317,14 +345,21 @@
         <div id="settings-measure-grid" class="settings-pane-main"></div>
         <aside class="settings-pane-aside">
           <div class="settings-help-card">
-            <h6><i class="bi bi-compass me-1"></i>{{ t.set_side_summary }}</h6>
+            <h6><i class="bi bi-hdd-network me-1"></i>{{ t.set_side_server_map }}</h6>
+            <div class="metric"><span>{{ t.set_side_active_server }}</span><strong class="text-truncate">{{ settings_sidebar.active_server or '—' }}</strong></div>
+            <div class="metric"><span>{{ t.set_side_enabled_servers }}</span><strong>{{ settings_sidebar.enabled_servers }}</strong></div>
+            <div class="metric"><span>{{ t.set_side_tested_servers }}</span><strong>{{ settings_sidebar.tested_servers }}</strong></div>
+            <div class="metric"><span>{{ t.set_side_untested_servers }}</span><strong class="{{ 'text-warning' if settings_sidebar.untested_servers else 'text-success' }}">{{ settings_sidebar.untested_servers }}</strong></div>
+          </div>
+          <div class="settings-help-card">
+            <h6><i class="bi bi-stopwatch me-1"></i>{{ t.set_side_next_cycle }}</h6>
             <div class="metric"><span>{{ t.set_overview_strategy }}</span><strong>{% if cfg.continuous_observation == '1' %}{{ t.set_observation_label }}{% elif cfg.benchmark_scope_mode == 'smart' %}{{ t.set_scope_smart }}{% else %}{{ t.set_scope_all }}{% endif %}</strong></div>
             <div class="metric"><span>{{ t.set_overview_test_mode }}</span><strong>{{ 'sidecar' if cfg.sidecar_mode == '1' else 'proxy' }}</strong></div>
             <div class="metric"><span>{{ t.dash_bench_est_total }}</span><strong>~{{ bench_est.total_min_s }}–{{ bench_est.total_max_s }}</strong></div>
           </div>
           <div class="settings-help-card">
-            <h6><i class="bi bi-lightbulb me-1"></i>{{ t.set_side_focus }}</h6>
-            <div class="text-muted">{{ t.set_side_measure_hint }}</div>
+            <h6><i class="bi bi-book me-1"></i>{{ t.set_side_readme }}</h6>
+            <div class="settings-readme-note">{{ t.set_side_readme_measure }}</div>
           </div>
         </aside>
       </div>
@@ -337,7 +372,20 @@
             <h6><i class="bi bi-person-badge me-1"></i>{{ t.set_profile_label }}</h6>
             {% set _p = profiles.get(cfg.active_profile) %}
             <div class="fw-bold mb-2">{% if _p %}{{ _p.label_fr if session.get('lang','fr') == 'fr' else _p.label_en }}{% else %}{{ cfg.active_profile }}{% endif %}</div>
-            <div class="text-muted">{{ t.set_profile_history_hint }}</div>
+            <div class="settings-readme-note">{{ t.set_profile_history_hint }}</div>
+          </div>
+          <div class="settings-help-card">
+            <h6><i class="bi bi-trophy me-1"></i>{{ t.set_side_top_servers }}</h6>
+            <div class="settings-server-list">
+              {% for s in settings_sidebar.top_servers %}
+              <div class="settings-server-row">
+                <code title="{{ s.server_name }}">{{ s.server_name }}</code>
+                <strong>{{ s.avg_dl }} Mbps</strong>
+              </div>
+              {% else %}
+              <div class="text-muted">{{ t.set_side_no_top_servers }}</div>
+              {% endfor %}
+            </div>
           </div>
           <div class="settings-help-card">
             <h6><i class="bi bi-arrow-left-right me-1"></i>{{ t.set_side_switching }}</h6>
@@ -352,13 +400,14 @@
         <div id="settings-wireguard-grid" class="settings-pane-main"></div>
         <aside class="settings-pane-aside">
           <div class="settings-help-card">
-            <h6><i class="bi bi-shield-lock me-1"></i>{{ t.set_wg_title }}</h6>
+            <h6><i class="bi bi-shield-lock me-1"></i>{{ t.set_side_wg_map }}</h6>
             <div class="metric"><span>{{ t.set_side_profiles }}</span><strong>{{ wg_profiles | length }}</strong></div>
             <div class="metric"><span>{{ t.set_side_orphans }}</span><strong class="{{ 'text-warning' if wg_orphan_count else 'text-success' }}">{{ wg_orphan_count }}</strong></div>
+            <div class="metric"><span>{{ t.set_wg_rotation_mode_label }}</span><strong>{{ cfg.wg_rotation_mode }}</strong></div>
           </div>
           <div class="settings-help-card">
-            <h6><i class="bi bi-key me-1"></i>{{ t.set_side_focus }}</h6>
-            <div class="text-muted">{{ t.set_wg_profile_sidecar_hint }}</div>
+            <h6><i class="bi bi-book me-1"></i>{{ t.set_side_readme }}</h6>
+            <div class="settings-readme-note">{{ t.set_side_readme_wireguard }}</div>
           </div>
         </aside>
       </div>
@@ -371,10 +420,11 @@
             <h6><i class="bi bi-bell me-1"></i>{{ t.set_tab_notifications }}</h6>
             <div class="metric"><span>Discord</span><strong>{{ 'OK' if cfg.discord_webhook_url else 'OFF' }}</strong></div>
             <div class="metric"><span>Apprise</span><strong>{{ 'OK' if cfg.apprise_urls else 'OFF' }}</strong></div>
+            <div class="metric"><span>{{ t.set_side_mentions }}</span><strong>{{ cfg.notify_mention_level }}</strong></div>
           </div>
           <div class="settings-help-card">
-            <h6><i class="bi bi-at me-1"></i>{{ t.set_side_mentions }}</h6>
-            <div class="text-muted">{{ t.set_side_notifications_hint }}</div>
+            <h6><i class="bi bi-book me-1"></i>{{ t.set_side_readme }}</h6>
+            <div class="settings-readme-note">{{ t.set_side_notifications_hint }}</div>
           </div>
         </aside>
       </div>
@@ -387,10 +437,23 @@
             <h6><i class="bi bi-tools me-1"></i>{{ t.set_tab_maintenance }}</h6>
             <div class="metric"><span>{{ t.set_api_title }}</span><strong>{{ 'ON' if cfg.api_token else 'OFF' }}</strong></div>
             <div class="metric"><span>{{ t.set_retention_label }}</span><strong>{{ cfg.db_retention_days }} {{ t.cmn_days }}</strong></div>
+            <div class="metric"><span>{{ t.set_catalogue_title }}</span><strong>{{ catalogue_stats.total if catalogue_stats else 0 }}</strong></div>
           </div>
           <div class="settings-help-card">
-            <h6><i class="bi bi-download me-1"></i>{{ t.set_export_title }}</h6>
-            <div class="text-muted">{{ t.set_export_subtitle }}</div>
+            <h6><i class="bi bi-activity me-1"></i>{{ t.set_side_last_test }}</h6>
+            {% if settings_sidebar.last_test %}
+            <div class="settings-server-row">
+              <code title="{{ settings_sidebar.last_test.server_name }}">{{ settings_sidebar.last_test.server_name }}</code>
+              <strong>{{ '%.1f'|format(settings_sidebar.last_test.download_mbps or 0) }} Mbps</strong>
+            </div>
+            <div class="small text-muted mt-2">{{ settings_sidebar.last_test.tested_at | localtime }}</div>
+            {% else %}
+            <div class="text-muted">{{ t.set_side_no_last_test }}</div>
+            {% endif %}
+          </div>
+          <div class="settings-help-card">
+            <h6><i class="bi bi-book me-1"></i>{{ t.set_side_readme }}</h6>
+            <div class="settings-readme-note">{{ t.set_export_subtitle }}</div>
           </div>
         </aside>
       </div>
