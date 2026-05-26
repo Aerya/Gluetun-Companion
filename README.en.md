@@ -63,10 +63,10 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [Sidecar mode (default)](#sidecar-mode-default)
   - [HTTP proxy mode (optional)](#http-proxy-mode-optional)
   - [Quick check before benchmark](#quick-check-before-benchmark-option)
-  - [Adaptive scheduling](#adaptive-scheduling-option)
-  - [Benchmark scope](#benchmark-scope-recommended-for-large-catalogues)
-  - [Benchmark filtering by entry type](#benchmark-filtering-by-entry-type-option)
-  - [AirVPN pre-filter before benchmark](#airvpn-pre-filter-before-benchmark-option-dedicated-to-airvpn)
+  - [Time optimization](#time-optimization-option)
+  - [Smart benchmark selection](#smart-benchmark-selection-recommended-for-large-catalogues)
+  - [Allowed servers before benchmark](#allowed-servers-before-benchmark-option)
+  - [Avoid loaded AirVPN servers](#avoid-loaded-airvpn-servers-option-dedicated-to-airvpn)
   - [Docker events listener](#docker-events-listener)
   - [Usage profiles](#usage-profiles)
   - [WireGuard VPN profiles](#wireguard-vpn-profiles)
@@ -94,10 +94,10 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Multi-source results** — Ookla, librespeed and iperf3 speeds stored separately and displayed in the dashboard and history
 - **Multi-stream download** — N concurrent TCP connections (configurable, default: 4)
 - **Automatic benchmarking** every X hours — download, upload and latency per server; automatic cycle can be disabled (manual trigger only)
-- **Smart benchmark scope** *(option)* — avoids huge cycles on massive catalogues: tests the best known servers for the usage profile, explores a few new servers and refreshes old measurements
-- **Benchmark pre-filtering** *(option)* — select which **entry types** to include in each cycle (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`); all types included by default; excluded servers remain in the list and can be tested manually; configurable in Settings → Benchmark filtering
+- **Smart benchmark selection** *(option)* — avoids huge cycles on massive catalogues: tests the best known servers for the usage profile, explores a few new servers and refreshes old measurements
+- **Allowed servers before benchmark** *(option)* — select which **entry types** to include in each cycle (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`) and, for AirVPN, skip overloaded servers; excluded servers remain in the list and can be tested manually
 - **Quick check before benchmark** *(option)* — tests only the current server before each cycle; if speed is within ±N% of the last known result, the full benchmark is skipped entirely — no containers paused, no VPN restarts; triggers the full benchmark only when performance drifts significantly
-- **Adaptive scheduling** *(option)* — analyses hourly speed and variance patterns to identify the best and worst benchmark windows; recommended time slots displayed in Settings; optional auto-shift: if the next cycle falls on an unfavorable hour, it is shifted up to 3 h forward to the next favorable window
+- **Time optimization** *(option)* — analyses hourly speed and variance patterns to identify the best and worst benchmark windows; recommended time slots displayed in Settings; optional auto-shift: if the next cycle falls on an unfavorable hour, it is shifted up to 3 h forward to the next favorable window
 - **On-demand quick benchmark** — button always available (dashboard and settings); tests only the active server via the Gluetun HTTP proxy, result in seconds, no VPN interruption, result saved in history
 - **Duration estimate** — the dashboard shows a dynamically calculated duration range (optimistic / pessimistic) based on your settings (`wait_secs`, `duration`, `samples`, `retries`, sidecar or proxy mode); automatic ⚠️ alert if the estimated total exceeds 30 minutes; the same estimate is shown live in Settings as you adjust parameters
 - **Jitter & Packet Loss** — network stability measured at every test (21 TTFB probes in proxy mode, ICMP via sidecar); 🟢/🟡/🔴 indicator on Servers page, dedicated columns in History, jitter shown in hourly patterns; factored into selection score (up to −15 % jitter / −25 % loss penalty)
@@ -176,7 +176,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 
 ### AirVPN
 - **Built-in AirVPN server picker** — *+ Add an AirVPN server* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), four tabs — full searchable list, geographic distribution by country, **Recommended** tab (load < 50 %, health OK, < 30 users) and **Changes** tab (newly detected servers, disappeared servers, load shifts, top 5 healthiest countries); multi-select, one-click add
-- **AirVPN pre-filter before benchmark** *(optional, dedicated to [AirVPN](https://airvpn.org/?referred_by=483746))* — at benchmark start, **[AirVPN](https://airvpn.org/?referred_by=483746)** servers of type `SERVER_NAMES` whose **load** or **user count** exceeds a configurable threshold are automatically skipped; data from the AirVPN cache (updated every 5 min); servers without AirVPN data are never excluded; thresholds configurable in Settings → Benchmark filtering
+- **Avoid loaded AirVPN servers** *(optional, dedicated to [AirVPN](https://airvpn.org/?referred_by=483746))* — at benchmark start, **[AirVPN](https://airvpn.org/?referred_by=483746)** servers of type `SERVER_NAMES` whose **load** or **user count** exceeds a configurable threshold are automatically skipped; data from the AirVPN cache (updated every 5 min); servers without AirVPN data are never excluded; thresholds configurable in Settings → Scheduling & Cycle → Which servers are allowed
 - **New AirVPN server detection** *(optional)* — compares the AirVPN API with your configured servers every 24 h; badge and dismissable banner on the Servers page + *Changes* tab in the add modal; Discord/Apprise notification with optional mention
 
 ### Analysis & history
@@ -388,7 +388,7 @@ Servers already in the database are grayed out with their checkbox disabled. The
 
 ### Quick check before benchmark *(option)*
 
-Enable via **Settings → Scheduling & Benchmark → Quick check before benchmark**.
+Enable via **Settings → Scheduling & Cycle → Avoid unnecessary tests**.
 
 When enabled, each cycle starts with a speed test of the **currently active server only** — before stopping any containers or restarting Gluetun:
 
@@ -401,9 +401,9 @@ This is ideal for frequent scheduling intervals (e.g. every 2–3 hours) where y
 
 > The threshold is configurable (1–100 %). A value of 15 means: if the current speed is between 85 % and 115 % of the last known result, the full benchmark is skipped.
 
-### Adaptive scheduling *(option)*
+### Time optimization *(option)*
 
-Enable via **Settings → Scheduling & Benchmark → Adaptive scheduling**.
+Enable via **Settings → Scheduling & Cycle → Optimize the time**.
 
 Companion analyses the test history to compute, for each hour of the day (0–23), the **average download speed** and **coefficient of variation** (CV = σ/μ). An hour with high speed and low variance is a good benchmark window — measurements are representative and reproducible there.
 
@@ -418,28 +418,30 @@ Companion analyses the test history to compute, for each hour of the day (0–23
 
 > This option complements the automatic cycle — it does not replace it. The configured interval remains the reference; the adaptive shift only adjusts the next trigger if the hour is deemed unfavorable.
 
-### Benchmark scope *(recommended for large catalogues)*
+### Smart benchmark selection *(recommended for large catalogues)*
 
-Enable via **Settings → Scheduling & Cycle → Benchmark scope**.
+Enable via **Settings → Scheduling & Cycle → How many servers to test**.
 
 Two modes are available:
 
 - **Test everything** — exhaustive mode: every compatible active server participates in the cycle. Useful to build an initial baseline, but very long with catalogues such as NordVPN.
-- **Smart benchmark** — recommended mode: Companion tests the **N best known servers** for the active usage profile, adds a few **never-tested** servers, then refreshes a few results older than X days.
+- **Smart selection** — recommended mode: Companion tests the **N best known servers** for the active usage profile, adds a few **never-tested** servers, then refreshes a few results older than X days.
 
-Configurable quotas:
+Configurable quotas are under **Advanced smart selection options**:
 
 - **Known top** — number of already-measured servers to keep according to the usage profile.
 - **New** — number of never-benchmarked servers to explore in each cycle.
 - **Old after d** + **Refresh** — minimum age and number of old results to recheck.
 
-Set a quota to `0` to disable that part. Entry-type filters and the AirVPN pre-filter still apply to the cycle.
+Set a quota to `0` to disable that part. The dashboard reminds you which mode is used, the estimated server count, and the test mode (`sidecar` or `proxy`) before a manual launch.
 
-### Benchmark filtering by entry type *(option)*
+### Allowed servers before benchmark *(option)*
 
-Enable via **Settings → Scheduling & Cycle → Benchmark filtering → Server types to include**.
+Enable via **Settings → Scheduling & Cycle → Which servers are allowed**.
 
-By default, the benchmark tests **all** enabled entries in `/servers`, regardless of their Gluetun type. With this option, you select exactly which types will participate in each cycle:
+These rules reduce the list before a full benchmark. Excluded servers remain visible in `/servers` and can still be tested manually.
+
+By default, the benchmark tests **all** enabled entries in `/servers`, regardless of their Gluetun type. With **Allowed Gluetun types**, you select exactly which types will participate in each cycle:
 
 | Type | Gluetun variable | Typical use |
 |---|---|---|
@@ -454,9 +456,9 @@ By default, the benchmark tests **all** enabled entries in `/servers`, regardles
 
 > Useful if you have `country`/`region` entries as fallback but only want to test them occasionally, without including them in every automatic cycle.
 
-### AirVPN pre-filter before benchmark *(option, dedicated to [AirVPN](https://airvpn.org/?referred_by=483746))*
+### Avoid loaded AirVPN servers *(option, dedicated to [AirVPN](https://airvpn.org/?referred_by=483746))*
 
-Enable via **Settings → Scheduling & Cycle → Benchmark filtering → AirVPN pre-filter**.
+Enable via **Settings → Scheduling & Cycle → Which servers are allowed → Avoid loaded AirVPN servers**.
 
 When you have added a large number of **[AirVPN](https://airvpn.org/?referred_by=483746)** servers (type `SERVER_NAMES`), a full benchmark cycle can take a very long time. This pre-filter lets you **automatically skip overloaded servers** at the start of each cycle:
 
@@ -877,12 +879,12 @@ curl -H "Authorization: Bearer <token>" \
 
 ### Automatic cycle vs manual trigger
 
-In **Settings → Scheduling & Benchmark**: the automatic cycle can be disabled via the *Enable automatic benchmark cycle* toggle. The interval field is then grayed out. Two buttons are always available (dashboard and settings):
+In **Settings → Scheduling & Cycle**: the automatic cycle can be disabled via the *Enable automatic benchmark cycle* toggle. The interval field is then grayed out. Two buttons are always available (dashboard and settings):
 
 - **Quick benchmark** — tests only the active server via the Gluetun HTTP proxy; result in seconds, no VPN interruption, result saved in history (`proxy_qc` method).
 - **Full benchmark** — runs a complete cycle immediately, regardless of the automatic cycle setting or the *Quick check* option. Uses the configured method (sidecar or proxy), shown in parentheses on the button.
 
-> **Duration estimate**: the dashboard displays a `~min–max / server` range and an estimated total for all your active servers, calculated from `wait_secs`, `duration`, `samples`, `retries` and the mode (proxy/sidecar). A ⚠️ alert appears automatically if the pessimistic total exceeds 30 minutes. The same estimate is recalculated live in **Settings → Scheduling & Benchmark** after each change.
+> **Duration estimate**: the dashboard displays a `~min–max / server` range and an estimated total for the selection that will actually be tested, calculated from `wait_secs`, `duration`, `samples`, `retries`, the mode (proxy/sidecar), filters, and smart selection. A ⚠️ alert appears automatically if the pessimistic total exceeds 30 minutes. The same estimate is recalculated live in **Settings → Scheduling & Cycle** after each change.
 
 ---
 

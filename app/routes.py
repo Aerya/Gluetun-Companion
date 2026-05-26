@@ -246,7 +246,8 @@ def dashboard():
         server_count = db.execute(
             'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'
         ).fetchone()['n']
-        bench_est = _bench_estimate(server_count)
+        benchmark_estimated_count = _benchmark_scope_estimated_count()
+        bench_est = _bench_estimate(benchmark_estimated_count)
         server_stats = db.execute('''
             SELECT st.server_name,
                    vp.name  AS profile_name,
@@ -300,6 +301,19 @@ def dashboard():
             if _prof_row and _prof_row['profile_name']:
                 active_profile = dict(_prof_row)
 
+    try:
+        _dash_include_types = json.loads(get_setting('bench_include_types', '[]') or '[]')
+    except Exception:
+        _dash_include_types = []
+    try:
+        _dash_airvpn_max_load = int(get_setting('airvpn_bench_max_load', '0') or '0')
+    except (TypeError, ValueError):
+        _dash_airvpn_max_load = 0
+    try:
+        _dash_airvpn_max_users = int(get_setting('airvpn_bench_max_users', '0') or '0')
+    except (TypeError, ValueError):
+        _dash_airvpn_max_users = 0
+
     return render_template(
         'dashboard.html',
         vpn_status=vpn_status,
@@ -311,11 +325,15 @@ def dashboard():
         last_switch=last_switch,
         recent_pool_switches=recent_pool_switches,
         server_count=server_count,
+        benchmark_estimated_count=benchmark_estimated_count,
         bench_est=bench_est,
         server_stats=server_stats,
         next_run=get_next_run() if get_setting('auto_benchmark', '1') == '1' else None,
         benchmark_running=benchmark_running,
         sidecar_mode=get_setting('sidecar_mode', '1'),
+        benchmark_scope_mode=get_setting('benchmark_scope_mode', 'smart'),
+        bench_include_types=_dash_include_types,
+        airvpn_bench_filter_active=(_dash_airvpn_max_load > 0 or _dash_airvpn_max_users > 0),
         last_cycle=last_cycle,
         total_tests=total_tests,
         sparkline_server=sparkline_server,

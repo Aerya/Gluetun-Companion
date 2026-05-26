@@ -173,6 +173,10 @@
         </div>
         {% endif %}
 
+        <div class="fw-semibold mb-2" style="font-size:.86rem">
+          <i class="bi bi-clock text-success me-1"></i>{{ t.set_cycle_when_title }}
+        </div>
+
         <div class="mb-3" id="interval-group">
           <label class="form-label">{{ t.set_interval_label }}</label>
           <div class="input-group">
@@ -198,6 +202,10 @@
         </div>
 
         <hr class="my-3">
+
+        <div class="fw-semibold mb-2" style="font-size:.86rem">
+          <i class="bi bi-lightning-charge text-info me-1"></i>{{ t.set_cycle_skip_title }}
+        </div>
 
         <div class="mb-2 form-check form-switch">
           <input type="checkbox" name="quick_check_mode" class="form-check-input"
@@ -226,6 +234,9 @@
         <hr class="my-3">
 
         {# ── Scheduling adaptatif ───────────────────────────────────────── #}
+        <div class="fw-semibold mb-2" style="font-size:.86rem">
+          <i class="bi bi-calendar-check text-primary me-1"></i>{{ t.set_cycle_optimize_title }}
+        </div>
         <div class="mb-2 form-check form-switch">
           <input type="checkbox" name="adaptive_scheduling" class="form-check-input"
                  id="adaptive_scheduling"
@@ -292,7 +303,7 @@
 
         {# ── Benchmark scope ────────────────────────────────────────────── #}
         <div class="fw-semibold mb-2" style="font-size:.85rem">
-          <i class="bi bi-bullseye text-success me-1"></i>{{ t.set_scope_title }}
+          <i class="bi bi-bullseye text-success me-1"></i>{{ t.set_cycle_how_many_title }}
         </div>
         <div class="form-text text-muted mb-2" style="font-size:.75rem">{{ t.set_scope_hint }}</div>
         <div class="d-flex flex-column gap-2 mb-2">
@@ -317,37 +328,41 @@
         </div>
         <div id="benchmark-scope-smart-options" class="ps-1 mb-3"
              style="{{ '' if cfg.benchmark_scope_mode == 'smart' else 'opacity:.45;pointer-events:none' }}">
-          <div class="row g-2">
-            <div class="col-6 col-xl-3">
-              <label class="form-label small mb-1">{{ t.set_scope_top_n }}</label>
-              <input type="number" name="benchmark_scope_top_n" class="form-control form-control-sm"
-                     value="{{ cfg.benchmark_scope_top_n }}" min="0" max="500" step="1">
+          <details>
+            <summary class="small fw-semibold" style="cursor:pointer">{{ t.set_scope_advanced }}</summary>
+            <div class="row g-2 mt-1">
+              <div class="col-6 col-xl-3">
+                <label class="form-label small mb-1">{{ t.set_scope_top_n }}</label>
+                <input type="number" name="benchmark_scope_top_n" class="form-control form-control-sm"
+                       value="{{ cfg.benchmark_scope_top_n }}" min="0" max="500" step="1">
+              </div>
+              <div class="col-6 col-xl-3">
+                <label class="form-label small mb-1">{{ t.set_scope_untested_n }}</label>
+                <input type="number" name="benchmark_scope_untested_n" class="form-control form-control-sm"
+                       value="{{ cfg.benchmark_scope_untested_n }}" min="0" max="200" step="1">
+              </div>
+              <div class="col-6 col-xl-3">
+                <label class="form-label small mb-1">{{ t.set_scope_refresh_days }}</label>
+                <input type="number" name="benchmark_scope_refresh_days" class="form-control form-control-sm"
+                       value="{{ cfg.benchmark_scope_refresh_days }}" min="1" max="365" step="1">
+              </div>
+              <div class="col-6 col-xl-3">
+                <label class="form-label small mb-1">{{ t.set_scope_refresh_n }}</label>
+                <input type="number" name="benchmark_scope_refresh_n" class="form-control form-control-sm"
+                       value="{{ cfg.benchmark_scope_refresh_n }}" min="0" max="500" step="1">
+              </div>
             </div>
-            <div class="col-6 col-xl-3">
-              <label class="form-label small mb-1">{{ t.set_scope_untested_n }}</label>
-              <input type="number" name="benchmark_scope_untested_n" class="form-control form-control-sm"
-                     value="{{ cfg.benchmark_scope_untested_n }}" min="0" max="200" step="1">
-            </div>
-            <div class="col-6 col-xl-3">
-              <label class="form-label small mb-1">{{ t.set_scope_refresh_days }}</label>
-              <input type="number" name="benchmark_scope_refresh_days" class="form-control form-control-sm"
-                     value="{{ cfg.benchmark_scope_refresh_days }}" min="1" max="365" step="1">
-            </div>
-            <div class="col-6 col-xl-3">
-              <label class="form-label small mb-1">{{ t.set_scope_refresh_n }}</label>
-              <input type="number" name="benchmark_scope_refresh_n" class="form-control form-control-sm"
-                     value="{{ cfg.benchmark_scope_refresh_n }}" min="0" max="500" step="1">
-            </div>
-          </div>
-          <div class="form-text mt-1" style="font-size:.72rem">{{ t.set_scope_smart_note }}</div>
+            <div class="form-text mt-1" style="font-size:.72rem">{{ t.set_scope_smart_note }}</div>
+          </details>
         </div>
 
         <hr class="my-3">
 
         {# ── Benchmark pre-filters ──────────────────────────────────────── #}
         <div class="fw-semibold mb-2" style="font-size:.85rem">
-          <i class="bi bi-funnel-fill text-info me-1"></i>{{ t.set_bench_filter_title }}
+          <i class="bi bi-funnel-fill text-info me-1"></i>{{ t.set_cycle_which_title }}
         </div>
+        <div class="form-text text-muted mb-2" style="font-size:.75rem">{{ t.set_bench_filter_hint }}</div>
 
         {# ── Filter by Gluetun type (all providers) ── #}
         <div class="mb-3">
@@ -424,6 +439,9 @@
         </div>
 
         <div class="d-flex gap-2 flex-wrap mb-0 mt-3">
+          <div class="w-100 fw-semibold mb-1" style="font-size:.85rem">
+            <i class="bi bi-play-circle text-success me-1"></i>{{ t.set_manual_actions_title }}
+          </div>
           <button type="submit" class="btn btn-sm btn-success fw-semibold">
             <i class="bi bi-save"></i> {{ t.cmn_save }}
           </button>
@@ -435,7 +453,8 @@
           </button>
         </div>
         <div class="mt-1" style="font-size:.75rem;color:var(--bs-secondary-color)">
-          <i class="bi bi-info-circle"></i> {{ t.set_run_quick_hint }}
+          <i class="bi bi-info-circle"></i>
+          {{ t.set_run_quick_hint }} · {{ t.set_run_full_hint }}
         </div>
       </div>
     </form>
@@ -1701,26 +1720,28 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
     source.querySelector(`.card:has(form#${id})`);
   const move = (target, el) => { if (el) target.appendChild(el); };
 
-  [
-    form('save_planning'),
+  [form('save_planning'), form('sidecar')].forEach((el, idx) => move(idx ? right : left, el));
+
+  const balancedCards = [
     source.querySelector('#card-wg-profiles'),
     form('save_switch'),
     form('save_speed'),
-    cardWithAction('db_retention'),
     form('save_vpn'),
-  ].forEach(el => move(left, el));
-
-  [
-    form('sidecar'),
     form('proxy_credentials'),
     cardWithForm('form-pull-network'),
+    cardWithAction('catalogue'),
     cardWithForm('form-post-switch'),
     cardWithForm('form-pause-bench'),
     cardWithAction('notifications'),
+    cardWithAction('db_retention'),
     cardWithAction('save_api_token'),
     cardWithAction('credentials'),
     source.querySelector('#card-export-import'),
-  ].forEach(el => move(right, el));
+  ].filter(Boolean);
+
+  balancedCards.forEach(el => {
+    move(left.offsetHeight <= right.offsetHeight ? left : right, el);
+  });
 })();
 </script>
 
