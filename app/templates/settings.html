@@ -53,7 +53,7 @@
   }
   .settings-pane-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
     gap: 1rem;
     align-items: start;
   }
@@ -122,6 +122,51 @@
     border-left: 3px solid var(--bs-info);
     padding-left: .75rem;
     color: var(--bs-secondary-color);
+  }
+  .settings-world-map {
+    width: 100%;
+    aspect-ratio: 1.9;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .45rem;
+    background:
+      radial-gradient(circle at 18% 48%, rgba(88,166,255,.16), transparent 18%),
+      radial-gradient(circle at 52% 42%, rgba(88,166,255,.14), transparent 21%),
+      radial-gradient(circle at 75% 55%, rgba(88,166,255,.14), transparent 18%),
+      linear-gradient(180deg, rgba(88,166,255,.08), rgba(88,166,255,.02));
+    overflow: hidden;
+  }
+  .settings-world-map svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .settings-map-land {
+    fill: rgba(125, 133, 144, .28);
+    stroke: rgba(125, 133, 144, .35);
+    stroke-width: .7;
+  }
+  .settings-map-point {
+    fill: var(--bs-info);
+    opacity: .82;
+    stroke: var(--bs-body-bg);
+    stroke-width: 1.2;
+  }
+  .settings-map-point-active {
+    fill: var(--bs-warning);
+    opacity: 1;
+    stroke: var(--bs-body-color);
+    stroke-width: 1.6;
+  }
+  .settings-readme-card {
+    max-height: 32rem;
+    overflow: auto;
+  }
+  .settings-readme-card p {
+    margin-bottom: .65rem;
+  }
+  .settings-readme-card ul {
+    margin: .25rem 0 .8rem;
+    padding-left: 1.1rem;
   }
   .settings-pane-main > form,
   .settings-pane-main > .card {
@@ -215,7 +260,6 @@
     }
     .settings-pane-aside {
       position: static;
-      order: -1;
     }
     .settings-pane-main .card {
       padding: 1rem !important;
@@ -311,6 +355,45 @@
     </div>
   </div>
 
+  {% macro settings_world_map() %}
+  <div class="settings-help-card">
+    <h6><i class="bi bi-globe-europe-africa me-1"></i>{{ t.set_side_world_map }}</h6>
+    <div class="settings-world-map">
+      <svg viewBox="0 0 1000 520" role="img" aria-label="{{ t.set_side_world_map }}">
+        <path class="settings-map-land" d="M115 145 C165 95 250 105 292 155 C330 200 300 250 348 290 C285 310 238 285 195 245 C148 248 112 218 115 145Z"/>
+        <path class="settings-map-land" d="M250 300 C300 315 330 365 315 430 C275 425 248 382 250 300Z"/>
+        <path class="settings-map-land" d="M440 130 C520 92 610 115 682 160 C735 194 785 190 845 235 C790 255 710 245 650 220 C590 270 515 255 462 220 C430 195 405 160 440 130Z"/>
+        <path class="settings-map-land" d="M520 250 C580 245 630 288 642 350 C610 420 555 420 525 350 C500 305 492 270 520 250Z"/>
+        <path class="settings-map-land" d="M760 315 C825 300 885 332 910 390 C858 428 790 398 760 315Z"/>
+        <path class="settings-map-land" d="M705 115 C760 95 815 112 848 150 C805 172 745 165 705 115Z"/>
+        {% for p in settings_sidebar.map_points %}
+          {% set x = ((p.lon + 180) / 360 * 1000) %}
+          {% set y = ((90 - p.lat) / 180 * 520) %}
+          {% set radius = 4 + ([p.uses, 18] | min) * 0.45 %}
+          <circle class="{{ 'settings-map-point-active' if p.active else 'settings-map-point' }}"
+                  cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}" r="{{ '%.1f'|format(radius) }}">
+            <title>{{ p.server }} · {{ p.country }} · {{ p.uses }} {{ t.set_side_map_uses }}</title>
+          </circle>
+        {% endfor %}
+      </svg>
+    </div>
+    <div class="small text-muted mt-2">
+      <span class="badge bg-info text-dark me-1">&nbsp;</span>{{ t.set_side_map_used }}
+      <span class="badge bg-warning text-dark ms-2 me-1">&nbsp;</span>{{ t.set_side_map_current }}
+    </div>
+    {% if not settings_sidebar.map_points %}
+      <div class="text-muted mt-2">{{ t.set_side_map_empty }}</div>
+    {% endif %}
+  </div>
+  {% endmacro %}
+
+  {% macro readme_card(title, body) %}
+  <div class="settings-help-card settings-readme-card">
+    <h6><i class="bi bi-book me-1"></i>{{ title }}</h6>
+    <div class="settings-readme-note">{{ body | safe }}</div>
+  </div>
+  {% endmacro %}
+
   <ul class="nav nav-tabs settings-tabs" id="settings-tabs" role="tablist">
     <li class="nav-item" role="presentation">
       <button class="nav-link active" id="tab-measure" data-bs-toggle="tab" data-bs-target="#settings-measure" type="button" role="tab">
@@ -344,23 +427,18 @@
       <div class="settings-pane-layout">
         <div id="settings-measure-grid" class="settings-pane-main"></div>
         <aside class="settings-pane-aside">
+          {{ settings_world_map() }}
           <div class="settings-help-card">
             <h6><i class="bi bi-hdd-network me-1"></i>{{ t.set_side_server_map }}</h6>
             <div class="metric"><span>{{ t.set_side_active_server }}</span><strong class="text-truncate">{{ settings_sidebar.active_server or '—' }}</strong></div>
             <div class="metric"><span>{{ t.set_side_enabled_servers }}</span><strong>{{ settings_sidebar.enabled_servers }}</strong></div>
             <div class="metric"><span>{{ t.set_side_tested_servers }}</span><strong>{{ settings_sidebar.tested_servers }}</strong></div>
             <div class="metric"><span>{{ t.set_side_untested_servers }}</span><strong class="{{ 'text-warning' if settings_sidebar.untested_servers else 'text-success' }}">{{ settings_sidebar.untested_servers }}</strong></div>
-          </div>
-          <div class="settings-help-card">
-            <h6><i class="bi bi-stopwatch me-1"></i>{{ t.set_side_next_cycle }}</h6>
             <div class="metric"><span>{{ t.set_overview_strategy }}</span><strong>{% if cfg.continuous_observation == '1' %}{{ t.set_observation_label }}{% elif cfg.benchmark_scope_mode == 'smart' %}{{ t.set_scope_smart }}{% else %}{{ t.set_scope_all }}{% endif %}</strong></div>
             <div class="metric"><span>{{ t.set_overview_test_mode }}</span><strong>{{ 'sidecar' if cfg.sidecar_mode == '1' else 'proxy' }}</strong></div>
             <div class="metric"><span>{{ t.dash_bench_est_total }}</span><strong>~{{ bench_est.total_min_s }}–{{ bench_est.total_max_s }}</strong></div>
           </div>
-          <div class="settings-help-card">
-            <h6><i class="bi bi-book me-1"></i>{{ t.set_side_readme }}</h6>
-            <div class="settings-readme-note">{{ t.set_side_readme_measure }}</div>
-          </div>
+          {{ readme_card(t.set_side_readme, t.set_side_readme_measure_full) }}
         </aside>
       </div>
     </div>
@@ -368,30 +446,15 @@
       <div class="settings-pane-layout">
         <div id="settings-decide-grid" class="settings-pane-main"></div>
         <aside class="settings-pane-aside">
+          {{ settings_world_map() }}
           <div class="settings-help-card">
             <h6><i class="bi bi-person-badge me-1"></i>{{ t.set_profile_label }}</h6>
             {% set _p = profiles.get(cfg.active_profile) %}
             <div class="fw-bold mb-2">{% if _p %}{{ _p.label_fr if session.get('lang','fr') == 'fr' else _p.label_en }}{% else %}{{ cfg.active_profile }}{% endif %}</div>
-            <div class="settings-readme-note">{{ t.set_profile_history_hint }}</div>
-          </div>
-          <div class="settings-help-card">
-            <h6><i class="bi bi-trophy me-1"></i>{{ t.set_side_top_servers }}</h6>
-            <div class="settings-server-list">
-              {% for s in settings_sidebar.top_servers %}
-              <div class="settings-server-row">
-                <code title="{{ s.server_name }}">{{ s.server_name }}</code>
-                <strong>{{ s.avg_dl }} Mbps</strong>
-              </div>
-              {% else %}
-              <div class="text-muted">{{ t.set_side_no_top_servers }}</div>
-              {% endfor %}
-            </div>
-          </div>
-          <div class="settings-help-card">
-            <h6><i class="bi bi-arrow-left-right me-1"></i>{{ t.set_side_switching }}</h6>
             <div class="metric"><span>{{ t.set_switch_title }}</span><strong>{{ 'ON' if cfg.auto_sw == '1' else 'OFF' }}</strong></div>
             <div class="metric"><span>{{ t.set_stability_weight_label }}</span><strong>{{ cfg.stability_weight }}%</strong></div>
           </div>
+          {{ readme_card(t.set_side_readme, t.set_side_readme_decide_full) }}
         </aside>
       </div>
     </div>
@@ -399,16 +462,14 @@
       <div class="settings-pane-layout">
         <div id="settings-wireguard-grid" class="settings-pane-main"></div>
         <aside class="settings-pane-aside">
+          {{ settings_world_map() }}
           <div class="settings-help-card">
             <h6><i class="bi bi-shield-lock me-1"></i>{{ t.set_side_wg_map }}</h6>
             <div class="metric"><span>{{ t.set_side_profiles }}</span><strong>{{ wg_profiles | length }}</strong></div>
             <div class="metric"><span>{{ t.set_side_orphans }}</span><strong class="{{ 'text-warning' if wg_orphan_count else 'text-success' }}">{{ wg_orphan_count }}</strong></div>
             <div class="metric"><span>{{ t.set_wg_rotation_mode_label }}</span><strong>{{ cfg.wg_rotation_mode }}</strong></div>
           </div>
-          <div class="settings-help-card">
-            <h6><i class="bi bi-book me-1"></i>{{ t.set_side_readme }}</h6>
-            <div class="settings-readme-note">{{ t.set_side_readme_wireguard }}</div>
-          </div>
+          {{ readme_card(t.set_side_readme, t.set_side_readme_wireguard_full) }}
         </aside>
       </div>
     </div>
@@ -416,16 +477,14 @@
       <div class="settings-pane-layout">
         <div id="settings-notifications-grid" class="settings-pane-main"></div>
         <aside class="settings-pane-aside">
+          {{ settings_world_map() }}
           <div class="settings-help-card">
             <h6><i class="bi bi-bell me-1"></i>{{ t.set_tab_notifications }}</h6>
             <div class="metric"><span>Discord</span><strong>{{ 'OK' if cfg.discord_webhook_url else 'OFF' }}</strong></div>
             <div class="metric"><span>Apprise</span><strong>{{ 'OK' if cfg.apprise_urls else 'OFF' }}</strong></div>
             <div class="metric"><span>{{ t.set_side_mentions }}</span><strong>{{ cfg.notify_mention_level }}</strong></div>
           </div>
-          <div class="settings-help-card">
-            <h6><i class="bi bi-book me-1"></i>{{ t.set_side_readme }}</h6>
-            <div class="settings-readme-note">{{ t.set_side_notifications_hint }}</div>
-          </div>
+          {{ readme_card(t.set_side_readme, t.set_side_readme_notifications_full) }}
         </aside>
       </div>
     </div>
@@ -433,6 +492,7 @@
       <div class="settings-pane-layout">
         <div id="settings-maintenance-grid" class="settings-pane-main"></div>
         <aside class="settings-pane-aside">
+          {{ settings_world_map() }}
           <div class="settings-help-card">
             <h6><i class="bi bi-tools me-1"></i>{{ t.set_tab_maintenance }}</h6>
             <div class="metric"><span>{{ t.set_api_title }}</span><strong>{{ 'ON' if cfg.api_token else 'OFF' }}</strong></div>
@@ -451,10 +511,7 @@
             <div class="text-muted">{{ t.set_side_no_last_test }}</div>
             {% endif %}
           </div>
-          <div class="settings-help-card">
-            <h6><i class="bi bi-book me-1"></i>{{ t.set_side_readme }}</h6>
-            <div class="settings-readme-note">{{ t.set_export_subtitle }}</div>
-          </div>
+          {{ readme_card(t.set_side_readme, t.set_side_readme_maintenance_full) }}
         </aside>
       </div>
     </div>
