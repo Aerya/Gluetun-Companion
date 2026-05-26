@@ -214,10 +214,16 @@
             {% endif %}
           </td>
           <td>
-            {% if s.to_ipv4 or s.to_ipv6 %}
-              <small class="text-muted font-monospace">
-                {{ s.to_ipv4 or '' }}
-                {% if s.to_ipv6 %}<br><span style="font-size:.7rem">{{ s.to_ipv6 }}</span>{% endif %}
+            {% set _has_ip = s.from_ipv4 or s.from_ipv6 or s.to_ipv4 or s.to_ipv6 %}
+            {% if _has_ip %}
+              <small class="font-monospace text-muted" style="line-height:1.3">
+                {% if s.from_ipv4 or s.from_ipv6 %}
+                  <div>{{ s.from_ipv4 or s.from_ipv6 }}</div>
+                  {% if s.from_ipv4 and s.from_ipv6 %}<div style="font-size:.68rem">{{ s.from_ipv6 }}</div>{% endif %}
+                  <div style="font-size:.65rem;color:var(--bs-secondary-color)">↓</div>
+                {% endif %}
+                <div>{{ s.to_ipv4 or '—' }}</div>
+                {% if s.to_ipv6 %}<div style="font-size:.68rem">{{ s.to_ipv6 }}</div>{% endif %}
               </small>
             {% else %}<span class="text-muted">-</span>{% endif %}
           </td>

@@ -340,10 +340,29 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
                     _decrypted[_vk] = ''
             wg_profile = {'compose_provider': _compose_prov, 'vars': _decrypted}
 
-    # ── Snapshot current server for switch logging ────────────────────────
+    # ── Snapshot current server + IPs + speed before switching ──────────────
     _cur_filters  = get_current_filters(container)
     from_server   = list(_cur_filters.values())[0].split(',')[0].strip() if _cur_filters else None
     pre_deps      = list_network_dependents(container)
+
+    # Capture current public IP before the switch
+    try:
+        from_ipv4, from_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
+    except Exception:
+        from_ipv4, from_ipv6 = None, None
+
+    # Look up last known average speed for the outgoing server
+    from_mbps: float | None = None
+    if from_server:
+        with get_db() as db:
+            _fr = db.execute(
+                '''SELECT ROUND(AVG(download_mbps), 1) AS avg_dl
+                   FROM speed_tests
+                   WHERE server_name = ? AND success = 1 AND test_method != 'proxy_qc'
+                   LIMIT 20''',
+                (from_server,),
+            ).fetchone()
+            from_mbps = _fr['avg_dl'] if _fr else None
 
     # ── Acquire benchmark mutex (prevents concurrent scheduler benchmark) ──
     set_setting('benchmark_running', '1')
@@ -387,15 +406,19 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
             pool_id, wait_secs,
         )
 
-    # Record switch
+    # Record switch — IPs/to_mbps added via UPDATE once the bench completes
+    switch_id: int | None = None
     with get_db() as db:
-        db.execute(
-            '''INSERT INTO switches (from_server, to_server, reason, success, connect_secs)
-               VALUES (?, ?, ?, 1, ?)''',
+        switch_id = db.execute(
+            '''INSERT INTO switches
+               (from_server, to_server, reason, success,
+                connect_secs, from_mbps, from_ipv4, from_ipv6)
+               VALUES (?, ?, ?, 1, ?, ?, ?, ?)''',
             (from_server, server['name'],
              f'pool_rotation:{pool["name"]}:{"manual" if manual else "auto"}',
-             _elapsed if vpn_up else None),
-        )
+             _elapsed if vpn_up else None,
+             from_mbps, from_ipv4, from_ipv6),
+        ).lastrowid
 
     # ── Optional quick bench ─────────────────────────────────────────────
     dl_mbps: float | None  = None
@@ -440,6 +463,14 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
             to_ipv4, to_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
         except Exception:
             pass
+
+    # ── Finalize switch record with destination IPs and speed ───────────────
+    if switch_id:
+        with get_db() as db:
+            db.execute(
+                'UPDATE switches SET to_ipv4 = ?, to_ipv6 = ?, to_mbps = ? WHERE id = ?',
+                (to_ipv4, to_ipv6, dl_mbps, switch_id),
+            )
 
     # ── Update pool state ────────────────────────────────────────────────
     now   = datetime.utcnow()

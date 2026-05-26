@@ -297,6 +297,8 @@ def init_db(db_path: str):
             "ALTER TABLE rotation_pools ADD COLUMN last_server TEXT",
             "ALTER TABLE rotation_pools ADD COLUMN last_error TEXT",
             "ALTER TABLE rotation_pools ADD COLUMN last_dl_mbps REAL",
+            "ALTER TABLE switches ADD COLUMN from_ipv4 TEXT",
+            "ALTER TABLE switches ADD COLUMN from_ipv6 TEXT",
         ]:
             try:
                 db.execute(stmt)
