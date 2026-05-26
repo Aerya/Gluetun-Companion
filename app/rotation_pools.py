@@ -103,6 +103,37 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
                 ).fetchall()
                 candidate_names.update(r['name'] for r in rows)
 
+            elif ctype == 'top_metric':
+                try:
+                    mdata  = json.loads(cval) if cval else {}
+                    metric = str(mdata.get('metric', '')).strip()
+                    n      = int(mdata.get('n', 0))
+                except (json.JSONDecodeError, AttributeError, TypeError, ValueError):
+                    logger.warning('Pool %d: malformed top_metric criterion: %r', pool_id, cval)
+                    continue
+                if metric not in ('dl', 'jitter', 'loss', 'dns') or n < 1:
+                    logger.warning('Pool %d: invalid top_metric metric=%r n=%r', pool_id, metric, n)
+                    continue
+                _metric_col = {
+                    'dl':     'AVG(CASE WHEN st.success=1 AND st.test_method!="proxy_qc" THEN st.download_mbps END)',
+                    'jitter': 'AVG(CASE WHEN st.success=1 AND st.test_method!="proxy_qc" THEN st.jitter_ms END)',
+                    'loss':   'AVG(CASE WHEN st.success=1 AND st.test_method!="proxy_qc" THEN st.packet_loss_pct END)',
+                    'dns':    'AVG(CASE WHEN st.success=1 AND st.test_method!="proxy_qc" THEN st.dns_latency_ms END)',
+                }[metric]
+                _order = 'ASC' if metric in ('jitter', 'loss', 'dns') else 'DESC'
+                rows = db.execute(
+                    f'''SELECT s.name
+                        FROM servers s
+                        LEFT JOIN speed_tests st ON st.server_name = s.name
+                        WHERE s.enabled = 1
+                        GROUP BY s.id
+                        HAVING {_metric_col} IS NOT NULL
+                        ORDER BY {_metric_col} {_order}
+                        LIMIT ?''',
+                    (n,),
+                ).fetchall()
+                candidate_names.update(r['name'] for r in rows)
+
         if not candidate_names:
             return []
 
@@ -191,7 +222,7 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     Returns {ok: bool, server: str|None, dl_mbps: float|None, error: str|None}
     """
     from .database import (
-        get_db, get_setting, get_vpn_profile,
+        get_db, get_setting, set_setting, get_vpn_profile,
         set_pool_rotation_state,
     )
     from .gluetun import switch_server, wait_for_vpn, get_public_ips, get_current_filters
@@ -260,6 +291,10 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     _cur_filters  = get_current_filters(container)
     from_server   = list(_cur_filters.values())[0].split(',')[0].strip() if _cur_filters else None
 
+    # ── Acquire benchmark mutex (prevents concurrent scheduler benchmark) ──
+    set_setting('benchmark_running', '1')
+    set_setting('benchmark_current_server', f'pool:{pool_id}')
+
     # ── Switch Gluetun ────────────────────────────────────────────────────
     ok, err = switch_server(
         filter_value=server['name'],
@@ -273,6 +308,8 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     if not ok:
         logger.error('Pool rotation [%d]: switch to %s failed: %s',
                      pool_id, server['name'], err)
+        set_setting('benchmark_running', '0')
+        set_setting('benchmark_current_server', '')
         return {'ok': False, 'server': server['name'], 'dl_mbps': None, 'error': err}
 
     # Record switch
@@ -291,7 +328,12 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
 
     if pool['quick_bench']:
         logger.info('Pool rotation [%d]: waiting %ds for VPN...', pool_id, wait_secs)
-        vpn_up = wait_for_vpn(container, timeout=wait_secs)
+        vpn_up, _elapsed = wait_for_vpn(
+            proxy_host, proxy_port,
+            timeout=wait_secs,
+            proxy_user=proxy_user,
+            proxy_password=proxy_pass,
+        )
         if vpn_up:
             try:
                 from .speedtest import test_download as _tdl
@@ -343,6 +385,8 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     if pool['notify']:
         _send_pool_notification(pool, server['name'], from_server, dl_mbps, to_ipv4, to_ipv6, manual)
 
+    set_setting('benchmark_running', '0')
+    set_setting('benchmark_current_server', '')
     return {'ok': True, 'server': server['name'], 'dl_mbps': dl_mbps, 'error': None}
 
 

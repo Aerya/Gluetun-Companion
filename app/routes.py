@@ -2226,11 +2226,21 @@ def pools():
     all_pools = get_rotation_pools()
 
     # Resolve candidate counts for each pool (for display)
+    _metric_labels = {'dl': 'Débit', 'jitter': 'Jitter', 'loss': 'Perte', 'dns': 'DNS'}
     for p in all_pools:
         try:
             p['candidate_count'] = len(resolve_pool_servers(p['id']))
         except Exception:
             p['candidate_count'] = 0
+        # Add human-readable display label for top_metric criteria
+        for c in p.get('criteria', []):
+            if c.get('crit_type') == 'top_metric':
+                try:
+                    mdata = json.loads(c.get('crit_value') or '{}')
+                    met   = _metric_labels.get(mdata.get('metric', ''), '?')
+                    c['_display'] = f"Top {mdata.get('n', '?')} {met}"
+                except Exception:
+                    c['_display'] = str(c.get('crit_value', '?'))
 
     # Build server list for autocomplete
     with get_db() as db:
@@ -2368,7 +2378,7 @@ def _parse_pool_criteria(raw: list) -> list[dict]:
     result = []
     for c in raw:
         ctype = (c.get('crit_type') or '').strip()
-        if ctype not in ('all', 'server', 'filter', 'profile'):
+        if ctype not in ('all', 'server', 'filter', 'profile', 'top_metric'):
             continue
         cval = c.get('crit_value')
         if ctype == 'server' and not cval:
@@ -2385,6 +2395,16 @@ def _parse_pool_criteria(raw: list) -> list[dict]:
             try:
                 int(cval)
             except (TypeError, ValueError):
+                continue
+        if ctype == 'top_metric':
+            try:
+                mdata = json.loads(cval) if isinstance(cval, str) else (cval or {})
+                metric = str(mdata.get('metric', '')).strip()
+                n = int(mdata.get('n', 0))
+                if metric not in ('dl', 'jitter', 'loss', 'dns') or n < 1:
+                    continue
+                cval = json.dumps({'metric': metric, 'n': n})
+            except Exception:
                 continue
         result.append({'crit_type': ctype, 'crit_value': cval if ctype != 'all' else None})
     return result

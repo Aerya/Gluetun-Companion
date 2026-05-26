@@ -61,6 +61,8 @@
                   <span class="me-2">🔧 {{ c.crit_value }}</span>
                 {% elif c.crit_type == 'profile' %}
                   <span class="me-2">🔑 Profil #{{ c.crit_value }}</span>
+                {% elif c.crit_type == 'top_metric' %}
+                  <span class="me-2">🏅 {{ c._display or c.crit_value }}</span>
                 {% endif %}
               {% else %}
                 <span class="text-warning">{{ t.pools_no_candidates }}</span>
@@ -245,6 +247,13 @@ const _T = {
   critFilterType:  {{ t.pools_crit_filter_type  | tojson }},
   critFilterValue: {{ t.pools_crit_filter_value | tojson }},
   critRemove:  {{ t.pools_crit_remove | tojson }},
+  critTopMetric:      {{ t.pools_crit_top_metric     | tojson }},
+  critTopMetricN:     {{ t.pools_crit_top_metric_n   | tojson }},
+  critTopMetricMet:   {{ t.pools_crit_top_metric_met | tojson }},
+  critMetDl:          {{ t.pools_crit_met_dl     | tojson }},
+  critMetJitter:      {{ t.pools_crit_met_jitter  | tojson }},
+  critMetLoss:        {{ t.pools_crit_met_loss    | tojson }},
+  critMetDns:         {{ t.pools_crit_met_dns     | tojson }},
   modalCreate: {{ t.pools_modal_create | tojson }},
   modalEdit:   {{ t.pools_modal_edit   | tojson }},
   modeBest:    {{ t.pools_mode_best_score | tojson }},
@@ -341,10 +350,11 @@ function addCriterion(data) {
   row.dataset.idx = idx;
 
   const typeOptions = [
-    ['all',     _T.critAll],
-    ['server',  _T.critServer],
-    ['filter',  _T.critFilter],
-    ['profile', _T.critProfile],
+    ['all',        _T.critAll],
+    ['server',     _T.critServer],
+    ['filter',     _T.critFilter],
+    ['profile',    _T.critProfile],
+    ['top_metric', _T.critTopMetric],
   ];
   const typeHTML = typeOptions.map(([v, l]) =>
     `<option value="${v}">${l}</option>`
@@ -442,6 +452,38 @@ function onCritTypeChange(idx, preload) {
         <select class="form-select form-select-sm crit-profile-id"
                 id="crit-prof-${idx}" onchange="_updateCandidatesPreview()">${opts}</select>`;
     }
+
+  } else if (type === 'top_metric') {
+    let preloadMetric = 'dl', preloadN = 10;
+    if (preload?.crit_value) {
+      try {
+        const md = JSON.parse(preload.crit_value);
+        preloadMetric = md.metric || 'dl';
+        preloadN      = md.n      || 10;
+      } catch(e) {}
+    }
+    const metOpts = [
+      ['dl',     _T.critMetDl],
+      ['jitter', _T.critMetJitter],
+      ['loss',   _T.critMetLoss],
+      ['dns',    _T.critMetDns],
+    ].map(([v, l]) =>
+      `<option value="${v}" ${v === preloadMetric ? 'selected' : ''}>${l}</option>`
+    ).join('');
+    area.innerHTML = `
+      <div class="row g-1">
+        <div class="col-6">
+          <label class="form-label small mb-1">${_T.critTopMetricMet}</label>
+          <select class="form-select form-select-sm"
+                  id="crit-topmet-${idx}" onchange="_updateCandidatesPreview()">${metOpts}</select>
+        </div>
+        <div class="col-6">
+          <label class="form-label small mb-1">${_T.critTopMetricN}</label>
+          <input type="number" class="form-control form-control-sm"
+                 id="crit-topn-${idx}" value="${preloadN}" min="1" max="200"
+                 oninput="_updateCandidatesPreview()">
+        </div>
+      </div>`;
   }
   _updateCandidatesPreview();
 }
@@ -471,6 +513,10 @@ function _buildCriteriaPayload() {
       cval = JSON.stringify({type: ftype, value: fval});
     } else if (type === 'profile') {
       cval = document.getElementById(`crit-prof-${idx}`)?.value || '';
+    } else if (type === 'top_metric') {
+      const met = document.getElementById(`crit-topmet-${idx}`)?.value || 'dl';
+      const n   = parseInt(document.getElementById(`crit-topn-${idx}`)?.value) || 10;
+      cval = JSON.stringify({metric: met, n: n});
     }
     criteria.push({crit_type: type, crit_value: cval});
   });
@@ -492,6 +538,7 @@ function _doPreview() {
   }
   // Client-side approximation (no network call for preview)
   const candidates = new Set();
+  const _topMetricNotes = [];
   criteria.forEach(c => {
     if (c.crit_type === 'all') {
       _ALL_SERVERS.forEach(s => candidates.add(s.name));
@@ -508,11 +555,18 @@ function _doPreview() {
     } else if (c.crit_type === 'profile') {
       const pid = parseInt(c.crit_value);
       _ALL_SERVERS.forEach(s => { if (s.vpn_profile_id === pid) candidates.add(s.name); });
+    } else if (c.crit_type === 'top_metric') {
+      // Server-side only (requires historical metrics) — add a placeholder
+      try {
+        const md  = JSON.parse(c.crit_value);
+        const lbl = {dl: _T.critMetDl, jitter: _T.critMetJitter, loss: _T.critMetLoss, dns: _T.critMetDns}[md.metric] || md.metric;
+        _topMetricNotes.push(`🏅 Top ${md.n} — ${lbl}`);
+      } catch(e) {}
     }
   });
   const arr = [...candidates].sort();
   let preview = '';
-  if (arr.length === 0) {
+  if (arr.length === 0 && _topMetricNotes.length === 0) {
     preview = `<span class="text-warning">${_T.noMatch}</span>`;
   } else {
     const show = arr.slice(0, 8);
@@ -522,6 +576,12 @@ function _doPreview() {
       preview += ` <span class="text-muted ms-1">→ top ${topN}</span>`;
     }
     if (rest > 0) preview += ` <span class="text-muted">+${rest}</span>`;
+    if (_topMetricNotes.length) {
+      if (preview) preview += ' ';
+      preview += _topMetricNotes.map(note =>
+        `<span class="badge bg-info text-dark me-1" title="Résolution côté serveur">${note}</span>`
+      ).join('');
+    }
   }
   document.getElementById('pm-candidates-preview').innerHTML = preview;
 }
