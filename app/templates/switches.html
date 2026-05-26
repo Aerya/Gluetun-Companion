@@ -163,6 +163,16 @@
       <a href="{{ url_for('main.switches') }}" class="btn btn-sm btn-outline-secondary" title="{{ t.ui_reset }}"><i class="bi bi-x-lg"></i></a>
     </div>
     {% endif %}
+    <div class="col-auto ms-auto d-flex align-items-center gap-1">
+      <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.srv_per_page }}</label>
+      <select id="swPerPage" class="form-select form-select-sm" style="width:auto">
+        <option value="10">10</option>
+        <option value="25">25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="0">{{ t.srv_per_page_all }}</option>
+      </select>
+    </div>
   </div>
 </form>
 
@@ -180,11 +190,11 @@
           <th>{{ t.cmn_date }}</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="swTbody">
         {% for s in switches %}
         {% set has_gain = s.from_mbps is not none and s.to_mbps is not none %}
         {% set delta = (s.to_mbps - s.from_mbps) if has_gain else none %}
-        <tr>
+        <tr data-sw-i="{{ loop.index0 }}">
           <td>
             <div class="server-flow">
               <div class="flow-server">
@@ -261,5 +271,106 @@
       </tbody>
     </table>
   </div>
+  <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top"
+       id="swPagFoot" style="font-size:.8rem;display:none">
+    <span class="text-muted" id="swPagInfo"></span>
+    <nav><ul class="pagination pagination-sm mb-0" id="swPagList"></ul></nav>
+  </div>
 </div>
+
+<script>
+(function () {
+  var _LS = 'gc_sw_pp';
+
+  function _load()  { try { return parseInt(localStorage.getItem(_LS)) || 50; } catch(e) { return 50; } }
+  function _save(v) { try { localStorage.setItem(_LS, v); } catch(e) {} }
+
+  var _allRows = Array.from(document.querySelectorAll('#swTbody tr[data-sw-i]'));
+  var _pp   = _load();
+  var _page = 1;
+
+  function _paginate() {
+    var total = _allRows.length;
+    if (total === 0) return;
+
+    var start = (_pp > 0) ? (_page - 1) * _pp : 0;
+    var end   = (_pp > 0) ? start + _pp        : total;
+
+    _allRows.forEach(function(tr, i) {
+      tr.style.display = (i >= start && i < end) ? '' : 'none';
+    });
+
+    /* info text */
+    var infoEl = document.getElementById('swPagInfo');
+    if (infoEl) {
+      if (_pp > 0 && total > _pp) {
+        infoEl.textContent = (start + 1) + '–' + Math.min(end, total) + ' / ' + total;
+      } else {
+        infoEl.textContent = total + (_pp === 0 || total <= _pp ? '' : '');
+      }
+    }
+
+    /* pagination buttons */
+    var listEl = document.getElementById('swPagList');
+    if (!listEl) return;
+    var pages = (_pp > 0) ? Math.ceil(total / _pp) : 1;
+
+    if (pages <= 1) { listEl.innerHTML = ''; return; }
+
+    var html = '';
+    html += '<li class="page-item' + (_page === 1 ? ' disabled' : '') + '">' +
+            '<a class="page-link" href="#" data-pg="' + (_page - 1) + '">‹</a></li>';
+
+    /* show at most 7 page buttons with ellipsis */
+    var show = [];
+    for (var p = 1; p <= pages; p++) {
+      if (p === 1 || p === pages || Math.abs(p - _page) <= 2) show.push(p);
+    }
+    var prev = 0;
+    show.forEach(function(p) {
+      if (prev && p - prev > 1) html += '<li class="page-item disabled"><span class="page-link">…</span></li>';
+      html += '<li class="page-item' + (p === _page ? ' active' : '') + '">' +
+              '<a class="page-link" href="#" data-pg="' + p + '">' + p + '</a></li>';
+      prev = p;
+    });
+
+    html += '<li class="page-item' + (_page === pages ? ' disabled' : '') + '">' +
+            '<a class="page-link" href="#" data-pg="' + (_page + 1) + '">›</a></li>';
+    listEl.innerHTML = html;
+
+    listEl.querySelectorAll('[data-pg]').forEach(function(a) {
+      a.addEventListener('click', function(e) {
+        e.preventDefault();
+        var pg = parseInt(this.getAttribute('data-pg'));
+        if (pg >= 1 && pg <= pages && pg !== _page) {
+          _page = pg;
+          _paginate();
+          /* scroll table into view */
+          var card = document.querySelector('.ops-table');
+          if (card) card.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+  }
+
+  /* init select */
+  var sel = document.getElementById('swPerPage');
+  if (sel) {
+    sel.value = String(_pp);
+    if (!sel.querySelector('option[value="' + _pp + '"]')) sel.value = '50';
+    sel.addEventListener('change', function() {
+      _pp   = parseInt(this.value);
+      _page = 1;
+      _save(_pp);
+      _paginate();
+    });
+  }
+
+  /* show footer */
+  var foot = document.getElementById('swPagFoot');
+  if (foot) foot.style.display = '';
+
+  _paginate();
+})();
+</script>
 {% endblock %}

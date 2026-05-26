@@ -1619,5 +1619,28 @@ function _srvSort(col, defaultDir) {
   inp.value = next;
   document.getElementById('srv-sort-form').submit();
 }
+
+/* ── per_page persistence ── */
+(function() {
+  var _LS = 'gc_srv_pp';
+  /* save when user changes the select */
+  var sel = document.querySelector('select[name="per_page"]');
+  if (sel) {
+    sel.addEventListener('change', function() {
+      try { localStorage.setItem(_LS, this.value); } catch(e) {}
+    });
+  }
+  /* on load: if per_page absent from URL, inject saved value and redirect */
+  var params = new URLSearchParams(location.search);
+  if (!params.has('per_page')) {
+    var saved = '';
+    try { saved = localStorage.getItem(_LS) || ''; } catch(e) {}
+    if (saved && saved !== '50') {
+      params.set('per_page', saved);
+      params.delete('page'); /* restart at page 1 */
+      location.replace(location.pathname + '?' + params.toString());
+    }
+  }
+})();
 </script>
 {% endblock %}
