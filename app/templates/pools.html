@@ -60,7 +60,7 @@
                   {% set fdata = c.crit_value | tojson | safe %}
                   <span class="me-2">🔧 {{ c.crit_value }}</span>
                 {% elif c.crit_type == 'profile' %}
-                  <span class="me-2">🔑 Profil #{{ c.crit_value }}</span>
+                  <span class="me-2">🔑 {{ t.pools_crit_profile }} #{{ c.crit_value }}</span>
                 {% elif c.crit_type == 'top_metric' %}
                   <span class="me-2">🏅 {{ c._display or c.crit_value }}</span>
                 {% endif %}
@@ -88,8 +88,29 @@
               {% endif %}
               <span>
                 <i class="bi bi-server me-1"></i>
-                <strong>{{ p.candidate_count }}</strong> candidat(s)
+                <strong>{{ p.candidate_count }}</strong> {{ t.pools_candidates_count }}
               </span>
+              {% if p.last_server %}
+              <span>
+                <i class="bi bi-arrow-right-circle me-1"></i>
+                {{ t.pools_last_server }}:
+                <strong>{{ p.last_server }}</strong>
+              </span>
+              {% endif %}
+              {% if p.last_dl_mbps %}
+              <span>
+                <i class="bi bi-speedometer2 me-1"></i>
+                {{ t.pools_last_speed }}:
+                <strong>{{ '%.1f'|format(p.last_dl_mbps) }} Mbps</strong>
+              </span>
+              {% endif %}
+              {% if p.last_error %}
+              <span class="text-warning">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                {{ t.pools_last_error }}:
+                <strong>{{ p.last_error }}</strong>
+              </span>
+              {% endif %}
             </div>
           </div>
 
@@ -165,6 +186,13 @@
 
         {# ② Critères #}
         <div class="mb-1 fw-semibold small">{{ t.pools_criteria_title }}</div>
+        <div class="mb-2" style="max-width:420px">
+          <label class="form-label small fw-semibold" for="pm-criteria-logic">{{ t.pools_criteria_logic_label }}</label>
+          <select class="form-select form-select-sm" id="pm-criteria-logic" onchange="_updateCandidatesPreview()">
+            <option value="union">{{ t.pools_criteria_union }}</option>
+            <option value="intersection">{{ t.pools_criteria_intersection }}</option>
+          </select>
+        </div>
         <div id="pm-criteria-list" class="mb-2"></div>
         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addCriterion()">
           <i class="bi bi-plus"></i> {{ t.pools_criteria_add }}
@@ -251,6 +279,7 @@ const _T = {
   critMetJitter:      {{ t.pools_crit_met_jitter  | tojson }},
   critMetLoss:        {{ t.pools_crit_met_loss    | tojson }},
   critMetDns:         {{ t.pools_crit_met_dns     | tojson }},
+  serverSide:         {{ t.pools_server_side_resolution | tojson }},
   modalCreate: {{ t.pools_modal_create | tojson }},
   modalEdit:   {{ t.pools_modal_edit   | tojson }},
   modeBest:    {{ t.pools_mode_best_score | tojson }},
@@ -295,6 +324,7 @@ function openPoolModal(poolId) {
   // Reset form
   document.getElementById('pm-name').value        = '';
   document.getElementById('pm-mode').value        = 'random';
+  document.getElementById('pm-criteria-logic').value = 'union';
   document.getElementById('pm-topn').value        = '';
   document.getElementById('pm-auto-rotate').checked = false;
   document.getElementById('pm-interval').value   = '6';
@@ -323,6 +353,7 @@ function openPoolModal(poolId) {
 function _fillModalFromPool(pd) {
   document.getElementById('pm-name').value   = pd.name;
   document.getElementById('pm-mode').value   = pd.mode;
+  document.getElementById('pm-criteria-logic').value = pd.criteria_logic || 'union';
   document.getElementById('pm-topn').value   = pd.top_n || '';
   document.getElementById('pm-auto-rotate').checked = !!pd.auto_rotate;
   document.getElementById('pm-interval').value = pd.interval_hours || 6;
@@ -534,24 +565,26 @@ function _doPreview() {
     return;
   }
   // Client-side approximation (no network call for preview)
-  const candidates = new Set();
+  const logic = document.getElementById('pm-criteria-logic')?.value || 'union';
+  const candidateSets = [];
   const _topMetricNotes = [];
   criteria.forEach(c => {
+    const local = new Set();
     if (c.crit_type === 'all') {
-      _ALL_SERVERS.forEach(s => candidates.add(s.name));
+      _ALL_SERVERS.forEach(s => local.add(s.name));
     } else if (c.crit_type === 'server' && c.crit_value) {
-      if (_ALL_SERVERS.find(s => s.name === c.crit_value)) candidates.add(c.crit_value);
+      if (_ALL_SERVERS.find(s => s.name === c.crit_value)) local.add(c.crit_value);
     } else if (c.crit_type === 'filter') {
       try {
         const fd = JSON.parse(c.crit_value);
         _ALL_SERVERS.forEach(s => {
           if (s.filter_type === fd.type && (!fd.value || s.name === fd.value))
-            candidates.add(s.name);
+            local.add(s.name);
         });
       } catch(e) {}
     } else if (c.crit_type === 'profile') {
       const pid = parseInt(c.crit_value);
-      _ALL_SERVERS.forEach(s => { if (s.vpn_profile_id === pid) candidates.add(s.name); });
+      _ALL_SERVERS.forEach(s => { if (s.vpn_profile_id === pid) local.add(s.name); });
     } else if (c.crit_type === 'top_metric') {
       // Server-side only (requires historical metrics) — add a placeholder
       try {
@@ -560,7 +593,14 @@ function _doPreview() {
         _topMetricNotes.push(`🏅 Top ${md.n} — ${lbl}`);
       } catch(e) {}
     }
+    if (local.size) candidateSets.push(local);
   });
+  let candidates = new Set();
+  if (candidateSets.length) {
+    candidates = logic === 'intersection'
+      ? candidateSets.reduce((acc, cur) => new Set([...acc].filter(x => cur.has(x))))
+      : candidateSets.reduce((acc, cur) => new Set([...acc, ...cur]), new Set());
+  }
   const arr = [...candidates].sort();
   let preview = '';
   if (arr.length === 0 && _topMetricNotes.length === 0) {
@@ -576,7 +616,7 @@ function _doPreview() {
     if (_topMetricNotes.length) {
       if (preview) preview += ' ';
       preview += _topMetricNotes.map(note =>
-        `<span class="badge bg-info text-dark me-1" title="Résolution côté serveur">${note}</span>`
+        `<span class="badge bg-info text-dark me-1" title="${_T.serverSide}">${note}</span>`
       ).join('');
     }
   }
@@ -601,6 +641,7 @@ async function savePool() {
   const payload = {
     name,
     mode:           document.getElementById('pm-mode').value,
+    criteria_logic: document.getElementById('pm-criteria-logic').value,
     top_n:          document.getElementById('pm-topn').value || null,
     auto_rotate:    document.getElementById('pm-auto-rotate').checked,
     interval_hours: parseFloat(document.getElementById('pm-interval').value) || 6,

@@ -112,12 +112,12 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 ### Pools de rotation
 
 - **Rotation sans benchmark** — basculez vers un serveur d'un groupe prédéfini sans lancer de cycle de mesure complet ; idéal pour la rotation périodique ou les changements ponctuels
-- **Critères combinables** (UNION) — chaque pool accepte autant de critères que nécessaire : serveur précis, type de filtre Gluetun (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`), profil VPN WireGuard, ou tous les serveurs actifs ; les critères s'additionnent
-- **3 modes de sélection** : 🎲 aléatoire, 🔄 tour à tour (round-robin avec curseur persistant), 🏆 meilleur score historique
-- **Top-N** — restreindre le pool aux N serveurs avec le meilleur score moyen (si non renseigné, tous les candidats sont éligibles)
+- **Critères combinables** — chaque pool accepte autant de critères que nécessaire : serveur précis, type de filtre Gluetun (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`), profil VPN WireGuard, top métrique, ou tous les serveurs actifs. La logique peut être `OU` (chaque critère ajoute des serveurs) ou `ET` (chaque critère restreint la sélection).
+- **3 modes de sélection** : 🎲 aléatoire, 🔄 tour à tour (round-robin avec curseur persistant), 🏆 meilleur débit historique
+- **Top-N** — restreindre le pool aux N meilleurs débits historiques (si non renseigné, tous les candidats sont éligibles)
 - **Manuel ou planifié** — déclenchement immédiat depuis l'UI, ou rotation automatique sur un intervalle configurable (en heures ; ex. toutes les 12 h ou tous les 2 jours)
-- **Quick bench optionnel** — après chaque bascule, un test proxy rapide mesure le débit du nouveau serveur et l'enregistre dans l'historique (méthode `proxy_qc`)
-- **Notifications** — alerte Discord/Apprise à chaque rotation (manuelle ou automatique), avec serveur précédent, nouveau serveur, débit si quick bench activé
+- **Mesure après bascule optionnelle** — après chaque bascule, un test proxy rapide mesure le débit du nouveau serveur et l'enregistre dans l'historique (méthode `proxy_qc`). Cette mesure ne choisit pas le serveur ; elle audite la rotation effectuée.
+- **Notifications** — alerte Discord/Apprise à chaque rotation (manuelle ou automatique), avec serveur précédent, nouveau serveur, débit si la mesure après bascule est activée
 
 ### Multi-provider WireGuard
 
@@ -613,15 +613,19 @@ Dans **Rotation → Nouveau pool** :
 2. Choisissez le **mode de sélection** :
    - 🎲 **Aléatoire** — `random.choice()` parmi les candidats
    - 🔄 **Tour à tour** — cycle alphabétique avec curseur persistant entre deux rotations
-   - 🏆 **Meilleur score** — candidat avec le meilleur débit moyen historique
-3. Définissez un **Top-N** optionnel : si renseigné, seuls les N serveurs avec le meilleur score moyen sont éligibles, même si les critères en sélectionnent davantage
-4. Ajoutez un ou plusieurs **critères** (UNION — chaque critère ajoute des candidats) :
+   - 🏆 **Meilleur débit historique** — candidat avec le meilleur débit moyen historique
+3. Définissez un **Top-N** optionnel : si renseigné, seuls les N meilleurs débits historiques sont éligibles, même si les critères en sélectionnent davantage
+4. Choisissez la **logique des critères** :
+   - `OU` — chaque critère ajoute des candidats (`France OU Top DNS`)
+   - `ET` — chaque critère restreint les candidats (`France ET Top DNS`)
+5. Ajoutez un ou plusieurs **critères** :
    - `Tous les serveurs actifs` — inclut l'intégralité des serveurs activés dans Companion
    - `Serveur précis` — saisissez le nom exact ; l'autocomplete propose les serveurs existants
    - `Type de filtre Gluetun` — choisissez la variable (`SERVER_COUNTRIES`, `SERVER_NAMES`, etc.) et optionnellement une valeur (vide = tous les serveurs de ce type)
    - `Profil VPN WireGuard` — tous les serveurs assignés à un profil WireGuard spécifique
-5. Configurez la **planification** : rotation automatique toutes les N heures (désactivée = manuel uniquement)
-6. Activez le **quick bench** si vous souhaitez enregistrer le débit après chaque bascule
+   - `Top N par métrique` — ajoute ou restreint selon les meilleurs historiques de débit, jitter, perte ou DNS
+6. Configurez la **planification** : rotation automatique toutes les N heures (désactivée = manuel uniquement)
+7. Activez **Mesurer après bascule** si vous souhaitez enregistrer le débit après chaque rotation. Cette mesure ne sert pas à choisir le serveur.
 
 L'aperçu des candidats est mis à jour en temps réel dans le modal pendant la configuration.
 
@@ -630,30 +634,32 @@ L'aperçu des candidats est mis à jour en temps réel dans le modal pendant la 
 ```
 Rotation déclenchée (manuelle ou automatique) :
   1. Résolution des candidats
-     ├─ UNION de tous les critères du pool
-     └─ Filtrage top-N par score moyen (si activé)
-  2. Sélection du serveur cible (random / round-robin / best-score)
+     ├─ logique OU : union de tous les critères
+     ├─ logique ET : intersection de tous les critères
+     └─ Filtrage top-N par débit historique (si activé)
+  2. Sélection du serveur cible (random / round-robin / meilleur débit historique)
   3. switch_server() → écriture docker-compose.override.yml + docker compose up -d
      └─ Si profil WireGuard associé : injection VPN_SERVICE_PROVIDER + WIREGUARD_* dans l'override
-  4. Si quick bench activé :
+  4. Attente reconnexion VPN + recréation des containers `network_mode: service:gluetun`
+  5. Si mesure après bascule activée :
      ├─ Attente reconnexion VPN (connection_wait_seconds)
      ├─ Test proxy rapide (proxy_qc)
      └─ Enregistrement dans speed_tests (test_trigger='pool_rotation')
-  5. Mise à jour de l'état du pool (last_rotated_at, next_rotation_at, curseur round-robin)
-  6. Notification Discord/Apprise (si activé)
+  6. Mise à jour de l'état du pool (last_rotated_at, next_rotation_at, dernier serveur, dernier débit/erreur, curseur round-robin)
+  7. Notification Discord/Apprise (si activé)
 ```
 
 #### Planification automatique
 
 Le scheduler vérifie toutes les **5 minutes** si des pools ont une rotation en attente (`next_rotation_at <= now`). Si un benchmark est en cours, la rotation est différée au prochain tick (sans modifier `next_rotation_at`).
 
-> Les rotations de pool et les benchmarks sont **indépendants** — ils ne se bloquent pas mutuellement, mais une rotation ne se déclenche pas pendant un benchmark actif.
+> Les rotations de pool et les benchmarks partagent le même verrou opérationnel : une rotation ne se déclenche pas pendant un benchmark actif, et inversement.
 
 #### Notifications de rotation de pool
 
 | Type | Sévérité | Contenu |
 |---|---|---|
-| 🟡 Rotation de pool | Moyen | Nom du pool, mode (auto/manuel), serveur précédent → nouveau, débit si quick bench activé, IP publique |
+| 🟡 Rotation de pool | Moyen | Nom du pool, mode (auto/manuel), serveur précédent → nouveau, débit si mesure après bascule activée, IP publique |
 
 ---
 

@@ -2229,7 +2229,12 @@ def pools():
     all_pools = get_rotation_pools()
 
     # Resolve candidate counts for each pool (for display)
-    _metric_labels = {'dl': 'Débit', 'jitter': 'Jitter', 'loss': 'Perte', 'dns': 'DNS'}
+    _metric_labels = {
+        'dl': t.get('pools_crit_met_dl', 'DL'),
+        'jitter': t.get('pools_crit_met_jitter', 'Jitter'),
+        'loss': t.get('pools_crit_met_loss', 'Loss'),
+        'dns': t.get('pools_crit_met_dns', 'DNS'),
+    }
     for p in all_pools:
         try:
             p['candidate_count'] = len(resolve_pool_servers(p['id']))
@@ -2288,6 +2293,7 @@ def api_pool_create():
     pool_id = create_rotation_pool(
         name=name,
         mode=data.get('mode', 'random'),
+        criteria_logic=_parse_criteria_logic(data.get('criteria_logic')),
         enabled=bool(data.get('enabled', True)),
         auto_rotate=bool(data.get('auto_rotate', False)),
         interval_hours=interval_h,
@@ -2313,6 +2319,7 @@ def api_pool_update(pool_id: int):
     name = (data.get('name') or '').strip() or None
     interval_h = _parse_interval(data)
     auto_rotate = data.get('auto_rotate')
+    criteria_logic = _parse_criteria_logic(data.get('criteria_logic')) if 'criteria_logic' in data else None
     criteria = _parse_pool_criteria(data.get('criteria') or []) if 'criteria' in data else None
 
     # top_n: only update if key was present in request; otherwise use sentinel to leave unchanged
@@ -2322,6 +2329,7 @@ def api_pool_update(pool_id: int):
         pool_id,
         name=name,
         mode=data.get('mode'),
+        criteria_logic=criteria_logic,
         enabled=data.get('enabled'),
         auto_rotate=None if auto_rotate is None else bool(auto_rotate),
         interval_hours=interval_h,
@@ -2435,6 +2443,10 @@ def _parse_interval(data: dict) -> float | None:
         return max(0.5, float(raw))
     except (TypeError, ValueError):
         return None
+
+
+def _parse_criteria_logic(raw) -> str:
+    return raw if raw in ('union', 'intersection') else 'union'
 
 
 def _parse_top_n(raw) -> int | None:

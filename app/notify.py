@@ -855,7 +855,7 @@ def send_pool_rotation_notification(
             ]
             if dl_mbps is not None:
                 fields.append({
-                    'name': t.get('notif_pool_speed', 'Débit (quick bench)'),
+                    'name': t.get('notif_pool_speed', 'Débit mesuré après bascule'),
                     'value': f'{dl_mbps:.1f} Mbps', 'inline': True,
                 })
             if to_ipv4:

@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 def resolve_pool_servers(pool_id: int) -> list[dict]:
     """
     Return the list of candidate servers for this pool, combining all criteria
-    via UNION (each criterion adds servers to the set).
+    using either union (each criterion adds servers) or intersection (each
+    criterion restricts the set), depending on pool.criteria_logic.
 
     If top_n is set on the pool, restrict to the top-N by historical avg
     download speed (proxy_qc excluded, same window as scoring).
@@ -48,7 +49,7 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
             (pool_id,),
         ).fetchall()
 
-        candidate_names: set[str] = set()
+        candidate_sets: list[set[str]] = []
 
         for crit in criteria:
             ctype = crit['crit_type']
@@ -62,7 +63,7 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
                        WHERE s.enabled = 1
                          AND (s.vpn_profile_id IS NULL OR vp.enabled = 1)'''
                 ).fetchall()
-                candidate_names.update(r['name'] for r in rows)
+                candidate_sets.append({r['name'] for r in rows})
 
             elif ctype == 'server':
                 # Include even if disabled? No — only active servers.
@@ -75,7 +76,7 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
                     (cval,),
                 ).fetchone()
                 if row:
-                    candidate_names.add(row['name'])
+                    candidate_sets.append({row['name']})
 
             elif ctype == 'filter':
                 try:
@@ -106,7 +107,7 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
                     ).fetchall()
                 else:
                     rows = []
-                candidate_names.update(r['name'] for r in rows)
+                candidate_sets.append({r['name'] for r in rows})
 
             elif ctype == 'profile':
                 try:
@@ -120,7 +121,7 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
                        WHERE s.vpn_profile_id = ? AND s.enabled = 1 AND vp.enabled = 1''',
                     (profile_id,),
                 ).fetchall()
-                candidate_names.update(r['name'] for r in rows)
+                candidate_sets.append({r['name'] for r in rows})
 
             elif ctype == 'top_metric':
                 try:
@@ -153,7 +154,15 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
                         LIMIT ?''',
                     (n,),
                 ).fetchall()
-                candidate_names.update(r['name'] for r in rows)
+                candidate_sets.append({r['name'] for r in rows})
+
+        non_empty_sets = [s for s in candidate_sets if s]
+        if not non_empty_sets:
+            return []
+        if pool.get('criteria_logic') == 'intersection':
+            candidate_names = set.intersection(*non_empty_sets)
+        else:
+            candidate_names = set.union(*non_empty_sets)
 
         if not candidate_names:
             return []
@@ -247,7 +256,7 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     """
     from .database import (
         get_db, get_setting, set_setting, get_vpn_profile,
-        set_pool_rotation_state,
+        set_pool_rotation_state, set_pool_last_error,
     )
     from .gluetun import (
         switch_server, wait_for_vpn, get_public_ips, get_current_filters,
@@ -268,6 +277,7 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
         return {'ok': False, 'server': None, 'dl_mbps': None, 'error': 'Pool not found'}
     if not pool.get('enabled'):
         logger.info('Pool rotation [%d] "%s": disabled', pool_id, pool['name'])
+        set_pool_last_error(pool_id, 'Pool disabled')
         return {'ok': False, 'server': None, 'dl_mbps': None, 'error': 'Pool disabled'}
 
     logger.info(
@@ -278,10 +288,12 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     candidates = resolve_pool_servers(pool_id)
     if not candidates:
         logger.warning('Pool rotation [%d] "%s": no candidates — skipping', pool_id, pool['name'])
+        set_pool_last_error(pool_id, 'No candidates')
         return {'ok': False, 'server': None, 'dl_mbps': None, 'error': 'No candidates'}
 
     server = pick_server(pool, candidates)
     if not server:
+        set_pool_last_error(pool_id, 'No server picked')
         return {'ok': False, 'server': None, 'dl_mbps': None, 'error': 'No server picked'}
 
     logger.info(
@@ -307,6 +319,7 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
             logger.warning(
                 'Pool rotation [%d]: profile %d is disabled', pool_id, server['vpn_profile_id']
             )
+            set_pool_last_error(pool_id, 'VPN profile disabled')
             return {
                 'ok': False,
                 'server': server['name'],
@@ -349,6 +362,7 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     if not ok:
         logger.error('Pool rotation [%d]: switch to %s failed: %s',
                      pool_id, server['name'], err)
+        set_pool_last_error(pool_id, str(err))
         set_setting('benchmark_running', '0')
         set_setting('benchmark_current_server', '')
         return {'ok': False, 'server': server['name'], 'dl_mbps': None, 'error': err}
@@ -434,7 +448,10 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     if pool['auto_rotate'] and pool['interval_hours']:
         next_s = (now + timedelta(hours=float(pool['interval_hours']))).strftime('%Y-%m-%d %H:%M:%S')
     new_rr_idx = _next_rr_idx(pool, candidates, server['name'])
-    set_pool_rotation_state(pool_id, now_s, next_s, new_rr_idx)
+    set_pool_rotation_state(
+        pool_id, now_s, next_s, new_rr_idx,
+        last_server=server['name'], last_error=None, last_dl_mbps=dl_mbps,
+    )
 
     # ── Notification ──────────────────────────────────────────────────────
     if pool['notify']:

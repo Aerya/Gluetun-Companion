@@ -144,13 +144,18 @@ def init_db(db_path: str):
                 next_rotation_at TEXT,             -- ISO datetime (UTC) of next auto-rotation
                 last_rotated_at  TEXT,             -- ISO datetime (UTC) of last rotation
                 current_rr_idx   INTEGER NOT NULL DEFAULT 0,  -- round-robin cursor
+                criteria_logic   TEXT    NOT NULL DEFAULT 'union',
+                                          -- 'union' | 'intersection'
                 quick_bench      INTEGER NOT NULL DEFAULT 0,  -- run proxy_qc after switch
                 notify           INTEGER NOT NULL DEFAULT 1,
                 top_n            INTEGER,          -- if set, restrict to top-N by avg score
+                last_server      TEXT,
+                last_error       TEXT,
+                last_dl_mbps     REAL,
                 created_at       TEXT    NOT NULL DEFAULT (datetime('now'))
             );
 
-            -- Criteria that feed a pool (UNION — each adds candidate servers)
+            -- Criteria that feed a pool. criteria_logic controls union vs intersection.
             CREATE TABLE IF NOT EXISTS rotation_pool_criteria (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 pool_id     INTEGER NOT NULL REFERENCES rotation_pools(id) ON DELETE CASCADE,
@@ -287,6 +292,10 @@ def init_db(db_path: str):
             "ALTER TABLE vpn_profiles ADD COLUMN sidecar_private_key  TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE vpn_profiles ADD COLUMN sidecar_addresses     TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE vpn_profiles ADD COLUMN sidecar_preshared_key TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE rotation_pools ADD COLUMN criteria_logic TEXT NOT NULL DEFAULT 'union'",
+            "ALTER TABLE rotation_pools ADD COLUMN last_server TEXT",
+            "ALTER TABLE rotation_pools ADD COLUMN last_error TEXT",
+            "ALTER TABLE rotation_pools ADD COLUMN last_dl_mbps REAL",
         ]:
             try:
                 db.execute(stmt)
@@ -982,6 +991,7 @@ def get_rotation_pool(pool_id: int) -> dict | None:
 def create_rotation_pool(
     name: str,
     mode: str = 'random',
+    criteria_logic: str = 'union',
     enabled: bool = True,
     auto_rotate: bool = False,
     interval_hours: float = 6.0,
@@ -994,9 +1004,10 @@ def create_rotation_pool(
     with get_db() as db:
         cur = db.execute(
             '''INSERT INTO rotation_pools
-               (name, mode, enabled, auto_rotate, interval_hours, quick_bench, notify, top_n)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-            (name, mode, int(enabled), int(auto_rotate),
+               (name, mode, criteria_logic, enabled, auto_rotate, interval_hours,
+                quick_bench, notify, top_n)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (name, mode, criteria_logic, int(enabled), int(auto_rotate),
              interval_hours, int(quick_bench), int(notify), top_n),
         )
         pool_id = cur.lastrowid
@@ -1014,6 +1025,7 @@ def update_rotation_pool(
     pool_id: int,
     name: str | None = None,
     mode: str | None = None,
+    criteria_logic: str | None = None,
     enabled: bool | None = None,
     auto_rotate: bool | None = None,
     interval_hours: float | None = None,
@@ -1029,6 +1041,7 @@ def update_rotation_pool(
         fields, params = [], []
         if name           is not None:  fields.append('name = ?');           params.append(name)
         if mode           is not None:  fields.append('mode = ?');           params.append(mode)
+        if criteria_logic is not None:  fields.append('criteria_logic = ?'); params.append(criteria_logic)
         if enabled        is not None:  fields.append('enabled = ?');        params.append(int(enabled))
         if auto_rotate    is not None:  fields.append('auto_rotate = ?');    params.append(int(auto_rotate))
         if interval_hours is not None:  fields.append('interval_hours = ?'); params.append(interval_hours)
@@ -1064,14 +1077,30 @@ def set_pool_rotation_state(
     last_rotated_at: str,
     next_rotation_at: str | None,
     current_rr_idx: int,
+    last_server: str | None = None,
+    last_error: str | None = None,
+    last_dl_mbps: float | None = None,
 ) -> None:
     """Update pool rotation state after a successful rotation."""
     with get_db() as db:
         db.execute(
             '''UPDATE rotation_pools
-               SET last_rotated_at = ?, next_rotation_at = ?, current_rr_idx = ?
+               SET last_rotated_at = ?, next_rotation_at = ?, current_rr_idx = ?,
+                   last_server = ?, last_error = ?, last_dl_mbps = ?
                WHERE id = ?''',
-            (last_rotated_at, next_rotation_at, current_rr_idx, pool_id),
+            (last_rotated_at, next_rotation_at, current_rr_idx,
+             last_server, last_error, last_dl_mbps, pool_id),
+        )
+
+
+def set_pool_last_error(pool_id: int, error: str) -> None:
+    """Store the last pool rotation failure for UI/debugging."""
+    with get_db() as db:
+        db.execute(
+            '''UPDATE rotation_pools
+               SET last_error = ?, last_rotated_at = datetime('now')
+               WHERE id = ?''',
+            (error, pool_id),
         )
 
 

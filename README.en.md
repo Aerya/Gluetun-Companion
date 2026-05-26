@@ -111,12 +111,12 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 ### Rotation pools
 
 - **Rotation without benchmarking** — switch to a server from a predefined group without triggering a full measurement cycle; ideal for periodic rotation or quick one-off changes
-- **Composable criteria** (UNION) — each pool accepts any number of criteria: specific server, Gluetun filter type (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`), WireGuard VPN profile, or all active servers; criteria are combined additively
-- **3 selection modes**: 🎲 random, 🔄 round-robin (persistent cursor across rotations), 🏆 best historical score
-- **Top-N** — restrict the pool to the N servers with the best average score (if unset, all candidates are eligible)
+- **Composable criteria** — each pool accepts any number of criteria: specific server, Gluetun filter type (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`), WireGuard VPN profile, top metric, or all active servers. Logic can be `OR` (each criterion adds servers) or `AND` (each criterion restricts the selection).
+- **3 selection modes**: 🎲 random, 🔄 round-robin (persistent cursor across rotations), 🏆 best historical download
+- **Top-N** — restrict the pool to the N best historical download speeds (if unset, all candidates are eligible)
 - **Manual or scheduled** — instant one-click rotation from the UI, or automatic rotation on a configurable interval (in hours; e.g. every 12 h or every 2 days)
-- **Optional quick bench** — after each switch, a fast proxy test measures the new server's speed and records it in the history (method `proxy_qc`)
-- **Notifications** — Discord/Apprise alert on each rotation (manual or automatic), including previous server, new server, and speed if quick bench is enabled
+- **Optional post-switch measurement** — after each switch, a fast proxy test measures the new server's speed and records it in the history (method `proxy_qc`). This measurement does not choose the server; it audits the completed rotation.
+- **Notifications** — Discord/Apprise alert on each rotation (manual or automatic), including previous server, new server, and speed if post-switch measurement is enabled
 
 ### Multi-provider WireGuard
 
@@ -612,15 +612,19 @@ In **Rotation → New pool**:
 2. Choose the **selection mode**:
    - 🎲 **Random** — `random.choice()` from the candidates
    - 🔄 **Round-robin** — alphabetical cycle with a persistent cursor between rotations
-   - 🏆 **Best score** — candidate with the highest historical average speed
-3. Set an optional **Top-N**: if specified, only the N servers with the best average score are eligible, even if the criteria match more
-4. Add one or more **criteria** (UNION — each criterion adds candidates):
+   - 🏆 **Best historical download** — candidate with the highest historical average download speed
+3. Set an optional **Top-N**: if specified, only the N best historical download speeds are eligible, even if the criteria match more
+4. Choose the **criteria logic**:
+   - `OR` — each criterion adds candidates (`France OR Top DNS`)
+   - `AND` — each criterion restricts candidates (`France AND Top DNS`)
+5. Add one or more **criteria**:
    - `All active servers` — includes every enabled server in Companion
    - `Specific server` — type the exact name; autocomplete suggests existing servers
    - `Gluetun filter type` — choose the variable (`SERVER_COUNTRIES`, `SERVER_NAMES`, etc.) and optionally a value (empty = all servers of that type)
    - `WireGuard VPN profile` — all servers assigned to a specific WireGuard profile
-5. Configure the **schedule**: automatic rotation every N hours (disabled = manual only)
-6. Enable **quick bench** to record speed after each switch
+   - `Top N by metric` — adds or restricts using the best historical download, jitter, packet loss or DNS metrics
+6. Configure the **schedule**: automatic rotation every N hours (disabled = manual only)
+7. Enable **Measure after switch** to record speed after each rotation. This measurement is not used to choose the server.
 
 The candidate preview updates in real time inside the modal as you configure criteria.
 
@@ -629,30 +633,32 @@ The candidate preview updates in real time inside the modal as you configure cri
 ```
 Rotation triggered (manual or automatic):
   1. Resolve candidates
-     ├─ UNION of all pool criteria
-     └─ Top-N filter by average score (if set)
-  2. Pick target server (random / round-robin / best-score)
+     ├─ OR logic: union of all criteria
+     ├─ AND logic: intersection of all criteria
+     └─ Top-N filter by historical download speed (if set)
+  2. Pick target server (random / round-robin / best historical download)
   3. switch_server() → write docker-compose.override.yml + docker compose up -d
      └─ If WireGuard profile attached: inject VPN_SERVICE_PROVIDER + WIREGUARD_* into override
-  4. If quick bench enabled:
+  4. Wait for VPN reconnection + recreate `network_mode: service:gluetun` containers
+  5. If post-switch measurement is enabled:
      ├─ Wait for VPN reconnection (connection_wait_seconds)
      ├─ Quick proxy test (proxy_qc)
      └─ Record in speed_tests (test_trigger='pool_rotation')
-  5. Update pool state (last_rotated_at, next_rotation_at, round-robin cursor)
-  6. Discord/Apprise notification (if enabled)
+  6. Update pool state (last_rotated_at, next_rotation_at, last server, last speed/error, round-robin cursor)
+  7. Discord/Apprise notification (if enabled)
 ```
 
 #### Automatic scheduling
 
 The scheduler checks every **5 minutes** whether any pool has a pending rotation (`next_rotation_at <= now`). If a benchmark is running, the rotation is deferred to the next tick without modifying `next_rotation_at`.
 
-> Pool rotations and benchmarks are **independent** — they do not block each other, but a rotation will not trigger while a benchmark is active.
+> Pool rotations and benchmarks share the same operational lock: a rotation will not trigger during an active benchmark, and vice versa.
 
 #### Pool rotation notifications
 
 | Type | Severity | Content |
 |---|---|---|
-| 🟡 Pool rotation | Medium | Pool name, trigger (auto/manual), previous → new server, speed if quick bench enabled, public IP |
+| 🟡 Pool rotation | Medium | Pool name, trigger (auto/manual), previous → new server, speed if post-switch measurement is enabled, public IP |
 
 ---
 
