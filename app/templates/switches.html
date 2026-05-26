@@ -129,6 +129,8 @@
         <option value="{{ reason }}" {{ 'selected' if reason_filter == reason }}>
           {% if reason == 'auto_best' %}{{ t.sw_reason_auto }}
           {% elif reason == 'manual' %}{{ t.sw_reason_manual }}
+          {% elif reason.startswith('pool_rotation:') and reason.endswith(':manual') %}{{ t.sw_reason_pool_manual }}
+          {% elif reason.startswith('pool_rotation:') %}{{ t.sw_reason_pool_auto }}
           {% else %}{{ reason }}{% endif %}
         </option>
         {% endfor %}
@@ -225,6 +227,10 @@
               <span class="reason-chip"><i class="bi bi-magic text-info"></i>{{ t.sw_reason_auto }}</span>
             {% elif s.reason == 'manual' %}
               <span class="reason-chip"><i class="bi bi-hand-index text-warning"></i>{{ t.sw_reason_manual }}</span>
+            {% elif s.reason.startswith('pool_rotation:') and s.reason.endswith(':manual') %}
+              <span class="reason-chip"><i class="bi bi-shuffle text-warning"></i>{{ t.sw_reason_pool_manual }}</span>
+            {% elif s.reason.startswith('pool_rotation:') %}
+              <span class="reason-chip"><i class="bi bi-shuffle text-info"></i>{{ t.sw_reason_pool_auto }}</span>
             {% else %}
               <span class="reason-chip">{{ s.reason }}</span>
             {% endif %}
