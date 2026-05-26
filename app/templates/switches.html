@@ -188,14 +188,14 @@
           <td>
             <div class="server-flow">
               <div class="flow-server">
-                <code class="text-muted" title="{{ s.from_server or '-' }}">{{ s.from_server or '-' }}</code>
+                <code class="text-muted" title="{{ s.from_server or '-' }}">{{ server_flag(s.from_server) }} {{ s.from_server or '-' }}</code>
                 {% if s.from_profile_name %}
                 <div class="flow-provider">{{ s.from_profile_name }}</div>
                 {% endif %}
               </div>
               <i class="bi bi-arrow-right text-muted text-center"></i>
               <div class="flow-server">
-                <code class="text-success" title="{{ s.to_server }}">{{ s.to_server }}</code>
+                <code class="text-success" title="{{ s.to_server }}">{{ server_flag(s.to_server) }} {{ s.to_server }}</code>
                 {% if s.to_profile_name %}
                 <div class="flow-provider">{{ s.to_profile_name }}</div>
                 {% endif %}

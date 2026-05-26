@@ -259,7 +259,7 @@
       <div class="col-12 col-xl-6">
         <div class="d-flex align-items-center gap-2" style="min-height:28px">
           <div style="width:130px;font-size:.8rem;min-width:0" title="{{ s.server_name }}">
-            <div class="text-truncate"><code>{{ s.server_name }}</code></div>
+            <div class="text-truncate">{{ server_flag(s.server_name) }} <code>{{ s.server_name }}</code></div>
             {% if s.profile_name %}
             <div class="text-truncate" style="font-size:.65rem;color:var(--bs-secondary-color);margin-top:.05rem">{{ s.profile_name }}</div>
             {% endif %}
@@ -337,7 +337,7 @@
       <tbody>
         {% for r in recent_tests %}
         <tr>
-          <td><code>{{ r.server_name }}</code></td>
+          <td>{{ server_flag(r.server_name) }} <code>{{ r.server_name }}</code></td>
           <td>
             {% if r.profile_name %}
             <small class="text-muted">{{ r.profile_name }}</small>

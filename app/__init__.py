@@ -178,6 +178,45 @@ def create_app():
             _has_wg = False
         return {'_g_has_wg_profiles': _has_wg}
 
+    @app.context_processor
+    def inject_flag_utils():
+        """Inject server_flag(label) — returns a country flag emoji for a server name.
+
+        Accepts both raw names ("Chamukuy") and formatted labels ("SERVER_NAMES=Chamukuy").
+        Data is sourced from gluetun_catalogue and airvpn_snapshot.
+        """
+        from .database import get_db
+
+        def _flag_emoji(code: str) -> str:
+            if not code or len(code) < 2:
+                return ''
+            c = code.upper()[:2]
+            if not (c[0].isalpha() and c[1].isalpha()):
+                return ''
+            return chr(0x1F1E6 + ord(c[0]) - 65) + chr(0x1F1E6 + ord(c[1]) - 65)
+
+        try:
+            with get_db() as _db:
+                _rows = _db.execute(
+                    'SELECT name, country_code FROM gluetun_catalogue '
+                    'WHERE country_code != "" '
+                    'UNION SELECT name, country_code FROM airvpn_snapshot '
+                    'WHERE country_code != ""'
+                ).fetchall()
+            _flags: dict[str, str] = {r['name']: r['country_code'].upper() for r in _rows}
+        except Exception:
+            _flags = {}
+
+        def server_flag(label: str | None) -> str:
+            """Return the flag emoji for a server label, or empty string if unknown."""
+            if not label or label in ('-', '—'):
+                return ''
+            # Strip filter-var prefix: "SERVER_NAMES=Chamukuy" → "Chamukuy"
+            name = label.split('=', 1)[-1].strip() if '=' in label else label.strip()
+            return _flag_emoji(_flags.get(name, ''))
+
+        return {'server_flag': server_flag}
+
     from .routes import bp
     app.register_blueprint(bp)
 

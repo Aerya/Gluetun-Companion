@@ -363,7 +363,7 @@
           <tr class="{{ '' if s.enabled else 'opacity-50' }}" data-srv="{{ s.name }}"
               {% if is_active %}style="border-left:3px solid var(--bs-success)"{% endif %}>
             <td>
-              <code>{{ s.name }}</code>
+              {{ server_flag(s.name) }} <code>{{ s.name }}</code>
               {% if is_active %}
               <span class="badge bg-success ms-1" style="font-size:.7rem">{{ t.srv_active_badge }}</span>
               {% endif %}
