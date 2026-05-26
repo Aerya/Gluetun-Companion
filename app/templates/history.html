@@ -337,7 +337,7 @@
 </div>
 
 {% elif per_server %}
-{# ── Floating bar chart (all servers) ─────────────────────────────────────── #}
+{# ── Top-6 mini-cards (static, always top-6 overall) ──────────────────────── #}
 <div class="row g-3 mb-4">
   {% for s in per_server[:6] %}
   <div class="col-6 col-md-4 col-xl-2">
@@ -355,11 +355,30 @@
   {% endfor %}
 </div>
 
+{# ── Interactive comparison chart ─────────────────────────────────────────── #}
 <div class="card mb-4 p-3">
-  <div class="fw-semibold mb-2">
+  <div class="fw-semibold mb-3">
     <i class="bi bi-bar-chart-fill text-success"></i> {{ t.hist_comparison }}
   </div>
-  <div style="position:relative; height:{{ [[per_server|length * 36, 120]|max, 480]|min }}px">
+
+  {# ── Controls ── #}
+  <div class="mb-3 p-2 rounded" style="background:var(--bs-secondary-bg);border:1px solid var(--bs-border-color);font-size:.82rem">
+    <div class="text-muted mb-2" style="font-size:.76rem;text-transform:uppercase;letter-spacing:.04em">
+      {{ t.hist_cmp_per_prov }}
+    </div>
+    <div id="cmpProvRows" class="d-flex flex-wrap gap-2 align-items-center mb-2"></div>
+    <div class="border-top pt-2 d-flex align-items-center gap-2 flex-wrap">
+      <span class="text-muted">{{ t.hist_cmp_global }} :</span>
+      <select id="cmpGlobal" class="form-select form-select-sm" style="width:auto">
+        <option value="all">{{ t.hist_cmp_all }}</option>
+        <option value="top10">{{ t.hist_cmp_top10 }}</option>
+        <option value="last10">{{ t.hist_cmp_last10 }}</option>
+      </select>
+      <span class="text-muted ms-2" id="cmpCount" style="font-size:.78rem"></span>
+    </div>
+  </div>
+
+  <div id="chartAvgWrap" style="position:relative;min-height:120px">
     <canvas id="chartAvg"></canvas>
   </div>
 </div>
@@ -727,64 +746,214 @@ new Chart(document.getElementById('chartTimeline'), {
 });
 
 {% elif per_server %}
-const _labels    = [{% for s in per_server %}'{{ s.server_name }}',{% endfor %}];
-const _rangeData = [{% for s in per_server %}[{{ s.min_dl or 0 }}, {{ s.max_dl or 0 }}],{% endfor %}];
-const _avgDl     = [{% for s in per_server %}{{ s.avg_dl or 0 }},{% endfor %}];
-const _avgUl     = [{% for s in per_server %}{{ s.avg_ul or 0 }},{% endfor %}];
+/* ── Comparison chart — interactive ── */
+(function() {
+  /* raw data from server */
+  var _PS = [
+    {% for s in per_server %}
+    { name: {{ s.server_name | tojson }},
+      flag: {{ server_flag(s.server_name) | tojson }},
+      prov: {{ (s.vp_name or '') | tojson }},
+      avg_dl:  {{ s.avg_dl  or 0 }},
+      min_dl:  {{ s.min_dl  or 0 }},
+      max_dl:  {{ s.max_dl  or 0 }},
+      avg_ul:  {{ s.avg_ul  or 0 }},
+      cnt:     {{ s.cnt }},
+      last_ts: {{ (s.last_tested_at or '') | tojson }}
+    }{{ ',' if not loop.last }}
+    {% endfor %}
+  ];
 
-new Chart(document.getElementById('chartAvg'), {
-  type: 'bar',
-  data: {
-    labels: _labels,
-    datasets: [
-      {
-        label: '{{ t.chart_range }}',
-        data: _rangeData,
-        backgroundColor: _chartRange,
-        borderColor: _chartRangeBorder,
-        borderWidth: 1, borderRadius: 3, maxBarThickness: 28,
+  /* i18n */
+  var _TT = {
+    all:       {{ t.hist_cmp_all    | tojson }},
+    top10:     {{ t.hist_cmp_top10  | tojson }},
+    last10:    {{ t.hist_cmp_last10 | tojson }},
+    noprof:    {{ t.hist_cmp_no_profile | tojson }},
+    rangeLabel:{{ t.chart_range  | tojson }},
+    dlLabel:   {{ t.chart_avg_dl | tojson }},
+    ulLabel:   {{ t.chart_avg_ul | tojson }},
+    nServers:  '{{ "serveurs" if lang == "fr" else "servers" }}'
+  };
+
+  /* ── build unique providers list (preserve avg_dl order) ── */
+  var _provOrder = [];
+  var _seen = {};
+  _PS.forEach(function(s) {
+    var p = s.prov || '';
+    if (!_seen[p]) { _seen[p] = true; _provOrder.push(p); }
+  });
+
+  /* state: per-provider {on, mode} */
+  var _pState = {};
+  _provOrder.forEach(function(p) { _pState[p] = { on: true, mode: 'all' }; });
+  var _gMode = 'all';
+
+  /* ── build controls ── */
+  var _modeOpts = [
+    { v: 'all',   l: _TT.all   },
+    { v: 'top10', l: _TT.top10 },
+    { v: 'last10',l: _TT.last10 }
+  ];
+
+  function _modeSelect(prov) {
+    var sel = document.createElement('select');
+    sel.className = 'form-select form-select-sm ms-1';
+    sel.style.width = 'auto';
+    _modeOpts.forEach(function(o) {
+      var opt = document.createElement('option');
+      opt.value = o.v; opt.textContent = o.l;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', function() {
+      _pState[prov].mode = this.value;
+      _rebuild();
+    });
+    return sel;
+  }
+
+  var _rows = document.getElementById('cmpProvRows');
+  if (_rows) {
+    _provOrder.forEach(function(p) {
+      var label = p || _TT.noprof;
+      var wrap = document.createElement('label');
+      wrap.className = 'd-inline-flex align-items-center gap-1 px-2 py-1 rounded';
+      wrap.style.cssText = 'background:var(--bs-tertiary-bg);border:1px solid var(--bs-border-color);cursor:pointer';
+
+      var cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = true; cb.className = 'form-check-input m-0';
+      cb.addEventListener('change', function() {
+        _pState[p].on = this.checked;
+        sel.disabled = !this.checked;
+        _rebuild();
+      });
+
+      var span = document.createElement('span');
+      span.textContent = label;
+      span.style.cssText = 'font-size:.82rem;white-space:nowrap';
+
+      var sel = _modeSelect(p);
+
+      wrap.appendChild(cb);
+      wrap.appendChild(span);
+      wrap.appendChild(sel);
+      _rows.appendChild(wrap);
+    });
+  }
+
+  var _gSel = document.getElementById('cmpGlobal');
+  if (_gSel) _gSel.addEventListener('change', function() { _gMode = this.value; _rebuild(); });
+
+  /* ── filter logic ── */
+  function _applyFilters() {
+    var result = [];
+
+    /* group by provider, preserving avg_dl order within each group */
+    var _byProv = {};
+    _provOrder.forEach(function(p) { _byProv[p] = []; });
+    _PS.forEach(function(s) { _byProv[s.prov || ''].push(s); });
+
+    _provOrder.forEach(function(p) {
+      if (!_pState[p].on) return;
+      var pool = _byProv[p].slice(); /* already avg_dl DESC from SQL */
+      var mode = _pState[p].mode;
+
+      if (mode === 'top10') {
+        pool = pool.slice(0, 10);
+      } else if (mode === 'last10') {
+        pool = pool.slice().sort(function(a, b) {
+          return b.last_ts.localeCompare(a.last_ts);
+        }).slice(0, 10);
+      }
+      result = result.concat(pool);
+    });
+
+    /* global cap */
+    if (_gMode === 'top10') {
+      result.sort(function(a, b) { return (b.avg_dl || 0) - (a.avg_dl || 0); });
+      result = result.slice(0, 10);
+    } else if (_gMode === 'last10') {
+      result.sort(function(a, b) { return b.last_ts.localeCompare(a.last_ts); });
+      result = result.slice(0, 10);
+    }
+
+    /* final sort for chart: avg_dl DESC */
+    result.sort(function(a, b) { return (b.avg_dl || 0) - (a.avg_dl || 0); });
+    return result;
+  }
+
+  /* ── chart instance ── */
+  var _chartInst = null;
+
+  function _rebuild() {
+    var data = _applyFilters();
+
+    /* update count label */
+    var cntEl = document.getElementById('cmpCount');
+    if (cntEl) cntEl.textContent = data.length + ' ' + _TT.nServers;
+
+    /* resize wrapper */
+    var h = Math.max(data.length * 46, 120);
+    var wrap = document.getElementById('chartAvgWrap');
+    if (wrap) wrap.style.height = h + 'px';
+
+    if (_chartInst) { _chartInst.destroy(); _chartInst = null; }
+    var canvas = document.getElementById('chartAvg');
+    if (!canvas || !data.length) return;
+
+    /* labels: [flag + name, provider] for multi-line */
+    var labels   = data.map(function(s) {
+      return s.prov ? [s.flag + ' ' + s.name, s.prov] : [s.flag + ' ' + s.name];
+    });
+    var avgDl    = data.map(function(s) { return s.avg_dl; });
+    var avgUl    = data.map(function(s) { return s.avg_ul; });
+    var rangeD   = data.map(function(s) { return [s.min_dl, s.max_dl]; });
+
+    _chartInst = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: _TT.rangeLabel, data: rangeD,
+            backgroundColor: _chartRange, borderColor: _chartRangeBorder,
+            borderWidth: 1, borderRadius: 3, maxBarThickness: 28 },
+          { label: _TT.dlLabel, data: avgDl,
+            backgroundColor: _chartDl, borderColor: _chartDl,
+            borderWidth: 1, borderRadius: 3, maxBarThickness: 10 },
+          { label: _TT.ulLabel, data: avgUl,
+            backgroundColor: 'rgba(251,191,36,.68)', borderColor: _chartUl,
+            borderWidth: 1, borderRadius: 3, maxBarThickness: 10 },
+        ]
       },
-      {
-        label: '{{ t.chart_avg_dl }}',
-        data: _avgDl,
-        backgroundColor: _chartDl,
-        borderColor: _chartDl,
-        borderWidth: 1, borderRadius: 3, maxBarThickness: 10,
-      },
-      {
-        label: '{{ t.chart_avg_ul }}',
-        data: _avgUl,
-        backgroundColor: 'rgba(251,191,36,.68)',
-        borderColor: _chartUl,
-        borderWidth: 1, borderRadius: 3, maxBarThickness: 10,
-      },
-    ]
-  },
-  options: {
-    indexAxis: 'y',
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      x: { beginAtZero: true, grid: { color: _cGrid },
-           ticks: { color: _cTick, callback: v => v + ' Mbps', maxTicksLimit: 6 } },
-      y: { grid: { display: false }, ticks: { color: _cLabel, font: { size: 12 } } },
-    },
-    plugins: {
-      legend: { position: 'bottom', labels: { color: _cLabel, boxWidth: 12, padding: 14 } },
-      tooltip: {
-        callbacks: {
-          label: ctx => {
-            if (ctx.datasetIndex === 0) {
-              const v = ctx.raw;
-              return ` Plage DL : ${Array.isArray(v) ? v[0] + ' → ' + v[1] : v} Mbps`;
-            }
-            return ` ${ctx.dataset.label} : ${ctx.parsed.x.toFixed(1)} Mbps`;
-          }
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { beginAtZero: true, grid: { color: _cGrid },
+               ticks: { color: _cTick, callback: function(v) { return v + ' Mbps'; }, maxTicksLimit: 6 } },
+          y: { grid: { display: false }, ticks: { color: _cLabel, font: { size: 11 } } }
         },
-      },
-    },
-  },
-});
+        plugins: {
+          legend: { position: 'bottom', labels: { color: _cLabel, boxWidth: 12, padding: 14 } },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) {
+                if (ctx.datasetIndex === 0) {
+                  var v = ctx.raw;
+                  return ' Plage DL : ' + (Array.isArray(v) ? v[0] + ' → ' + v[1] : v) + ' Mbps';
+                }
+                return ' ' + ctx.dataset.label + ' : ' + ctx.parsed.x.toFixed(1) + ' Mbps';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  _rebuild();
+})();
 {% endif %}
 
 document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));

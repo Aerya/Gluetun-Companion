@@ -1067,7 +1067,8 @@ def history():
                    ROUND(MAX(st.download_mbps), 1) AS max_dl,
                    ROUND(AVG(st.upload_mbps),   1) AS avg_ul,
                    COUNT(*) AS cnt,
-                   vp.name AS vp_name
+                   vp.name AS vp_name,
+                   MAX(st.tested_at) AS last_tested_at
             FROM speed_tests st
             LEFT JOIN servers s        ON s.name  = st.server_name
             LEFT JOIN vpn_profiles vp  ON vp.id   = s.vpn_profile_id
