@@ -787,10 +787,26 @@ def _restore_interval_trigger() -> None:
 
 def run_benchmark(app):
     """Scheduled entry point — respects auto_benchmark and adaptive scheduling."""
-    from .database import get_setting
+    from .database import get_setting, get_db
     if get_setting('auto_benchmark', '1') != '1':
         logger.info('Auto benchmark disabled — skipping scheduled run')
         return
+
+    # Defence-in-depth: skip if any auto-rotating pool is active — pool rotation
+    # manages the schedule and the benchmark job should have been paused already.
+    try:
+        with get_db() as _db:
+            _pools = _db.execute(
+                'SELECT COUNT(*) AS n FROM rotation_pools WHERE enabled=1 AND auto_rotate=1'
+            ).fetchone()['n']
+        if _pools:
+            logger.info(
+                'Auto benchmark skipped — %d active rotation pool(s) manage the schedule',
+                _pools,
+            )
+            return
+    except Exception:
+        pass
 
     # ── Adaptive scheduling: shift to next favorable hour if needed ──────────
     # Only shift when the interval job still exists in the scheduler.
@@ -2294,11 +2310,31 @@ def _check_rotation_pools(app):
 
 def start_scheduler(app):
     global _scheduler
-    from .database import get_setting
+    from .database import get_setting, get_db
 
     with app.app_context():
         hours   = float(get_setting('test_interval_hours', '6'))
         enabled = get_setting('auto_benchmark', '1') == '1'
+
+        # If any auto-rotating pool is active, the pool rotation manages the
+        # schedule — the regular benchmark cycle must stay paused regardless
+        # of the auto_benchmark setting.  This handles restarts where
+        # auto_benchmark may still be '1' from before the pool was activated.
+        _active_pools = 0
+        try:
+            with get_db() as _db:
+                _active_pools = _db.execute(
+                    'SELECT COUNT(*) AS n FROM rotation_pools'
+                    ' WHERE enabled = 1 AND auto_rotate = 1'
+                ).fetchone()['n']
+        except Exception:
+            pass
+        if _active_pools:
+            enabled = False
+            # Keep the DB in sync so the UI checkbox state is consistent
+            if get_setting('auto_benchmark', '1') == '1':
+                from .database import set_setting
+                set_setting('auto_benchmark', '0')
 
     _scheduler = BackgroundScheduler(daemon=True)
     _scheduler.add_job(
@@ -2340,7 +2376,13 @@ def start_scheduler(app):
 
     if not enabled:
         _scheduler.pause_job('benchmark')
-        logger.info('Scheduler started — automatic benchmark DISABLED (manual trigger only)')
+        if _active_pools:
+            logger.info(
+                'Scheduler started — benchmark PAUSED (%d active rotation pool(s) — manual trigger still available)',
+                _active_pools,
+            )
+        else:
+            logger.info('Scheduler started — automatic benchmark DISABLED (manual trigger only)')
     else:
         logger.info('Scheduler started — benchmark every %.1f hours', hours)
 
