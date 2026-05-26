@@ -232,7 +232,7 @@ def dashboard():
         recent_pool_switches = db.execute(
             '''SELECT * FROM switches
                WHERE reason LIKE 'pool_rotation:%'
-               ORDER BY switched_at DESC LIMIT 5'''
+               ORDER BY switched_at DESC LIMIT 200'''
         ).fetchall()
         server_count = db.execute(
             'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'

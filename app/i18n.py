@@ -88,6 +88,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'dash_benchmark_count': 'benchmarks',
         'dash_pool_activity':   'Rotations de pool récentes',
         'dash_pool_changed':    'Bascule pool',
+        'dash_pool_col_type':   'Type',
+        'dash_pool_show':       'Afficher',
+        'dash_pool_entries':    'entrées',
+        'dash_pool_all':        'Toutes',
+        'dash_pool_search':     'Filtrer (pool, serveur…)',
+        'dash_pool_showing':    'Affichage de',
+        'dash_pool_of':         'sur',
+        'dash_pool_empty':      'Aucune rotation de pool.',
 
         # ── Shared benchmark pattern labels ──
         'chart_row_mbps':         'Mbps',
@@ -894,6 +902,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'dash_benchmark_count': 'benchmarks',
         'dash_pool_activity':   'Recent pool rotations',
         'dash_pool_changed':    'Pool switch',
+        'dash_pool_col_type':   'Type',
+        'dash_pool_show':       'Show',
+        'dash_pool_entries':    'entries',
+        'dash_pool_all':        'All',
+        'dash_pool_search':     'Filter (pool, server…)',
+        'dash_pool_showing':    'Showing',
+        'dash_pool_of':         'of',
+        'dash_pool_empty':      'No pool rotation.',
 
         # ── Shared benchmark pattern labels ──
         'chart_row_mbps':         'Mbps',

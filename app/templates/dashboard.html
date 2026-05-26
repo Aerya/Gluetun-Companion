@@ -208,26 +208,208 @@
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
 {% if recent_pool_switches %}
 <div class="card mb-3">
-  <div class="card-header py-2">
+  <div class="card-header py-2 d-flex align-items-center justify-content-between gap-2">
     <span class="fw-semibold" style="font-size:.9rem">
       <i class="bi bi-shuffle text-primary"></i> {{ t.dash_pool_activity }}
+      <span class="badge bg-secondary ms-1" id="poolTotalBadge" style="font-size:.7rem">{{ recent_pool_switches | length }}</span>
     </span>
+    <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button"
+            data-bs-toggle="collapse" data-bs-target="#poolActivityBody"
+            aria-expanded="true" aria-controls="poolActivityBody">
+      <i class="bi bi-chevron-up" id="poolChevron"></i>
+    </button>
   </div>
-  <div class="table-responsive">
-    <table class="table table-sm mb-0" style="font-size:.82rem">
-      <tbody>
-        {% for sw in recent_pool_switches %}
-        <tr>
-          <td><span class="badge bg-primary"><i class="bi bi-shuffle"></i> {{ t.dash_pool_changed }}</span></td>
-          <td>{{ server_flag(sw.from_server) }} <code>{{ sw.from_server or '—' }}</code> → {{ server_flag(sw.to_server) }} <code>{{ sw.to_server or '—' }}</code></td>
-          <td class="text-muted">{{ sw.reason.split(':')[1] if sw.reason and ':' in sw.reason else 'pool' }}</td>
-          <td class="text-end"><small class="text-muted">{{ sw.switched_at | localtime | truncate(16, True, '') }}</small></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+
+  <div class="collapse show" id="poolActivityBody">
+    {# ── Filter bar ── #}
+    <div class="px-3 pt-2 pb-2 border-bottom d-flex flex-wrap gap-2 align-items-end">
+      <input type="text" id="poolSearch" class="form-control form-control-sm"
+             style="max-width:210px" placeholder="{{ t.dash_pool_search }}">
+      <input type="date" id="poolFromDate" class="form-control form-control-sm" style="max-width:145px"
+             title="{{ t.hist_date_from }}">
+      <input type="date" id="poolToDate" class="form-control form-control-sm" style="max-width:145px"
+             title="{{ t.hist_date_to }}">
+      <div class="d-flex align-items-center gap-1 ms-auto">
+        <span class="text-muted" style="font-size:.82rem">{{ t.dash_pool_show }}</span>
+        <select id="poolPerPage" class="form-select form-select-sm" style="width:auto">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="20">20</option>
+          <option value="0">{{ t.dash_pool_all }}</option>
+        </select>
+        <span class="text-muted" style="font-size:.82rem">{{ t.dash_pool_entries }}</span>
+      </div>
+    </div>
+
+    {# ── Table ── #}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0" style="font-size:.82rem">
+        <thead>
+          <tr>
+            <th class="_psort" data-col="pool" style="cursor:pointer;user-select:none;white-space:nowrap">
+              Pool <span class="_picon text-muted" data-col="pool">⇅</span>
+            </th>
+            <th style="min-width:260px">{{ t.sw_col_from }} → {{ t.sw_col_to }}</th>
+            <th class="_psort" data-col="type" style="cursor:pointer;user-select:none;white-space:nowrap">
+              {{ t.dash_pool_col_type }} <span class="_picon text-muted" data-col="type">⇅</span>
+            </th>
+            <th class="_psort" data-col="ok" style="cursor:pointer;user-select:none;white-space:nowrap">
+              {{ t.cmn_status }} <span class="_picon text-muted" data-col="ok">⇅</span>
+            </th>
+            <th class="_psort" data-col="ts" style="cursor:pointer;user-select:none;white-space:nowrap">
+              {{ t.cmn_date }} <span class="_picon text-muted" data-col="ts">⇅</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody id="poolTableBody"></tbody>
+      </table>
+    </div>
+    <div class="px-3 py-2 border-top" style="font-size:.78rem">
+      <span class="text-muted" id="poolShowingInfo"></span>
+    </div>
+  </div>{# /collapse #}
 </div>
+
+<script>
+(function () {
+  /* ── raw data serialised by Jinja ── */
+  var _D = [
+    {% for sw in recent_pool_switches %}
+    {
+      pool:      {{ (sw.reason.split(':')[1] if sw.reason and ':' in sw.reason else '?') | tojson }},
+      type:      {{ ('manual' if sw.reason and sw.reason.endswith(':manual') else 'auto') | tojson }},
+      from_s:    {{ (sw.from_server or '—') | tojson }},
+      to_s:      {{ (sw.to_server   or '—') | tojson }},
+      flag_from: {{ server_flag(sw.from_server) | tojson }},
+      flag_to:   {{ server_flag(sw.to_server)   | tojson }},
+      ok:        {{ 1 if sw.success else 0 }},
+      date:      {{ ((sw.switched_at | localtime)[:16]) | tojson }},
+      ts:        {{ (sw.switched_at or '') | tojson }}
+    }{{ ',' if not loop.last }}
+    {% endfor %}
+  ];
+
+  /* ── i18n strings ── */
+  var _T = {
+    poolAuto:    {{ t.sw_reason_pool_auto   | tojson }},
+    poolManual:  {{ t.sw_reason_pool_manual | tojson }},
+    success:     {{ t.cmn_success | tojson }},
+    failure:     {{ t.cmn_failure | tojson }},
+    showing:     {{ t.dash_pool_showing | tojson }},
+    of:          {{ t.dash_pool_of      | tojson }},
+    entries:     {{ t.dash_pool_entries | tojson }},
+    empty:       {{ t.dash_pool_empty   | tojson }}
+  };
+
+  /* ── state ── */
+  var _col = 'ts', _dir = -1, _pp = 10, _q = '', _fd = '', _td = '';
+
+  function _esc(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function _filter(d) {
+    if (_q) {
+      var q = _q.toLowerCase();
+      if (d.pool.toLowerCase().indexOf(q) < 0 &&
+          d.from_s.toLowerCase().indexOf(q) < 0 &&
+          d.to_s.toLowerCase().indexOf(q) < 0) return false;
+    }
+    if (_fd && d.ts.slice(0,10) < _fd) return false;
+    if (_td && d.ts.slice(0,10) > _td) return false;
+    return true;
+  }
+
+  function _render() {
+    var filtered = _D.filter(_filter);
+    filtered.sort(function(a, b) {
+      var va = a[_col], vb = b[_col];
+      if (va < vb) return _dir;
+      if (va > vb) return -_dir;
+      return 0;
+    });
+    var total = filtered.length;
+    var rows  = _pp > 0 ? filtered.slice(0, _pp) : filtered;
+
+    var tbody = document.getElementById('poolTableBody');
+    if (!tbody) return;
+
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">' + _T.empty + '</td></tr>';
+    } else {
+      tbody.innerHTML = rows.map(function(sw) {
+        var typeBadge = sw.type === 'manual'
+          ? '<span class="badge" style="background:rgba(255,193,7,.15);color:#ffc107;border:1px solid rgba(255,193,7,.3)">' + _T.poolManual + '</span>'
+          : '<span class="badge" style="background:rgba(13,202,240,.1);color:var(--bs-info);border:1px solid rgba(13,202,240,.3)">'  + _T.poolAuto   + '</span>';
+        var statusBadge = sw.ok
+          ? '<span class="badge bg-success"><i class="bi bi-check2"></i> ' + _T.success + '</span>'
+          : '<span class="badge bg-danger"><i class="bi bi-x"></i> '       + _T.failure  + '</span>';
+        return '<tr>' +
+          '<td><span class="badge bg-primary" style="font-weight:500">' + _esc(sw.pool) + '</span></td>' +
+          '<td style="font-size:.8rem">' +
+            sw.flag_from + ' <code class="text-muted">'   + _esc(sw.from_s) + '</code>' +
+            ' <i class="bi bi-arrow-right text-muted" style="font-size:.7rem"></i> ' +
+            sw.flag_to   + ' <code class="text-success">' + _esc(sw.to_s)   + '</code>' +
+          '</td>' +
+          '<td>' + typeBadge   + '</td>' +
+          '<td>' + statusBadge + '</td>' +
+          '<td><small class="text-muted">' + _esc(sw.date) + '</small></td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    /* showing info */
+    var shown = _pp > 0 ? Math.min(total, _pp) : total;
+    var info  = document.getElementById('poolShowingInfo');
+    if (info) info.textContent = _T.showing + ' ' + shown + ' ' + _T.of + ' ' + total;
+
+    /* badge */
+    var badge = document.getElementById('poolTotalBadge');
+    if (badge) badge.textContent = total;
+
+    /* sort icons */
+    document.querySelectorAll('._picon').forEach(function(el) {
+      var c = el.getAttribute('data-col');
+      el.textContent = c === _col ? (_dir === 1 ? '▲' : '▼') : '⇅';
+    });
+  }
+
+  /* ── event bindings ── */
+  function _bind(id, evt, fn) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener(evt, fn);
+  }
+  _bind('poolSearch',   'input',  function() { _q  = this.value; _render(); });
+  _bind('poolFromDate', 'change', function() { _fd = this.value; _render(); });
+  _bind('poolToDate',   'change', function() { _td = this.value; _render(); });
+  _bind('poolPerPage',  'change', function() { _pp = parseInt(this.value); _render(); });
+
+  document.querySelectorAll('._psort').forEach(function(th) {
+    th.addEventListener('click', function() {
+      var c = this.getAttribute('data-col');
+      _col === c ? (_dir *= -1) : (_col = c, _dir = -1);
+      _render();
+    });
+  });
+
+  /* ── collapse chevron ── */
+  var body = document.getElementById('poolActivityBody');
+  if (body) {
+    body.addEventListener('show.bs.collapse', function() {
+      var ic = document.getElementById('poolChevron');
+      if (ic) { ic.className = 'bi bi-chevron-up'; }
+    });
+    body.addEventListener('hide.bs.collapse', function() {
+      var ic = document.getElementById('poolChevron');
+      if (ic) { ic.className = 'bi bi-chevron-down'; }
+    });
+  }
+
+  _render();
+})();
+</script>
 {% endif %}
 
 {# ROW 2 — Server ranking (horizontal bars, no Chart.js) ─────────────────── #}
