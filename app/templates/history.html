@@ -25,7 +25,7 @@
       {%- endif %}
     </strong>
     {% if last_bench_cycle.servers_tested %}&nbsp;·&nbsp;{{ last_bench_cycle.servers_tested }} {{ t.dash_servers_tested }}{% endif %}
-    {% if last_bench_cycle.best_server %}&nbsp;·&nbsp;<i class="bi bi-trophy-fill text-warning" style="font-size:.75rem"></i> {{ server_flag(last_bench_cycle.best_server) }} <code style="font-size:.75rem">{{ last_bench_cycle.best_server.split('=')[-1] if '=' in last_bench_cycle.best_server else last_bench_cycle.best_server }}</code>{% endif %}
+    {% if last_bench_cycle.best_server %}&nbsp;·&nbsp;<i class="bi bi-trophy-fill text-warning" style="font-size:.75rem"></i> {{ server_flag(last_bench_cycle.best_server) }} <code style="font-size:.75rem">{{ last_bench_cycle.best_server | strip_prefix }}</code>{% endif %}
   </span>
   {% endif %}
   <div class="ms-auto d-flex gap-2">

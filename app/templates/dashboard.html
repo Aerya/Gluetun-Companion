@@ -118,7 +118,7 @@
           <div class="text-muted mb-1" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
             <i class="bi bi-server"></i> {{ t.dash_active_server }}
           </div>
-          {{ server_flag(current_server) }} <code style="font-size:1rem;font-weight:600">{{ current_server or '—' }}</code>
+          {{ server_flag(current_server) }} <code style="font-size:1rem;font-weight:600">{{ current_server | strip_prefix or '—' }}</code>
           {% if active_profile %}
           <div style="font-size:.76rem;color:var(--bs-secondary-color);margin-top:.2rem">
             <i class="bi bi-person-badge"></i> {{ active_profile.profile_name }}

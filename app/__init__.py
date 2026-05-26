@@ -130,6 +130,14 @@ def create_app():
 
     app.jinja_env.filters['localtime'] = _utc_to_local
 
+    def _strip_prefix(label: str | None) -> str:
+        """Strip Gluetun filter-var prefix: 'SERVER_NAMES=Menkent' → 'Menkent'."""
+        if not label:
+            return label or ''
+        return label.split('=', 1)[-1].strip() if '=' in label else label.strip()
+
+    app.jinja_env.filters['strip_prefix'] = _strip_prefix
+
     from .csrf import generate_csrf, validate_csrf
     app.jinja_env.globals['csrf_token'] = generate_csrf
 
