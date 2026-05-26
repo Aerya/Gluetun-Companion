@@ -772,6 +772,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notice_new_features_score_b':   'Sur la page <strong>/servers</strong>, le bouton "Meilleur pour ce profil" affichait toujours le même serveur quel que soit le profil sélectionné. C\'est corrigé : le scoring utilise maintenant les données disponibles (y compris les quick checks) au lieu de tirer à zéro. Si les métriques upload/latence sont absentes, un avertissement s\'affiche sous les boutons de profil.',
         'notice_new_features_check':     'J\'ai lu et pris note',
         'notice_new_features_close':     'Fermer',
+        'notice_testers_title':      'Message pour les testeurs',
+        'notice_testers_body':       'Quand vous avez un moment, merci d\'aller lire la discussion GitHub liée aux retours de test. Si c\'est plus simple, vous pouvez aussi rejoindre le Discord ; un canal privé pourra être créé pour échanger plus facilement.',
+        'notice_testers_discussion': 'Lire la discussion GitHub',
+        'notice_testers_discord':    'Rejoindre le Discord',
+        'notice_testers_check':      'J\'ai compris, je lirai la discussion quand je peux',
+        'notice_testers_close':      'Fermer',
 
         # ── Jitter / Packet Loss ──
         'stab_col_header':        'Stabilité',
@@ -1617,6 +1623,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'notice_new_features_score_b':   'On the <strong>/servers</strong> page, the "Best for this profile" badge always showed the same server regardless of the selected profile. Fixed: scoring now uses available data (including quick checks) instead of falling back to zero. If upload/latency metrics are missing, a warning is shown below the profile buttons.',
         'notice_new_features_check':     'I\'ve read and noted this',
         'notice_new_features_close':     'Close',
+        'notice_testers_title':      'Message for testers',
+        'notice_testers_body':       'When you have a moment, please read the GitHub discussion for test feedback. If Discord is easier, you can also join there; a private channel can be created to discuss things more comfortably.',
+        'notice_testers_discussion': 'Read the GitHub discussion',
+        'notice_testers_discord':    'Join Discord',
+        'notice_testers_check':      'I understand, I will read the discussion when I can',
+        'notice_testers_close':      'Close',
 
         # ── Jitter / Packet Loss ──
         'stab_col_header':        'Stability',

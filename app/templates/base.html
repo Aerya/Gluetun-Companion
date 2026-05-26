@@ -244,41 +244,45 @@
 {% endif %}{# _g_has_wg_profiles #}
 
 {# ── Notice : nouveautés testeurs v2 ────────────────────────────────────────
-   Shown once per browser (localStorage key notice_new_features_v2).
+   Shown once per browser (localStorage key notice_testers_discussion_v1).
    Requires checking the checkbox before the Close button becomes active.
    ────────────────────────────────────────────────────────────────────────── #}
-<div class="modal fade" id="noticeNewFeaturesModal" tabindex="-1"
+<div class="modal fade" id="noticeTestersModal" tabindex="-1"
      data-bs-backdrop="static" data-bs-keyboard="false"
-     aria-labelledby="noticeNewFeaturesLabel" aria-modal="true" role="dialog">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
+     aria-labelledby="noticeTestersLabel" aria-modal="true" role="dialog">
+  <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-info">
       <div class="modal-header border-info pb-2">
-        <h5 class="modal-title fw-bold text-info" id="noticeNewFeaturesLabel">
-          {{ t.notice_new_features_title }}
+        <h5 class="modal-title fw-bold text-info" id="noticeTestersLabel">
+          {{ t.notice_testers_title }}
         </h5>
       </div>
-      <div class="modal-body" style="font-size:.88rem">
+      <div class="modal-body" style="font-size:.9rem">
 
-        <h6 class="fw-semibold mb-1">{{ t.notice_new_features_pools_h }}</h6>
-        <p class="mb-3">{{ t.notice_new_features_pools_b | safe }}</p>
-
-        <h6 class="fw-semibold mb-1">{{ t.notice_new_features_wg_h }}</h6>
-        <p class="mb-3">{{ t.notice_new_features_wg_b | safe }}</p>
-
-        <h6 class="fw-semibold mb-1">{{ t.notice_new_features_score_h }}</h6>
-        <p class="mb-3">{{ t.notice_new_features_score_b | safe }}</p>
-
-        <div class="form-check mt-2">
-          <input type="checkbox" class="form-check-input" id="noticeNewFeaturesCheck">
-          <label class="form-check-label" for="noticeNewFeaturesCheck">
-            {{ t.notice_new_features_check }}
+        <p>{{ t.notice_testers_body | safe }}</p>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <a href="https://github.com/Aerya/Gluetun-Companion/discussions/9"
+             target="_blank" rel="noopener"
+             class="btn btn-sm btn-outline-info">
+            <i class="bi bi-github"></i> {{ t.notice_testers_discussion }}
+          </a>
+          <a href="https://discord.gg/RFJB5v2ttz"
+             target="_blank" rel="noopener"
+             class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-discord"></i> {{ t.notice_testers_discord }}
+          </a>
+        </div>
+        <div class="form-check">
+          <input type="checkbox" class="form-check-input" id="noticeTestersCheck">
+          <label class="form-check-label" for="noticeTestersCheck">
+            {{ t.notice_testers_check }}
           </label>
         </div>
       </div>
       <div class="modal-footer border-0 pt-0">
         <button type="button" class="btn btn-info fw-semibold text-dark"
-                id="noticeNewFeaturesClose" disabled>
-          {{ t.notice_new_features_close }}
+                id="noticeTestersClose" disabled>
+          {{ t.notice_testers_close }}
         </button>
       </div>
     </div>
@@ -286,12 +290,12 @@
 </div>
 <script>
 (function () {
-  const NOTICE_KEY = 'notice_new_features_v2';
+  const NOTICE_KEY = 'notice_testers_discussion_v1';
   if (localStorage.getItem(NOTICE_KEY)) return;          // already dismissed
   document.addEventListener('DOMContentLoaded', function () {
-    const modal    = new bootstrap.Modal(document.getElementById('noticeNewFeaturesModal'));
-    const check    = document.getElementById('noticeNewFeaturesCheck');
-    const closeBtn = document.getElementById('noticeNewFeaturesClose');
+    const modal    = new bootstrap.Modal(document.getElementById('noticeTestersModal'));
+    const check    = document.getElementById('noticeTestersCheck');
+    const closeBtn = document.getElementById('noticeTestersClose');
     check.addEventListener('change', function () {
       closeBtn.disabled = !this.checked;
     });
