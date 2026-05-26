@@ -1284,6 +1284,10 @@ def switches():
 def settings():
     if request.method == 'POST':
         action = request.form.get('action')
+        wants_json = (
+            request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or 'application/json' in request.headers.get('Accept', '')
+        )
 
         if action == 'save_planning':
             active_auto_pools = _active_auto_pool_count()
@@ -1559,6 +1563,16 @@ def settings():
             except ValueError:
                 pass
             flash_t('flash_settings_saved', 'success')
+
+        if wants_json:
+            flashes = session.pop('_flashes', [])
+            category, message = flashes[-1] if flashes else ('success', get_t().get('flash_settings_saved', 'Saved.'))
+            return jsonify({
+                'ok': category not in ('danger', 'error'),
+                'category': category,
+                'message': message,
+                'action': action,
+            })
 
         return redirect(url_for('main.settings'))
 

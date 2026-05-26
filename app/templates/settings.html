@@ -145,6 +145,9 @@
     stroke: rgba(125, 133, 144, .35);
     stroke-width: .7;
   }
+  .settings-map-base {
+    opacity: .92;
+  }
   .settings-map-point {
     fill: var(--bs-info);
     opacity: .82;
@@ -355,17 +358,15 @@
     </div>
   </div>
 
+  <div id="settings-save-feedback" class="position-fixed end-0 top-0 p-3"
+       style="z-index:1080;max-width:360px;pointer-events:none"></div>
+
   {% macro settings_world_map() %}
   <div class="settings-help-card">
     <h6><i class="bi bi-globe-europe-africa me-1"></i>{{ t.set_side_world_map }}</h6>
     <div class="settings-world-map">
       <svg viewBox="0 0 1000 520" role="img" aria-label="{{ t.set_side_world_map }}">
-        <path class="settings-map-land" d="M115 145 C165 95 250 105 292 155 C330 200 300 250 348 290 C285 310 238 285 195 245 C148 248 112 218 115 145Z"/>
-        <path class="settings-map-land" d="M250 300 C300 315 330 365 315 430 C275 425 248 382 250 300Z"/>
-        <path class="settings-map-land" d="M440 130 C520 92 610 115 682 160 C735 194 785 190 845 235 C790 255 710 245 650 220 C590 270 515 255 462 220 C430 195 405 160 440 130Z"/>
-        <path class="settings-map-land" d="M520 250 C580 245 630 288 642 350 C610 420 555 420 525 350 C500 305 492 270 520 250Z"/>
-        <path class="settings-map-land" d="M760 315 C825 300 885 332 910 390 C858 428 790 398 760 315Z"/>
-        <path class="settings-map-land" d="M705 115 C760 95 815 112 848 150 C805 172 745 165 705 115Z"/>
+        <image class="settings-map-base" href="{{ url_for('static', filename='world-map.svg') }}" x="0" y="0" width="1000" height="520"/>
         {% for p in settings_sidebar.map_points %}
           {% set x = ((p.lon + 180) / 360 * 1000) %}
           {% set y = ((90 - p.lat) / 180 * 520) %}
@@ -2128,7 +2129,7 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 </div>
 
 <script>
-(function arrangeSettingsTabs() {
+function arrangeSettingsTabs() {
   const source = document.getElementById('settings-source');
   if (!source) return;
 
@@ -2140,6 +2141,7 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
     source.querySelector(`.card:has(form#${id})`);
   const move = (target, el) => { if (el) target.appendChild(el); };
   const pane = id => document.getElementById(id);
+  const byId = id => document.getElementById(id);
 
   [
     form('save_planning'),
@@ -2147,6 +2149,7 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
     form('save_vpn'),
     form('sidecar'),
     cardWithForm('form-pause-bench'),
+    byId('card-grafana'),
   ].forEach(el => move(pane('settings-measure-grid'), el));
 
   [
@@ -2171,16 +2174,17 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
     cardWithAction('credentials'),
     source.querySelector('#card-export-import'),
   ].forEach(el => move(pane('settings-maintenance-grid'), el));
-})();
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', arrangeSettingsTabs);
+} else {
+  arrangeSettingsTabs();
+}
 </script>
 
 </div>{# end settings-board #}
 
-{# ══════════════════════════════════════════════════════════════════════════
-   Dashboard Grafana — pleine largeur sous la grille
-   ══════════════════════════════════════════════════════════════════════════ #}
-<div class="mt-2">
-  <div class="card p-4">
+<div id="card-grafana" class="card p-4">
     <h6 class="fw-bold mb-1">
       <i class="bi bi-bar-chart-line"></i> {{ t.set_grafana_title }}
     </h6>
@@ -2193,7 +2197,6 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
     <p class="text-muted mb-0" style="font-size:.8rem">
       <i class="bi bi-info-circle me-1"></i>{{ t.set_grafana_metrics_hint }}
     </p>
-  </div>
 </div>
 
 {% endblock %}
@@ -2201,6 +2204,96 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
 {% block scripts %}
 {% set _bench_method = 'sidecar' if cfg.sidecar_mode == '1' else 'proxy' %}
 <script>
+// ── Settings tabs + AJAX saves ───────────────────────────────────────────
+(function () {
+  const settingsPath = new URL('{{ url_for('main.settings') }}', window.location.origin).pathname;
+  const storageKey = 'gluetun_companion_settings_tab';
+  const feedback = () => document.getElementById('settings-save-feedback');
+  const savedText = {{ t.flash_settings_saved | tojson }};
+
+  function showSettingsFeedback(message, category) {
+    const box = feedback();
+    if (!box) return;
+    const level = category || 'success';
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${level} alert-dismissible fade show shadow-sm py-2 mb-2`;
+    alert.style.pointerEvents = 'auto';
+    alert.innerHTML = `
+      <span>${message || savedText}</span>
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    box.appendChild(alert);
+    setTimeout(() => {
+      if (!alert.isConnected) return;
+      const inst = bootstrap.Alert.getOrCreateInstance(alert);
+      inst.close();
+    }, 3500);
+  }
+
+  function rememberActiveTab() {
+    const active = document.querySelector('#settings-tabs .nav-link.active');
+    if (active && active.dataset.bsTarget) {
+      localStorage.setItem(storageKey, active.dataset.bsTarget);
+    }
+  }
+
+  document.querySelectorAll('#settings-tabs [data-bs-toggle="tab"]').forEach(tab => {
+    tab.addEventListener('shown.bs.tab', rememberActiveTab);
+  });
+
+  const target = localStorage.getItem(storageKey);
+  if (target) {
+    const tab = Array.from(document.querySelectorAll('#settings-tabs [data-bs-toggle="tab"]'))
+      .find(el => el.dataset.bsTarget === target);
+    if (tab) bootstrap.Tab.getOrCreateInstance(tab).show();
+  }
+
+  document.addEventListener('submit', async event => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    if ((form.method || 'get').toLowerCase() !== 'post') return;
+
+    const formAction = new URL(form.getAttribute('action') || window.location.href, window.location.href);
+    if (formAction.pathname !== settingsPath) return;
+    if ((form.enctype || '').toLowerCase() === 'multipart/form-data') return;
+
+    const actionInput = form.querySelector('input[name="action"]');
+    const action = actionInput ? actionInput.value : '';
+    if (!action || action === 'wg_profile_delete') return;
+
+    event.preventDefault();
+    rememberActiveTab();
+
+    const submitter = event.submitter;
+    const oldHtml = submitter ? submitter.innerHTML : '';
+    if (submitter) {
+      submitter.disabled = true;
+      submitter.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${submitter.textContent.trim() || savedText}`;
+    }
+
+    try {
+      const response = await fetch(formAction.href, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      showSettingsFeedback(payload.message || savedText, payload.category || (payload.ok ? 'success' : 'danger'));
+    } catch (err) {
+      showSettingsFeedback(err.message || 'Erreur', 'danger');
+    } finally {
+      if (submitter) {
+        submitter.disabled = false;
+        submitter.innerHTML = oldHtml;
+      }
+    }
+  });
+})();
+
 // ── Profile selector: show/hide per-profile hint ─────────────────────────
 (function () {
   const sel = document.getElementById('active_profile');
