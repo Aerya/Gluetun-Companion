@@ -60,7 +60,7 @@
         {% for sw in recent_pool_switches %}
         <tr>
           <td><span class="badge bg-primary"><i class="bi bi-shuffle"></i> {{ t.hist_pool_switch }}</span></td>
-          <td><code>{{ sw.from_server or '—' }}</code> → <code>{{ sw.to_server or '—' }}</code></td>
+          <td>{{ server_flag(sw.from_server) }} <code>{{ sw.from_server or '—' }}</code> → {{ server_flag(sw.to_server) }} <code>{{ sw.to_server or '—' }}</code></td>
           <td class="text-muted">{{ sw.reason.split(':')[1] if sw.reason and ':' in sw.reason else 'pool' }}</td>
           <td class="text-end"><small class="text-muted">{{ sw.switched_at | localtime | truncate(16, True, '') }}</small></td>
         </tr>
@@ -159,7 +159,10 @@
   {% for s in per_server[:6] %}
   <div class="col-6 col-md-4 col-xl-2">
     <div class="card p-3 h-100">
-      <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ s.server_name }}">{{ s.server_name }}</div>
+      <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ s.server_name }}">{{ server_flag(s.server_name) }} {{ s.server_name }}</div>
+      {% if s.vp_name %}
+      <div style="font-size:.65rem;color:var(--bs-secondary-color);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ s.vp_name }}">{{ s.vp_name }}</div>
+      {% endif %}
       {% set cls = 'speed-good' if s.avg_dl > 50 else ('speed-ok' if s.avg_dl > 15 else 'speed-bad') %}
       <div class="fw-bold {{ cls }}" style="font-size:1.25rem">{{ s.avg_dl }} Mbps</div>
       <div class="text-muted" style="font-size:.75rem">{{ t.hist_avg }} · {{ s.cnt }} {{ t.hist_tests }}</div>

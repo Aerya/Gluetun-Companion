@@ -1054,14 +1054,18 @@ def history():
             params + [_HISTORY_PER_PAGE, offset],
         ).fetchall()
         per_server = db.execute('''
-            SELECT server_name,
-                   ROUND(AVG(download_mbps), 1) AS avg_dl,
-                   ROUND(MIN(download_mbps), 1) AS min_dl,
-                   ROUND(MAX(download_mbps), 1) AS max_dl,
-                   ROUND(AVG(upload_mbps),   1) AS avg_ul,
-                   COUNT(*) AS cnt
-            FROM speed_tests WHERE success = 1
-            GROUP BY server_name
+            SELECT st.server_name,
+                   ROUND(AVG(st.download_mbps), 1) AS avg_dl,
+                   ROUND(MIN(st.download_mbps), 1) AS min_dl,
+                   ROUND(MAX(st.download_mbps), 1) AS max_dl,
+                   ROUND(AVG(st.upload_mbps),   1) AS avg_ul,
+                   COUNT(*) AS cnt,
+                   vp.name AS vp_name
+            FROM speed_tests st
+            LEFT JOIN servers s        ON s.name  = st.server_name
+            LEFT JOIN vpn_profiles vp  ON vp.id   = s.vpn_profile_id
+            WHERE st.success = 1
+            GROUP BY st.server_name
             ORDER BY avg_dl DESC
         ''').fetchall()
         server_names = [r['server_name'] for r in db.execute(
