@@ -9,6 +9,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 logger = logging.getLogger(__name__)
 _scheduler: BackgroundScheduler | None = None
 _lock = threading.Lock()
+_current_test_trigger: str | None = None
 
 # ── Stop-benchmark signal ──────────────────────────────────────────────────
 # Set via request_stop() from the REST API; cleared at the start of every
@@ -830,8 +831,9 @@ def run_benchmark(app):
             )
             return
 
+    observation = get_setting('continuous_observation', '0') == '1'
     with _lock:
-        _do_benchmark(app)
+        _do_benchmark(app, observation=observation)
 
     # Restore IntervalTrigger in case we were running from a one-shot DateTrigger
     _restore_interval_trigger()
@@ -843,14 +845,14 @@ def run_benchmark_now(app):
         _do_benchmark(app, skip_quick_check=True)
 
 
-def _apply_benchmark_scope(servers: list) -> list:
+def _apply_benchmark_scope(servers: list, observation: bool = False) -> list:
     """Limit a full benchmark to an explainable, configurable working set."""
     from datetime import datetime, timedelta
     from .database import get_db, get_setting, get_stability_all
     from .profiles import score_servers
 
     mode = get_setting('benchmark_scope_mode', 'smart')
-    if mode != 'smart' or not servers:
+    if (mode != 'smart' and not observation) or not servers:
         return servers
 
     def _as_int(key: str, default: int, lo: int, hi: int) -> int:
@@ -859,13 +861,33 @@ def _apply_benchmark_scope(servers: list) -> list:
         except ValueError:
             return default
 
+    def _rotating_slice(rows: list[dict], quota: int) -> list[dict]:
+        if quota <= 0 or not rows:
+            return []
+        rows = sorted(rows, key=lambda r: r['name'])
+        if len(rows) <= quota:
+            return rows
+        offset = datetime.utcnow().toordinal() % len(rows)
+        rotated = rows[offset:] + rows[:offset]
+        return rotated[:quota]
+
+    def _score_pick(rows: list[dict], quota: int) -> list[str]:
+        if quota <= 0 or not rows:
+            return []
+        scores = score_servers(rows, active_profile, get_stability_all())
+        return [
+            name for name, _score in sorted(
+                scores.items(), key=lambda item: item[1], reverse=True
+            )[:quota]
+        ]
+
     top_n = _as_int('benchmark_scope_top_n', 50, 0, 500)
     untested_n = _as_int('benchmark_scope_untested_n', 10, 0, 200)
     refresh_days = _as_int('benchmark_scope_refresh_days', 14, 1, 365)
     refresh_n = _as_int('benchmark_scope_refresh_n', 20, 0, 500)
     active_profile = get_setting('active_profile', 'balanced')
 
-    if top_n <= 0 and untested_n <= 0 and refresh_n <= 0:
+    if not observation and top_n <= 0 and untested_n <= 0 and refresh_n <= 0:
         logger.info('Benchmark scope=smart but all quotas are 0 — keeping full list')
         return servers
 
@@ -888,14 +910,60 @@ def _apply_benchmark_scope(servers: list) -> list:
     known_rows = [r for r in stats.values() if (r.get('full_tests') or 0) > 0]
     untested_rows = [r for r in stats.values() if not (r.get('full_tests') or 0)]
 
+    if observation:
+        target_tests = _as_int('observation_target_tests', 11, 2, 50)
+        confirm_tests = _as_int('observation_confirm_tests', 3, 2, 20)
+        confirm_tests = min(confirm_tests, target_tests)
+        explore_n = _as_int('observation_explore_n', 20, 0, 500)
+        confirm_n = _as_int('observation_confirm_n', 20, 0, 500)
+        finalist_n = _as_int('observation_finalist_n', 10, 0, 500)
+
+        selected: set[str] = set()
+        selected.update(r['name'] for r in _rotating_slice(untested_rows, explore_n))
+
+        confirm_rows = [
+            r for r in known_rows
+            if 0 < (r.get('full_tests') or 0) < confirm_tests
+        ]
+        selected.update(_score_pick(confirm_rows, confirm_n))
+
+        finalist_rows = [
+            r for r in known_rows
+            if confirm_tests <= (r.get('full_tests') or 0) < target_tests
+        ]
+        selected.update(_score_pick(finalist_rows, finalist_n))
+
+        if refresh_n > 0:
+            cutoff = datetime.utcnow() - timedelta(days=refresh_days)
+            mature_rows = [
+                r for r in known_rows
+                if (r.get('full_tests') or 0) >= target_tests and r.get('last_full_test')
+            ]
+            stale = []
+            for r in mature_rows:
+                try:
+                    last_dt = datetime.strptime(str(r['last_full_test'])[:19], '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    continue
+                if last_dt < cutoff:
+                    stale.append((last_dt, r))
+            selected.update(r['name'] for _last_dt, r in sorted(stale)[:refresh_n])
+
+        if not selected:
+            logger.info('Continuous observation selected no server - falling back to smart scope')
+        else:
+            scoped = [s for s in servers if s['name'] in selected]
+            logger.info(
+                'Continuous observation scope: selected %d/%d server(s) '
+                '(explore=%d, confirm<%d=%d, finalists<%d=%d, refresh>%dd=%d, profile=%s)',
+                len(scoped), len(servers), explore_n, confirm_tests, confirm_n,
+                target_tests, finalist_n, refresh_days, refresh_n, active_profile,
+            )
+            return scoped
+
     selected: set[str] = set()
     if top_n > 0 and known_rows:
-        scores = score_servers(known_rows, active_profile, get_stability_all())
-        selected.update(
-            name for name, _score in sorted(
-                scores.items(), key=lambda item: item[1], reverse=True
-            )[:top_n]
-        )
+        selected.update(_score_pick(known_rows, top_n))
 
     if untested_n > 0 and untested_rows:
         selected.update(r['name'] for r in sorted(untested_rows, key=lambda r: r['name'])[:untested_n])
@@ -929,7 +997,8 @@ def _apply_benchmark_scope(servers: list) -> list:
     return scoped
 
 
-def _do_benchmark(app, skip_quick_check: bool = False):
+def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False):
+    global _current_test_trigger
     import json as _json
     from .database import get_db, get_setting, set_setting
     from .gluetun import (
@@ -941,6 +1010,7 @@ def _do_benchmark(app, skip_quick_check: bool = False):
     )
 
     _stop_event.clear()   # reset any leftover stop signal from a previous run
+    _current_test_trigger = 'observation' if observation else None
     set_setting('benchmark_running', '1')
     cycle_start = time.time()
 
@@ -1033,7 +1103,7 @@ def _do_benchmark(app, skip_quick_check: bool = False):
     quick_check_mode      = get_setting('quick_check_mode', '0') == '1'
     quick_check_threshold = float(get_setting('quick_check_threshold', '15'))
     qc_info: dict | None = None   # populated if quick check fails and triggers full bench
-    if quick_check_mode and not skip_quick_check:
+    if quick_check_mode and not skip_quick_check and not observation:
         logger.info('Quick check mode enabled (threshold ±%.0f%%) — testing current server first', quick_check_threshold)
         qc_passed, qc_server, qc_dl, qc_last_dl = _quick_check(
             container=container,
@@ -1062,7 +1132,7 @@ def _do_benchmark(app, skip_quick_check: bool = False):
     # Containers to pause before benchmark and restart after
     # (e.g. torrent clients that would distort speed measurements)
     _pause_raw = _json.loads(get_setting('pause_bench_containers', '[]'))
-    pause_containers: list[str] = [c.strip() for c in _pause_raw if c and c.strip()]
+    pause_containers: list[str] = [] if observation else [c.strip() for c in _pause_raw if c and c.strip()]
     pause_exclude = set(pause_containers)  # passed to restart functions
     pull_post_switch_set = set(_json.loads(get_setting('pull_post_switch_containers', '[]')))
     pull_pause_bench_set = set(_json.loads(get_setting('pull_pause_bench_containers', '[]')))
@@ -1076,7 +1146,13 @@ def _do_benchmark(app, skip_quick_check: bool = False):
         _stopped = stop_containers(pause_containers)
         logger.info('Paused %d/%d container(s)', len(_stopped), len(pause_containers))
 
-    logger.info('=== Benchmark cycle started ===')
+    if observation:
+        auto_sw = False
+        logger.info(
+            '=== Continuous observation cycle started (no quick check, no paused containers, no auto-switch) ==='
+        )
+    else:
+        logger.info('=== Benchmark cycle started ===')
 
     try:
         with get_db() as db:
@@ -1168,7 +1244,7 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                     )
                 servers = _kept
 
-        servers = _apply_benchmark_scope(servers)
+        servers = _apply_benchmark_scope(servers, observation=observation)
 
         if not servers:
             logger.info('No servers left after pre-filters — skipping benchmark')
@@ -1365,6 +1441,7 @@ def _do_benchmark(app, skip_quick_check: bool = False):
             )
 
         best_server_label: str | None = None
+        best_server_name: str | None = None
         if auto_sw and results:
             current_pct      = float(get_setting('weighted_score_current_pct', '65'))
             stability_weight = float(get_setting('stability_weight', '30'))
@@ -1624,7 +1701,7 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                 (duration_secs, len(results), best_server_label, cycle_id),
             )
 
-        if _notif_bench_end and results:
+        if _notif_bench_end and results and not observation:
             _best_dl = next(
                 (r['dl'] for r in results if r.get('server') == best_server_name),
                 None,
@@ -1690,6 +1767,7 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                 len(_resumed), len(pause_containers),
             )
         set_setting('benchmark_running', '0')
+        _current_test_trigger = None
         set_setting('benchmark_current_server', '')
 
 
@@ -1912,6 +1990,8 @@ def _record_test(
     dl_single_mbps: float | None = None,
 ):
     from .database import get_db
+    if trigger is None:
+        trigger = _current_test_trigger
     with get_db() as db:
         db.execute(
             '''INSERT INTO speed_tests

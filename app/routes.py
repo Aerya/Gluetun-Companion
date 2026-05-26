@@ -74,6 +74,8 @@ _EXPORT_KEYS = frozenset({
     'quick_check_mode', 'quick_check_threshold', 'scoring_window_days', 'outlier_detection',
     'benchmark_scope_mode', 'benchmark_scope_top_n', 'benchmark_scope_untested_n',
     'benchmark_scope_refresh_days', 'benchmark_scope_refresh_n',
+    'continuous_observation', 'observation_target_tests', 'observation_explore_n',
+    'observation_confirm_tests', 'observation_confirm_n', 'observation_finalist_n',
     'weighted_score_current_pct',
     'stability_weight', 'adaptive_scheduling', 'adaptive_auto_shift',
     'notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
@@ -246,7 +248,7 @@ def dashboard():
         server_count = db.execute(
             'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'
         ).fetchone()['n']
-        benchmark_estimated_count = _benchmark_scope_estimated_count()
+        benchmark_estimated_count = _benchmark_scope_estimated_count(observation=False)
         bench_est = _bench_estimate(benchmark_estimated_count)
         server_stats = db.execute('''
             SELECT st.server_name,
@@ -332,6 +334,7 @@ def dashboard():
         benchmark_running=benchmark_running,
         sidecar_mode=get_setting('sidecar_mode', '1'),
         benchmark_scope_mode=get_setting('benchmark_scope_mode', 'smart'),
+        continuous_observation=get_setting('continuous_observation', '0'),
         bench_include_types=_dash_include_types,
         airvpn_bench_filter_active=(_dash_airvpn_max_load > 0 or _dash_airvpn_max_users > 0),
         last_cycle=last_cycle,
@@ -1304,12 +1307,18 @@ def settings():
                 ('benchmark_scope_untested_n',   '10',  0, 200),
                 ('benchmark_scope_refresh_days', '14',  1, 365),
                 ('benchmark_scope_refresh_n',    '20',  0, 500),
+                ('observation_target_tests',     '11',  2, 50),
+                ('observation_explore_n',        '20',  0, 500),
+                ('observation_confirm_tests',    '3',   2, 20),
+                ('observation_confirm_n',        '20',  0, 500),
+                ('observation_finalist_n',       '10',  0, 500),
             ):
                 try:
                     _v = int(request.form.get(_key, _default) or _default)
                     set_setting(_key, str(max(_min_v, min(_v, _max_v))))
                 except ValueError:
                     set_setting(_key, _default)
+            set_setting('continuous_observation', '1' if request.form.get('continuous_observation') else '0')
             # Bench pre-filters
             _types_selected = request.form.getlist('bench_include_types')
             _valid_types = {'name', 'country', 'city', 'region', 'hostname'}
@@ -1603,6 +1612,12 @@ def settings():
         'benchmark_scope_untested_n':   get_setting('benchmark_scope_untested_n', '10'),
         'benchmark_scope_refresh_days': get_setting('benchmark_scope_refresh_days', '14'),
         'benchmark_scope_refresh_n':    get_setting('benchmark_scope_refresh_n', '20'),
+        'continuous_observation':       get_setting('continuous_observation', '0'),
+        'observation_target_tests':      get_setting('observation_target_tests', '11'),
+        'observation_explore_n':         get_setting('observation_explore_n', '20'),
+        'observation_confirm_tests':     get_setting('observation_confirm_tests', '3'),
+        'observation_confirm_n':         get_setting('observation_confirm_n', '20'),
+        'observation_finalist_n':        get_setting('observation_finalist_n', '10'),
         'adaptive_scheduling':          get_setting('adaptive_scheduling', '0'),
         'adaptive_auto_shift':          get_setting('adaptive_auto_shift', '0'),
         'scoring_window_days':          get_setting('scoring_window_days', '30'),
@@ -1647,7 +1662,9 @@ def settings():
     from .catalogue import catalogue_stats
     adaptive_stats = get_hourly_benchmark_stats()
     active_auto_pools = _active_auto_pool_count()
-    bench_est_settings = _bench_estimate(_benchmark_scope_estimated_count())
+    bench_est_settings = _bench_estimate(
+        _benchmark_scope_estimated_count(observation=(cfg['continuous_observation'] == '1'))
+    )
     return render_template(
         'settings.html',
         cfg=cfg,
@@ -2574,7 +2591,7 @@ def _bench_estimate(server_count: int = 0) -> dict:
     }
 
 
-def _benchmark_scope_estimated_count() -> int:
+def _benchmark_scope_estimated_count(observation: bool = False) -> int:
     """Best-effort estimate of how many servers the next full benchmark will test."""
     try:
         with get_db() as db:
@@ -2613,6 +2630,14 @@ def _benchmark_scope_estimated_count() -> int:
                         continue
                     kept.append(r)
                 rows = kept
+            if observation:
+                cap = (
+                    int(get_setting('observation_explore_n', '20') or '20')
+                    + int(get_setting('observation_confirm_n', '20') or '20')
+                    + int(get_setting('observation_finalist_n', '10') or '10')
+                    + int(get_setting('benchmark_scope_refresh_n', '20') or '20')
+                )
+                return min(len(rows), max(0, cap))
             if get_setting('benchmark_scope_mode', 'smart') == 'smart':
                 cap = (
                     int(get_setting('benchmark_scope_top_n', '50') or '50')

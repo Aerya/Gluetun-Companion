@@ -436,6 +436,21 @@ Les quotas configurables sont rangés dans **Options avancées de la sélection 
 
 Mettre un quota à `0` désactive cette partie. Le dashboard rappelle le mode utilisé, le nombre de serveurs estimé et le mode de test (`sidecar` ou `proxy`) avant lancement manuel.
 
+#### Observation continue pyramidale
+
+Activer via **Paramètres → Planification & Cycle → Combien de serveurs tester → Observation continue pyramidale**.
+
+Ce mode sert à rendre les profils d'usage sérieux sans lancer un benchmark gigantesque à chaque fois. Il transforme le cycle automatique en collecte progressive :
+
+- **Exploration** — teste un lot de serveurs jamais mesurés, par rotation quotidienne dans la liste.
+- **Confirmation** — reprend les serveurs qui ont déjà quelques mesures, jusqu'au seuil “confirmé”.
+- **Finalistes** — concentre les mesures sur les meilleurs candidats qui n'ont pas encore assez d'historique.
+- **Rafraîchissement** — recontrôle quelques serveurs matures dont les mesures sont devenues anciennes.
+
+En observation continue, Companion ne fait pas de quick check, ne coupe pas les containers configurés dans “Containers à stopper pendant le benchmark” et ne bascule pas automatiquement de serveur. Le but est d'accumuler de l'historique utilisable, pas de perturber l'usage courant.
+
+Les profils ne doivent pas être compris comme une magie immédiate : avec une ou deux mesures, ils donnent seulement une indication. Ils deviennent vraiment pertinents quand les serveurs ont plusieurs benchmarks complets, idéalement à des heures différentes.
+
 ### Serveurs autorisés avant benchmark *(option)*
 
 Activer via **Paramètres → Planification & Cycle → Quels serveurs autoriser**.
@@ -525,6 +540,8 @@ Le score influence légèrement la sélection automatique du meilleur serveur : 
 Companion propose 6 **profils d'usage** sélectionnables depuis la page **Serveurs** (barre de pills) ou depuis **Paramètres → Bascule automatique → Profil d'usage**.
 
 Le profil actif détermine **comment le meilleur serveur est sélectionné** à la fin de chaque cycle de benchmark, en pondérant différemment les métriques mesurées.
+
+Important : un profil d'usage n'est fiable que si l'historique est suffisant. Au début, Companion peut surtout comparer le débit disponible ; la latence, le jitter, la perte de paquets, l'upload, le monoflux DDL et la stabilité ne deviennent discriminants qu'après plusieurs benchmarks complets par serveur. Pour construire cet historique sans tester tout le catalogue en boucle, utilisez l'**observation continue pyramidale** dans **Paramètres → Planification & Cycle**.
 
 | Profil | Critère principal | Usage typique |
 |---|---|---|

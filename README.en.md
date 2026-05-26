@@ -435,6 +435,21 @@ Configurable quotas are under **Advanced smart selection options**:
 
 Set a quota to `0` to disable that part. The dashboard reminds you which mode is used, the estimated server count, and the test mode (`sidecar` or `proxy`) before a manual launch.
 
+#### Pyramidal continuous observation
+
+Enable via **Settings → Scheduling & Cycle → How many servers to test → Pyramidal continuous observation**.
+
+This mode makes usage profiles serious without running a huge benchmark every time. It turns the automatic cycle into progressive data collection:
+
+- **Exploration** — tests a batch of never-measured servers, rotating through the list day by day.
+- **Confirmation** — retests servers that already have a few measurements, up to the “confirmed” threshold.
+- **Finalists** — focuses repeated measurements on the best candidates that do not have enough history yet.
+- **Refresh** — rechecks a few mature servers whose measurements have become old.
+
+In continuous observation, Companion does not run quick check, does not stop the containers configured in “Containers to stop during benchmark”, and does not automatically switch servers. The goal is to build useful history, not to disturb normal usage.
+
+Usage profiles should not be treated as instant magic: with one or two measurements, they are only an indication. They become genuinely meaningful once servers have several full benchmarks, ideally at different hours.
+
 ### Allowed servers before benchmark *(option)*
 
 Enable via **Settings → Scheduling & Cycle → Which servers are allowed**.
@@ -524,6 +539,8 @@ The score lightly influences automatic server selection: HIGH × 1.0 · MEDIUM �
 Companion provides 6 **usage profiles** selectable from the **Servers** page (pill bar) or from **Settings → Automatic switching → Usage profile**.
 
 The active profile determines **how the best server is selected** at the end of each benchmark cycle, by weighting the measured metrics differently.
+
+Important: a usage profile is only reliable when enough history exists. At first, Companion can mostly compare available throughput; latency, jitter, packet loss, upload, DDL single-stream speed, and stability become truly discriminating only after several full benchmarks per server. To build that history without looping over the whole catalogue, use **pyramidal continuous observation** in **Settings → Scheduling & Cycle**.
 
 | Profile | Primary criterion | Typical use |
 |---|---|---|

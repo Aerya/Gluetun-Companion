@@ -638,6 +638,12 @@
                 <i class="bi bi-shuffle"></i> pool
               </span>
             {% endif %}
+            {% if r.test_trigger == 'observation' %}
+              <span class="badge bg-info text-dark ms-1" style="font-size:.65rem;cursor:help"
+                    data-bs-toggle="tooltip" title="{{ t.hist_trigger_observation }}">
+                <i class="bi bi-layers-half"></i> obs
+              </span>
+            {% endif %}
           </td>
           <td>
             {% if r.success %}

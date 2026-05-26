@@ -356,6 +356,55 @@
           </details>
         </div>
 
+        <div class="border rounded p-2 mb-3">
+          <div class="form-check form-switch mb-1">
+            <input type="checkbox" name="continuous_observation" class="form-check-input"
+                   id="continuous_observation"
+                   {{ 'checked' if cfg.continuous_observation == '1' }}
+                   onchange="toggleObservation(this.checked)">
+            <label class="form-check-label fw-semibold small" for="continuous_observation">
+              <i class="bi bi-layers-half text-primary me-1"></i>{{ t.set_observation_label }}
+            </label>
+          </div>
+          <div class="form-text text-muted mb-2" style="font-size:.75rem">
+            {{ t.set_observation_hint }}
+          </div>
+          <div id="observation-options"
+               style="{{ '' if cfg.continuous_observation == '1' else 'opacity:.45;pointer-events:none' }}">
+            <details>
+              <summary class="small fw-semibold" style="cursor:pointer">{{ t.set_observation_advanced }}</summary>
+              <div class="row g-2 mt-1">
+                <div class="col-6 col-xl-4">
+                  <label class="form-label small mb-1">{{ t.set_observation_explore_n }}</label>
+                  <input type="number" name="observation_explore_n" class="form-control form-control-sm"
+                         value="{{ cfg.observation_explore_n }}" min="0" max="500" step="1">
+                </div>
+                <div class="col-6 col-xl-4">
+                  <label class="form-label small mb-1">{{ t.set_observation_confirm_n }}</label>
+                  <input type="number" name="observation_confirm_n" class="form-control form-control-sm"
+                         value="{{ cfg.observation_confirm_n }}" min="0" max="500" step="1">
+                </div>
+                <div class="col-6 col-xl-4">
+                  <label class="form-label small mb-1">{{ t.set_observation_finalist_n }}</label>
+                  <input type="number" name="observation_finalist_n" class="form-control form-control-sm"
+                         value="{{ cfg.observation_finalist_n }}" min="0" max="500" step="1">
+                </div>
+                <div class="col-6 col-xl-4">
+                  <label class="form-label small mb-1">{{ t.set_observation_confirm_tests }}</label>
+                  <input type="number" name="observation_confirm_tests" class="form-control form-control-sm"
+                         value="{{ cfg.observation_confirm_tests }}" min="2" max="20" step="1">
+                </div>
+                <div class="col-6 col-xl-4">
+                  <label class="form-label small mb-1">{{ t.set_observation_target_tests }}</label>
+                  <input type="number" name="observation_target_tests" class="form-control form-control-sm"
+                         value="{{ cfg.observation_target_tests }}" min="2" max="50" step="1">
+                </div>
+              </div>
+              <div class="form-text mt-1" style="font-size:.72rem">{{ t.set_observation_note }}</div>
+            </details>
+          </div>
+        </div>
+
         <hr class="my-3">
 
         {# ── Benchmark pre-filters ──────────────────────────────────────── #}
@@ -753,6 +802,9 @@
             {% endfor %}
           </select>
           <div class="form-text">{{ t.set_profile_hint }}</div>
+          <div class="form-text text-warning" style="font-size:.75rem">
+            <i class="bi bi-info-circle me-1"></i>{{ t.set_profile_history_hint }}
+          </div>
           {# Show hint for selected profile #}
           {% for pk, pv in profiles.items() %}
           <div class="form-text text-info profile-hint-{{ pk }}"
@@ -2110,6 +2162,15 @@ function toggleBenchmarkScope() {
   }
 }
 toggleBenchmarkScope();
+
+function toggleObservation(enabled) {
+  const opts = document.getElementById('observation-options');
+  if (opts) {
+    opts.style.opacity = enabled ? '' : '0.45';
+    opts.style.pointerEvents = enabled ? '' : 'none';
+  }
+}
+toggleObservation(document.getElementById('continuous_observation').checked);
 
 // ── Adaptive scheduling toggle ───────────────────────────────────────────
 function toggleAdaptive(enabled) {
