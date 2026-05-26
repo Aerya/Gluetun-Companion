@@ -841,6 +841,14 @@
           <div class="form-text text-muted">{{ t.set_retries_hint }}</div>
         </div>
 
+        <div class="alert alert-secondary py-2 px-3 mb-3" style="font-size:.78rem">
+          {{ t.set_bench_est_hint
+              .replace('{min}',     bench_est.per_min_s)
+              .replace('{max}',     bench_est.per_max_s)
+              .replace('{retries}', bench_est.max_retries | string)
+              .replace('{mode}',    bench_est.mode) }}
+        </div>
+
         <div class="mb-3">
           <label class="form-label">{{ t.set_timeout_label }}</label>
           <div class="input-group" style="max-width:160px">

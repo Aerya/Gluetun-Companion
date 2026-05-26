@@ -97,6 +97,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Quick check before benchmark** *(option)* — tests only the current server before each cycle; if speed is within ±N% of the last known result, the full benchmark is skipped entirely — no containers paused, no VPN restarts; triggers the full benchmark only when performance drifts significantly
 - **Adaptive scheduling** *(option)* — analyses hourly speed and variance patterns to identify the best and worst benchmark windows; recommended time slots displayed in Settings; optional auto-shift: if the next cycle falls on an unfavorable hour, it is shifted up to 3 h forward to the next favorable window
 - **On-demand quick benchmark** — button always available (dashboard and settings); tests only the active server via the Gluetun HTTP proxy, result in seconds, no VPN interruption, result saved in history
+- **Duration estimate** — the dashboard shows a dynamically calculated duration range (optimistic / pessimistic) based on your settings (`wait_secs`, `duration`, `samples`, `retries`, sidecar or proxy mode); automatic ⚠️ alert if the estimated total exceeds 30 minutes; the same estimate is shown live in Settings as you adjust parameters
 - **Jitter & Packet Loss** — network stability measured at every test (21 TTFB probes in proxy mode, ICMP via sidecar); 🟢/🟡/🔴 indicator on Servers page, dedicated columns in History, jitter shown in hourly patterns; factored into selection score (up to −15 % jitter / −25 % loss penalty)
 - **DNS latency** *(sidecar)* — DNS resolution time measured from inside the VPN tunnel via `dig` (4 domains in parallel, median returned); detects slow, overloaded, or hijacking resolvers; column in History, DNS shown in the Stability tooltip, data in hourly patterns
 - **Docker events listener** — daemon thread watching for Gluetun container `start` events; if Gluetun restarts on its own (crash, update, watchdog), automatically triggers a quick check after N seconds (VPN reconnect delay); if speed drift exceeds the configured threshold and auto-switch is enabled, immediately runs a full benchmark; restarts triggered by Companion itself are ignored; 5-minute cooldown between triggers
@@ -861,6 +862,8 @@ In **Settings → Scheduling & Benchmark**: the automatic cycle can be disabled 
 
 - **Quick benchmark** — tests only the active server via the Gluetun HTTP proxy; result in seconds, no VPN interruption, result saved in history (`proxy_qc` method).
 - **Full benchmark** — runs a complete cycle immediately, regardless of the automatic cycle setting or the *Quick check* option. Uses the configured method (sidecar or proxy), shown in parentheses on the button.
+
+> **Duration estimate**: the dashboard displays a `~min–max / server` range and an estimated total for all your active servers, calculated from `wait_secs`, `duration`, `samples`, `retries` and the mode (proxy/sidecar). A ⚠️ alert appears automatically if the pessimistic total exceeds 30 minutes. The same estimate is recalculated live in **Settings → Scheduling & Benchmark** after each change.
 
 ---
 

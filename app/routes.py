@@ -237,6 +237,7 @@ def dashboard():
         server_count = db.execute(
             'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'
         ).fetchone()['n']
+        bench_est = _bench_estimate(server_count)
         server_stats = db.execute('''
             SELECT st.server_name,
                    vp.name  AS profile_name,
@@ -301,6 +302,7 @@ def dashboard():
         last_switch=last_switch,
         recent_pool_switches=recent_pool_switches,
         server_count=server_count,
+        bench_est=bench_est,
         server_stats=server_stats,
         next_run=get_next_run() if get_setting('auto_benchmark', '1') == '1' else None,
         benchmark_running=benchmark_running,
@@ -1573,9 +1575,11 @@ def settings():
     from .catalogue import catalogue_stats
     adaptive_stats = get_hourly_benchmark_stats()
     active_auto_pools = _active_auto_pool_count()
+    bench_est_settings = _bench_estimate()  # per-server only (no server_count needed)
     return render_template(
         'settings.html',
         cfg=cfg,
+        bench_est=bench_est_settings,
         next_run=None if active_auto_pools else get_next_run(),
         gluetun_container=current_app.config['GLUETUN_CONTAINER'],
         adaptive_stats=adaptive_stats,
@@ -2438,6 +2442,64 @@ def api_pool_candidates(pool_id: int):
         return jsonify({'ok': False, 'error': 'Not found'}), 404
     candidates = resolve_pool_servers(pool_id)
     return jsonify({'ok': True, 'candidates': candidates, 'count': len(candidates)})
+
+
+# ── Benchmark duration estimate ───────────────────────────────────────────────
+
+def _bench_estimate(server_count: int = 0) -> dict:
+    """
+    Compute an optimistic/pessimistic per-server benchmark duration estimate
+    from the current settings.
+
+    Phases per server (proxy mode):
+      connect  — wait_secs (pessimistic) / min(wait_secs, 15) (optimistic)
+      warmup   — 2s if enabled, else 0
+      DL       — dl_duration × dl_samples
+      UL       — dl_duration
+      stability— 21 TTFB probes ≈ 10s fixed
+      overhead — docker-compose switch + deps ≈ 5s fixed
+
+    Sidecar adds ≈ 15s container lifecycle per attempt.
+    Retries multiply the pessimistic estimate by (max_retries + 1).
+    """
+    wait_secs   = int(get_setting('connection_wait_seconds', '45'))
+    dl_duration = float(get_setting('speedtest_duration', '8'))
+    dl_samples  = int(get_setting('speedtest_samples', '3'))
+    warmup      = 2.0 if get_setting('speedtest_warmup', '1') == '1' else 0.0
+    max_retries = int(get_setting('speedtest_retries', '2'))
+    sidecar     = get_setting('sidecar_mode', '1') == '1'
+
+    # test phases (everything after the VPN connection)
+    test_phases = warmup + dl_duration * dl_samples + dl_duration + 10 + 5
+    if sidecar:
+        test_phases += 15  # container create + cleanup
+
+    # optimistic: fast connect (15s), no retries
+    per_min = int(min(wait_secs, 15) + test_phases)
+    # pessimistic: full timeout × (retries + 1)
+    per_max = int((wait_secs + test_phases) * (max_retries + 1))
+
+    def _fmt(s: int) -> str:
+        if s < 60:
+            return f"{s}s"
+        m, r = divmod(s, 60)
+        h, m2 = divmod(m, 60)
+        if h:
+            return f"{h}h{m2:02d}min" if m2 else f"{h}h"
+        return f"{m}m{r:02d}s" if r else f"{m}min"
+
+    total_min = per_min * server_count
+    total_max = per_max * server_count
+
+    return {
+        'per_min_s':   _fmt(per_min),
+        'per_max_s':   _fmt(per_max),
+        'total_min_s': _fmt(total_min) if server_count else '—',
+        'total_max_s': _fmt(total_max) if server_count else '—',
+        'warn':        server_count > 0 and total_max > 1800,  # > 30 min
+        'mode':        'sidecar' if sidecar else 'proxy',
+        'max_retries': max_retries,
+    }
 
 
 # ── Pool helpers ──────────────────────────────────────────────────────────────

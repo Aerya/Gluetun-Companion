@@ -183,6 +183,23 @@
           {% endif %}
         </button>
       </div>
+
+      {# ── Benchmark duration estimate ── #}
+      <div class="mt-2 text-muted" style="font-size:.73rem;line-height:1.4">
+        <i class="bi bi-stopwatch me-1"></i>
+        ~{{ bench_est.per_min_s }}–{{ bench_est.per_max_s }} {{ t.dash_bench_est_per }}
+        ({{ bench_est.mode }})  · 
+        {{ t.dash_bench_est_total }} {{ t.dash_bench_est_for }}
+        {{ server_count }} {{ t.dash_bench_est_srvs }} :
+        ~{{ bench_est.total_min_s }}–{{ bench_est.total_max_s }}
+      </div>
+      {% if bench_est.warn %}
+      <div class="alert alert-warning py-1 px-2 mt-2 mb-0" style="font-size:.75rem">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+        {{ t.dash_bench_warn.replace('{n}', server_count | string) }}
+      </div>
+      {% endif %}
+
     </div>
   </div>
 
