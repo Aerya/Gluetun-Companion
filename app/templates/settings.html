@@ -560,18 +560,6 @@
             <div class="metric"><span>{{ t.set_retention_label }}</span><strong>{% if cfg.db_retention_days | int == 0 %}{{ t.set_retention_unlimited }}{% else %}{{ cfg.db_retention_days }} {{ t.cmn_days }}{% endif %}</strong></div>
             <div class="metric"><span>{{ t.set_catalogue_title }}</span><strong>{{ catalogue_stats.total if catalogue_stats else 0 }}</strong></div>
           </div>
-          <div class="settings-help-card">
-            <h6><i class="bi bi-activity me-1"></i>{{ t.set_side_last_test }}</h6>
-            {% if settings_sidebar.last_test %}
-            <div class="settings-server-row">
-              <code title="{{ settings_sidebar.last_test.server_name }}">{{ settings_sidebar.last_test.server_name }}</code>
-              <strong>{{ '%.1f'|format(settings_sidebar.last_test.download_mbps or 0) }} Mbps</strong>
-            </div>
-            <div class="small text-muted mt-2">{{ settings_sidebar.last_test.tested_at | localtime }}</div>
-            {% else %}
-            <div class="text-muted">{{ t.set_side_no_last_test }}</div>
-            {% endif %}
-          </div>
           {{ readme_card(t.set_side_readme, t.set_side_readme_maintenance_full, readme_links.maintenance) }}
         </aside>
       </div>
@@ -2185,7 +2173,6 @@ function arrangeSettingsTabs() {
     form('save_vpn'),
     form('sidecar'),
     cardWithForm('form-pause-bench'),
-    byId('card-grafana'),
   ].forEach(el => move(pane('settings-measure-grid'), el));
 
   [
@@ -2208,6 +2195,7 @@ function arrangeSettingsTabs() {
     cardWithAction('db_retention'),
     cardWithAction('save_api_token'),
     cardWithAction('credentials'),
+    byId('card-grafana'),
   ].forEach(el => move(pane('settings-maintenance-grid'), el));
 }
 if (document.readyState === 'loading') {
