@@ -356,30 +356,39 @@
 </div>
 
 {# ── Interactive comparison chart ─────────────────────────────────────────── #}
-<div class="card mb-4 p-3">
-  <div class="fw-semibold mb-3">
-    <i class="bi bi-bar-chart-fill text-success"></i> {{ t.hist_comparison }}
+<div class="card mb-4">
+  <div class="card-header py-2 d-flex align-items-center justify-content-between gap-2">
+    <span class="fw-semibold" style="font-size:.9rem">
+      <i class="bi bi-bar-chart-fill text-success"></i> {{ t.hist_comparison }}
+    </span>
+    <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button"
+            data-bs-toggle="collapse" data-bs-target="#cmpChartBody"
+            aria-expanded="true" aria-controls="cmpChartBody">
+      <i class="bi bi-chevron-up" id="cmpChevron"></i>
+    </button>
   </div>
 
-  {# ── Controls ── #}
-  <div class="mb-3 p-2 rounded" style="background:var(--bs-secondary-bg);border:1px solid var(--bs-border-color);font-size:.82rem">
-    <div class="text-muted mb-2" style="font-size:.76rem;text-transform:uppercase;letter-spacing:.04em">
-      {{ t.hist_cmp_per_prov }}
+  <div class="collapse show p-3" id="cmpChartBody">
+    {# ── Controls ── #}
+    <div class="mb-3 p-2 rounded" style="background:var(--bs-secondary-bg);border:1px solid var(--bs-border-color);font-size:.82rem">
+      <div class="text-muted mb-2" style="font-size:.76rem;text-transform:uppercase;letter-spacing:.04em">
+        {{ t.hist_cmp_per_prov }}
+      </div>
+      <div id="cmpProvRows" class="d-flex flex-wrap gap-2 align-items-center mb-2"></div>
+      <div class="border-top pt-2 d-flex align-items-center gap-2 flex-wrap">
+        <span class="text-muted">{{ t.hist_cmp_global }} :</span>
+        <select id="cmpGlobal" class="form-select form-select-sm" style="width:auto">
+          <option value="all">{{ t.hist_cmp_all }}</option>
+          <option value="top10">{{ t.hist_cmp_top10 }}</option>
+          <option value="last10">{{ t.hist_cmp_last10 }}</option>
+        </select>
+        <span class="text-muted ms-2" id="cmpCount" style="font-size:.78rem"></span>
+      </div>
     </div>
-    <div id="cmpProvRows" class="d-flex flex-wrap gap-2 align-items-center mb-2"></div>
-    <div class="border-top pt-2 d-flex align-items-center gap-2 flex-wrap">
-      <span class="text-muted">{{ t.hist_cmp_global }} :</span>
-      <select id="cmpGlobal" class="form-select form-select-sm" style="width:auto">
-        <option value="all">{{ t.hist_cmp_all }}</option>
-        <option value="top10">{{ t.hist_cmp_top10 }}</option>
-        <option value="last10">{{ t.hist_cmp_last10 }}</option>
-      </select>
-      <span class="text-muted ms-2" id="cmpCount" style="font-size:.78rem"></span>
-    </div>
-  </div>
 
-  <div id="chartAvgWrap" style="position:relative;min-height:120px">
-    <canvas id="chartAvg"></canvas>
+    <div id="chartAvgWrap" style="position:relative;min-height:120px">
+      <canvas id="chartAvg"></canvas>
+    </div>
   </div>
 </div>
 {% endif %}
@@ -784,10 +793,38 @@ new Chart(document.getElementById('chartTimeline'), {
     if (!_seen[p]) { _seen[p] = true; _provOrder.push(p); }
   });
 
-  /* state: per-provider {on, mode} */
+  /* ── localStorage persistence ── */
+  var _LS_KEY = 'gc_cmp_state_v1';
+  function _saveState() {
+    try {
+      localStorage.setItem(_LS_KEY, JSON.stringify({ pState: _pState, gMode: _gMode }));
+    } catch(e) {}
+  }
+  function _loadSaved() {
+    try {
+      var raw = localStorage.getItem(_LS_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch(e) { return null; }
+  }
+
+  /* state: per-provider {on, mode} — init with defaults then overlay saved */
   var _pState = {};
   _provOrder.forEach(function(p) { _pState[p] = { on: true, mode: 'all' }; });
   var _gMode = 'all';
+
+  var _saved = _loadSaved();
+  if (_saved) {
+    if (_saved.gMode) _gMode = _saved.gMode;
+    if (_saved.pState) {
+      _provOrder.forEach(function(p) {
+        if (_saved.pState[p]) {
+          _pState[p].on   = !!_saved.pState[p].on;
+          _pState[p].mode = _saved.pState[p].mode || 'all';
+        }
+      });
+    }
+  }
 
   /* ── build controls ── */
   var _modeOpts = [
@@ -807,7 +844,7 @@ new Chart(document.getElementById('chartTimeline'), {
     });
     sel.addEventListener('change', function() {
       _pState[prov].mode = this.value;
-      _rebuild();
+      _saveState(); _rebuild();
     });
     return sel;
   }
@@ -825,7 +862,7 @@ new Chart(document.getElementById('chartTimeline'), {
       cb.addEventListener('change', function() {
         _pState[p].on = this.checked;
         sel.disabled = !this.checked;
-        _rebuild();
+        _saveState(); _rebuild();
       });
 
       var span = document.createElement('span');
@@ -833,6 +870,11 @@ new Chart(document.getElementById('chartTimeline'), {
       span.style.cssText = 'font-size:.82rem;white-space:nowrap';
 
       var sel = _modeSelect(p);
+
+      /* restore saved state into DOM controls */
+      cb.checked   = _pState[p].on;
+      sel.value    = _pState[p].mode;
+      sel.disabled = !_pState[p].on;
 
       wrap.appendChild(cb);
       wrap.appendChild(span);
@@ -842,7 +884,10 @@ new Chart(document.getElementById('chartTimeline'), {
   }
 
   var _gSel = document.getElementById('cmpGlobal');
-  if (_gSel) _gSel.addEventListener('change', function() { _gMode = this.value; _rebuild(); });
+  if (_gSel) {
+    _gSel.value = _gMode; /* restore saved value into DOM */
+    _gSel.addEventListener('change', function() { _gMode = this.value; _saveState(); _rebuild(); });
+  }
 
   /* ── filter logic ── */
   function _applyFilters() {
@@ -949,6 +994,19 @@ new Chart(document.getElementById('chartTimeline'), {
           }
         }
       }
+    });
+  }
+
+  /* ── collapse chevron ── */
+  var _cmpBody = document.getElementById('cmpChartBody');
+  if (_cmpBody) {
+    _cmpBody.addEventListener('show.bs.collapse', function() {
+      var ic = document.getElementById('cmpChevron');
+      if (ic) ic.className = 'bi bi-chevron-up';
+    });
+    _cmpBody.addEventListener('hide.bs.collapse', function() {
+      var ic = document.getElementById('cmpChevron');
+      if (ic) ic.className = 'bi bi-chevron-down';
     });
   }
 
