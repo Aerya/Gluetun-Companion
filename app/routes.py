@@ -59,38 +59,123 @@ def _standby_benchmark_cycle_for_pools() -> None:
     except Exception as exc:
         logger.warning('reschedule after pool standby failed: %s', exc)
 
-# ---------------------------------------------------------------------------
-# Config export/import — allowed keys (no secrets)
-# ---------------------------------------------------------------------------
-_EXPORT_KEYS = frozenset({
-    'test_interval_hours', 'auto_switch', 'connection_wait_seconds',
-    'speedtest_samples', 'speedtest_duration', 'speedtest_retries',
-    'server_timeout_secs', 'auto_exclude_failures', 'speedtest_warmup',
-    'speedtest_streams', 'db_retention_days', 'sidecar_mode', 'sidecar_image',
-    'sidecar_port', 'sidecar_speedtest_method', 'sidecar_iperf_fallback',
-    'sidecar_proxy_fallback', 'post_switch_containers', 'pause_bench_containers',
-    'auto_benchmark', 'pull_gluetun', 'pull_post_switch_containers',
-    'pull_pause_bench_containers', 'pull_network_containers',
-    'quick_check_mode', 'quick_check_threshold', 'scoring_window_days', 'outlier_detection',
-    'benchmark_scope_mode', 'benchmark_scope_top_n', 'benchmark_scope_untested_n',
-    'benchmark_scope_refresh_days', 'benchmark_scope_refresh_n',
-    'continuous_observation', 'observation_target_tests', 'observation_explore_n',
-    'observation_confirm_tests', 'observation_confirm_n', 'observation_finalist_n',
-    'weighted_score_current_pct',
-    'stability_weight', 'adaptive_scheduling', 'adaptive_auto_shift',
-    'notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
-    'notif_auto_exclude', 'notif_benchmark_end', 'notif_benchmark_failure',
-    'notif_quick_check', 'notif_optimal_hour_change', 'notif_catalogue_changes',
-    'catalogue_auto_add', 'notify_mention_level',
-    'active_profile', 'single_stream_test', 'airvpn_new_server_notif',
-    'proxy_username',
-    'catalogue_import_mode', 'catalogue_import_provider',
-    'catalogue_bench_on_import', 'catalogue_import_filter_type',
-    'ui_lang',
-    # WireGuard rotation + bench filters (non-secret, safe to export)
-    'wg_rotation_mode', 'wg_rotation_threshold',
-    'bench_include_types', 'airvpn_bench_max_load', 'airvpn_bench_max_users',
-})
+
+_COUNTRY_COORDS = {
+    'ad': (42.5, 1.6), 'ae': (24.4, 54.4), 'al': (41.3, 19.8), 'am': (40.2, 44.5),
+    'ar': (-34.6, -58.4), 'at': (48.2, 16.4), 'au': (-33.9, 151.2), 'az': (40.4, 49.9),
+    'ba': (43.9, 18.4), 'be': (50.8, 4.4), 'bg': (42.7, 23.3), 'br': (-23.5, -46.6),
+    'by': (53.9, 27.6), 'ca': (45.4, -75.7), 'ch': (47.4, 8.5), 'cl': (-33.4, -70.7),
+    'cn': (39.9, 116.4), 'co': (4.7, -74.1), 'cr': (9.9, -84.1), 'cy': (35.2, 33.4),
+    'cz': (50.1, 14.4), 'de': (52.5, 13.4), 'dk': (55.7, 12.6), 'ee': (59.4, 24.8),
+    'es': (40.4, -3.7), 'fi': (60.2, 24.9), 'fr': (48.9, 2.4), 'gb': (51.5, -0.1),
+    'ge': (41.7, 44.8), 'gr': (38.0, 23.7), 'hk': (22.3, 114.2), 'hr': (45.8, 16.0),
+    'hu': (47.5, 19.0), 'id': (-6.2, 106.8), 'ie': (53.3, -6.3), 'il': (32.1, 34.8),
+    'in': (28.6, 77.2), 'is': (64.1, -21.9), 'it': (41.9, 12.5), 'jp': (35.7, 139.7),
+    'kr': (37.6, 127.0), 'lt': (54.7, 25.3), 'lu': (49.6, 6.1), 'lv': (56.9, 24.1),
+    'md': (47.0, 28.8), 'mk': (42.0, 21.4), 'mt': (35.9, 14.5), 'mx': (19.4, -99.1),
+    'my': (3.1, 101.7), 'nl': (52.4, 4.9), 'no': (59.9, 10.8), 'nz': (-36.8, 174.8),
+    'pa': (9.0, -79.5), 'pe': (-12.0, -77.0), 'ph': (14.6, 121.0), 'pl': (52.2, 21.0),
+    'pt': (38.7, -9.1), 'ro': (44.4, 26.1), 'rs': (44.8, 20.5), 'ru': (55.8, 37.6),
+    'se': (59.3, 18.1), 'sg': (1.3, 103.8), 'si': (46.1, 14.5), 'sk': (48.1, 17.1),
+    'th': (13.8, 100.5), 'tr': (41.0, 29.0), 'tw': (25.0, 121.6), 'ua': (50.5, 30.5),
+    'us': (40.7, -74.0), 'uy': (-34.9, -56.2), 'vn': (10.8, 106.7), 'za': (-33.9, 18.4),
+}
+
+
+def _server_map_points(db, active_server_name: str = '') -> list[dict]:
+    """Return map points for the 30 most tested servers plus the current server."""
+    rows = db.execute(
+        '''WITH catalogue_country AS (
+               SELECT name,
+                      MAX(NULLIF(country_code, '')) AS country_code,
+                      MAX(NULLIF(country, '')) AS country
+               FROM gluetun_catalogue
+               GROUP BY name
+           )
+           SELECT st.server_name,
+                  COUNT(DISTINCT st.id) AS uses,
+                  COALESCE(NULLIF(av.country_code, ''), cc.country_code) AS country_code,
+                  COALESCE(NULLIF(av.country, ''), cc.country) AS country
+           FROM speed_tests st
+           LEFT JOIN airvpn_snapshot av ON av.name = st.server_name
+           LEFT JOIN catalogue_country cc ON cc.name = st.server_name
+           WHERE st.success = 1
+           GROUP BY st.server_name
+           ORDER BY uses DESC, MAX(st.tested_at) DESC
+           LIMIT 30'''
+    ).fetchall()
+    points = []
+    names = set()
+    for row in rows:
+        cc = (row['country_code'] or '').lower()
+        if cc not in _COUNTRY_COORDS:
+            continue
+        lat, lon = _COUNTRY_COORDS[cc]
+        points.append({
+            'server': row['server_name'],
+            'uses': int(row['uses'] or 0),
+            'country': row['country'] or cc.upper(),
+            'country_code': cc,
+            'lat': lat,
+            'lon': lon,
+            'active': row['server_name'] == active_server_name,
+        })
+        names.add(row['server_name'])
+
+    if active_server_name and active_server_name not in names:
+        row = db.execute(
+            '''WITH catalogue_country AS (
+                   SELECT name,
+                          MAX(NULLIF(country_code, '')) AS country_code,
+                          MAX(NULLIF(country, '')) AS country
+                   FROM gluetun_catalogue
+                   GROUP BY name
+               )
+               SELECT COALESCE(NULLIF(av.country_code, ''), cc.country_code) AS country_code,
+                      COALESCE(NULLIF(av.country, ''), cc.country) AS country,
+                      COUNT(DISTINCT st.id) AS uses
+               FROM (SELECT ? AS name) active
+               LEFT JOIN airvpn_snapshot av ON av.name = active.name
+               LEFT JOIN catalogue_country cc ON cc.name = active.name
+               LEFT JOIN speed_tests st ON st.server_name = active.name AND st.success = 1''',
+            (active_server_name,),
+        ).fetchone()
+        if row:
+            cc = (row['country_code'] or '').lower()
+            if cc in _COUNTRY_COORDS:
+                lat, lon = _COUNTRY_COORDS[cc]
+                points.append({
+                    'server': active_server_name,
+                    'uses': int(row['uses'] or 0),
+                    'country': row['country'] or cc.upper(),
+                    'country_code': cc,
+                    'lat': lat,
+                    'lon': lon,
+                    'active': True,
+                })
+    return points
+
+
+def _benchmark_progress() -> dict:
+    started = get_setting('benchmark_started_at', '')
+    total = int(get_setting('benchmark_total_servers', '0') or '0')
+    done = int(get_setting('benchmark_done_servers', '0') or '0')
+    running = get_setting('benchmark_running', '0') == '1'
+    elapsed = 0
+    try:
+        elapsed = max(0, int(time.time() - float(started))) if started else 0
+    except (TypeError, ValueError):
+        elapsed = 0
+    return {
+        'running': running,
+        'mode': get_setting('benchmark_mode', ''),
+        'current': get_setting('benchmark_current_server', ''),
+        'started_at': started,
+        'elapsed_secs': elapsed,
+        'total': total,
+        'done': min(done, total) if total else done,
+        'remaining': max(0, total - done) if total else 0,
+    }
 
 # ---------------------------------------------------------------------------
 # Login rate limiting (in-memory, per remote IP)
@@ -215,6 +300,7 @@ def dashboard():
     public_ip         = get_public_ip(proxy_host, proxy_port, px_user, px_pass) if vpn_status == 'running' else None
     current_filters   = get_current_filters(container)
     current_server    = format_filters(current_filters)
+    active_server_name = next(iter(current_filters.values()), '').split(',')[0].strip() if current_filters else ''
     benchmark_running = get_setting('benchmark_running', '0') == '1'
 
     _ALLOWED_LIMITS = {10, 20, 50}
@@ -280,7 +366,7 @@ def dashboard():
         sparkline_server: str | None = None
         active_profile: dict | None = None
         if current_filters:
-            sname = next(iter(current_filters.values())).split(',')[0].strip()
+            sname = active_server_name
             sparkline_server = sname
             spark_rows = db.execute('''
                 SELECT tested_at, download_mbps, upload_mbps
@@ -302,6 +388,7 @@ def dashboard():
             ).fetchone()
             if _prof_row and _prof_row['profile_name']:
                 active_profile = dict(_prof_row)
+        dashboard_map_points = _server_map_points(db, active_server_name)
 
     try:
         _dash_include_types = json.loads(get_setting('bench_include_types', '[]') or '[]')
@@ -326,6 +413,8 @@ def dashboard():
         recent_limit=recent_limit,
         last_switch=last_switch,
         recent_pool_switches=recent_pool_switches,
+        dashboard_map_points=dashboard_map_points,
+        benchmark_progress=_benchmark_progress(),
         server_count=server_count,
         benchmark_estimated_count=benchmark_estimated_count,
         bench_est=bench_est,
@@ -2307,80 +2396,6 @@ def api_docker_containers():
 
 
 # ---------------------------------------------------------------------------
-# Config export / import
-# ---------------------------------------------------------------------------
-
-@bp.route('/config/export')
-@login_required
-def config_export():
-    """Download non-secret settings as a JSON file."""
-    from datetime import datetime, timezone
-
-    with get_db() as db:
-        rows = db.execute('SELECT key, value FROM settings').fetchall()
-
-    payload = {
-        '_version':     1,
-        '_exported_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-        'settings':     {r['key']: r['value'] for r in rows if r['key'] in _EXPORT_KEYS},
-    }
-
-    resp = Response(
-        json.dumps(payload, indent=2, ensure_ascii=False),
-        mimetype='application/json',
-    )
-    resp.headers['Content-Disposition'] = 'attachment; filename="companion-config.json"'
-    return resp
-
-
-@bp.route('/config/import', methods=['POST'])
-@login_required
-def config_import():
-    """Import settings from a JSON file (secrets are ignored)."""
-    f = request.files.get('config_file')
-    if not f:
-        flash('Aucun fichier fourni.', 'danger')
-        return redirect(url_for('main.settings'))
-
-    try:
-        data = json.loads(f.read().decode('utf-8'))
-    except Exception as exc:
-        flash(f'Fichier invalide : {exc}', 'danger')
-        return redirect(url_for('main.settings'))
-
-    if not isinstance(data, dict) or 'settings' not in data:
-        flash("Format invalide — clé 'settings' manquante.", 'danger')
-        return redirect(url_for('main.settings'))
-
-    imported = skipped = 0
-    _schedule_keys = {'test_interval_hours', 'auto_benchmark'}
-    _needs_reschedule = False
-    for key, value in data['settings'].items():
-        if key in _EXPORT_KEYS:
-            set_setting(key, str(value))
-            imported += 1
-            if key in _schedule_keys:
-                _needs_reschedule = True
-        else:
-            skipped += 1
-
-    if _needs_reschedule:
-        try:
-            _h = float(get_setting('test_interval_hours', '6') or '6')
-            _en = get_setting('auto_benchmark', '0') == '1'
-            reschedule(_h, enabled=_en)
-        except Exception as _exc:
-            logger.warning('reschedule after config import failed: %s', _exc)
-
-    flash(
-        f'{imported} paramètre(s) importé(s).'
-        + (f' {skipped} clé(s) ignorée(s) (secrètes ou inconnues).' if skipped else ''),
-        'success',
-    )
-    return redirect(url_for('main.settings'))
-
-
-# ---------------------------------------------------------------------------
 # Grafana dashboard download
 # ---------------------------------------------------------------------------
 
@@ -2894,11 +2909,17 @@ def api_status():
     cfg     = current_app.config
     px_user = get_setting('proxy_username') or None
     px_pass = get_setting('proxy_password') or None
+    progress = _benchmark_progress()
     return jsonify({
         'vpn_status':             get_vpn_status(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
         'public_ip':              get_public_ip(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
         'current_server':         format_filters(get_current_filters(cfg['GLUETUN_CONTAINER'])),
         'benchmark_running':      get_setting('benchmark_running', '0') == '1',
         'current_server_testing': get_setting('benchmark_current_server', ''),
+        'benchmark_mode':         progress['mode'],
+        'benchmark_elapsed_secs': progress['elapsed_secs'],
+        'benchmark_total_servers': progress['total'],
+        'benchmark_done_servers': progress['done'],
+        'benchmark_remaining_servers': progress['remaining'],
         'next_run':               str(get_next_run()) if (get_next_run() and get_setting('auto_benchmark', '1') == '1') else None,
     })

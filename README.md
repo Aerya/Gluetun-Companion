@@ -907,12 +907,6 @@ Dans **Paramètres → Mesurer** : le cycle automatique peut être désactivé v
 
 ---
 
-## Export / import de configuration
-
-Accessible depuis **Paramètres**, le bouton **Exporter la configuration** génère un fichier `companion-config.json` contenant les paramètres *hors secrets* (mots de passe, tokens, webhooks ne sont pas exportés). Ce fichier peut être réimporté sur une autre instance via le bouton **Importer**. Si l'import modifie l'intervalle de benchmark ou le cycle automatique, le planificateur est rechargé immédiatement.
-
----
-
 ## Dashboard Grafana
 
 Un fichier JSON de dashboard Grafana est téléchargeable depuis **Paramètres**. Il est pré-câblé sur les métriques Prometheus de Companion et comprend des panneaux pour :

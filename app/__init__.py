@@ -98,6 +98,10 @@ def create_app():
     _was_running = get_setting('benchmark_running', '0') == '1'
     set_setting('benchmark_running', '0')
     set_setting('benchmark_current_server', '')
+    set_setting('benchmark_started_at', '')
+    set_setting('benchmark_mode', '')
+    set_setting('benchmark_total_servers', '0')
+    set_setting('benchmark_done_servers', '0')
 
     if _was_running:
         _log = logging.getLogger(__name__)

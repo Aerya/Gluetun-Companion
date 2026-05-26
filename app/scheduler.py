@@ -1013,6 +1013,10 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
     _current_test_trigger = 'observation' if observation else None
     set_setting('benchmark_running', '1')
     cycle_start = time.time()
+    set_setting('benchmark_started_at', str(cycle_start))
+    set_setting('benchmark_mode', 'observation' if observation else 'benchmark')
+    set_setting('benchmark_total_servers', '0')
+    set_setting('benchmark_done_servers', '0')
 
     # ── Catalogue refresh via sidecar (always) ───────────────────────────────
     # The sidecar downloads server lists from the public Gluetun GitHub repo.
@@ -1118,6 +1122,10 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             logger.info('=== Quick check passed (%.0fs) — full benchmark skipped ===', duration_secs)
             set_setting('benchmark_running', '0')
             set_setting('benchmark_current_server', '')
+            set_setting('benchmark_started_at', '')
+            set_setting('benchmark_mode', '')
+            set_setting('benchmark_total_servers', '0')
+            set_setting('benchmark_done_servers', '0')
             return
         elif qc_dl is not None and qc_last_dl:
             # Quick check ran but deviation too large → full benchmark triggered
@@ -1249,6 +1257,8 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
         if not servers:
             logger.info('No servers left after pre-filters — skipping benchmark')
             return
+        set_setting('benchmark_total_servers', str(len(servers)))
+        set_setting('benchmark_done_servers', '0')
 
         # ── Load WireGuard profile vars for each distinct vpn_profile_id ─────
         # Decrypts secrets once per profile and builds a lookup table so each
@@ -1333,13 +1343,15 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
 
         results: list[dict] = []
 
-        for row in servers:
+        for idx, row in enumerate(servers, start=1):
             if _stop_event.is_set():
                 logger.info(
                     'Benchmark aborted by user — %d/%d server(s) tested',
                     len(results), len(servers),
                 )
                 break
+            set_setting('benchmark_current_server', row['name'])
+            set_setting('benchmark_done_servers', str(idx - 1))
 
             # Resolve WireGuard extra_env for this server's profile (None if no profile)
             _pid = row['vpn_profile_id']
@@ -1375,6 +1387,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                             'Server %s: skipping (%s, no proxy fallback configured)',
                             row['name'], _skip_reason,
                         )
+                        set_setting('benchmark_done_servers', str(idx))
                         continue   # not a failure — just untestable in this mode
                 else:
                     _sidecar_env: dict[str, str] = dict(_extra_env) if _extra_env else {}
@@ -1424,6 +1437,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                         mention=_mention,
                         mention_level=_mention_level,
                     )
+            set_setting('benchmark_done_servers', str(idx))
 
         # ── No successful result at all → notify failure ─────────────────────
         if not results and _notif_bench_fail:
@@ -1769,6 +1783,10 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
         set_setting('benchmark_running', '0')
         _current_test_trigger = None
         set_setting('benchmark_current_server', '')
+        set_setting('benchmark_started_at', '')
+        set_setting('benchmark_mode', '')
+        set_setting('benchmark_total_servers', '0')
+        set_setting('benchmark_done_servers', '0')
 
 
 # ---------------------------------------------------------------------------

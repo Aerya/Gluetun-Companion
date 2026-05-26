@@ -157,10 +157,13 @@ def get_current_filters(container_name: str) -> dict[str, str]:
 
 
 def format_filters(filters: dict[str, str]) -> str:
-    """Human-readable representation of active filters, e.g. 'SERVER_NAMES=Chamukuy'."""
+    """Human-readable representation of active filter values, without Gluetun env prefixes."""
     if not filters:
         return '—'
-    return '  '.join(f'{FILTER_VARS[k]}={v}' for k, v in filters.items())
+    labels: list[str] = []
+    for value in filters.values():
+        labels.extend(part.strip() for part in str(value).split(',') if part.strip())
+    return ' · '.join(labels) if labels else '—'
 
 
 def switch_server(

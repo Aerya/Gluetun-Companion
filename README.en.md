@@ -905,12 +905,6 @@ In **Settings → Measure**: the automatic cycle can be disabled via the *Enable
 
 ---
 
-## Configuration export / import
-
-Available from **Settings**, the **Export configuration** button generates a `companion-config.json` file containing settings *excluding secrets* (passwords, tokens, webhooks are not exported). This file can be re-imported on another instance via the **Import** button. If the import changes the benchmark interval or the automatic cycle, the scheduler reloads immediately.
-
----
-
 ## Grafana dashboard
 
 A Grafana dashboard JSON file is downloadable from **Settings**. It is pre-wired to Companion's Prometheus metrics and includes panels for:

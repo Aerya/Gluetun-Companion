@@ -51,6 +51,42 @@
   }
   .rank-legend-avg { background: #2dd4bf; }
   .rank-legend-max { background: rgba(96,165,250,.34); border: 1px solid rgba(96,165,250,.58); }
+  .dash-fixed-card { min-height: 245px; }
+  .dash-world-map {
+    width: 100%;
+    aspect-ratio: 1.9;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .45rem;
+    background:
+      radial-gradient(circle at 18% 48%, rgba(88,166,255,.16), transparent 18%),
+      radial-gradient(circle at 52% 42%, rgba(88,166,255,.14), transparent 21%),
+      radial-gradient(circle at 75% 55%, rgba(88,166,255,.14), transparent 18%),
+      linear-gradient(180deg, rgba(88,166,255,.08), rgba(88,166,255,.02));
+    overflow: hidden;
+  }
+  .dash-world-map svg { width: 100%; height: 100%; display: block; }
+  .dash-map-base { opacity: .92; }
+  .dash-map-point {
+    fill: var(--bs-info);
+    opacity: .82;
+    stroke: var(--bs-body-bg);
+    stroke-width: 1.2;
+  }
+  .dash-map-point-active {
+    fill: var(--bs-warning);
+    opacity: 1;
+    stroke: var(--bs-body-color);
+    stroke-width: 1.6;
+  }
+  .dash-observation-metric {
+    display: flex;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .35rem 0;
+    border-top: 1px solid var(--bs-border-color);
+    font-size: .82rem;
+  }
+  .dash-observation-metric:first-of-type { border-top: 0; }
 </style>
 
 
@@ -231,8 +267,73 @@
 </div>
 
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
-{% if recent_pool_switches %}
-<div class="card mb-3">
+{% if continuous_observation == '1' or dashboard_map_points or recent_pool_switches %}
+<div class="row g-3 mb-3">
+  <div class="col-12 col-lg-4">
+    <div class="card dash-fixed-card p-3 h-100">
+      {% if continuous_observation == '1' %}
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <div class="fw-semibold" style="font-size:.9rem">
+          <i class="bi bi-layers-half text-info"></i> {{ t.dash_observation_title }}
+        </div>
+        <span class="badge {{ 'bg-success' if benchmark_progress.running and benchmark_progress.mode == 'observation' else 'bg-secondary' }}" id="obsStateBadge">
+          {{ t.dash_running if benchmark_progress.running and benchmark_progress.mode == 'observation' else 'ON' }}
+        </span>
+      </div>
+      <div class="progress mb-2" style="height:7px">
+        {% set obs_pct = ((benchmark_progress.done / benchmark_progress.total * 100) | int) if benchmark_progress.total else 0 %}
+        <div id="obsProgressBar" class="progress-bar bg-info" style="width:{{ obs_pct }}%"></div>
+      </div>
+      <div class="dash-observation-metric">
+        <span>{{ t.dash_observation_elapsed }}</span>
+        <strong id="obsElapsed">{{ benchmark_progress.elapsed_secs }}s</strong>
+      </div>
+      <div class="dash-observation-metric">
+        <span>{{ t.dash_observation_tested }}</span>
+        <strong><span id="obsDone">{{ benchmark_progress.done }}</span>/<span id="obsTotal">{{ benchmark_progress.total }}</span></strong>
+      </div>
+      <div class="dash-observation-metric">
+        <span>{{ t.dash_observation_remaining }}</span>
+        <strong id="obsRemaining">{{ benchmark_progress.remaining }}</strong>
+      </div>
+      <div class="dash-observation-metric">
+        <span>{{ t.dash_observation_current }}</span>
+        <strong id="obsCurrent" class="text-truncate" style="max-width:170px">{{ benchmark_progress.current or '—' }}</strong>
+      </div>
+      {% if not benchmark_progress.running or benchmark_progress.mode != 'observation' %}
+      <div class="small text-muted mt-2">{{ t.dash_observation_idle }}</div>
+      {% endif %}
+      {% else %}
+      <div class="fw-semibold mb-2" style="font-size:.9rem">
+        <i class="bi bi-globe-europe-africa text-info"></i> {{ t.dash_map_title }}
+      </div>
+      <div class="dash-world-map">
+        <svg viewBox="0 0 1000 520" role="img" aria-label="{{ t.dash_map_title }}">
+          <image class="dash-map-base" href="{{ url_for('static', filename='world-map.svg') }}" x="0" y="0" width="1000" height="520"/>
+          {% for p in dashboard_map_points %}
+            {% set x = ((p.lon + 180) / 360 * 1000) %}
+            {% set y = ((90 - p.lat) / 180 * 520) %}
+            {% set radius = 4 + ([p.uses, 18] | min) * 0.45 %}
+            <circle class="{{ 'dash-map-point-active' if p.active else 'dash-map-point' }}"
+                    cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}" r="{{ '%.1f'|format(radius) }}">
+              <title>{{ p.server }} · {{ p.country }} · {{ p.uses }} {{ t.set_side_map_uses }}</title>
+            </circle>
+          {% endfor %}
+        </svg>
+      </div>
+      <div class="small text-muted mt-2">
+        <span class="badge bg-info text-dark me-1">&nbsp;</span>{{ t.set_side_map_used }}
+        <span class="badge bg-warning text-dark ms-2 me-1">&nbsp;</span>{{ t.set_side_map_current }}
+      </div>
+      {% if not dashboard_map_points %}
+      <div class="small text-muted mt-2">{{ t.set_side_map_empty }}</div>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+  {% if recent_pool_switches %}
+  <div class="col-12 col-lg-8">
+<div class="card dash-fixed-card">
   <div class="card-header py-2 d-flex align-items-center justify-content-between gap-2">
     <span class="fw-semibold" style="font-size:.9rem">
       <i class="bi bi-shuffle text-primary"></i> {{ t.dash_pool_activity }}
@@ -257,8 +358,8 @@
       <div class="d-flex align-items-center gap-1 ms-auto">
         <span class="text-muted" style="font-size:.82rem">{{ t.dash_pool_show }}</span>
         <select id="poolPerPage" class="form-select form-select-sm" style="width:auto">
-          <option value="5">5</option>
-          <option value="10" selected>10</option>
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
           <option value="20">20</option>
           <option value="0">{{ t.dash_pool_all }}</option>
         </select>
@@ -329,7 +430,7 @@
   };
 
   /* ── state ── */
-  var _col = 'ts', _dir = -1, _pp = 10, _q = '', _fd = '', _td = '';
+  var _col = 'ts', _dir = -1, _pp = 5, _q = '', _fd = '', _td = '';
 
   function _esc(s) {
     return String(s)
@@ -445,6 +546,11 @@
   _render();
 })();
 </script>
+{% endif %}
+  {% if recent_pool_switches %}
+  </div>
+  {% endif %}
+</div>
 {% endif %}
 
 {# ROW 2 — Server ranking (horizontal bars, no Chart.js) ─────────────────── #}
@@ -664,12 +770,33 @@ const _chartUl = '#fbbf24';
 window._onBenchmarkStatus = function(d) {
   const btn      = document.getElementById('btn-trigger');
   const btnQuick = document.getElementById('btn-trigger-quick');
+  const obsBadge = document.getElementById('obsStateBadge');
+  const obsBar = document.getElementById('obsProgressBar');
+  const obsElapsed = document.getElementById('obsElapsed');
+  const obsDone = document.getElementById('obsDone');
+  const obsTotal = document.getElementById('obsTotal');
+  const obsRemaining = document.getElementById('obsRemaining');
+  const obsCurrent = document.getElementById('obsCurrent');
   if (d.benchmark_running) {
     if (btn)      { btn.disabled = true;      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning; }
     if (btnQuick) { btnQuick.disabled = true; btnQuick.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning; }
   } else {
     if (btn)      { btn.disabled = false;      btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow; }
     if (btnQuick) { btnQuick.disabled = false; btnQuick.innerHTML = '<i class="bi bi-speedometer"></i> ' + _msgRunQuick; }
+  }
+  if (obsBadge) {
+    const isObs = d.benchmark_running && d.benchmark_mode === 'observation';
+    obsBadge.textContent = isObs ? _msgRunning : 'ON';
+    obsBadge.className = 'badge ' + (isObs ? 'bg-success' : 'bg-secondary');
+    const total = Number(d.benchmark_total_servers || 0);
+    const done = Number(d.benchmark_done_servers || 0);
+    const pct = total > 0 ? Math.min(100, Math.round(done / total * 100)) : 0;
+    if (obsBar) obsBar.style.width = pct + '%';
+    if (obsElapsed) obsElapsed.textContent = String(d.benchmark_elapsed_secs || 0) + 's';
+    if (obsDone) obsDone.textContent = String(done);
+    if (obsTotal) obsTotal.textContent = String(total);
+    if (obsRemaining) obsRemaining.textContent = String(d.benchmark_remaining_servers || 0);
+    if (obsCurrent) obsCurrent.textContent = d.current_server_testing || '—';
   }
 };
 

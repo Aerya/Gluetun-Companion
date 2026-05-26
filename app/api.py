@@ -71,6 +71,10 @@ def status():
     return jsonify({
         'benchmark_running':    get_setting('benchmark_running',    '0') == '1',
         'benchmark_current':    get_setting('benchmark_current_server', '') or None,
+        'benchmark_mode':       get_setting('benchmark_mode', '') or None,
+        'benchmark_started_at':  get_setting('benchmark_started_at', '') or None,
+        'benchmark_total':      int(get_setting('benchmark_total_servers', '0') or '0'),
+        'benchmark_done':       int(get_setting('benchmark_done_servers', '0') or '0'),
         'auto_benchmark':       get_setting('auto_benchmark',       '1') == '1',
         'auto_switch':          get_setting('auto_switch',          '1') == '1',
         'active_server':        active_server,
