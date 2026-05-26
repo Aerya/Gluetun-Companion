@@ -539,20 +539,24 @@ In **Settings → WireGuard VPN profiles**:
 
 > **Key security**: encrypted values are stored with the prefix `enc:` in the database. They are only decrypted at the moment the Compose override is written or a sidecar container is launched — never exposed in logs or configuration exports.
 
-#### ⚠️ Per-profile WireGuard sidecar key (required)
+#### ⚠️ Per-profile WireGuard sidecar key (recommended)
 
-> **If you use sidecar mode for benchmarks with WireGuard, each WireGuard profile must have its own dedicated sidecar key pair. Without it, servers in that profile are skipped during sidecar benchmarks.**
+> **If you use sidecar mode for WireGuard benchmarks, the most reliable setup is to give each WireGuard profile its own dedicated sidecar identity. Companion can also, as an advanced option, reuse the main profile WireGuard configuration.**
 
-**Why this is necessary:** sidecar test containers clone the environment of your main Gluetun container, including its `WIREGUARD_PRIVATE_KEY`. When a test container initiates a new WireGuard handshake using the same key from a different IP address, the VPN provider updates the peer routing… and your main Gluetun tunnel drops.
+**Why this is recommended:** sidecar test containers clone the environment of your main Gluetun container, including its `WIREGUARD_PRIVATE_KEY`. When a test container initiates a new WireGuard handshake using the same key from a different IP address, some VPN providers update the peer routing… and your main Gluetun tunnel may drop.
 
-**Why there is no global key:** an AirVPN key cannot authenticate against Mullvad or Proton, and vice-versa. A shared sidecar key across multiple providers is inherently invalid — each profile must have its own dedicated key pair.
+**Why there is no global key:** an AirVPN key cannot authenticate against Mullvad or Proton, and vice-versa. A shared sidecar key across multiple providers is inherently invalid — each profile must carry its own configuration.
 
 **Solution:** in **Settings → WireGuard VPN Profiles**, edit each profile and fill in the *Dedicated sidecar key* section:
 - **Sidecar private key** — a new private key generated from the same provider as the profile (e.g. `wg genkey` for providers that support it, or from your client account)
 - **Sidecar IP address** — the IP address assigned to this key by your provider (CIDR format, e.g. `10.x.x.x/32`)
 - **Sidecar pre-shared key** — only if your provider requires one
 
-If a profile has no sidecar key configured, its servers are **skipped** in sidecar mode (no failure recorded — they are simply excluded from the cycle). If the proxy fallback is enabled, they automatically fall back to proxy mode instead.
+**AirVPN / device case:** exporting the same AirVPN device again normally returns the same `PrivateKey`, `PresharedKey`, and `Address`. To get a different triplet dedicated to the sidecar, create a second AirVPN device/peer, even if it represents the same physical home server.
+
+**Advanced option:** enable *Reuse the main profile WireGuard configuration* if you accept the sidecar using the same WireGuard identity as the main Gluetun instance. This is convenient for providers that tolerate it, but it may disturb the main tunnel with others.
+
+If a profile has neither a dedicated sidecar key nor the reuse option enabled, its servers are **skipped** in sidecar mode (no failure recorded — they are simply excluded from the cycle). If the proxy fallback is enabled, they automatically fall back to proxy mode instead.
 
 #### Server ↔ profile assignment
 
@@ -576,7 +580,8 @@ Benchmark cycle with WireGuard profiles
        2. Sidecar mode:
           ├─ profile has a dedicated sidecar key → sidecar container launched with sidecar key
           │   (prevents peer conflict with the main Gluetun tunnel)
-          └─ profile has no sidecar key → server SKIPPED for this cycle
+          ├─ profile allows reuse → sidecar container launched with main profile vars
+          └─ profile has no sidecar key and no reuse option → server SKIPPED for this cycle
              (if proxy fallback enabled → tested in proxy mode instead)
        3. Proxy mode: test via Gluetun HTTP proxy (no sidecar container)
   └─ Select the best server according to the rotation policy:

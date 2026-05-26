@@ -672,12 +672,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_wg_rotation_threshold_hint':'Rotation conditionnelle : bascule vers un autre profil seulement si son score est supérieur d\'au moins X % au profil courant.',
 
         # ── Per-profile sidecar key ──
-        'set_wg_profile_sidecar_title': 'Clé sidecar dédiée (obligatoire en mode sidecar)',
-        'set_wg_profile_sidecar_hint':  'Chaque profil WireGuard a besoin de sa propre paire de clés sidecar. Sans cette clé, les serveurs de ce profil seront ignorés lors des benchmarks sidecar (conflit de peer entre le sidecar et Gluetun principal).',
+        'set_wg_profile_sidecar_title': 'Clé sidecar dédiée (recommandée en mode sidecar)',
+        'set_wg_profile_sidecar_hint':  'Pour un sidecar isolé, créez un deuxième device/peer WireGuard chez le fournisseur et renseignez ses valeurs ici. Chez AirVPN, réexporter le même device redonne logiquement le même triplet PrivateKey/PresharedKey/Address.',
+        'set_wg_profile_sidecar_reuse': 'Réutiliser la configuration WireGuard du profil principal',
+        'set_wg_profile_sidecar_reuse_hint': 'Option avancée : autorise le sidecar à utiliser les mêmes identifiants WireGuard que Gluetun principal. Selon le fournisseur, deux tunnels simultanés avec le même peer peuvent couper ou perturber le tunnel principal.',
         'set_wg_profile_sidecar_pk':    'Clé privée sidecar',
         'set_wg_profile_sidecar_addr':  'Adresse IP sidecar',
         'set_wg_profile_sidecar_psk':   'Clé pré-partagée sidecar (optionnelle)',
         'set_wg_profile_sidecar_badge': 'sidecar perso',
+        'set_wg_profile_sidecar_reuse_badge': 'sidecar réutilisé',
 
         # ── Hourly patterns ──
         'pat_title':        'Patterns horaires',
@@ -701,19 +704,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_run_now_hint':  'Passe par le proxy HTTP — résultat en quelques secondes.',
 
         # ── Notice : clé WireGuard sidecar ──
-        'notice_wg_sidecar_title':   '⚠️ Action requise — Clé sidecar WireGuard par profil',
-        'notice_wg_sidecar_body':    'Chaque profil WireGuard doit avoir sa propre <strong>paire de clés sidecar dédiée</strong>. Une clé AirVPN ne peut pas s\'authentifier contre Mullvad ou Proton — il n\'y a donc plus de clé sidecar globale. Sans clé sidecar, les serveurs du profil sont ignorés lors des benchmarks sidecar.',
-        'notice_wg_sidecar_action':  'Modifiez chaque profil dans <strong>Paramètres → Profils VPN WireGuard</strong> et renseignez la section <em>Clé sidecar dédiée</em>.',
+        'notice_wg_sidecar_title':   '⚠️ WireGuard sidecar par profil',
+        'notice_wg_sidecar_body':    'Pour les benchmarks sidecar WireGuard, Companion peut utiliser une <strong>clé sidecar dédiée</strong> par profil ou, en option avancée, réutiliser la configuration WireGuard du profil principal. Une clé AirVPN ne peut pas s\'authentifier contre Mullvad ou Proton : il n\'y a donc pas de clé globale multi-fournisseurs.',
+        'notice_wg_sidecar_action':  'Dans <strong>Paramètres → Profils VPN WireGuard</strong>, choisissez pour chaque profil une clé sidecar dédiée ou l\'option de réutilisation du profil principal.',
         'notice_wg_sidecar_readme':  'Lire la documentation',
-        'notice_wg_sidecar_check':   'J\'ai lu, je vais configurer la clé',
+        'notice_wg_sidecar_check':   'J\'ai lu, je vais configurer mes profils',
         'notice_wg_sidecar_close':   'Fermer',
 
         # ── Notice : nouveautés testeurs v2 ──
         'notice_new_features_title':     'Nouveautés pour les testeurs',
         'notice_new_features_pools_h':   'Pools de rotation (nouveau)',
         'notice_new_features_pools_b':   'Créez des groupes de serveurs qui tournent automatiquement ou manuellement — par liste, par filtre (pays, région…), par profil WireGuard, ou par métrique historique. Chaque pool a sa logique de critères (OU/ET), son mode de sélection (aléatoire, round-robin, meilleur débit historique) et peut mesurer le débit après rotation. Page <strong>Rotation</strong> dans la navigation.',
-        'notice_new_features_wg_h':      'Clé WireGuard dédiée aux tests sidecar (nouveau — obligatoire en mode WireGuard)',
-        'notice_new_features_wg_b':      'Les conteneurs sidecar partageaient la même clé WireGuard que Gluetun principal, provoquant une collision de pair et coupant le tunnel principal. Il faut désormais configurer une paire de clés dédiée dans <strong>Paramètres → Profils VPN WireGuard</strong>. Consultez le README pour les détails.',
+        'notice_new_features_wg_h':      'Configuration WireGuard sidecar par profil',
+        'notice_new_features_wg_b':      'Les tests sidecar WireGuard peuvent maintenant utiliser une clé dédiée par profil, ou réutiliser volontairement le profil principal via une option avancée. La clé dédiée reste recommandée pour éviter les collisions de peer. Consultez le README pour les détails.',
         'notice_new_features_score_h':   'Correction du classement par profil (fix)',
         'notice_new_features_score_b':   'Sur la page <strong>/servers</strong>, le bouton "Meilleur pour ce profil" affichait toujours le même serveur quel que soit le profil sélectionné. C\'est corrigé : le scoring utilise maintenant les données disponibles (y compris les quick checks) au lieu de tirer à zéro. Si les métriques upload/latence sont absentes, un avertissement s\'affiche sous les boutons de profil.',
         'notice_new_features_check':     'J\'ai lu et pris note',
@@ -1459,12 +1462,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_wg_rotation_threshold_hint':'Conditional rotation: switch to another profile only if its score is at least X% higher than the current one.',
 
         # ── Per-profile sidecar key ──
-        'set_wg_profile_sidecar_title': 'Dedicated sidecar key (required in sidecar mode)',
-        'set_wg_profile_sidecar_hint':  'Each WireGuard profile needs its own sidecar key pair. Without it, servers in this profile will be skipped during sidecar benchmarks (peer conflict between the sidecar container and the main Gluetun instance).',
+        'set_wg_profile_sidecar_title': 'Dedicated sidecar key (recommended in sidecar mode)',
+        'set_wg_profile_sidecar_hint':  'For an isolated sidecar, create a second WireGuard device/peer at the provider and enter its values here. With AirVPN, exporting the same device again will logically return the same PrivateKey/PresharedKey/Address triplet.',
+        'set_wg_profile_sidecar_reuse': 'Reuse the main profile WireGuard configuration',
+        'set_wg_profile_sidecar_reuse_hint': 'Advanced option: lets the sidecar use the same WireGuard identity as the main Gluetun instance. Depending on the provider, two simultaneous tunnels with the same peer may drop or disturb the main tunnel.',
         'set_wg_profile_sidecar_pk':    'Sidecar private key',
         'set_wg_profile_sidecar_addr':  'Sidecar IP address',
         'set_wg_profile_sidecar_psk':   'Sidecar pre-shared key (optional)',
         'set_wg_profile_sidecar_badge': 'custom sidecar',
+        'set_wg_profile_sidecar_reuse_badge': 'reused sidecar',
 
         # ── Hourly patterns ──
         'pat_title':        'Hourly patterns',
@@ -1488,19 +1494,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_run_now_hint':  'Uses the HTTP proxy — result in a few seconds.',
 
         # ── Notice: WireGuard sidecar key ──
-        'notice_wg_sidecar_title':   '⚠️ Action required — Per-profile WireGuard sidecar key',
-        'notice_wg_sidecar_body':    'Each WireGuard profile must have its own <strong>dedicated sidecar key pair</strong>. An AirVPN key cannot authenticate against Mullvad or Proton — there is therefore no global sidecar key anymore. Without a sidecar key, servers in that profile are skipped during sidecar benchmarks.',
-        'notice_wg_sidecar_action':  'Edit each profile in <strong>Settings → WireGuard VPN Profiles</strong> and fill in the <em>Dedicated sidecar key</em> section.',
+        'notice_wg_sidecar_title':   '⚠️ Per-profile WireGuard sidecar',
+        'notice_wg_sidecar_body':    'For WireGuard sidecar benchmarks, Companion can use a <strong>dedicated sidecar key</strong> per profile or, as an advanced option, reuse the main profile WireGuard configuration. An AirVPN key cannot authenticate against Mullvad or Proton, so there is no global multi-provider sidecar key.',
+        'notice_wg_sidecar_action':  'In <strong>Settings → WireGuard VPN Profiles</strong>, choose either a dedicated sidecar key or main-profile reuse for each profile.',
         'notice_wg_sidecar_readme':  'Read the documentation',
-        'notice_wg_sidecar_check':   'I\'ve read this, I\'ll configure the key',
+        'notice_wg_sidecar_check':   'I\'ve read this, I\'ll configure my profiles',
         'notice_wg_sidecar_close':   'Close',
 
         # ── Notice : new features for testers v2 ──
         'notice_new_features_title':     'What\'s new for testers',
         'notice_new_features_pools_h':   'Rotation pools (new)',
         'notice_new_features_pools_b':   'Create groups of servers that rotate automatically or manually — by list, by filter (country, region…), by WireGuard profile, or by historical metric. Each pool has its own criteria logic (OR/AND), selection mode (random, round-robin, best historical download) and can measure speed after rotation. See the <strong>Rotation</strong> page in the navigation.',
-        'notice_new_features_wg_h':      'Dedicated WireGuard key for sidecar tests (new — required in WireGuard mode)',
-        'notice_new_features_wg_b':      'Sidecar containers shared the same WireGuard key as the main Gluetun instance, causing a peer conflict and dropping the main tunnel. A dedicated key pair must now be configured in <strong>Settings → WireGuard VPN Profiles</strong>. See the README for details.',
+        'notice_new_features_wg_h':      'Per-profile WireGuard sidecar configuration',
+        'notice_new_features_wg_b':      'WireGuard sidecar tests can now use a dedicated key per profile, or deliberately reuse the main profile through an advanced option. A dedicated key is still recommended to avoid peer collisions. See the README for details.',
         'notice_new_features_score_h':   'Profile ranking fix',
         'notice_new_features_score_b':   'On the <strong>/servers</strong> page, the "Best for this profile" badge always showed the same server regardless of the selected profile. Fixed: scoring now uses available data (including quick checks) instead of falling back to zero. If upload/latency metrics are missing, a warning is shown below the profile buttons.',
         'notice_new_features_check':     'I\'ve read and noted this',

@@ -540,20 +540,24 @@ Dans **Paramètres → Profils VPN WireGuard** :
 
 > **Sécurité des clés** : les valeurs chiffrées sont préfixées `enc:` en base. Elles ne sont déchiffrées qu'au moment de la construction de l'override Compose ou du lancement d'un container sidecar — jamais exposées dans les logs ni dans l'export de configuration.
 
-#### ⚠️ Clé WireGuard sidecar par profil (obligatoire)
+#### ⚠️ Clé WireGuard sidecar par profil (recommandée)
 
-> **Si vous utilisez le mode sidecar pour les benchmarks avec WireGuard, chaque profil WireGuard doit avoir sa propre clé sidecar dédiée. Sans elle, les serveurs de ce profil sont ignorés lors des benchmarks sidecar.**
+> **Si vous utilisez le mode sidecar pour les benchmarks avec WireGuard, le plus fiable est de donner à chaque profil WireGuard sa propre identité sidecar dédiée. Companion permet aussi, en option avancée, de réutiliser la configuration WireGuard du profil principal.**
 
-**Pourquoi c'est nécessaire :** les containers sidecar de test clonent l'environnement de votre container Gluetun principal, y compris sa `WIREGUARD_PRIVATE_KEY`. Quand un container de test initie un nouveau handshake WireGuard avec la même clé depuis une adresse IP différente, le fournisseur VPN met à jour la route du peer… et le tunnel de votre Gluetun principal tombe.
+**Pourquoi c'est recommandé :** les containers sidecar de test clonent l'environnement de votre container Gluetun principal, y compris sa `WIREGUARD_PRIVATE_KEY`. Quand un container de test initie un nouveau handshake WireGuard avec la même clé depuis une adresse IP différente, certains fournisseurs VPN mettent à jour la route du peer… et le tunnel de votre Gluetun principal peut tomber.
 
-**Pourquoi il n'y a pas de clé globale :** une clé AirVPN ne peut pas s'authentifier auprès de Mullvad ou Proton, et inversement. Une clé sidecar partagée entre plusieurs providers est donc invalide par nature — chaque profil doit avoir sa propre paire de clés.
+**Pourquoi il n'y a pas de clé globale :** une clé AirVPN ne peut pas s'authentifier auprès de Mullvad ou Proton, et inversement. Une clé sidecar partagée entre plusieurs providers est donc invalide par nature — chaque profil doit porter sa propre configuration.
 
 **Solution :** dans **Paramètres → Profils VPN WireGuard**, modifiez chaque profil et renseignez la section *Clé sidecar dédiée* :
 - **Clé privée sidecar** — nouvelle clé privée générée auprès du même fournisseur que le profil (ex. `wg genkey` pour les providers qui l'acceptent, ou depuis votre espace client)
 - **Adresse IP sidecar** — l'adresse IP assignée à cette clé par votre fournisseur (format CIDR, ex. `10.x.x.x/32`)
 - **Clé pré-partagée sidecar** — uniquement si votre fournisseur en exige une
 
-Si un profil n'a pas de clé sidecar configurée, ses serveurs sont **ignorés** en mode sidecar (aucun résultat d'échec enregistré — ils sont simplement exclus du cycle). Si le fallback proxy est activé, ils basculent automatiquement en mode proxy.
+**Cas AirVPN / device :** réexporter la configuration du même device AirVPN redonne normalement le même `PrivateKey`, `PresharedKey` et `Address`. Pour obtenir un triplet différent dédié au sidecar, créez un deuxième device/peer côté AirVPN, même s'il correspond au même serveur physique chez vous.
+
+**Option avancée :** cochez *Réutiliser la configuration WireGuard du profil principal* si vous acceptez que le sidecar utilise les mêmes identifiants WireGuard que Gluetun principal. C'est pratique pour les fournisseurs qui le tolèrent, mais cela peut perturber le tunnel principal chez d'autres.
+
+Si un profil n'a ni clé sidecar dédiée ni option de réutilisation activée, ses serveurs sont **ignorés** en mode sidecar (aucun résultat d'échec enregistré — ils sont simplement exclus du cycle). Si le fallback proxy est activé, ils basculent automatiquement en mode proxy.
 
 #### Liaison serveurs ↔ profils
 
@@ -577,7 +581,8 @@ Cycle de benchmark avec profils WireGuard
        2. Mode sidecar :
           ├─ profil a une clé sidecar dédiée → container sidecar lancé avec la clé sidecar
           │   (évite le conflit de peer avec le tunnel Gluetun principal)
-          └─ profil sans clé sidecar → serveur IGNORÉ pour ce cycle
+          ├─ profil autorise la réutilisation → container sidecar lancé avec les vars du profil principal
+          └─ profil sans clé sidecar ni réutilisation → serveur IGNORÉ pour ce cycle
              (si fallback proxy activé → test en mode proxy à la place)
        3. Mode proxy : test via le proxy HTTP Gluetun (pas de container sidecar)
   └─ Sélection du meilleur serveur selon la politique de rotation :

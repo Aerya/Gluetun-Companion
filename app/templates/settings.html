@@ -433,9 +433,14 @@
                   <i class="bi bi-arrow-repeat"></i> rotation
                 </span>
                 {% endif %}
-                {% if profile.sidecar_private_key %}
+                {% if profile.sidecar_pk_set %}
                 <span class="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-25 ms-1" style="font-size:.7rem">
                   <i class="bi bi-key-fill"></i> {{ t.set_wg_profile_sidecar_badge }}
+                </span>
+                {% endif %}
+                {% if profile.sidecar_reuse_profile %}
+                <span class="badge bg-secondary bg-opacity-25 text-secondary border border-secondary border-opacity-25 ms-1" style="font-size:.7rem">
+                  <i class="bi bi-arrow-repeat"></i> {{ t.set_wg_profile_sidecar_reuse_badge }}
                 </span>
                 {% endif %}
               </div>
@@ -522,6 +527,15 @@
             <i class="bi bi-key text-secondary me-1"></i>{{ t.set_wg_profile_sidecar_title }}
           </div>
           <p class="text-muted mb-2" style="font-size:.74rem">{{ t.set_wg_profile_sidecar_hint }}</p>
+
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox"
+                   id="wg_sidecar_reuse_profile" name="wg_sidecar_reuse_profile">
+            <label class="form-check-label small" for="wg_sidecar_reuse_profile">
+              {{ t.set_wg_profile_sidecar_reuse }}
+            </label>
+            <div class="form-text" style="font-size:.72rem">{{ t.set_wg_profile_sidecar_reuse_hint }}</div>
+          </div>
 
           <div class="mb-2">
             <label class="form-label small" for="wg_sidecar_pk_profile">
@@ -2086,9 +2100,11 @@ function _wgEditProfile(profile) {
   const pkInput  = document.getElementById('wg_sidecar_pk_profile');
   const pskInput = document.getElementById('wg_sidecar_psk_profile');
   const addrInput = document.getElementById('wg_sidecar_addr_profile');
+  const reuseInput = document.getElementById('wg_sidecar_reuse_profile');
   if (pkInput)  { pkInput.value  = ''; pkInput.placeholder  = profile.sidecar_pk_set  ? '{{ t.set_wg_secret_keep }}' : ''; }
   if (pskInput) { pskInput.value = ''; pskInput.placeholder = profile.sidecar_psk_set ? '{{ t.set_wg_secret_keep }}' : ''; }
   if (addrInput) addrInput.value = profile.sidecar_addresses || '';
+  if (reuseInput) reuseInput.checked = !!profile.sidecar_reuse_profile;
   if (pkBadge)  pkBadge.style.display  = profile.sidecar_pk_set  ? '' : 'none';
   if (pskBadge) pskBadge.style.display = profile.sidecar_psk_set ? '' : 'none';
 
@@ -2108,8 +2124,12 @@ function _wgCancelEdit() {
   const pskBadge = document.getElementById('wg_sidecar_psk_profile_badge');
   const pkInput  = document.getElementById('wg_sidecar_pk_profile');
   const pskInput = document.getElementById('wg_sidecar_psk_profile');
+  const addrInput = document.getElementById('wg_sidecar_addr_profile');
+  const reuseInput = document.getElementById('wg_sidecar_reuse_profile');
   if (pkInput)  { pkInput.value = '';  pkInput.placeholder  = ''; }
   if (pskInput) { pskInput.value = ''; pskInput.placeholder = ''; }
+  if (addrInput) addrInput.value = '';
+  if (reuseInput) reuseInput.checked = false;
   if (pkBadge)  pkBadge.style.display  = 'none';
   if (pskBadge) pskBadge.style.display = 'none';
   document.getElementById('wg-form-title').innerHTML =

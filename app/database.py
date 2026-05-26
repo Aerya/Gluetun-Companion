@@ -292,6 +292,7 @@ def init_db(db_path: str):
             "ALTER TABLE vpn_profiles ADD COLUMN sidecar_private_key  TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE vpn_profiles ADD COLUMN sidecar_addresses     TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE vpn_profiles ADD COLUMN sidecar_preshared_key TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE vpn_profiles ADD COLUMN sidecar_reuse_profile INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE rotation_pools ADD COLUMN criteria_logic TEXT NOT NULL DEFAULT 'union'",
             "ALTER TABLE rotation_pools ADD COLUMN last_server TEXT",
             "ALTER TABLE rotation_pools ADD COLUMN last_error TEXT",
@@ -755,7 +756,7 @@ def get_vpn_profiles(enabled_only: bool = False) -> list[dict]:
         profiles = db.execute(
             f'SELECT id, name, provider, enabled, rotation_allowed, '
             f'rotation_priority, created_at, updated_at, '
-            f'sidecar_private_key, sidecar_addresses, sidecar_preshared_key '
+            f'sidecar_private_key, sidecar_addresses, sidecar_preshared_key, sidecar_reuse_profile '
             f'FROM vpn_profiles {where} ORDER BY rotation_priority, id'
         ).fetchall()
 
@@ -778,6 +779,7 @@ def get_vpn_profiles(enabled_only: bool = False) -> list[dict]:
                 'sidecar_private_key':  p['sidecar_private_key']  or '',
                 'sidecar_addresses':    p['sidecar_addresses']    or '',
                 'sidecar_preshared_key': p['sidecar_preshared_key'] or '',
+                'sidecar_reuse_profile': bool(p['sidecar_reuse_profile']),
             })
     return result
 
@@ -788,7 +790,7 @@ def get_vpn_profile(profile_id: int) -> dict | None:
         p = db.execute(
             'SELECT id, name, provider, enabled, rotation_allowed, '
             'rotation_priority, created_at, updated_at, '
-            'sidecar_private_key, sidecar_addresses, sidecar_preshared_key '
+            'sidecar_private_key, sidecar_addresses, sidecar_preshared_key, sidecar_reuse_profile '
             'FROM vpn_profiles WHERE id = ?',
             (profile_id,),
         ).fetchone()
@@ -811,6 +813,7 @@ def get_vpn_profile(profile_id: int) -> dict | None:
         'sidecar_private_key':   p['sidecar_private_key']   or '',
         'sidecar_addresses':     p['sidecar_addresses']     or '',
         'sidecar_preshared_key': p['sidecar_preshared_key'] or '',
+        'sidecar_reuse_profile': bool(p['sidecar_reuse_profile']),
     }
 
 
@@ -824,6 +827,7 @@ def create_vpn_profile(
     sidecar_private_key: str = '',
     sidecar_addresses: str = '',
     sidecar_preshared_key: str = '',
+    sidecar_reuse_profile: bool = False,
 ) -> int:
     """Insert a new VPN profile and its vars.  Returns the new profile id.
 
@@ -834,10 +838,11 @@ def create_vpn_profile(
         cur = db.execute(
             'INSERT INTO vpn_profiles '
             '(name, provider, enabled, rotation_allowed, rotation_priority, '
-            ' sidecar_private_key, sidecar_addresses, sidecar_preshared_key) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            ' sidecar_private_key, sidecar_addresses, sidecar_preshared_key, sidecar_reuse_profile) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
             (name, provider, int(enabled), int(rotation_allowed), rotation_priority,
-             sidecar_private_key, sidecar_addresses, sidecar_preshared_key),
+             sidecar_private_key, sidecar_addresses, sidecar_preshared_key,
+             int(sidecar_reuse_profile)),
         )
         profile_id = cur.lastrowid
         for var_key, var_value in vars.items():
@@ -860,6 +865,7 @@ def update_vpn_profile(
     sidecar_private_key: str | None = None,
     sidecar_addresses: str | None = None,
     sidecar_preshared_key: str | None = None,
+    sidecar_reuse_profile: bool | None = None,
 ) -> bool:
     """Update an existing VPN profile.  Returns False if the profile doesn't exist.
 
@@ -890,6 +896,8 @@ def update_vpn_profile(
             fields.append('sidecar_addresses = ?');    params.append(sidecar_addresses)
         if sidecar_preshared_key is not None:
             fields.append('sidecar_preshared_key = ?'); params.append(sidecar_preshared_key)
+        if sidecar_reuse_profile is not None:
+            fields.append('sidecar_reuse_profile = ?'); params.append(int(sidecar_reuse_profile))
 
         if fields:
             params.append(profile_id)

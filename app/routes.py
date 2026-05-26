@@ -1385,6 +1385,7 @@ def settings():
                 _sc_pk_raw  = request.form.get('wg_sidecar_pk_profile', '').strip()
                 _sc_addr    = request.form.get('wg_sidecar_addr_profile', '').strip()
                 _sc_psk_raw = request.form.get('wg_sidecar_psk_profile', '').strip()
+                _sc_reuse   = bool(request.form.get('wg_sidecar_reuse_profile'))
                 # Encrypt secrets when provided; empty = keep existing (handled below)
                 _sc_pk  = crypto_encrypt(_sc_pk_raw)  if _sc_pk_raw  else None
                 _sc_psk = crypto_encrypt(_sc_psk_raw) if _sc_psk_raw else None
@@ -1408,6 +1409,7 @@ def settings():
                         sidecar_private_key=_sc_pk,
                         sidecar_addresses=_sc_addr_val,
                         sidecar_preshared_key=_sc_psk,
+                        sidecar_reuse_profile=_sc_reuse,
                     ):
                         flash_t('flash_settings_saved', 'success')
                     else:
@@ -1424,6 +1426,7 @@ def settings():
                         sidecar_private_key=_sc_pk  or '',
                         sidecar_addresses=_sc_addr_val or '',
                         sidecar_preshared_key=_sc_psk or '',
+                        sidecar_reuse_profile=_sc_reuse,
                     )
                     flash_t('flash_settings_saved', 'success')
 
