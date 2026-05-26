@@ -230,9 +230,16 @@ def dashboard():
             'SELECT * FROM switches ORDER BY switched_at DESC LIMIT 1'
         ).fetchone()
         recent_pool_switches = db.execute(
-            '''SELECT * FROM switches
-               WHERE reason LIKE 'pool_rotation:%'
-               ORDER BY switched_at DESC LIMIT 200'''
+            '''SELECT sw.*,
+                      vp_to.name   AS to_profile_name,
+                      vp_from.name AS from_profile_name
+               FROM switches sw
+               LEFT JOIN servers s_to    ON s_to.name    = sw.to_server
+               LEFT JOIN vpn_profiles vp_to   ON vp_to.id   = s_to.vpn_profile_id
+               LEFT JOIN servers s_from  ON s_from.name  = sw.from_server
+               LEFT JOIN vpn_profiles vp_from ON vp_from.id = s_from.vpn_profile_id
+               WHERE sw.reason LIKE 'pool_rotation:%'
+               ORDER BY sw.switched_at DESC LIMIT 200'''
         ).fetchall()
         server_count = db.execute(
             'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'
@@ -1090,9 +1097,16 @@ def history():
                ORDER BY id DESC LIMIT 1'''
         ).fetchone()
         recent_pool_switches = db.execute(
-            '''SELECT * FROM switches
-               WHERE reason LIKE 'pool_rotation:%'
-               ORDER BY switched_at DESC LIMIT 10'''
+            '''SELECT sw.*,
+                      vp_to.name   AS to_profile_name,
+                      vp_from.name AS from_profile_name
+               FROM switches sw
+               LEFT JOIN servers s_to    ON s_to.name    = sw.to_server
+               LEFT JOIN vpn_profiles vp_to   ON vp_to.id   = s_to.vpn_profile_id
+               LEFT JOIN servers s_from  ON s_from.name  = sw.from_server
+               LEFT JOIN vpn_profiles vp_from ON vp_from.id = s_from.vpn_profile_id
+               WHERE sw.reason LIKE 'pool_rotation:%'
+               ORDER BY sw.switched_at DESC LIMIT 200'''
         ).fetchall()
 
     pages = max(1, (total + _HISTORY_PER_PAGE - 1) // _HISTORY_PER_PAGE)

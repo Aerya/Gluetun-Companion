@@ -282,6 +282,8 @@
       to_s:      {{ (sw.to_server   or '—') | tojson }},
       flag_from: {{ server_flag(sw.from_server) | tojson }},
       flag_to:   {{ server_flag(sw.to_server)   | tojson }},
+      from_prof: {{ (sw.from_profile_name or '') | tojson }},
+      to_prof:   {{ (sw.to_profile_name   or '') | tojson }},
       ok:        {{ 1 if sw.success else 0 }},
       date:      {{ ((sw.switched_at | localtime)[:16]) | tojson }},
       ts:        {{ (sw.switched_at or '') | tojson }}
@@ -348,10 +350,18 @@
           : '<span class="badge bg-danger"><i class="bi bi-x"></i> '       + _T.failure  + '</span>';
         return '<tr>' +
           '<td><span class="badge bg-primary" style="font-weight:500">' + _esc(sw.pool) + '</span></td>' +
-          '<td style="font-size:.8rem">' +
-            sw.flag_from + ' <code class="text-muted">'   + _esc(sw.from_s) + '</code>' +
-            ' <i class="bi bi-arrow-right text-muted" style="font-size:.7rem"></i> ' +
-            sw.flag_to   + ' <code class="text-success">' + _esc(sw.to_s)   + '</code>' +
+          '<td>' +
+            '<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:.35rem;align-items:start;min-width:240px">' +
+              '<div>' +
+                '<div><code class="text-muted" style="font-size:.8rem">' + sw.flag_from + ' ' + _esc(sw.from_s) + '</code></div>' +
+                (sw.from_prof ? '<div style="font-size:.67rem;color:var(--bs-secondary-color)">' + _esc(sw.from_prof) + '</div>' : '') +
+              '</div>' +
+              '<i class="bi bi-arrow-right text-muted" style="font-size:.7rem;padding-top:.2rem"></i>' +
+              '<div>' +
+                '<div><code class="text-success" style="font-size:.8rem">' + sw.flag_to + ' ' + _esc(sw.to_s) + '</code></div>' +
+                (sw.to_prof ? '<div style="font-size:.67rem;color:var(--bs-secondary-color)">' + _esc(sw.to_prof) + '</div>' : '') +
+              '</div>' +
+            '</div>' +
           '</td>' +
           '<td>' + typeBadge   + '</td>' +
           '<td>' + statusBadge + '</td>' +
