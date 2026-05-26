@@ -64,6 +64,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [HTTP proxy mode (optional)](#http-proxy-mode-optional)
   - [Quick check before benchmark](#quick-check-before-benchmark-option)
   - [Adaptive scheduling](#adaptive-scheduling-option)
+  - [Benchmark scope](#benchmark-scope-recommended-for-large-catalogues)
   - [Benchmark filtering by entry type](#benchmark-filtering-by-entry-type-option)
   - [AirVPN pre-filter before benchmark](#airvpn-pre-filter-before-benchmark-option-dedicated-to-airvpn)
   - [Docker events listener](#docker-events-listener)
@@ -93,6 +94,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Multi-source results** — Ookla, librespeed and iperf3 speeds stored separately and displayed in the dashboard and history
 - **Multi-stream download** — N concurrent TCP connections (configurable, default: 4)
 - **Automatic benchmarking** every X hours — download, upload and latency per server; automatic cycle can be disabled (manual trigger only)
+- **Smart benchmark scope** *(option)* — avoids huge cycles on massive catalogues: tests the best known servers for the usage profile, explores a few new servers and refreshes old measurements
 - **Benchmark pre-filtering** *(option)* — select which **entry types** to include in each cycle (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`); all types included by default; excluded servers remain in the list and can be tested manually; configurable in Settings → Benchmark filtering
 - **Quick check before benchmark** *(option)* — tests only the current server before each cycle; if speed is within ±N% of the last known result, the full benchmark is skipped entirely — no containers paused, no VPN restarts; triggers the full benchmark only when performance drifts significantly
 - **Adaptive scheduling** *(option)* — analyses hourly speed and variance patterns to identify the best and worst benchmark windows; recommended time slots displayed in Settings; optional auto-shift: if the next cycle falls on an unfavorable hour, it is shifted up to 3 h forward to the next favorable window
@@ -415,6 +417,23 @@ Companion analyses the test history to compute, for each hour of the day (0–23
 **Auto-shift** *(sub-option)*: if a scheduled cycle falls on an unfavorable hour, the benchmark is deferred by up to 3 h to the next favorable window. If none is found within that delay, the benchmark runs immediately. Once complete, the scheduler resumes its normal interval.
 
 > This option complements the automatic cycle — it does not replace it. The configured interval remains the reference; the adaptive shift only adjusts the next trigger if the hour is deemed unfavorable.
+
+### Benchmark scope *(recommended for large catalogues)*
+
+Enable via **Settings → Scheduling & Cycle → Benchmark scope**.
+
+Two modes are available:
+
+- **Test everything** — exhaustive mode: every compatible active server participates in the cycle. Useful to build an initial baseline, but very long with catalogues such as NordVPN.
+- **Smart benchmark** — recommended mode: Companion tests the **N best known servers** for the active usage profile, adds a few **never-tested** servers, then refreshes a few results older than X days.
+
+Configurable quotas:
+
+- **Known top** — number of already-measured servers to keep according to the usage profile.
+- **New** — number of never-benchmarked servers to explore in each cycle.
+- **Old after d** + **Refresh** — minimum age and number of old results to recheck.
+
+Set a quota to `0` to disable that part. Entry-type filters and the AirVPN pre-filter still apply to the cycle.
 
 ### Benchmark filtering by entry type *(option)*
 

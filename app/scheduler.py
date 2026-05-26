@@ -843,6 +843,92 @@ def run_benchmark_now(app):
         _do_benchmark(app, skip_quick_check=True)
 
 
+def _apply_benchmark_scope(servers: list) -> list:
+    """Limit a full benchmark to an explainable, configurable working set."""
+    from datetime import datetime, timedelta
+    from .database import get_db, get_setting, get_stability_all
+    from .profiles import score_servers
+
+    mode = get_setting('benchmark_scope_mode', 'smart')
+    if mode != 'smart' or not servers:
+        return servers
+
+    def _as_int(key: str, default: int, lo: int, hi: int) -> int:
+        try:
+            return max(lo, min(int(get_setting(key, str(default)) or default), hi))
+        except ValueError:
+            return default
+
+    top_n = _as_int('benchmark_scope_top_n', 50, 0, 500)
+    untested_n = _as_int('benchmark_scope_untested_n', 10, 0, 200)
+    refresh_days = _as_int('benchmark_scope_refresh_days', 14, 1, 365)
+    refresh_n = _as_int('benchmark_scope_refresh_n', 20, 0, 500)
+    active_profile = get_setting('active_profile', 'balanced')
+
+    if top_n <= 0 and untested_n <= 0 and refresh_n <= 0:
+        logger.info('Benchmark scope=smart but all quotas are 0 — keeping full list')
+        return servers
+
+    candidate_names = {s['name'] for s in servers}
+    with get_db() as db:
+        stats_rows = db.execute(
+            '''SELECT s.name,
+                      AVG(CASE WHEN st.success=1 AND (st.test_method IS NULL OR st.test_method!='proxy_qc') THEN st.download_mbps END) AS avg_dl,
+                      AVG(CASE WHEN st.success=1 AND (st.test_method IS NULL OR st.test_method!='proxy_qc') THEN st.upload_mbps END) AS avg_ul,
+                      AVG(CASE WHEN st.success=1 AND (st.test_method IS NULL OR st.test_method!='proxy_qc') THEN st.latency_ms END) AS avg_lat,
+                      AVG(CASE WHEN st.success=1 AND (st.test_method IS NULL OR st.test_method!='proxy_qc') THEN st.dl_single_mbps END) AS avg_dl_single,
+                      COUNT(CASE WHEN st.success=1 AND (st.test_method IS NULL OR st.test_method!='proxy_qc') THEN 1 END) AS full_tests,
+                      MAX(CASE WHEN st.success=1 AND (st.test_method IS NULL OR st.test_method!='proxy_qc') THEN st.tested_at END) AS last_full_test
+               FROM servers s
+               LEFT JOIN speed_tests st ON st.server_name = s.name
+               GROUP BY s.id'''
+        ).fetchall()
+
+    stats = {r['name']: dict(r) for r in stats_rows if r['name'] in candidate_names}
+    known_rows = [r for r in stats.values() if (r.get('full_tests') or 0) > 0]
+    untested_rows = [r for r in stats.values() if not (r.get('full_tests') or 0)]
+
+    selected: set[str] = set()
+    if top_n > 0 and known_rows:
+        scores = score_servers(known_rows, active_profile, get_stability_all())
+        selected.update(
+            name for name, _score in sorted(
+                scores.items(), key=lambda item: item[1], reverse=True
+            )[:top_n]
+        )
+
+    if untested_n > 0 and untested_rows:
+        selected.update(r['name'] for r in sorted(untested_rows, key=lambda r: r['name'])[:untested_n])
+
+    if refresh_n > 0 and known_rows:
+        cutoff = datetime.utcnow() - timedelta(days=refresh_days)
+        stale = []
+        for r in known_rows:
+            last_raw = r.get('last_full_test')
+            if not last_raw:
+                continue
+            try:
+                last_dt = datetime.strptime(str(last_raw)[:19], '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                continue
+            if last_dt < cutoff:
+                stale.append((last_dt, r['name']))
+        selected.update(name for _last_dt, name in sorted(stale)[:refresh_n])
+
+    if not selected:
+        logger.info('Benchmark scope=smart selected no server — keeping full list')
+        return servers
+
+    before = len(servers)
+    scoped = [s for s in servers if s['name'] in selected]
+    logger.info(
+        'Benchmark scope=smart: selected %d/%d server(s) '
+        '(top=%d, untested=%d, stale>%dd=%d, profile=%s)',
+        len(scoped), before, top_n, untested_n, refresh_days, refresh_n, active_profile,
+    )
+    return scoped
+
+
 def _do_benchmark(app, skip_quick_check: bool = False):
     import json as _json
     from .database import get_db, get_setting, set_setting
@@ -1081,6 +1167,8 @@ def _do_benchmark(app, skip_quick_check: bool = False):
                         len(_skipped), _max_load, _max_users, ', '.join(_skipped),
                     )
                 servers = _kept
+
+        servers = _apply_benchmark_scope(servers)
 
         if not servers:
             logger.info('No servers left after pre-filters — skipping benchmark')

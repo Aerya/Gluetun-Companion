@@ -72,6 +72,8 @@ _EXPORT_KEYS = frozenset({
     'auto_benchmark', 'pull_gluetun', 'pull_post_switch_containers',
     'pull_pause_bench_containers', 'pull_network_containers',
     'quick_check_mode', 'quick_check_threshold', 'scoring_window_days', 'outlier_detection',
+    'benchmark_scope_mode', 'benchmark_scope_top_n', 'benchmark_scope_untested_n',
+    'benchmark_scope_refresh_days', 'benchmark_scope_refresh_n',
     'weighted_score_current_pct',
     'stability_weight', 'adaptive_scheduling', 'adaptive_auto_shift',
     'notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
@@ -1275,6 +1277,21 @@ def settings():
                 pass
             set_setting('adaptive_scheduling', '1' if request.form.get('adaptive_scheduling') else '0')
             set_setting('adaptive_auto_shift', '1' if request.form.get('adaptive_auto_shift') else '0')
+            _scope_mode = request.form.get('benchmark_scope_mode', 'smart')
+            if _scope_mode not in ('all', 'smart'):
+                _scope_mode = 'smart'
+            set_setting('benchmark_scope_mode', _scope_mode)
+            for _key, _default, _min_v, _max_v in (
+                ('benchmark_scope_top_n',        '50',  0, 500),
+                ('benchmark_scope_untested_n',   '10',  0, 200),
+                ('benchmark_scope_refresh_days', '14',  1, 365),
+                ('benchmark_scope_refresh_n',    '20',  0, 500),
+            ):
+                try:
+                    _v = int(request.form.get(_key, _default) or _default)
+                    set_setting(_key, str(max(_min_v, min(_v, _max_v))))
+                except ValueError:
+                    set_setting(_key, _default)
             # Bench pre-filters
             _types_selected = request.form.getlist('bench_include_types')
             _valid_types = {'name', 'country', 'city', 'region', 'hostname'}
@@ -1563,6 +1580,11 @@ def settings():
         'pull_network_containers':      set(json.loads(get_setting('pull_network_containers', '[]'))),
         'quick_check_mode':             get_setting('quick_check_mode', '0'),
         'quick_check_threshold':        get_setting('quick_check_threshold', '15'),
+        'benchmark_scope_mode':         get_setting('benchmark_scope_mode', 'smart'),
+        'benchmark_scope_top_n':        get_setting('benchmark_scope_top_n', '50'),
+        'benchmark_scope_untested_n':   get_setting('benchmark_scope_untested_n', '10'),
+        'benchmark_scope_refresh_days': get_setting('benchmark_scope_refresh_days', '14'),
+        'benchmark_scope_refresh_n':    get_setting('benchmark_scope_refresh_n', '20'),
         'adaptive_scheduling':          get_setting('adaptive_scheduling', '0'),
         'adaptive_auto_shift':          get_setting('adaptive_auto_shift', '0'),
         'scoring_window_days':          get_setting('scoring_window_days', '30'),
@@ -1607,7 +1629,7 @@ def settings():
     from .catalogue import catalogue_stats
     adaptive_stats = get_hourly_benchmark_stats()
     active_auto_pools = _active_auto_pool_count()
-    bench_est_settings = _bench_estimate()  # per-server only (no server_count needed)
+    bench_est_settings = _bench_estimate(_benchmark_scope_estimated_count())
     return render_template(
         'settings.html',
         cfg=cfg,
@@ -2532,6 +2554,57 @@ def _bench_estimate(server_count: int = 0) -> dict:
         'mode':        'sidecar' if sidecar else 'proxy',
         'max_retries': max_retries,
     }
+
+
+def _benchmark_scope_estimated_count() -> int:
+    """Best-effort estimate of how many servers the next full benchmark will test."""
+    try:
+        with get_db() as db:
+            rows = db.execute(
+                '''SELECT s.name, s.filter_type, s.vpn_profile_id
+                   FROM servers s
+                   LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
+                   WHERE s.enabled = 1
+                     AND (s.vpn_profile_id IS NULL OR vp.enabled = 1)'''
+            ).fetchall()
+            if any(r['vpn_profile_id'] is not None for r in rows):
+                rows = [r for r in rows if r['vpn_profile_id'] is not None]
+            try:
+                include_types = set(json.loads(get_setting('bench_include_types', '[]')))
+            except Exception:
+                include_types = set()
+            if include_types:
+                rows = [r for r in rows if r['filter_type'] in include_types]
+            max_load = int(get_setting('airvpn_bench_max_load', '0') or '0')
+            max_users = int(get_setting('airvpn_bench_max_users', '0') or '0')
+            if max_load > 0 or max_users > 0:
+                snap = {
+                    r['name']: r for r in db.execute(
+                        'SELECT name, load, users FROM airvpn_snapshot'
+                    ).fetchall()
+                }
+                kept = []
+                for r in rows:
+                    if r['filter_type'] != 'name' or r['name'] not in snap:
+                        kept.append(r)
+                        continue
+                    s = snap[r['name']]
+                    if max_load > 0 and s['load'] is not None and s['load'] > max_load:
+                        continue
+                    if max_users > 0 and s['users'] is not None and s['users'] > max_users:
+                        continue
+                    kept.append(r)
+                rows = kept
+            if get_setting('benchmark_scope_mode', 'smart') == 'smart':
+                cap = (
+                    int(get_setting('benchmark_scope_top_n', '50') or '50')
+                    + int(get_setting('benchmark_scope_untested_n', '10') or '10')
+                    + int(get_setting('benchmark_scope_refresh_n', '20') or '20')
+                )
+                return min(len(rows), max(0, cap))
+            return len(rows)
+    except Exception:
+        return 0
 
 
 # ── Pool helpers ──────────────────────────────────────────────────────────────

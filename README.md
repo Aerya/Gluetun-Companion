@@ -64,6 +64,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
   - [Mode Proxy HTTP (optionnel)](#mode-proxy-http-optionnel)
   - [Vérification rapide avant benchmark](#vérification-rapide-avant-benchmark-option)
   - [Scheduling adaptatif](#scheduling-adaptatif-option)
+  - [Périmètre du benchmark](#périmètre-du-benchmark-recommandé-pour-les-gros-catalogues)
   - [Filtrage du benchmark par type d'entrée](#filtrage-du-benchmark-par-type-dentrée-option)
   - [Pré-filtre AirVPN avant benchmark](#pré-filtre-airvpn-avant-benchmark-option-dédié-airvpn)
   - [Écoute Docker events](#écoute-docker-events)
@@ -94,6 +95,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Résultats multi-sources** — les vitesses Ookla, librespeed et iperf3 sont stockées séparément et affichées dans le dashboard et l'historique
 - **Téléchargement multi-flux** — N connexions TCP simultanées (configurable, défaut : 4)
 - **Benchmark automatique** toutes les X heures — download, upload et latence par serveur ; cycle automatique désactivable (déclenchement manuel uniquement)
+- **Périmètre de benchmark intelligent** *(option)* — évite les cycles énormes sur les catalogues massifs : teste les meilleurs serveurs connus selon le profil d'usage, explore quelques nouveaux serveurs et rafraîchit les mesures anciennes
 - **Pré-filtrage du benchmark** *(option)* — sélectionnez les **types d'entrées** à inclure dans chaque cycle (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`) ; par défaut tous les types sont testés ; les serveurs exclus restent dans la liste et peuvent être testés manuellement ; configurable dans Paramètres → Filtrage du benchmark
 - **Vérification rapide avant benchmark** *(option)* — teste uniquement le serveur actif avant chaque cycle ; si le débit est dans la plage ±N% par rapport au dernier résultat connu, le benchmark complet est ignoré — aucun container stoppé, aucun redémarrage VPN ; déclenche le benchmark complet uniquement si les performances dérivent significativement
 - **Scheduling adaptatif** *(option)* — analyse les patterns horaires de débit et de variance pour identifier les meilleures et pires fenêtres de benchmark ; affiche les plages recommandées dans les Paramètres ; option de décalage automatique : si le prochain cycle tombe sur une heure défavorable, il est décalé jusqu'à 3 h vers la prochaine fenêtre favorable
@@ -416,6 +418,23 @@ Companion analyse l'historique des tests pour calculer, pour chaque tranche hora
 **Décalage automatique** *(sous-option)* : si le cycle planifié tombe sur une heure défavorable, le benchmark est décalé d'un maximum de 3 h vers la prochaine fenêtre favorable. Si aucune n'est trouvée dans ce délai, le benchmark s'exécute immédiatement. Une fois terminé, le planificateur reprend son intervalle normal.
 
 > Cette option est complémentaire du cycle automatique — elle ne le remplace pas. L'intervalle configuré reste la référence ; le décalage adaptatif n'ajuste que le prochain déclenchement si l'heure est jugée défavorable.
+
+### Périmètre du benchmark *(recommandé pour les gros catalogues)*
+
+Activer via **Paramètres → Planification & Cycle → Périmètre du benchmark**.
+
+Deux modes sont disponibles :
+
+- **Tout tester** — mode exhaustif : tous les serveurs actifs compatibles passent dans le cycle. C'est utile pour construire une base initiale, mais très long avec des catalogues comme NordVPN.
+- **Benchmark intelligent** — mode recommandé : Companion teste les **N meilleurs serveurs déjà connus** selon le profil d'usage actif, ajoute quelques serveurs **jamais testés**, puis rafraîchit quelques résultats plus anciens que X jours.
+
+Les quotas configurables sont :
+
+- **Top connus** — nombre de serveurs déjà mesurés à garder selon le profil d'usage.
+- **Nouveaux** — nombre de serveurs jamais benchmarkés à explorer à chaque cycle.
+- **Anciens après J** + **À rafraîchir** — âge minimum et nombre de résultats anciens à recontrôler.
+
+Mettre un quota à `0` désactive cette partie. Les filtres par type d'entrée et le pré-filtre AirVPN restent appliqués au cycle.
 
 ### Filtrage du benchmark par type d'entrée *(option)*
 
