@@ -23,6 +23,26 @@ def request_stop() -> None:
     logger.info('Stop requested by user — benchmark will abort after current server')
 
 
+def _progress_log(message: str) -> None:
+    """Keep a tiny user-facing live log for dashboard observation status."""
+    import json
+    from datetime import datetime
+    from .database import get_setting, set_setting
+
+    try:
+        lines = json.loads(get_setting('benchmark_log_lines', '[]') or '[]')
+        if not isinstance(lines, list):
+            lines = []
+    except Exception:
+        lines = []
+
+    lines.append({
+        'ts': datetime.now().strftime('%H:%M:%S'),
+        'msg': str(message),
+    })
+    set_setting('benchmark_log_lines', json.dumps(lines[-5:], ensure_ascii=False))
+
+
 # Docker event listener state
 _last_docker_event_ts: float = 0.0   # epoch of last event-triggered quick check
 _DOCKER_EVENT_COOLDOWN = 300          # minimum seconds between two event-triggered checks
@@ -833,16 +853,94 @@ def run_benchmark(app):
 
     observation = get_setting('continuous_observation', '0') == '1'
     with _lock:
-        _do_benchmark(app, observation=observation)
+        if observation:
+            cycle_no = 0
+            while (
+                get_setting('auto_benchmark', '1') == '1'
+                and get_setting('continuous_observation', '0') == '1'
+            ):
+                cycle_no += 1
+                logger.info('Continuous observation loop: cycle #%d', cycle_no)
+                tested = _do_benchmark(app, observation=True) or 0
+                if _stop_event.is_set():
+                    logger.info('Continuous observation loop stopped by user request')
+                    break
+                if tested <= 0:
+                    logger.info('Continuous observation loop stopped: no successful test in last cycle')
+                    break
+                if not _has_observation_work_left():
+                    logger.info('Continuous observation loop complete: no server left below target')
+                    break
+                time.sleep(30)
+        else:
+            _do_benchmark(app, observation=False)
 
     # Restore IntervalTrigger in case we were running from a one-shot DateTrigger
     _restore_interval_trigger()
+
+
+def run_observation_now(app):
+    """Run the continuous observation loop immediately, outside the interval schedule."""
+    from .database import get_setting
+    if get_setting('auto_benchmark', '1') != '1':
+        logger.info('Continuous observation not started — automatic cycle disabled')
+        return
+    if get_setting('continuous_observation', '0') != '1':
+        logger.info('Continuous observation not started — option disabled')
+        return
+    if get_setting('benchmark_running', '0') == '1':
+        logger.info('Continuous observation not started — benchmark already running')
+        return
+    with _lock:
+        cycle_no = 0
+        while (
+            get_setting('auto_benchmark', '1') == '1'
+            and get_setting('continuous_observation', '0') == '1'
+        ):
+            cycle_no += 1
+            logger.info('Continuous observation immediate loop: cycle #%d', cycle_no)
+            tested = _do_benchmark(app, observation=True) or 0
+            if _stop_event.is_set():
+                logger.info('Continuous observation immediate loop stopped by user request')
+                break
+            if tested <= 0:
+                logger.info('Continuous observation immediate loop stopped: no successful test in last cycle')
+                break
+            if not _has_observation_work_left():
+                logger.info('Continuous observation immediate loop complete: no server left below target')
+                break
+            time.sleep(30)
 
 
 def run_benchmark_now(app):
     """Manual trigger — always runs, bypasses auto_benchmark + quick check."""
     with _lock:
         _do_benchmark(app, skip_quick_check=True)
+
+
+def _observation_candidate_servers() -> list:
+    """Return servers eligible for observation before pyramid quotas are applied."""
+    from .database import get_db
+    with get_db() as db:
+        servers = db.execute(
+            'SELECT s.name, s.filter_type, s.vpn_profile_id, '
+            '       vp.provider AS vp_provider, vp.name AS vp_name, '
+            '       vp.enabled AS vp_enabled, vp.rotation_allowed AS vp_rotation_allowed '
+            'FROM servers s '
+            'LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id '
+            'WHERE s.enabled = 1 '
+            '  AND (s.vpn_profile_id IS NULL OR vp.enabled = 1) '
+            'ORDER BY s.name'
+        ).fetchall()
+
+    any_profiles = any(s['vpn_profile_id'] is not None for s in servers)
+    if any_profiles:
+        servers = [s for s in servers if s['vpn_profile_id'] is not None]
+    return servers
+
+
+def _has_observation_work_left() -> bool:
+    return bool(_apply_benchmark_scope(_observation_candidate_servers(), observation=True))
 
 
 def _apply_benchmark_scope(servers: list, observation: bool = False) -> list:
@@ -950,7 +1048,8 @@ def _apply_benchmark_scope(servers: list, observation: bool = False) -> list:
             selected.update(r['name'] for _last_dt, r in sorted(stale)[:refresh_n])
 
         if not selected:
-            logger.info('Continuous observation selected no server - falling back to smart scope')
+            logger.info('Continuous observation selected no server - target reached or no eligible server')
+            return []
         else:
             scoped = [s for s in servers if s['name'] in selected]
             logger.info(
@@ -1017,6 +1116,9 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
     set_setting('benchmark_mode', 'observation' if observation else 'benchmark')
     set_setting('benchmark_total_servers', '0')
     set_setting('benchmark_done_servers', '0')
+    set_setting('benchmark_next_server', '')
+    set_setting('benchmark_log_lines', '[]')
+    _progress_log('Observation continue demarree' if observation else 'Benchmark demarre')
 
     # ── Catalogue refresh via sidecar (always) ───────────────────────────────
     # The sidecar downloads server lists from the public Gluetun GitHub repo.
@@ -1122,11 +1224,13 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             logger.info('=== Quick check passed (%.0fs) — full benchmark skipped ===', duration_secs)
             set_setting('benchmark_running', '0')
             set_setting('benchmark_current_server', '')
+            set_setting('benchmark_next_server', '')
             set_setting('benchmark_started_at', '')
             set_setting('benchmark_mode', '')
             set_setting('benchmark_total_servers', '0')
             set_setting('benchmark_done_servers', '0')
-            return
+            _progress_log('Quick check OK - benchmark complet ignore')
+            return 0
         elif qc_dl is not None and qc_last_dl:
             # Quick check ran but deviation too large → full benchmark triggered
             diff_pct = abs(qc_dl - qc_last_dl) / qc_last_dl * 100
@@ -1181,7 +1285,8 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
 
         if not servers:
             logger.info('No enabled servers — skipping benchmark')
-            return
+            _progress_log('Aucun serveur actif a tester')
+            return 0
 
         # ── Pre-filter 0: exclude orphan servers when WireGuard profiles exist ─
         # If ANY vpn_profiles exist the user has set up WireGuard multi-provider.
@@ -1256,9 +1361,11 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
 
         if not servers:
             logger.info('No servers left after pre-filters — skipping benchmark')
-            return
+            _progress_log('Aucun serveur restant dans le perimetre')
+            return 0
         set_setting('benchmark_total_servers', str(len(servers)))
         set_setting('benchmark_done_servers', '0')
+        _progress_log(f'{len(servers)} serveur(s) selectionne(s)')
 
         # ── Load WireGuard profile vars for each distinct vpn_profile_id ─────
         # Decrypts secrets once per profile and builds a lookup table so each
@@ -1352,6 +1459,9 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                 break
             set_setting('benchmark_current_server', row['name'])
             set_setting('benchmark_done_servers', str(idx - 1))
+            next_server = servers[idx]['name'] if idx < len(servers) else ''
+            set_setting('benchmark_next_server', next_server)
+            _progress_log(f'Test {idx}/{len(servers)} : {row["name"]}')
 
             # Resolve WireGuard extra_env for this server's profile (None if no profile)
             _pid = row['vpn_profile_id']
@@ -1388,6 +1498,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                             row['name'], _skip_reason,
                         )
                         set_setting('benchmark_done_servers', str(idx))
+                        _progress_log(f'Ignore {row["name"]} : {_skip_reason}')
                         continue   # not a failure — just untestable in this mode
                 else:
                     _sidecar_env: dict[str, str] = dict(_extra_env) if _extra_env else {}
@@ -1420,8 +1531,10 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                 )
             if result:
                 results.append(result)
+                _progress_log(f'OK {row["name"]} - {float(result.get("dl", 0) or 0):.1f} Mbps')
                 _update_consecutive_failures(row['name'], success=True, threshold=auto_exclude)
             else:
+                _progress_log(f'Echec {row["name"]}')
                 _excluded_failures = _update_consecutive_failures(
                     row['name'], success=False, threshold=auto_exclude
                 )
@@ -1706,6 +1819,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
 
         duration_secs = round(time.time() - cycle_start, 1)
         logger.info('=== Benchmark cycle finished in %.0fs ===', duration_secs)
+        _progress_log(f'Cycle termine - {len(results)} resultat(s)')
 
         with get_db() as db:
             db.execute(
@@ -1763,6 +1877,8 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             except Exception as _hour_exc:
                 logger.warning('Optimal hour notification error: %s', _hour_exc)
 
+        return len(results)
+
     finally:
         # Always restart paused containers — even if the benchmark failed or
         # was interrupted — so the user's downloads resume automatically.
@@ -1783,6 +1899,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
         set_setting('benchmark_running', '0')
         _current_test_trigger = None
         set_setting('benchmark_current_server', '')
+        set_setting('benchmark_next_server', '')
         set_setting('benchmark_started_at', '')
         set_setting('benchmark_mode', '')
         set_setting('benchmark_total_servers', '0')
@@ -2571,6 +2688,10 @@ def start_scheduler(app):
             logger.info('Scheduler started — automatic benchmark DISABLED (manual trigger only)')
     else:
         logger.info('Scheduler started — benchmark every %.1f hours', hours)
+        with app.app_context():
+            if get_setting('continuous_observation', '0') == '1':
+                logger.info('Continuous observation enabled at startup — starting immediately')
+                trigger_observation_now(app)
 
 
 def reschedule(hours: float, enabled: bool = True):
@@ -2588,6 +2709,12 @@ def reschedule(hours: float, enabled: bool = True):
 def trigger_now(app):
     """Manual trigger: always runs full benchmark, ignores auto_benchmark + quick check."""
     t = threading.Thread(target=run_benchmark_now, args=[app], daemon=True, name='benchmark-now')
+    t.start()
+
+
+def trigger_observation_now(app):
+    """Start or resume continuous observation immediately if it is enabled."""
+    t = threading.Thread(target=run_observation_now, args=[app], daemon=True, name='observation-now')
     t.start()
 
 

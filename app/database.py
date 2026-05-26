@@ -179,6 +179,8 @@ def init_db(db_path: str):
                 ('connection_wait_seconds',  '45'),
                 ('benchmark_running',        '0'),
                 ('benchmark_current_server',''),
+                ('benchmark_next_server',   ''),
+                ('benchmark_log_lines',     '[]'),
                 ('benchmark_started_at',     ''),
                 ('benchmark_mode',           ''),
                 ('benchmark_total_servers',  '0'),

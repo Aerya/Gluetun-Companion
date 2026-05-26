@@ -108,6 +108,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'dash_observation_tested':'Testés',
         'dash_observation_remaining':'Restants',
         'dash_observation_current':'En cours',
+        'dash_observation_next':'Prochain',
+        'dash_observation_logs':'Journal live',
+        'dash_observation_history':'Voir les resultats',
+        'dash_observation_waiting':'En attente',
         'dash_map_title':       'Carte des serveurs',
 
         # ── Shared benchmark pattern labels ──
@@ -1018,6 +1022,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'dash_observation_tested':'Tested',
         'dash_observation_remaining':'Remaining',
         'dash_observation_current':'Current',
+        'dash_observation_next':'Next',
+        'dash_observation_logs':'Live log',
+        'dash_observation_history':'View results',
+        'dash_observation_waiting':'Waiting',
         'dash_map_title':       'Server map',
 
         # ── Shared benchmark pattern labels ──

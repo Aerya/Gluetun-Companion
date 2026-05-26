@@ -39,7 +39,7 @@ from .gluetun import (
 from .i18n import flash_t, get_t
 from .scheduler import (
     get_next_run, reschedule, trigger_now, trigger_quick_now,
-    trigger_single_server, request_stop, _lock as scheduler_lock,
+    trigger_single_server, trigger_observation_now, request_stop, _lock as scheduler_lock,
 )
 
 bp = Blueprint('main', __name__)
@@ -161,6 +161,12 @@ def _benchmark_progress() -> dict:
     total = int(get_setting('benchmark_total_servers', '0') or '0')
     done = int(get_setting('benchmark_done_servers', '0') or '0')
     running = get_setting('benchmark_running', '0') == '1'
+    try:
+        log_lines = json.loads(get_setting('benchmark_log_lines', '[]') or '[]')
+        if not isinstance(log_lines, list):
+            log_lines = []
+    except Exception:
+        log_lines = []
     elapsed = 0
     try:
         elapsed = max(0, int(time.time() - float(started))) if started else 0
@@ -170,6 +176,8 @@ def _benchmark_progress() -> dict:
         'running': running,
         'mode': get_setting('benchmark_mode', ''),
         'current': get_setting('benchmark_current_server', ''),
+        'next': get_setting('benchmark_next_server', ''),
+        'log_lines': log_lines[-5:],
         'started_at': started,
         'elapsed_secs': elapsed,
         'total': total,
@@ -334,6 +342,15 @@ def dashboard():
         server_count = db.execute(
             'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'
         ).fetchone()['n']
+        tested_servers = db.execute(
+            '''SELECT COUNT(DISTINCT s.name) AS n
+               FROM servers s
+               JOIN speed_tests st ON st.server_name = s.name
+               WHERE s.enabled = 1
+                 AND st.success = 1
+                 AND (st.test_method IS NULL OR st.test_method != 'proxy_qc')'''
+        ).fetchone()['n']
+        untested_servers = max(0, server_count - tested_servers)
         benchmark_estimated_count = _benchmark_scope_estimated_count(observation=False)
         bench_est = _bench_estimate(benchmark_estimated_count)
         server_stats = db.execute('''
@@ -416,6 +433,8 @@ def dashboard():
         dashboard_map_points=dashboard_map_points,
         benchmark_progress=_benchmark_progress(),
         server_count=server_count,
+        tested_servers=tested_servers,
+        untested_servers=untested_servers,
         benchmark_estimated_count=benchmark_estimated_count,
         bench_est=bench_est,
         server_stats=server_stats,
@@ -1411,7 +1430,8 @@ def settings():
                     set_setting(_key, str(max(_min_v, min(_v, _max_v))))
                 except ValueError:
                     set_setting(_key, _default)
-            set_setting('continuous_observation', '1' if request.form.get('continuous_observation') else '0')
+            observation_enabled = bool(request.form.get('continuous_observation'))
+            set_setting('continuous_observation', '1' if observation_enabled else '0')
             # Bench pre-filters
             _types_selected = request.form.getlist('bench_include_types')
             _valid_types = {'name', 'country', 'city', 'region', 'hostname'}
@@ -1428,6 +1448,8 @@ def settings():
             except ValueError:
                 pass
             reschedule(float(request.form.get('interval', '6')), enabled=(auto_bm and not active_auto_pools))
+            if observation_enabled and auto_bm and not active_auto_pools:
+                trigger_observation_now(current_app._get_current_object())
             if active_auto_pools and auto_bm:
                 flash_t('flash_pool_cycle_standby', 'warning')
             else:
@@ -2921,5 +2943,7 @@ def api_status():
         'benchmark_total_servers': progress['total'],
         'benchmark_done_servers': progress['done'],
         'benchmark_remaining_servers': progress['remaining'],
+        'benchmark_next_server':   progress['next'],
+        'benchmark_log_lines':     progress['log_lines'],
         'next_run':               str(get_next_run()) if (get_next_run() and get_setting('auto_benchmark', '1') == '1') else None,
     })

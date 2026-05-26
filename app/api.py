@@ -9,6 +9,7 @@ If no token is set, all endpoints return 403 (API disabled).
 
 Base URL : /api/v1/
 """
+import json
 import logging
 from functools import wraps
 
@@ -68,9 +69,18 @@ def status():
     if filters:
         active_server = next(iter(filters.values()), None)
 
+    try:
+        benchmark_log = json.loads(get_setting('benchmark_log_lines', '[]') or '[]')
+        if not isinstance(benchmark_log, list):
+            benchmark_log = []
+    except Exception:
+        benchmark_log = []
+
     return jsonify({
         'benchmark_running':    get_setting('benchmark_running',    '0') == '1',
         'benchmark_current':    get_setting('benchmark_current_server', '') or None,
+        'benchmark_next':       get_setting('benchmark_next_server', '') or None,
+        'benchmark_log_lines':  benchmark_log[-5:],
         'benchmark_mode':       get_setting('benchmark_mode', '') or None,
         'benchmark_started_at':  get_setting('benchmark_started_at', '') or None,
         'benchmark_total':      int(get_setting('benchmark_total_servers', '0') or '0'),
