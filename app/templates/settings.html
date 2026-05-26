@@ -166,6 +166,12 @@
         <h6 class="fw-bold mb-3 text-success">
           <i class="bi bi-calendar3"></i> {{ t.set_benchmark_title }}
         </h6>
+        {% if active_auto_pools %}
+        <div class="alert alert-info py-2 px-3 mb-3" style="font-size:.82rem">
+          <i class="bi bi-pause-circle me-1"></i>
+          {{ t.set_pool_cycle_standby.format(n=active_auto_pools) }}
+        </div>
+        {% endif %}
 
         <div class="mb-3" id="interval-group">
           <label class="form-label">{{ t.set_interval_label }}</label>
@@ -183,7 +189,8 @@
 
         <div class="mb-2 form-check form-switch">
           <input type="checkbox" name="auto_benchmark" class="form-check-input"
-                 id="auto_benchmark" {{ 'checked' if cfg.auto_benchmark == '1' }}
+                 id="auto_benchmark" {{ 'checked' if cfg.auto_benchmark == '1' and not active_auto_pools }}
+                 {{ 'disabled' if active_auto_pools }}
                  onchange="toggleAutoBenchmark(this.checked)">
           <label class="form-check-label" for="auto_benchmark">
             {{ t.set_auto_benchmark_label | safe }}
@@ -1995,7 +2002,7 @@ function toggleAutoBenchmark(enabled) {
     group.style.pointerEvents = enabled ? '' : 'none';
   }
 }
-toggleAutoBenchmark(document.getElementById('auto_benchmark').checked);
+toggleAutoBenchmark(document.getElementById('auto_benchmark').checked && !document.getElementById('auto_benchmark').disabled);
 
 // ── Quick check toggle ────────────────────────────────────────────────────
 function toggleQuickCheck(enabled) {

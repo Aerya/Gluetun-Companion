@@ -47,6 +47,30 @@
   </div>
 </div>
 
+{% if recent_pool_switches %}
+<div class="card mb-3">
+  <div class="card-header py-2">
+    <span class="fw-semibold" style="font-size:.9rem">
+      <i class="bi bi-shuffle text-primary"></i> {{ t.hist_pool_activity }}
+    </span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0" style="font-size:.82rem">
+      <tbody>
+        {% for sw in recent_pool_switches %}
+        <tr>
+          <td><span class="badge bg-primary"><i class="bi bi-shuffle"></i> {{ t.hist_pool_switch }}</span></td>
+          <td><code>{{ sw.from_server or '—' }}</code> → <code>{{ sw.to_server or '—' }}</code></td>
+          <td class="text-muted">{{ sw.reason.split(':')[1] if sw.reason and ':' in sw.reason else 'pool' }}</td>
+          <td class="text-end"><small class="text-muted">{{ sw.switched_at | localtime | truncate(16, True, '') }}</small></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {# ── Inline Patterns panel (Bootstrap Collapse) ──────────────────────────── #}
 {% if adaptive_stats.has_enough_data %}
 <div class="collapse {% if server_filter %}show{% endif %}" id="patternsPanel">
@@ -392,6 +416,12 @@
               <span class="badge bg-dark ms-1" style="font-size:.65rem;cursor:help"
                     data-bs-toggle="tooltip" title="{{ t.hist_trigger_docker }}">
                 <i class="bi bi-plugin"></i> auto
+              </span>
+            {% endif %}
+            {% if r.test_trigger == 'pool_rotation' %}
+              <span class="badge bg-primary ms-1" style="font-size:.65rem;cursor:help"
+                    data-bs-toggle="tooltip" title="{{ t.hist_trigger_pool }}">
+                <i class="bi bi-shuffle"></i> pool
               </span>
             {% endif %}
           </td>

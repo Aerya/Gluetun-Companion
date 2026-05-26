@@ -89,6 +89,11 @@
       <div style="font-size:.75rem;color:var(--muted)">
         <i class="bi bi-arrow-left-right"></i>
         {{ t.dash_last_switch }} {{ last_switch.switched_at | localtime | truncate(16, True, '') }}
+        {% if last_switch.reason and last_switch.reason.startswith('pool_rotation:') %}
+        <span class="badge bg-primary ms-1" style="font-size:.65rem">
+          <i class="bi bi-shuffle"></i> {{ t.dash_pool_changed }}
+        </span>
+        {% endif %}
       </div>
       {% endif %}
       {% if adaptive_stats.has_enough_data and adaptive_stats.best_hour is not none %}
@@ -184,6 +189,30 @@
 </div>
 
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
+{% if recent_pool_switches %}
+<div class="card mb-3">
+  <div class="card-header py-2">
+    <span class="fw-semibold" style="font-size:.9rem">
+      <i class="bi bi-shuffle text-primary"></i> {{ t.dash_pool_activity }}
+    </span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0" style="font-size:.82rem">
+      <tbody>
+        {% for sw in recent_pool_switches %}
+        <tr>
+          <td><span class="badge bg-primary"><i class="bi bi-shuffle"></i> {{ t.dash_pool_changed }}</span></td>
+          <td><code>{{ sw.from_server or '—' }}</code> → <code>{{ sw.to_server or '—' }}</code></td>
+          <td class="text-muted">{{ sw.reason.split(':')[1] if sw.reason and ':' in sw.reason else 'pool' }}</td>
+          <td class="text-end"><small class="text-muted">{{ sw.switched_at | localtime | truncate(16, True, '') }}</small></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {# ROW 2 — Server ranking (horizontal bars, no Chart.js) ─────────────────── #}
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
 {% if server_stats %}
@@ -347,6 +376,12 @@
               <span class="badge method-qc"><i class="bi bi-hdd-network"></i> quick check</span>
             {% else %}
               <span class="badge bg-secondary"><i class="bi bi-globe2"></i> proxy</span>
+            {% endif %}
+            {% if r.test_trigger == 'pool_rotation' %}
+              <span class="badge bg-primary ms-1" style="font-size:.65rem"
+                    data-bs-toggle="tooltip" title="{{ t.hist_trigger_pool }}">
+                <i class="bi bi-shuffle"></i> pool
+              </span>
             {% endif %}
           </td>
           <td>

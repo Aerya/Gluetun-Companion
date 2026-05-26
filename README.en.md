@@ -659,6 +659,10 @@ The scheduler checks every **5 minutes** whether any pool has a pending rotation
 
 > Pool rotations and benchmarks share the same operational lock: a rotation will not trigger during an active benchmark, and vice versa.
 
+When at least one automatic rotation pool is active, the classic automatic cycle in **Settings → Scheduling & Cycle** is paused: the toggle is disabled in the UI, manual benchmarks remain available, and pool rotations become the primary scheduler.
+
+Pool rotations are visible on the dashboard `/` and in `/history`. A switch appears as pool activity; if **Measure after switch** is enabled, the `proxy_qc` test also gets the `pool` badge.
+
 #### Pool rotation notifications
 
 | Type | Severity | Content |

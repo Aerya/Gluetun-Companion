@@ -660,6 +660,10 @@ Le scheduler vérifie toutes les **5 minutes** si des pools ont une rotation en 
 
 > Les rotations de pool et les benchmarks partagent le même verrou opérationnel : une rotation ne se déclenche pas pendant un benchmark actif, et inversement.
 
+Quand au moins un pool de rotation automatique est actif, le cycle automatique classique de **Paramètres → Planification & Cycle** passe en pause : le toggle est désactivé dans l'UI, les benchmarks manuels restent disponibles, et les rotations de pool deviennent le planificateur principal.
+
+Les rotations de pool sont visibles sur le dashboard `/` et dans `/history`. Une bascule apparaît comme activité de pool ; si l'option **Mesurer après bascule** est activée, le test `proxy_qc` reçoit aussi le badge `pool`.
+
 #### Notifications de rotation de pool
 
 | Type | Sévérité | Contenu |

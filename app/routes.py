@@ -44,6 +44,21 @@ from .scheduler import (
 
 bp = Blueprint('main', __name__)
 
+
+def _active_auto_pool_count() -> int:
+    with get_db() as db:
+        return db.execute(
+            'SELECT COUNT(*) AS n FROM rotation_pools WHERE enabled = 1 AND auto_rotate = 1'
+        ).fetchone()['n']
+
+
+def _standby_benchmark_cycle_for_pools() -> None:
+    set_setting('auto_benchmark', '0')
+    try:
+        reschedule(float(get_setting('test_interval_hours', '6') or '6'), enabled=False)
+    except Exception as exc:
+        logger.warning('reschedule after pool standby failed: %s', exc)
+
 # ---------------------------------------------------------------------------
 # Config export/import — allowed keys (no secrets)
 # ---------------------------------------------------------------------------
@@ -214,6 +229,11 @@ def dashboard():
         last_switch = db.execute(
             'SELECT * FROM switches ORDER BY switched_at DESC LIMIT 1'
         ).fetchone()
+        recent_pool_switches = db.execute(
+            '''SELECT * FROM switches
+               WHERE reason LIKE 'pool_rotation:%'
+               ORDER BY switched_at DESC LIMIT 5'''
+        ).fetchall()
         server_count = db.execute(
             'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'
         ).fetchone()['n']
@@ -279,6 +299,7 @@ def dashboard():
         recent_tests=recent_tests,
         recent_limit=recent_limit,
         last_switch=last_switch,
+        recent_pool_switches=recent_pool_switches,
         server_count=server_count,
         server_stats=server_stats,
         next_run=get_next_run() if get_setting('auto_benchmark', '1') == '1' else None,
@@ -1056,6 +1077,11 @@ def history():
                WHERE finished_at IS NOT NULL
                ORDER BY id DESC LIMIT 1'''
         ).fetchone()
+        recent_pool_switches = db.execute(
+            '''SELECT * FROM switches
+               WHERE reason LIKE 'pool_rotation:%'
+               ORDER BY switched_at DESC LIMIT 10'''
+        ).fetchall()
 
     pages = max(1, (total + _HISTORY_PER_PAGE - 1) // _HISTORY_PER_PAGE)
     return render_template(
@@ -1066,6 +1092,7 @@ def history():
         from_date=from_date, to_date=to_date,
         show_failed=show_failed,
         last_bench_cycle=last_bench_cycle,
+        recent_pool_switches=recent_pool_switches,
         server_names=server_names,
         timeline_data=timeline_data,
         confidence=compute_confidence_all(),
@@ -1202,9 +1229,10 @@ def settings():
         action = request.form.get('action')
 
         if action == 'save_planning':
+            active_auto_pools = _active_auto_pool_count()
             set_setting('test_interval_hours', request.form.get('interval', '6'))
             auto_bm = bool(request.form.get('auto_benchmark'))
-            set_setting('auto_benchmark',      '1' if auto_bm else '0')
+            set_setting('auto_benchmark', '0' if active_auto_pools else ('1' if auto_bm else '0'))
             set_setting('quick_check_mode',    '1' if request.form.get('quick_check_mode') else '0')
             try:
                 qct = float(request.form.get('quick_check_threshold', '15'))
@@ -1228,8 +1256,11 @@ def settings():
                 set_setting('airvpn_bench_max_users', str(max(0, _max_users)))
             except ValueError:
                 pass
-            reschedule(float(request.form.get('interval', '6')), enabled=auto_bm)
-            flash_t('flash_settings_saved', 'success')
+            reschedule(float(request.form.get('interval', '6')), enabled=(auto_bm and not active_auto_pools))
+            if active_auto_pools and auto_bm:
+                flash_t('flash_pool_cycle_standby', 'warning')
+            else:
+                flash_t('flash_settings_saved', 'success')
 
         elif action == 'save_speed':
             set_setting('speedtest_duration',  request.form.get('speedtest_duration', '8'))
@@ -1541,10 +1572,11 @@ def settings():
     from .database import get_hourly_benchmark_stats
     from .catalogue import catalogue_stats
     adaptive_stats = get_hourly_benchmark_stats()
+    active_auto_pools = _active_auto_pool_count()
     return render_template(
         'settings.html',
         cfg=cfg,
-        next_run=get_next_run(),
+        next_run=None if active_auto_pools else get_next_run(),
         gluetun_container=current_app.config['GLUETUN_CONTAINER'],
         adaptive_stats=adaptive_stats,
         profiles=PROFILES,
@@ -1574,6 +1606,7 @@ def settings():
         }),
         wg_orphan_count=_orphan_count,
         has_wg_profiles=_has_wg_profiles,
+        active_auto_pools=active_auto_pools,
     )
 
 
@@ -2306,7 +2339,11 @@ def api_pool_create():
         criteria=criteria,
     )
     # Schedule first auto-rotation if applicable
-    _maybe_schedule_next(pool_id, interval_h, bool(data.get('auto_rotate', False)))
+    _pool_enabled = bool(data.get('enabled', True))
+    _pool_auto = bool(data.get('auto_rotate', False))
+    _maybe_schedule_next(pool_id, interval_h, _pool_enabled and _pool_auto)
+    if _pool_enabled and _pool_auto:
+        _standby_benchmark_cycle_for_pools()
     return jsonify({'ok': True, 'id': pool_id})
 
 
@@ -2341,13 +2378,17 @@ def api_pool_update(pool_id: int):
         top_n=top_n_arg,
         criteria=criteria,
     )
-    # Reschedule if auto_rotate or interval changed
-    if auto_rotate is not None or interval_h is not None:
+    _enabled_after = bool(data.get('enabled')) if 'enabled' in data else bool(pool['enabled'])
+    _auto_after = bool(auto_rotate) if auto_rotate is not None else bool(pool['auto_rotate'])
+    # Reschedule if auto_rotate, enabled or interval changed
+    if auto_rotate is not None or interval_h is not None or 'enabled' in data:
         _maybe_schedule_next(
             pool_id,
             interval_h if interval_h is not None else pool['interval_hours'],
-            bool(auto_rotate) if auto_rotate is not None else bool(pool['auto_rotate']),
+            _enabled_after and _auto_after,
         )
+    if _enabled_after and _auto_after:
+        _standby_benchmark_cycle_for_pools()
     return jsonify({'ok': True})
 
 
