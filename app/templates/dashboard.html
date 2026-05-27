@@ -91,23 +91,10 @@
     0%, 100% { opacity: .55; transform: scale(.9); }
     50% { opacity: 1; transform: scale(1.08); }
   }
-  @keyframes obsShimmer {
-    0% { transform: translateX(-120%); }
-    100% { transform: translateX(120%); }
-  }
   .obs-live-card {
     position: relative;
     overflow: hidden;
     border-color: rgba(13,202,240,.35);
-  }
-  .obs-live-card::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(90deg, transparent, rgba(13,202,240,.08), transparent);
-    transform: translateX(-120%);
-    animation: obsShimmer 2.8s linear infinite;
-    pointer-events: none;
   }
   .obs-live-card > * { position: relative; z-index: 1; }
   .obs-led {
@@ -142,6 +129,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1.35;
+  }
+  .pool-activity-scroll {
+    max-height: 18.25rem;
+    overflow-y: auto;
   }
 </style>
 
@@ -439,7 +430,7 @@
   </div>
   {% if recent_pool_switches %}
   <div class="col-12 col-lg-8">
-<div class="card dash-fixed-card">
+<div class="card dash-fixed-card h-100 d-flex flex-column">
   <div class="card-header py-2 d-flex align-items-center justify-content-between gap-2">
     <span class="fw-semibold" style="font-size:.9rem">
       <i class="bi bi-shuffle text-primary"></i> {{ t.dash_pool_activity }}
@@ -452,7 +443,7 @@
     </button>
   </div>
 
-  <div class="collapse show" id="poolActivityBody">
+  <div class="collapse show flex-grow-1" id="poolActivityBody">
     {# ── Filter bar ── #}
     <div class="px-3 pt-2 pb-2 border-bottom d-flex flex-wrap gap-2 align-items-end">
       <input type="text" id="poolSearch" class="form-control form-control-sm"
@@ -464,9 +455,9 @@
       <div class="d-flex align-items-center gap-1 ms-auto">
         <span class="text-muted" style="font-size:.82rem">{{ t.dash_pool_show }}</span>
         <select id="poolPerPage" class="form-select form-select-sm" style="width:auto">
-          <option value="5" selected>5</option>
-          <option value="10">10</option>
+          <option value="10" selected>10</option>
           <option value="20">20</option>
+          <option value="50">50</option>
           <option value="0">{{ t.dash_pool_all }}</option>
         </select>
         <span class="text-muted" style="font-size:.82rem">{{ t.dash_pool_entries }}</span>
@@ -474,7 +465,7 @@
     </div>
 
     {# ── Table ── #}
-    <div class="table-responsive">
+    <div class="table-responsive pool-activity-scroll">
       <table class="table table-sm table-hover mb-0" style="font-size:.82rem">
         <thead>
           <tr>
@@ -536,7 +527,7 @@
   };
 
   /* ── state ── */
-  var _col = 'ts', _dir = -1, _pp = 5, _q = '', _fd = '', _td = '';
+  var _col = 'ts', _dir = -1, _pp = 10, _q = '', _fd = '', _td = '';
 
   function _esc(s) {
     return String(s)
