@@ -233,6 +233,15 @@
       <option value="LOW"    {{ 'selected' if conf_filter == 'LOW' }}>🔴 {{ t.srv_filter_conf_low }}</option>
     </select>
   </div>
+  <div class="col-auto">
+    <select name="airvpn_bw_min" class="form-select form-select-sm" onchange="this.form.submit()"
+            title="{{ t.srv_airvpn_bw_hint }}">
+      <option value="0" {{ 'selected' if not airvpn_bw_min }}>{{ t.srv_airvpn_bw_all }}</option>
+      {% for n in [1000, 2500, 5000, 10000, 20000] %}
+      <option value="{{ n }}" {{ 'selected' if airvpn_bw_min == n }}>{{ t.srv_airvpn_bw_min }} {{ n | bw_label }}</option>
+      {% endfor %}
+    </select>
+  </div>
   <div class="col-auto d-flex align-items-center gap-1">
     <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.srv_filter_top_n }}</label>
     <select name="top_n" class="form-select form-select-sm" style="width:80px" onchange="this.form.submit()">
@@ -256,7 +265,7 @@
       <i class="bi bi-funnel-fill"></i>
     </button>
   </div>
-  {% if q or type_filter or from_date or to_date or conf_filter or top_n or sort not in ('avg_dl', 'avg_dl_desc') %}
+  {% if q or type_filter or from_date or to_date or conf_filter or top_n or airvpn_bw_min or sort not in ('avg_dl', 'avg_dl_desc') %}
   <div class="col-auto">
     <a href="{{ url_for('main.servers', per_page=per_page) }}" class="btn btn-sm btn-outline-secondary">✕</a>
   </div>
@@ -302,6 +311,15 @@
                  title="{{ t.srv_airvpn_col_airvpn_only }}"
                  onclick="event.stopPropagation()"></i>
               <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('users_asc','users_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='users_asc' else ('▼' if sort=='users_desc' else '⇅') }}</span>
+            </th>
+            <th style="cursor:pointer;user-select:none;white-space:nowrap"
+                onclick="_srvSort('bw','desc')">
+              {{ t.srv_airvpn_col_bw }}
+              <i class="bi bi-info-circle text-muted ms-1" style="font-size:.75rem"
+                 data-bs-toggle="tooltip" data-bs-placement="bottom"
+                 title="{{ t.srv_airvpn_bw_hint }}"
+                 onclick="event.stopPropagation()"></i>
+              <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('bw_asc','bw_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='bw_asc' else ('▼' if sort=='bw_desc' else '⇅') }}</span>
             </th>
             {{ srv_th(t.cmn_public_ip,   'ip',      'asc') }}
             {{ srv_th(t.srv_col_avg_dl,  'avg_dl',  'desc') }}
@@ -447,7 +465,15 @@
             <td class="srv-col-users" data-srv="{{ s.name }}">
               <span class="text-muted">—</span>
             </td>
+            <td class="srv-col-bw" data-srv="{{ s.name }}">
+              {% if s.airvpn_bw_max %}
+                <span class="badge bg-info text-dark">{{ s.airvpn_bw_max | bw_label }}</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
             {% else %}
+            <td><span class="text-muted">—</span></td>
             <td><span class="text-muted">—</span></td>
             <td><span class="text-muted">—</span></td>
             {% endif %}
@@ -735,8 +761,20 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="border-bottom px-3 pt-3 pb-0">
-        <input type="text" id="airvpn-search" class="form-control form-control-sm mb-3"
-               placeholder="{{ t.srv_airvpn_search_ph }}">
+        <div class="row g-2 mb-3">
+          <div class="col">
+            <input type="text" id="airvpn-search" class="form-control form-control-sm"
+                   placeholder="{{ t.srv_airvpn_search_ph }}">
+          </div>
+          <div class="col-auto">
+            <select id="airvpn-bw-filter" class="form-select form-select-sm" title="{{ t.srv_airvpn_bw_hint }}">
+              <option value="0">{{ t.srv_airvpn_bw_all }}</option>
+              {% for n in [1000, 2500, 5000, 10000, 20000] %}
+              <option value="{{ n }}">{{ t.srv_airvpn_bw_min }} {{ n | bw_label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
         <ul class="nav nav-tabs border-0" id="airvpnTabs">
           <li class="nav-item">
             <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-servers" id="tab-servers-btn">
@@ -783,6 +821,7 @@
                     <th class="airvpn-sort-th" data-col="country" style="cursor:pointer;user-select:none">{{ t.filter_label_country }} <span class="airvpn-sort-icon" data-col="country">⇅</span></th>
                     <th>{{ t.srv_airvpn_col_location }}</th>
                     <th class="airvpn-sort-th" data-col="load" style="cursor:pointer;user-select:none;min-width:130px">{{ t.srv_airvpn_col_load }} <span class="airvpn-sort-icon" data-col="load">⇅</span></th>
+                    <th class="airvpn-sort-th" data-col="bw_max" style="cursor:pointer;user-select:none;white-space:nowrap">{{ t.srv_airvpn_col_bw }} <span class="airvpn-sort-icon" data-col="bw_max">⇅</span></th>
                     <th class="airvpn-sort-th" data-col="users" style="cursor:pointer;user-select:none">{{ t.srv_airvpn_col_users }} <span class="airvpn-sort-icon" data-col="users">⇅</span></th>
                     <th title="{{ t.srv_airvpn_health_hint }}" style="cursor:help"><i class="bi bi-info-circle text-muted" style="font-size:.8rem"></i></th>
                   </tr>
@@ -808,6 +847,7 @@
                     <th>{{ t.filter_label_country }}</th>
                     <th>{{ t.srv_airvpn_col_location }}</th>
                     <th style="min-width:130px">{{ t.srv_airvpn_col_load }}</th>
+                    <th>{{ t.srv_airvpn_col_bw }}</th>
                     <th>{{ t.srv_airvpn_col_users }}</th>
                     <th title="{{ t.srv_airvpn_health_hint }}" style="cursor:help"><i class="bi bi-info-circle text-muted" style="font-size:.8rem"></i></th>
                   </tr>
@@ -960,7 +1000,7 @@ document.querySelectorAll('.airvpn-sort-th').forEach(th => {
     _sortDir = (th.dataset.col === _sortCol) ? _sortDir * -1 : 1;
     _sortCol = th.dataset.col;
     _applySortUI();
-    if (_airvpnData) _renderServersTab(_sortedServers());
+    if (_airvpnData) { _renderServersTab(_sortedServers()); _filterAirvpnModal(); }
   });
 });
 
@@ -997,7 +1037,7 @@ function _flag(code) {
 function _loadBar(pct, bw_max) {
   const cls = pct < 40 ? 'bg-success' : pct < 70 ? 'bg-warning' : 'bg-danger';
   const bwHtml = bw_max
-    ? `<div><small class="text-muted" style="font-size:.68rem">${bw_max >= 1000 ? (bw_max % 1000 === 0 ? bw_max/1000 : (bw_max/1000).toFixed(1)) + ' Gbit/s' : bw_max + ' Mbit/s'} max</small></div>`
+    ? `<div><small class="text-muted" style="font-size:.68rem">${_fmtBw(bw_max)} max</small></div>`
     : '';
   return `<div class="d-flex align-items-center gap-2">
     <div class="progress flex-grow-1" style="height:5px;min-width:60px">
@@ -1005,6 +1045,15 @@ function _loadBar(pct, bw_max) {
     </div>
     <small class="text-muted" style="width:2.8rem;text-align:right">${pct}%</small>
   </div>${bwHtml}`;
+}
+function _fmtBw(mbps) {
+  const v = parseInt(mbps || 0, 10);
+  if (!v) return '—';
+  if (v >= 1000) return (v % 1000 === 0 ? v / 1000 : (v / 1000).toFixed(1)) + ' Gbit/s';
+  return v + ' Mbit/s';
+}
+function _bwBadge(mbps) {
+  return mbps ? `<span class="badge bg-info text-dark">${_fmtBw(mbps)}</span>` : '<span class="text-muted">—</span>';
 }
 
 function _renderServersTab(servers) {
@@ -1015,6 +1064,7 @@ function _renderServersTab(servers) {
     const tr = document.createElement('tr');
     tr.dataset.name = s.name.toLowerCase();
     tr.dataset.country = s.country.toLowerCase();
+    tr.dataset.bw = String(s.bw_max || 0);
     if (exists) tr.classList.add('opacity-50');
     const tdCb = document.createElement('td');
     tdCb.className = 'ps-3';
@@ -1028,6 +1078,7 @@ function _renderServersTab(servers) {
       <td><span title="${_esc(s.country)}">${_flag(s.country_code)} <small>${_esc(s.country)}</small></span></td>
       <td><small class="text-muted">${_esc(s.location)}</small></td>
       <td>${_loadBar(s.load, s.bw_max)}</td>
+      <td>${_bwBadge(s.bw_max)}</td>
       <td><small class="text-muted">${_esc(String(s.users))}</small></td>
       <td>${s.health==='ok' ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-exclamation-triangle-fill text-warning" data-bs-toggle="tooltip" data-bs-title="'+_esc(_t.healthErr)+'"></i>'}</td>
     `);
@@ -1058,6 +1109,7 @@ function _renderCountriesTab(countries) {
       const row = document.createElement('div');
       row.className = 'country-server-row d-flex align-items-center gap-2 py-1' + (exists ? ' opacity-50' : '');
       row.dataset.name = s.name.toLowerCase(); row.dataset.country = c.country.toLowerCase();
+      row.dataset.bw = String(s.bw_max || 0);
       if (!exists) row.style.cursor = 'pointer';
       const cb = document.createElement('input');
       cb.type='checkbox'; cb.className='form-check-input airvpn-cb flex-shrink-0'; cb.value=s.name;
@@ -1088,13 +1140,14 @@ function _renderRecTab(allServers) {
     badge.classList.remove('d-none');
   }
   if (!recServers.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">${_esc(_t.recEmpty)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">${_esc(_t.recEmpty)}</td></tr>`;
     return;
   }
   for (const s of recServers) {
     const exists = _existingServers.has(s.name);
     const tr = document.createElement('tr');
     tr.dataset.name = s.name.toLowerCase(); tr.dataset.country = s.country.toLowerCase();
+    tr.dataset.bw = String(s.bw_max || 0);
     if (exists) tr.classList.add('opacity-50'); else tr.style.cursor = 'pointer';
     const tdCb = document.createElement('td'); tdCb.className = 'ps-3';
     const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'form-check-input airvpn-cb'; cb.value = s.name;
@@ -1106,6 +1159,7 @@ function _renderRecTab(allServers) {
       <td><span title="${_esc(s.country)}">${_flag(s.country_code)} <small>${_esc(s.country)}</small></span></td>
       <td><small class="text-muted">${_esc(s.location)}</small></td>
       <td>${_loadBar(s.load, s.bw_max)}</td>
+      <td>${_bwBadge(s.bw_max)}</td>
       <td><small class="text-muted">${_esc(String(s.users))}</small></td>
       <td><i class="bi bi-check-circle-fill text-success"></i></td>
     `);
@@ -1157,6 +1211,7 @@ function _renderDiffTab(allServers, diff) {
         const row = document.createElement('div');
         row.className = 'd-flex align-items-center gap-2 py-1' + (exists ? ' opacity-50' : '');
         row.dataset.name = s.name.toLowerCase(); row.dataset.country = s.country.toLowerCase();
+        row.dataset.bw = String(s.bw_max || 0);
         if (!exists) row.style.cursor = 'pointer';
         const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'form-check-input airvpn-cb flex-shrink-0'; cb.value = s.name;
         if (exists) cb.disabled = true;
@@ -1202,6 +1257,7 @@ function _renderDiffTab(allServers, diff) {
         const div = document.createElement('div');
         div.className = 'd-flex align-items-center gap-2 py-1';
         div.dataset.name = s.name.toLowerCase(); div.dataset.country = s.country.toLowerCase();
+        div.dataset.bw = String(s.bw_max || 0);
         div.insertAdjacentHTML('beforeend',
           `<i class="bi ${_esc(ico)} ${_esc(cls)} flex-shrink-0" style="font-size:1.1rem"></i>`+
           `<code class="flex-shrink-0">${_esc(s.name)}</code>`+
@@ -1261,16 +1317,23 @@ function airvpnAddSelected() {
     .catch(()=>{btn.disabled=false;btn.innerHTML=`<i class="bi bi-plus-lg"></i> ${_t.addBtn}`;});
 }
 
-document.getElementById('airvpn-search').addEventListener('input', function(){
-  const q=this.value.toLowerCase().trim();
-  const _match = el => !q || el.dataset.name?.includes(q) || el.dataset.country?.includes(q);
+function _filterAirvpnModal(){
+  const q=document.getElementById('airvpn-search').value.toLowerCase().trim();
+  const minBw=parseInt(document.getElementById('airvpn-bw-filter')?.value || '0', 10) || 0;
+  const _match = el => {
+    const textOk = !q || el.dataset.name?.includes(q) || el.dataset.country?.includes(q);
+    const bwOk = !minBw || (parseInt(el.dataset.bw || '0', 10) >= minBw);
+    return textOk && bwOk;
+  };
   document.querySelectorAll('#airvpn-servers-tbody tr').forEach(tr=>tr.classList.toggle('d-none',!_match(tr)));
   document.querySelectorAll('#airvpn-rec-tbody tr[data-name]').forEach(tr=>tr.classList.toggle('d-none',!_match(tr)));
   document.querySelectorAll('.country-server-row').forEach(row=>row.classList.toggle('d-none',!_match(row)));
-  document.querySelectorAll('#airvpn-countries-list details').forEach(d=>{const ctry=d.dataset.country||'';const hasV=q?(ctry.includes(q)||[...d.querySelectorAll('.country-server-row')].some(r=>!r.classList.contains('d-none'))):true;d.classList.toggle('d-none',!hasV);if(q&&hasV)d.open=true;else if(!q)d.open=false;});
+  document.querySelectorAll('#airvpn-countries-list details').forEach(d=>{const ctry=d.dataset.country||'';const hasRows=[...d.querySelectorAll('.country-server-row')].some(r=>!r.classList.contains('d-none'));const hasV=(q&&ctry.includes(q))||hasRows;d.classList.toggle('d-none',!hasV);if((q||minBw)&&hasV)d.open=true;else if(!q&&!minBw)d.open=false;});
   // Diff tab: filter rows with data-name/data-country
   document.querySelectorAll('#airvpn-diff-container [data-name]').forEach(el=>el.classList.toggle('d-none',!_match(el)));
-});
+}
+document.getElementById('airvpn-search').addEventListener('input', _filterAirvpnModal);
+document.getElementById('airvpn-bw-filter')?.addEventListener('change', _filterAirvpnModal);
 
 // ── Catalogue modal ───────────────────────────────────────────────────────
 const _catExisting = new Set({{ existing_all_names | tojson }});
@@ -1573,10 +1636,17 @@ function _refreshAirvpnStats() {
       document.querySelectorAll('td.srv-col-load[data-srv]').forEach(td=>{
         const name=td.dataset.srv; const s=map.get(name);
         const utd=document.querySelector(`td.srv-col-users[data-srv="${CSS.escape(name)}"]`);
-        if(!s){td.innerHTML='<span class="text-muted">—</span>';if(utd)utd.innerHTML='<span class="text-muted">—</span>';return;}
+        const btd=document.querySelector(`td.srv-col-bw[data-srv="${CSS.escape(name)}"]`);
+        if(!s){
+          td.innerHTML='<span class="text-muted">—</span>';
+          if(utd)utd.innerHTML='<span class="text-muted">—</span>';
+          if(btd)btd.innerHTML='<span class="text-muted">—</span>';
+          return;
+        }
         td.innerHTML=_loadBar(s.load, s.bw_max)+(s.health!=='ok'?' <i class="bi bi-exclamation-triangle-fill text-warning ms-1" style="font-size:.75rem" data-bs-toggle="tooltip" data-bs-title="'+_esc(_t.healthErr)+'"></i>':'');
         td.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el=>new bootstrap.Tooltip(el,{trigger:'hover focus'}));
         if(utd)utd.innerHTML=`<small class="text-muted">${s.users}</small>`;
+        if(btd)btd.innerHTML=_bwBadge(s.bw_max);
       });
       _airvpnStatsFirstLoad=false;
     })

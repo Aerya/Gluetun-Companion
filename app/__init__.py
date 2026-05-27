@@ -144,6 +144,21 @@ def create_app():
 
     app.jinja_env.filters['strip_prefix'] = _strip_prefix
 
+    def _bw_label(mbps) -> str:
+        """Format provider bandwidth/capacity stored in Mbit/s."""
+        try:
+            value = int(float(mbps or 0))
+        except (TypeError, ValueError):
+            value = 0
+        if value <= 0:
+            return ''
+        if value >= 1000:
+            gbps = value / 1000
+            return f'{int(gbps)} Gbit/s' if value % 1000 == 0 else f'{gbps:.1f} Gbit/s'
+        return f'{value} Mbit/s'
+
+    app.jinja_env.filters['bw_label'] = _bw_label
+
     from .csrf import generate_csrf, validate_csrf
     app.jinja_env.globals['csrf_token'] = generate_csrf
 

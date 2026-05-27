@@ -339,10 +339,12 @@ def dashboard():
 
     with get_db() as db:
         recent_tests = db.execute(
-            'SELECT st.*, vp.name AS profile_name, vp.provider AS provider_key '
+            'SELECT st.*, vp.name AS profile_name, vp.provider AS provider_key, '
+            '       av.bw_max_mbps AS airvpn_bw_max '
             'FROM speed_tests st '
             'LEFT JOIN servers s ON s.name = st.server_name '
             'LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id '
+            'LEFT JOIN airvpn_snapshot av ON av.name = st.server_name '
             'ORDER BY st.tested_at DESC LIMIT ?', (recent_limit,)
         ).fetchall()
         last_switch = db.execute(
@@ -351,12 +353,16 @@ def dashboard():
         recent_pool_switches = db.execute(
             '''SELECT sw.*,
                       vp_to.name   AS to_profile_name,
-                      vp_from.name AS from_profile_name
+                      vp_from.name AS from_profile_name,
+                      av_to.bw_max_mbps AS to_airvpn_bw_max,
+                      av_from.bw_max_mbps AS from_airvpn_bw_max
                FROM switches sw
                LEFT JOIN servers s_to    ON s_to.name    = sw.to_server
                LEFT JOIN vpn_profiles vp_to   ON vp_to.id   = s_to.vpn_profile_id
+               LEFT JOIN airvpn_snapshot av_to ON av_to.name = sw.to_server
                LEFT JOIN servers s_from  ON s_from.name  = sw.from_server
                LEFT JOIN vpn_profiles vp_from ON vp_from.id = s_from.vpn_profile_id
+               LEFT JOIN airvpn_snapshot av_from ON av_from.name = sw.from_server
                WHERE sw.reason LIKE 'pool_rotation:%'
                ORDER BY sw.switched_at DESC LIMIT 200'''
         ).fetchall()
@@ -370,6 +376,7 @@ def dashboard():
             SELECT st.server_name,
                    vp.name  AS profile_name,
                    vp.provider AS provider_key,
+                   av.bw_max_mbps AS airvpn_bw_max,
                    ROUND(AVG(st.download_mbps), 1) AS avg_dl,
                    ROUND(MAX(st.download_mbps), 1) AS max_dl,
                    ROUND(AVG(st.latency_ms),    0) AS avg_lat,
@@ -377,6 +384,7 @@ def dashboard():
             FROM speed_tests st
             LEFT JOIN servers s ON s.name = st.server_name
             LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
+            LEFT JOIN airvpn_snapshot av ON av.name = st.server_name
             WHERE st.success = 1
             GROUP BY st.server_name
             ORDER BY avg_dl DESC
@@ -502,6 +510,8 @@ _SERVERS_SORT = {
     'load_asc':       'airvpn_load ASC  NULLS LAST, s.name',
     'users_desc':     'airvpn_users DESC NULLS LAST, s.name',
     'users_asc':      'airvpn_users ASC  NULLS LAST, s.name',
+    'bw_desc':        'airvpn_bw_max DESC NULLS LAST, s.name',
+    'bw_asc':         'airvpn_bw_max ASC  NULLS LAST, s.name',
     # stability / quality sorts
     'jitter_asc':     'avg_jitter ASC  NULLS LAST, s.name',
     'jitter_desc':    'avg_jitter DESC NULLS LAST, s.name',
@@ -528,6 +538,7 @@ def servers():
     profile_filter = request.args.get('profile', '').strip()  # filter by vpn_profile_id
     conf_filter    = request.args.get('conf', '').strip().upper()    # HIGH / MEDIUM / LOW
     top_n          = request.args.get('top_n', 0, type=int)         # 0 = all
+    airvpn_bw_min  = max(0, request.args.get('airvpn_bw_min', 0, type=int))
 
     if sort not in _SERVERS_SORT:
         sort = 'avg_dl'
@@ -553,6 +564,9 @@ def servers():
             params.append(int(profile_filter))
         except ValueError:
             pass
+    if airvpn_bw_min > 0:
+        where_parts.append('COALESCE(av.bw_max_mbps, 0) >= ?')
+        params.append(airvpn_bw_min)
 
     having_params: list = []
     if from_date:
@@ -594,7 +608,10 @@ def servers():
                 (SELECT public_ipv6 FROM speed_tests
                  WHERE server_name=s.name AND success=1 ORDER BY tested_at DESC LIMIT 1) AS last_ipv6,
                 av.load  AS airvpn_load,
-                av.users AS airvpn_users
+                av.users AS airvpn_users,
+                av.bw_mbps AS airvpn_bw,
+                av.bw_max_mbps AS airvpn_bw_max,
+                av.avail_mbps AS airvpn_avail_mbps
             FROM servers s
             LEFT JOIN speed_tests st ON st.server_name = s.name
             LEFT JOIN airvpn_snapshot av ON av.name = s.name
@@ -754,6 +771,7 @@ def servers():
         profile_filter=profile_filter,
         conf_filter=conf_filter,
         top_n=top_n,
+        airvpn_bw_min=airvpn_bw_min,
         wg_providers=WG_PROVIDERS,
     )
 
@@ -1209,10 +1227,12 @@ def history():
             f'''SELECT st.*,
                        s.vpn_profile_id,
                        vp.name     AS vp_name,
-                       vp.provider AS vp_provider
+                       vp.provider AS vp_provider,
+                       av.bw_max_mbps AS airvpn_bw_max
                 FROM speed_tests st
                 LEFT JOIN servers s        ON s.name = st.server_name
                 LEFT JOIN vpn_profiles vp  ON vp.id  = s.vpn_profile_id
+                LEFT JOIN airvpn_snapshot av ON av.name = st.server_name
                 {where_sql}
                 ORDER BY {order_sql} LIMIT ? OFFSET ?''',
             params + [_HISTORY_PER_PAGE, offset],
@@ -1225,10 +1245,12 @@ def history():
                    ROUND(AVG(st.upload_mbps),   1) AS avg_ul,
                    COUNT(*) AS cnt,
                    vp.name AS vp_name,
+                   av.bw_max_mbps AS airvpn_bw_max,
                    MAX(st.tested_at) AS last_tested_at
             FROM speed_tests st
             LEFT JOIN servers s        ON s.name  = st.server_name
             LEFT JOIN vpn_profiles vp  ON vp.id   = s.vpn_profile_id
+            LEFT JOIN airvpn_snapshot av ON av.name = st.server_name
             WHERE st.success = 1
             GROUP BY st.server_name
             ORDER BY avg_dl DESC
@@ -1257,12 +1279,16 @@ def history():
         recent_pool_switches = db.execute(
             '''SELECT sw.*,
                       vp_to.name   AS to_profile_name,
-                      vp_from.name AS from_profile_name
+                      vp_from.name AS from_profile_name,
+                      av_to.bw_max_mbps AS to_airvpn_bw_max,
+                      av_from.bw_max_mbps AS from_airvpn_bw_max
                FROM switches sw
                LEFT JOIN servers s_to    ON s_to.name    = sw.to_server
                LEFT JOIN vpn_profiles vp_to   ON vp_to.id   = s_to.vpn_profile_id
+               LEFT JOIN airvpn_snapshot av_to ON av_to.name = sw.to_server
                LEFT JOIN servers s_from  ON s_from.name  = sw.from_server
                LEFT JOIN vpn_profiles vp_from ON vp_from.id = s_from.vpn_profile_id
+               LEFT JOIN airvpn_snapshot av_from ON av_from.name = sw.from_server
                WHERE sw.reason LIKE 'pool_rotation:%'
                ORDER BY sw.switched_at DESC LIMIT 200'''
         ).fetchall()
@@ -1357,12 +1383,16 @@ def switches():
         rows = db.execute(
             f'''SELECT sw.*,
                        vp_to.name   AS to_profile_name,
-                       vp_from.name AS from_profile_name
+                       vp_from.name AS from_profile_name,
+                       av_to.bw_max_mbps AS to_airvpn_bw_max,
+                       av_from.bw_max_mbps AS from_airvpn_bw_max
                 FROM switches sw
                 LEFT JOIN servers s_to    ON s_to.name    = sw.to_server
                 LEFT JOIN vpn_profiles vp_to   ON vp_to.id   = s_to.vpn_profile_id
+                LEFT JOIN airvpn_snapshot av_to ON av_to.name = sw.to_server
                 LEFT JOIN servers s_from  ON s_from.name  = sw.from_server
                 LEFT JOIN vpn_profiles vp_from ON vp_from.id = s_from.vpn_profile_id
+                LEFT JOIN airvpn_snapshot av_from ON av_from.name = sw.from_server
                 {where_sql}
                 ORDER BY sw.switched_at DESC LIMIT 500''',
             params,
@@ -2698,7 +2728,12 @@ def pools():
     # Build server list for autocomplete
     with get_db() as db:
         all_servers = db.execute(
-            'SELECT name, filter_type, vpn_profile_id FROM servers WHERE enabled=1 ORDER BY name'
+            '''SELECT s.name, s.filter_type, s.vpn_profile_id,
+                      av.bw_max_mbps AS airvpn_bw_max
+               FROM servers s
+               LEFT JOIN airvpn_snapshot av ON av.name = s.name
+               WHERE s.enabled=1
+               ORDER BY s.name'''
         ).fetchall()
         all_servers = [dict(s) for s in all_servers]
 
@@ -2983,7 +3018,7 @@ def _parse_pool_criteria(raw: list) -> list[dict]:
     result = []
     for c in raw:
         ctype = (c.get('crit_type') or '').strip()
-        if ctype not in ('all', 'server', 'filter', 'profile', 'top_metric'):
+        if ctype not in ('all', 'server', 'filter', 'profile', 'top_metric', 'airvpn_bw_min'):
             continue
         cval = c.get('crit_value')
         if ctype == 'server' and not cval:
@@ -3010,6 +3045,12 @@ def _parse_pool_criteria(raw: list) -> list[dict]:
                     continue
                 cval = json.dumps({'metric': metric, 'n': n})
             except Exception:
+                continue
+        if ctype == 'airvpn_bw_min':
+            try:
+                bw_min = max(1, int(cval))
+                cval = str(bw_min)
+            except (TypeError, ValueError):
                 continue
         result.append({'crit_type': ctype, 'crit_value': cval if ctype != 'all' else None})
     return result

@@ -115,6 +115,9 @@ def servers():
         rows = db.execute('''
             SELECT
                 s.id, s.name, s.filter_type, s.enabled, s.consecutive_failures,
+                av.bw_mbps AS airvpn_bw_mbps,
+                av.bw_max_mbps AS airvpn_bw_max_mbps,
+                av.avail_mbps AS airvpn_avail_mbps,
                 ROUND(AVG(CASE WHEN st.success=1 AND st.test_method NOT IN ('proxy_qc')
                                THEN st.download_mbps END), 2) AS avg_dl,
                 ROUND(AVG(CASE WHEN st.success=1 AND st.test_method NOT IN ('proxy_qc')
@@ -126,6 +129,7 @@ def servers():
                 MAX(st.tested_at)                              AS last_tested_at
             FROM servers s
             LEFT JOIN speed_tests st ON st.server_name = s.name
+            LEFT JOIN airvpn_snapshot av ON av.name = s.name
             GROUP BY s.id
             ORDER BY s.name
         ''').fetchall()
@@ -141,6 +145,9 @@ def servers():
             'enabled':              bool(r['enabled']),
             'is_active':            r['name'] == active_name,
             'consecutive_failures': r['consecutive_failures'],
+            'airvpn_bw_mbps':       r['airvpn_bw_mbps'],
+            'airvpn_bw_max_mbps':   r['airvpn_bw_max_mbps'],
+            'airvpn_avail_mbps':    r['airvpn_avail_mbps'],
             'avg_dl_mbps':          r['avg_dl'],
             'avg_ul_mbps':          r['avg_ul'],
             'avg_latency_ms':       r['avg_lat'],
@@ -182,12 +189,15 @@ def history():
     with get_db() as db:
         if server:
             rows = db.execute(
-                '''SELECT id, server_name, download_mbps, upload_mbps, latency_ms,
+                '''SELECT st.id, st.server_name, st.download_mbps, st.upload_mbps, st.latency_ms,
                           public_ip, public_ipv6, success, error_msg, test_method,
                           jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms,
-                          dns_latency_ms, test_trigger, tested_at
-                   FROM speed_tests WHERE server_name=?
-                   ORDER BY tested_at DESC LIMIT ? OFFSET ?''',
+                          dns_latency_ms, test_trigger, tested_at,
+                          av.bw_max_mbps AS airvpn_bw_max_mbps
+                   FROM speed_tests st
+                   LEFT JOIN airvpn_snapshot av ON av.name = st.server_name
+                   WHERE st.server_name=?
+                   ORDER BY st.tested_at DESC LIMIT ? OFFSET ?''',
                 (server, limit, offset),
             ).fetchall()
             total = db.execute(
@@ -195,12 +205,14 @@ def history():
             ).fetchone()[0]
         else:
             rows = db.execute(
-                '''SELECT id, server_name, download_mbps, upload_mbps, latency_ms,
+                '''SELECT st.id, st.server_name, st.download_mbps, st.upload_mbps, st.latency_ms,
                           public_ip, public_ipv6, success, error_msg, test_method,
                           jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms,
-                          dns_latency_ms, test_trigger, tested_at
-                   FROM speed_tests
-                   ORDER BY tested_at DESC LIMIT ? OFFSET ?''',
+                          dns_latency_ms, test_trigger, tested_at,
+                          av.bw_max_mbps AS airvpn_bw_max_mbps
+                   FROM speed_tests st
+                   LEFT JOIN airvpn_snapshot av ON av.name = st.server_name
+                   ORDER BY st.tested_at DESC LIMIT ? OFFSET ?''',
                 (limit, offset),
             ).fetchall()
             total = db.execute('SELECT COUNT(*) FROM speed_tests').fetchone()[0]
@@ -241,8 +253,13 @@ def switches():
     with get_db() as db:
         rows = db.execute(
             '''SELECT id, from_server, to_server, reason, success,
-                      connect_secs, from_mbps, to_mbps, to_ipv4, to_ipv6, switched_at
-               FROM switches
+                      connect_secs, from_mbps, to_mbps, to_ipv4, to_ipv6,
+                      av_from.bw_max_mbps AS from_airvpn_bw_max_mbps,
+                      av_to.bw_max_mbps AS to_airvpn_bw_max_mbps,
+                      switched_at
+               FROM switches sw
+               LEFT JOIN airvpn_snapshot av_from ON av_from.name = sw.from_server
+               LEFT JOIN airvpn_snapshot av_to ON av_to.name = sw.to_server
                ORDER BY switched_at DESC LIMIT ? OFFSET ?''',
             (limit, offset),
         ).fetchall()

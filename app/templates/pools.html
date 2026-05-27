@@ -63,6 +63,8 @@
                   <span class="me-2">🔑 {{ t.pools_crit_profile }} #{{ c.crit_value }}</span>
                 {% elif c.crit_type == 'top_metric' %}
                   <span class="me-2">🏅 {{ c._display or c.crit_value }}</span>
+                {% elif c.crit_type == 'airvpn_bw_min' %}
+                  <span class="me-2"><i class="bi bi-hdd-network"></i> {{ t.pools_crit_airvpn_bw_min }} >= {{ c.crit_value | bw_label }}</span>
                 {% endif %}
               {% else %}
                 <span class="text-warning">{{ t.pools_no_candidates }}</span>
@@ -298,6 +300,8 @@ const _T = {
   critFilterValue: {{ t.pools_crit_filter_value | tojson }},
   critRemove:  {{ t.pools_crit_remove | tojson }},
   critTopMetric:      {{ t.pools_crit_top_metric     | tojson }},
+  critAirvpnBwMin:    {{ t.pools_crit_airvpn_bw_min  | tojson }},
+  critAirvpnBwHint:   {{ t.pools_crit_airvpn_bw_hint | tojson }},
   critTopMetricN:     {{ t.pools_crit_top_metric_n   | tojson }},
   critTopMetricMet:   {{ t.pools_crit_top_metric_met | tojson }},
   critMetDl:          {{ t.pools_crit_met_dl     | tojson }},
@@ -459,6 +463,7 @@ function addCriterion(data) {
     ['filter',     _T.critFilter],
     ['profile',    _T.critProfile],
     ['top_metric', _T.critTopMetric],
+    ['airvpn_bw_min', _T.critAirvpnBwMin],
   ];
   const typeHTML = typeOptions.map(([v, l]) =>
     `<option value="${v}">${l}</option>`
@@ -588,6 +593,16 @@ function onCritTypeChange(idx, preload) {
                  oninput="_updateCandidatesPreview()">
         </div>
       </div>`;
+  } else if (type === 'airvpn_bw_min') {
+    const preloadBw = parseInt(preload?.crit_value || 5000, 10) || 5000;
+    area.innerHTML = `
+      <label class="form-label small mb-1">${_T.critAirvpnBwMin}</label>
+      <div class="input-group input-group-sm">
+        <input type="number" class="form-control" id="crit-airvpn-bw-${idx}"
+               value="${preloadBw}" min="1" step="100" oninput="_updateCandidatesPreview()">
+        <span class="input-group-text">Mbit/s</span>
+      </div>
+      <div class="form-text" style="font-size:.72rem">${_T.critAirvpnBwHint}</div>`;
   }
   _updateCandidatesPreview();
 }
@@ -621,6 +636,8 @@ function _buildCriteriaPayload() {
       const met = document.getElementById(`crit-topmet-${idx}`)?.value || 'dl';
       const n   = parseInt(document.getElementById(`crit-topn-${idx}`)?.value) || 10;
       cval = JSON.stringify({metric: met, n: n});
+    } else if (type === 'airvpn_bw_min') {
+      cval = String(parseInt(document.getElementById(`crit-airvpn-bw-${idx}`)?.value) || 0);
     }
     criteria.push({crit_type: type, crit_value: cval});
   });
@@ -668,6 +685,11 @@ function _doPreview() {
         const lbl = {dl: _T.critMetDl, jitter: _T.critMetJitter, loss: _T.critMetLoss, dns: _T.critMetDns}[md.metric] || md.metric;
         _topMetricNotes.push(`🏅 Top ${md.n} — ${lbl}`);
       } catch(e) {}
+    } else if (c.crit_type === 'airvpn_bw_min') {
+      const minBw = parseInt(c.crit_value) || 0;
+      _ALL_SERVERS.forEach(s => {
+        if ((parseInt(s.airvpn_bw_max || 0) || 0) >= minBw) local.add(s.name);
+      });
     }
     if (local.size) candidateSets.push(local);
   });

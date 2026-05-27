@@ -177,13 +177,14 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 
 ### AirVPN
 - **Built-in AirVPN server picker** — *+ Add an AirVPN server* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), four tabs — full searchable list, geographic distribution by country, **Recommended** tab (load < 50 %, health OK, < 30 users) and **Changes** tab (newly detected servers, disappeared servers, load shifts, top 5 healthiest countries); multi-select, one-click add
+- **Visible and filterable AirVPN bandwidth** — Companion stores the capacity advertised by AirVPN (`bw_max`) separately from benchmark results: sortable/filterable column in `/servers`, filter in the AirVPN import modal, badges on the dashboard, history, pool rotations and switches. This is provider metadata, not a measured speed result.
 - **Avoid loaded AirVPN servers** *(optional, dedicated to [AirVPN](https://airvpn.org/?referred_by=483746))* — at benchmark start, **[AirVPN](https://airvpn.org/?referred_by=483746)** servers of type `SERVER_NAMES` whose **load** or **user count** exceeds a configurable threshold are automatically skipped; data from the AirVPN cache (updated every 5 min); servers without AirVPN data are never excluded; thresholds configurable in Settings → Measure → Which servers are allowed
 - **New AirVPN server detection** *(optional)* — compares the AirVPN API with your configured servers every 24 h; badge and dismissable banner on the Servers page + *Changes* tab in the add modal; Discord/Apprise notification with optional mention
 
 ### Analysis & history
 - **Per-server confidence score** — 🟢/🟡/🔴 indicator on the Servers page and in History; based on measurement count and result variability; factored into the automatic selection score (light weighting)
 - **Hourly patterns** (`/history/patterns`) — 0h–23h bar chart showing average speed by hour of day, color-coded by relative performance; best and worst hour displayed; helps identify server saturation windows
-- **Sortable columns** — click any column header in `/history` (11 columns) and `/servers` (8 columns) to sort; clicking again reverses the order; ▲/▼/⇅ visual indicators; sort persists across pages
+- **Sortable columns** — click table headers in `/history` and `/servers` to sort; clicking again reverses the order; ▲/▼/⇅ visual indicators; sort persists across pages
 - **On-demand test** of a single server from the UI without waiting for the next cycle
 - **CSV export** of the full history
 
@@ -668,6 +669,7 @@ In **Rotation → New pool**:
    - `Gluetun filter type` — choose the variable (`SERVER_COUNTRIES`, `SERVER_NAMES`, etc.) and optionally a value (empty = all servers of that type)
    - `WireGuard VPN profile` — all servers assigned to a specific WireGuard profile
    - `Top N by metric` — adds or restricts using the best historical download, jitter, packet loss or DNS metrics
+   - `Minimum AirVPN bandwidth` — adds AirVPN servers whose advertised capacity (`bw_max`) is at least the chosen value
 4. Choose how rules are combined:
    - **Add the results of each rule** — each rule adds servers; duplicates are merged automatically.
    - **Keep only servers matching every rule** — stricter, useful for "France + AirVPN profile + Top download".

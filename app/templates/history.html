@@ -124,6 +124,8 @@
       flag_to:   {{ server_flag(sw.to_server)   | tojson }},
       from_prof: {{ (sw.from_profile_name or '') | tojson }},
       to_prof:   {{ (sw.to_profile_name   or '') | tojson }},
+      from_bw:   {{ (sw.from_airvpn_bw_max | bw_label) | tojson }},
+      to_bw:     {{ (sw.to_airvpn_bw_max   | bw_label) | tojson }},
       ok:        {{ 1 if sw.success else 0 }},
       date:      {{ ((sw.switched_at | localtime)[:16]) | tojson }},
       ts:        {{ (sw.switched_at or '') | tojson }}
@@ -192,11 +194,13 @@
               '<div>' +
                 '<div><code class="text-muted" style="font-size:.8rem">' + sw.flag_from + ' ' + _esc(sw.from_s) + '</code></div>' +
                 (sw.from_prof ? '<div style="font-size:.67rem;color:var(--bs-secondary-color)">' + _esc(sw.from_prof) + '</div>' : '') +
+                (sw.from_bw ? '<div><span class="badge bg-info text-dark" style="font-size:.62rem">' + _esc(sw.from_bw) + '</span></div>' : '') +
               '</div>' +
               '<i class="bi bi-arrow-right text-muted" style="font-size:.7rem;padding-top:.2rem"></i>' +
               '<div>' +
                 '<div><code class="text-success" style="font-size:.8rem">' + sw.flag_to + ' ' + _esc(sw.to_s) + '</code></div>' +
                 (sw.to_prof ? '<div style="font-size:.67rem;color:var(--bs-secondary-color)">' + _esc(sw.to_prof) + '</div>' : '') +
+                (sw.to_bw ? '<div><span class="badge bg-info text-dark" style="font-size:.62rem">' + _esc(sw.to_bw) + '</span></div>' : '') +
               '</div>' +
             '</div>' +
           '</td>' +
@@ -345,6 +349,9 @@
       <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ s.server_name }}">{{ server_flag(s.server_name) }} {{ s.server_name }}</div>
       {% if s.vp_name %}
       <div style="font-size:.65rem;color:var(--bs-secondary-color);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ s.vp_name }}">{{ s.vp_name }}</div>
+      {% endif %}
+      {% if s.airvpn_bw_max %}
+      <span class="badge bg-info text-dark" style="font-size:.62rem">{{ s.airvpn_bw_max | bw_label }}</span>
       {% endif %}
       {% set cls = 'speed-good' if s.avg_dl > 50 else ('speed-ok' if s.avg_dl > 15 else 'speed-bad') %}
       <div class="fw-bold {{ cls }}" style="font-size:1.25rem">{{ s.avg_dl }} Mbps</div>
@@ -529,6 +536,9 @@
         <tr>
           <td>
             {{ server_flag(r.server_name) }} <code>{{ r.server_name }}</code>
+            {% if r.airvpn_bw_max %}
+            <span class="badge bg-info text-dark ms-1" style="font-size:.62rem">{{ r.airvpn_bw_max | bw_label }}</span>
+            {% endif %}
             {%- set _conf = confidence.get(r.server_name) -%}
             {%- if _conf and _conf.nb >= 7 -%}
               {%- if _conf.level == 'HIGH' -%}
@@ -778,6 +788,7 @@ new Chart(document.getElementById('chartTimeline'), {
     { name: {{ s.server_name | tojson }},
       flag: {{ server_flag(s.server_name) | tojson }},
       prov: {{ (s.vp_name or '') | tojson }},
+      bw:   {{ (s.airvpn_bw_max | bw_label) | tojson }},
       avg_dl:  {{ s.avg_dl  or 0 }},
       min_dl:  {{ s.min_dl  or 0 }},
       max_dl:  {{ s.max_dl  or 0 }},
@@ -963,7 +974,8 @@ new Chart(document.getElementById('chartTimeline'), {
 
     /* labels: [flag + name, provider] for multi-line */
     var labels   = data.map(function(s) {
-      return s.prov ? [s.flag + ' ' + s.name, s.prov] : [s.flag + ' ' + s.name];
+      var meta = [s.prov, s.bw].filter(Boolean).join(' · ');
+      return meta ? [s.flag + ' ' + s.name, meta] : [s.flag + ' ' + s.name];
     });
     var avgDl    = data.map(function(s) { return s.avg_dl; });
     var avgUl    = data.map(function(s) { return s.avg_ul; });

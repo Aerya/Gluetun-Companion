@@ -178,13 +178,14 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 
 ### AirVPN
 - **Sélecteur de serveurs AirVPN intégré** — bouton *+ Ajouter un serveur AirVPN* sur la page Serveurs : données en direct depuis `airvpn.org/api/status/` (cache 5 min), quatre onglets — liste complète searchable, répartition géographique par pays, onglet **Recommandés** (charge < 50 %, santé OK, < 30 utilisateurs) et onglet **Changements** (nouveaux serveurs détectés, serveurs disparus, évolutions de charge, top 5 pays les plus sains) ; ajout multi-sélection en un clic
+- **Bande passante AirVPN visible et filtrable** — Companion stocke la capacité annoncée par AirVPN (`bw_max`) séparément des benchmarks : colonne triable/filtrable dans `/servers`, filtre dans la fenêtre d'import AirVPN, badges sur le dashboard, l'historique, les rotations de pool et les bascules. C'est une donnée fournisseur, pas une mesure de débit réelle.
 - **Éviter les serveurs AirVPN chargés** *(optionnel, dédié [AirVPN](https://airvpn.org/?referred_by=483746))* — au démarrage du benchmark, les serveurs **[AirVPN](https://airvpn.org/?referred_by=483746)** de type `SERVER_NAMES` dont la **charge** ou le **nombre d'utilisateurs** dépasse un seuil configurable sont automatiquement ignorés ; données issues du cache AirVPN (mis à jour toutes les 5 min) ; les serveurs sans données AirVPN ne sont jamais exclus ; seuils configurables dans Paramètres → Mesurer → Quels serveurs autoriser
 - **Détection de nouveaux serveurs AirVPN** *(optionnel)* — compare l'API AirVPN avec vos serveurs configurés toutes les 24 h ; bannière et badge sur la page Serveurs + onglet *Changements* dans le modal d'ajout ; notification Discord/Apprise avec mention optionnelle
 
 ### Analyse & historique
 - **Score de confiance par serveur** — indicateur 🟢/🟡/🔴 sur la page Serveurs et dans l'historique ; basé sur le nombre de mesures et la variabilité des résultats ; intégré dans le score de sélection automatique (pondération légère)
 - **Patterns horaires** (`/history/patterns`) — graphique barres 0h–23h du débit moyen par tranche horaire, coloré selon les performances relatives ; meilleure et pire heure affichées ; permet de repérer les créneaux de saturation serveur
-- **Colonnes triables** — cliquez sur n'importe quel en-tête de colonne dans `/history` (11 colonnes) et `/servers` (8 colonnes) pour trier ; une seconde presse inverse l'ordre ; indicateurs ▲/▼/⇅ visuels ; tri persistant via pagination
+- **Colonnes triables** — cliquez sur les en-têtes de colonne dans `/history` et `/servers` pour trier ; une seconde presse inverse l'ordre ; indicateurs ▲/▼/⇅ visuels ; tri persistant via pagination
 - **Test unitaire** d'un serveur depuis l'UI sans attendre le prochain cycle
 - **Export CSV** de l'historique complet
 
@@ -669,6 +670,7 @@ Dans **Rotation → Nouveau pool** :
    - `Type de filtre Gluetun` — choisissez la variable (`SERVER_COUNTRIES`, `SERVER_NAMES`, etc.) et optionnellement une valeur (vide = tous les serveurs de ce type)
    - `Profil VPN WireGuard` — tous les serveurs assignés à un profil WireGuard spécifique
    - `Top N par métrique` — ajoute ou restreint selon les meilleurs historiques de débit, jitter, perte ou DNS
+   - `Bande passante AirVPN min.` — ajoute les serveurs AirVPN dont la capacité annoncée (`bw_max`) atteint au moins la valeur choisie
 4. Choisissez comment combiner les règles :
    - **Ajouter les résultats de chaque règle** — chaque règle ajoute des serveurs ; les doublons sont fusionnés automatiquement.
    - **Garder seulement les serveurs qui respectent toutes les règles** — plus strict, utile pour faire « France + profil AirVPN + Top débit ».

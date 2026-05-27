@@ -158,6 +158,26 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
                 ).fetchall()
                 candidate_sets.append({r['name'] for r in rows})
 
+            elif ctype == 'airvpn_bw_min':
+                try:
+                    bw_min = int(cval)
+                except (TypeError, ValueError):
+                    continue
+                if bw_min < 1:
+                    continue
+                rows = db.execute(
+                    '''SELECT s.name
+                       FROM servers s
+                       LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
+                       JOIN airvpn_snapshot av ON av.name = s.name
+                       WHERE s.enabled = 1
+                         AND s.filter_type = 'name'
+                         AND av.bw_max_mbps >= ?
+                         AND (s.vpn_profile_id IS NULL OR vp.enabled = 1)''',
+                    (bw_min,),
+                ).fetchall()
+                candidate_sets.append({r['name'] for r in rows})
+
         non_empty_sets = [s for s in candidate_sets if s]
         if not non_empty_sets:
             return []
