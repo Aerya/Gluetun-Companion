@@ -357,15 +357,15 @@
       </div>
       <div class="dash-observation-metric">
         <span>{{ t.set_side_enabled_servers }}</span>
-        <strong>{{ server_count }}</strong>
+        <strong id="obsGlobalEnabled">{{ server_count }}</strong>
       </div>
       <div class="dash-observation-metric">
         <span>{{ t.set_side_tested_servers }}</span>
-        <strong>{{ tested_servers }}</strong>
+        <strong id="obsGlobalTested">{{ tested_servers }}</strong>
       </div>
       <div class="dash-observation-metric">
         <span>{{ t.set_side_untested_servers }}</span>
-        <strong class="{{ 'text-warning' if untested_servers else 'text-success' }}">{{ untested_servers }}</strong>
+        <strong id="obsGlobalUntested" class="{{ 'text-warning' if untested_servers else 'text-success' }}">{{ untested_servers }}</strong>
       </div>
       <div class="dash-observation-metric">
         <span>{{ t.set_overview_test_mode }}</span>
@@ -875,6 +875,9 @@ window._onBenchmarkStatus = function(d) {
   const obsRemaining = document.getElementById('obsRemaining');
   const obsCurrent = document.getElementById('obsCurrent');
   const obsNext = document.getElementById('obsNext');
+  const obsGlobalEnabled = document.getElementById('obsGlobalEnabled');
+  const obsGlobalTested = document.getElementById('obsGlobalTested');
+  const obsGlobalUntested = document.getElementById('obsGlobalUntested');
   const obsLed = document.getElementById('obsLed');
   const obsLog = document.getElementById('obsLog');
   if (d.benchmark_running) {
@@ -899,6 +902,13 @@ window._onBenchmarkStatus = function(d) {
     if (obsRemaining) obsRemaining.textContent = String(d.benchmark_remaining_servers || 0);
     if (obsCurrent) obsCurrent.textContent = d.current_server_testing || '—';
     if (obsNext) obsNext.textContent = d.benchmark_next_server || '—';
+    if (obsGlobalEnabled) obsGlobalEnabled.textContent = String(d.server_count || 0);
+    if (obsGlobalTested) obsGlobalTested.textContent = String(d.tested_servers || 0);
+    if (obsGlobalUntested) {
+      const n = Number(d.untested_servers || 0);
+      obsGlobalUntested.textContent = String(n);
+      obsGlobalUntested.className = n ? 'text-warning' : 'text-success';
+    }
     if (obsLog) {
       const lines = Array.isArray(d.benchmark_log_lines) ? d.benchmark_log_lines : [];
       const esc = (value) => String(value || '').replace(/[&<>"']/g, ch => ({

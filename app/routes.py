@@ -185,6 +185,27 @@ def _benchmark_progress() -> dict:
         'remaining': max(0, total - done) if total else 0,
     }
 
+
+def _server_history_counts() -> dict:
+    """Return global enabled/tested server counts used by dashboard/settings."""
+    with get_db() as db:
+        enabled = db.execute(
+            'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'
+        ).fetchone()['n']
+        tested = db.execute(
+            '''SELECT COUNT(DISTINCT s.name) AS n
+               FROM servers s
+               JOIN speed_tests st ON st.server_name = s.name
+               WHERE s.enabled = 1
+                 AND st.success = 1
+                 AND (st.test_method IS NULL OR st.test_method != 'proxy_qc')'''
+        ).fetchone()['n']
+    return {
+        'enabled': enabled,
+        'tested': tested,
+        'untested': max(0, enabled - tested),
+    }
+
 # ---------------------------------------------------------------------------
 # Login rate limiting (in-memory, per remote IP)
 # ---------------------------------------------------------------------------
@@ -339,18 +360,10 @@ def dashboard():
                WHERE sw.reason LIKE 'pool_rotation:%'
                ORDER BY sw.switched_at DESC LIMIT 200'''
         ).fetchall()
-        server_count = db.execute(
-            'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'
-        ).fetchone()['n']
-        tested_servers = db.execute(
-            '''SELECT COUNT(DISTINCT s.name) AS n
-               FROM servers s
-               JOIN speed_tests st ON st.server_name = s.name
-               WHERE s.enabled = 1
-                 AND st.success = 1
-                 AND (st.test_method IS NULL OR st.test_method != 'proxy_qc')'''
-        ).fetchone()['n']
-        untested_servers = max(0, server_count - tested_servers)
+        history_counts = _server_history_counts()
+        server_count = history_counts['enabled']
+        tested_servers = history_counts['tested']
+        untested_servers = history_counts['untested']
         benchmark_estimated_count = _benchmark_scope_estimated_count(observation=False)
         bench_est = _bench_estimate(benchmark_estimated_count)
         server_stats = db.execute('''
@@ -1839,22 +1852,11 @@ def settings():
             'th': (13.8, 100.5), 'tr': (41.0, 29.0), 'tw': (25.0, 121.6), 'ua': (50.5, 30.5),
             'us': (40.7, -74.0), 'uy': (-34.9, -56.2), 'vn': (10.8, 106.7), 'za': (-33.9, 18.4),
         }
+        counts = _server_history_counts()
+        settings_sidebar['enabled_servers'] = counts['enabled']
+        settings_sidebar['tested_servers'] = counts['tested']
+        settings_sidebar['untested_servers'] = counts['untested']
         with get_db() as db:
-            settings_sidebar['enabled_servers'] = db.execute(
-                'SELECT COUNT(*) AS n FROM servers WHERE enabled = 1'
-            ).fetchone()['n']
-            settings_sidebar['tested_servers'] = db.execute(
-                '''SELECT COUNT(DISTINCT s.name) AS n
-                   FROM servers s
-                   JOIN speed_tests st ON st.server_name = s.name
-                   WHERE s.enabled = 1
-                     AND st.success = 1
-                     AND (st.test_method IS NULL OR st.test_method != 'proxy_qc')'''
-            ).fetchone()['n']
-            settings_sidebar['untested_servers'] = max(
-                0,
-                settings_sidebar['enabled_servers'] - settings_sidebar['tested_servers'],
-            )
             settings_sidebar['last_test'] = db.execute(
                 '''SELECT server_name, download_mbps, upload_mbps, latency_ms,
                           test_method, test_trigger, tested_at
@@ -2974,6 +2976,7 @@ def api_status():
     px_user = get_setting('proxy_username') or None
     px_pass = get_setting('proxy_password') or None
     progress = _benchmark_progress()
+    history_counts = _server_history_counts()
     return jsonify({
         'vpn_status':             get_vpn_status(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
         'public_ip':              get_public_ip(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
@@ -2987,5 +2990,8 @@ def api_status():
         'benchmark_remaining_servers': progress['remaining'],
         'benchmark_next_server':   progress['next'],
         'benchmark_log_lines':     progress['log_lines'],
+        'server_count':            history_counts['enabled'],
+        'tested_servers':          history_counts['tested'],
+        'untested_servers':        history_counts['untested'],
         'next_run':               str(get_next_run()) if (get_next_run() and get_setting('auto_benchmark', '1') == '1') else None,
     })
