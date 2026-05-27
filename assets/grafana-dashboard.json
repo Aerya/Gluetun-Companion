@@ -10,14 +10,46 @@
     }
   ],
   "__requires": [
-    { "type": "grafana",    "id": "grafana",    "name": "Grafana",    "version": "9.0.0" },
-    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" },
-    { "type": "panel", "id": "stat",     "name": "Stat",      "version": "" },
-    { "type": "panel", "id": "bargauge", "name": "Bar gauge", "version": "" },
-    { "type": "panel", "id": "table",    "name": "Table",     "version": "" },
-    { "type": "panel", "id": "piechart", "name": "Pie chart", "version": "" }
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "9.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "bargauge",
+      "name": "Bar gauge",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "piechart",
+      "name": "Pie chart",
+      "version": ""
+    }
   ],
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -26,266 +58,1435 @@
   "liveNow": false,
   "schemaVersion": 37,
   "style": "dark",
-  "tags": ["gluetun", "vpn", "companion"],
-  "templating": { "list": [] },
-  "time": { "from": "now-6h", "to": "now" },
+  "tags": [
+    "gluetun",
+    "vpn",
+    "companion"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "provider",
+        "label": "Provider",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(gluetun_companion_server_enabled, provider)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "profile",
+        "label": "VPN profile",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(gluetun_companion_server_enabled{provider=~\"$provider\"}, profile)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "server",
+        "label": "Server",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(gluetun_companion_server_enabled{provider=~\"$provider\",profile=~\"$profile\"}, server)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "browser",
   "title": "Gluetun Companion",
   "uid": "gluetun-companion-v1",
-  "version": 1,
+  "version": 2,
   "panels": [
-
-    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
-      "id": 1, "title": "Vue d'ensemble", "type": "row" },
-
     {
-      "id": 2, "type": "stat", "title": "Benchmark en cours",
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "auto" },
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "title": "Vue d'ensemble",
+      "type": "row"
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Benchmark en cours",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            { "type": "value", "options": { "0": { "text": "Inactif",   "color": "green"  },
-                                            "1": { "text": "En cours",  "color": "yellow" } } }
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Inactif",
+                  "color": "green"
+                },
+                "1": {
+                  "text": "En cours",
+                  "color": "yellow"
+                }
+              }
+            }
           ],
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 } ] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          }
         }
       },
-      "targets": [ { "expr": "gluetun_companion_benchmark_running", "legendFormat": "", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+      "targets": [
+        {
+          "expr": "gluetun_companion_benchmark_running",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
     },
-
     {
-      "id": 3, "type": "stat", "title": "Serveur actif",
-      "gridPos": { "h": 4, "w": 8, "x": 4, "y": 1 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "name" },
+      "id": 3,
+      "type": "stat",
+      "title": "Serveur actif",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 4,
+        "y": 1
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "name"
+      },
       "fieldConfig": {
         "defaults": {
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "blue", "value": null } ] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
         }
       },
-      "targets": [ { "expr": "gluetun_companion_server_active == 1", "legendFormat": "{{server}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+      "targets": [
+        {
+          "expr": "gluetun_companion_server_active{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"} == 1",
+          "legendFormat": "{{server}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
     },
-
     {
-      "id": 4, "type": "stat", "title": "Basculements totaux",
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "text", "value": null } ] } } },
-      "targets": [ { "expr": "gluetun_companion_switches_total", "legendFormat": "Total", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+      "id": 4,
+      "type": "stat",
+      "title": "Basculements totaux",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "gluetun_companion_switches_total",
+          "legendFormat": "Total",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
     },
-
     {
-      "id": 5, "type": "stat", "title": "Basculements réussis",
-      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] } } },
-      "targets": [ { "expr": "gluetun_companion_switches_success_total", "legendFormat": "Réussis", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+      "id": 5,
+      "type": "stat",
+      "title": "Basculements réussis",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "gluetun_companion_switches_success_total",
+          "legendFormat": "Réussis",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
     },
-
     {
-      "id": 6, "type": "stat", "title": "Dernier basculement",
-      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "id": 6,
+      "type": "stat",
+      "title": "Dernier basculement",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "dateTimeFromNow",
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "text", "value": null } ] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         }
       },
-      "targets": [ { "expr": "gluetun_companion_last_switch_timestamp_seconds * 1000", "legendFormat": "", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+      "targets": [
+        {
+          "expr": "gluetun_companion_last_switch_timestamp_seconds * 1000",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
     },
-
-    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
-      "id": 10, "title": "Débit", "type": "row" },
-
     {
-      "id": 11, "type": "bargauge", "title": "Débit descendant moyen (Mbps)",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient", "valueMode": "color" },
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "id": 10,
+      "title": "Débit",
+      "type": "row"
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "Débit descendant moyen (Mbps)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "Mbps",
-          "thresholds": { "mode": "absolute", "steps": [
-            { "color": "red",    "value": null  },
-            { "color": "yellow", "value": 100   },
-            { "color": "green",  "value": 300   }
-          ] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "green",
+                "value": 300
+              }
+            ]
+          }
         }
       },
-      "targets": [ { "expr": "gluetun_companion_server_avg_dl_mbps", "legendFormat": "{{server}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+      "targets": [
+        {
+          "expr": "gluetun_companion_server_avg_dl_mbps{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
     },
-
     {
-      "id": 12, "type": "bargauge", "title": "Débit montant moyen (Mbps)",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient", "valueMode": "color" },
+      "id": 12,
+      "type": "bargauge",
+      "title": "Débit montant moyen (Mbps)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "Mbps",
-          "thresholds": { "mode": "absolute", "steps": [
-            { "color": "red",    "value": null },
-            { "color": "yellow", "value": 50   },
-            { "color": "green",  "value": 150  }
-          ] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 150
+              }
+            ]
+          }
         }
       },
-      "targets": [ { "expr": "gluetun_companion_server_avg_ul_mbps", "legendFormat": "{{server}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+      "targets": [
+        {
+          "expr": "gluetun_companion_server_avg_ul_mbps{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
     },
-
-    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
-      "id": 20, "title": "Qualité réseau", "type": "row" },
-
     {
-      "id": 21, "type": "bargauge", "title": "Latence moyenne (ms)",
-      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 15 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient", "valueMode": "color" },
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "id": 20,
+      "title": "Qualité réseau",
+      "type": "row"
+    },
+    {
+      "id": 21,
+      "type": "bargauge",
+      "title": "Latence moyenne (ms)",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 15
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "thresholds": { "mode": "absolute", "steps": [
-            { "color": "green",  "value": null },
-            { "color": "yellow", "value": 50   },
-            { "color": "red",    "value": 150  }
-          ] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 150
+              }
+            ]
+          }
         }
       },
-      "targets": [ { "expr": "gluetun_companion_server_avg_latency_ms", "legendFormat": "{{server}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+      "targets": [
+        {
+          "expr": "gluetun_companion_server_avg_latency_ms{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
     },
-
     {
-      "id": 22, "type": "bargauge", "title": "Jitter moyen (ms)",
-      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 15 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient", "valueMode": "color" },
+      "id": 22,
+      "type": "bargauge",
+      "title": "Jitter moyen (ms)",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 15
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "thresholds": { "mode": "absolute", "steps": [
-            { "color": "green",  "value": null },
-            { "color": "yellow", "value": 10   },
-            { "color": "red",    "value": 30   }
-          ] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
+            ]
+          }
         }
       },
-      "targets": [ { "expr": "gluetun_companion_server_avg_jitter_ms", "legendFormat": "{{server}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+      "targets": [
+        {
+          "expr": "gluetun_companion_server_avg_jitter_ms{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
     },
-
     {
-      "id": 23, "type": "bargauge", "title": "Perte de paquets moyenne (%)",
-      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 15 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient", "valueMode": "color" },
+      "id": 23,
+      "type": "bargauge",
+      "title": "Perte de paquets moyenne (%)",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 15
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "thresholds": { "mode": "absolute", "steps": [
-            { "color": "green",  "value": null },
-            { "color": "yellow", "value": 1    },
-            { "color": "red",    "value": 5    }
-          ] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
         }
       },
-      "targets": [ { "expr": "gluetun_companion_server_avg_loss_pct", "legendFormat": "{{server}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+      "targets": [
+        {
+          "expr": "gluetun_companion_server_avg_loss_pct{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
     },
-
     {
-      "id": 24, "type": "bargauge", "title": "DNS moyen (ms)",
-      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 15 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient", "valueMode": "color" },
+      "id": 24,
+      "type": "bargauge",
+      "title": "DNS moyen (ms)",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 15
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
-          "thresholds": { "mode": "absolute", "steps": [
-            { "color": "green",  "value": null },
-            { "color": "yellow", "value": 20   },
-            { "color": "red",    "value": 80   }
-          ] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
         }
       },
-      "targets": [ { "expr": "gluetun_companion_server_avg_dns_ms", "legendFormat": "{{server}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+      "targets": [
+        {
+          "expr": "gluetun_companion_server_avg_dns_ms{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
     },
-
-    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
-      "id": 30, "title": "Fiabilité & Score", "type": "row" },
-
     {
-      "id": 31, "type": "bargauge", "title": "Indice de confiance (0=LOW, 1=MED, 2=HIGH)",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient", "valueMode": "color" },
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "id": 30,
+      "title": "Fiabilité & Score",
+      "type": "row"
+    },
+    {
+      "id": 31,
+      "type": "bargauge",
+      "title": "Indice de confiance (0=LOW, 1=MED, 2=HIGH)",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 24
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color"
+      },
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            { "type": "value", "options": { "0": { "text": "LOW",    "color": "red"    },
-                                            "1": { "text": "MEDIUM", "color": "yellow" },
-                                            "2": { "text": "HIGH",   "color": "green"  } } }
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "LOW",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "MEDIUM",
+                  "color": "yellow"
+                },
+                "2": {
+                  "text": "HIGH",
+                  "color": "green"
+                }
+              }
+            }
           ],
-          "thresholds": { "mode": "absolute", "steps": [
-            { "color": "red",    "value": null },
-            { "color": "yellow", "value": 1    },
-            { "color": "green",  "value": 2    }
-          ] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "green",
+                "value": 2
+              }
+            ]
+          }
         }
       },
-      "targets": [ { "expr": "gluetun_companion_server_confidence", "legendFormat": "{{server}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+      "targets": [
+        {
+          "expr": "gluetun_companion_server_confidence{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
     },
-
     {
-      "id": 32, "type": "bargauge", "title": "Score profil actif [0–1]",
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient", "valueMode": "color" },
+      "id": 32,
+      "type": "bargauge",
+      "title": "Score profil actif [0–1]",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 24
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
-          "thresholds": { "mode": "absolute", "steps": [
-            { "color": "red",    "value": null },
-            { "color": "yellow", "value": 0.4  },
-            { "color": "green",  "value": 0.7  }
-          ] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.4
+              },
+              {
+                "color": "green",
+                "value": 0.7
+              }
+            ]
+          }
         }
       },
-      "targets": [ { "expr": "gluetun_companion_server_score", "legendFormat": "{{server}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
+      "targets": [
+        {
+          "expr": "gluetun_companion_server_score{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
     },
-
     {
-      "id": 33, "type": "bargauge", "title": "Échecs consécutifs",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient", "valueMode": "color" },
+      "id": 33,
+      "type": "bargauge",
+      "title": "Échecs consécutifs",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 24
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "valueMode": "color"
+      },
       "fieldConfig": {
         "defaults": {
-          "thresholds": { "mode": "absolute", "steps": [
-            { "color": "green",  "value": null },
-            { "color": "yellow", "value": 1    },
-            { "color": "red",    "value": 3    }
-          ] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          }
         }
       },
-      "targets": [ { "expr": "gluetun_companion_server_consecutive_failures", "legendFormat": "{{server}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
-    },
-
-    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
-      "id": 40, "title": "Erreurs & Détail", "type": "row" },
-
-    {
-      "id": 41, "type": "piechart", "title": "Erreurs par type",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 33 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "displayLabels": ["name", "percent"], "pieType": "donut", "tooltip": { "mode": "single" } },
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "text", "value": null } ] } } },
-      "targets": [ { "expr": "gluetun_companion_errors_total", "legendFormat": "{{type}}", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } } ]
-    },
-
-    {
-      "id": 42, "type": "table", "title": "Tableau des serveurs",
-      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 33 },
-      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } },
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "text", "value": null } ] } } },
       "targets": [
-        { "expr": "gluetun_companion_server_avg_dl_mbps",             "legendFormat": "{{server}}", "instant": true, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "refId": "DL" },
-        { "expr": "gluetun_companion_server_avg_ul_mbps",             "legendFormat": "{{server}}", "instant": true, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "refId": "UL" },
-        { "expr": "gluetun_companion_server_avg_latency_ms",          "legendFormat": "{{server}}", "instant": true, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "refId": "LAT" },
-        { "expr": "gluetun_companion_server_test_count",              "legendFormat": "{{server}}", "instant": true, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "refId": "CNT" },
-        { "expr": "gluetun_companion_server_failure_count",           "legendFormat": "{{server}}", "instant": true, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "refId": "FAIL" },
-        { "expr": "gluetun_companion_server_confidence",              "legendFormat": "{{server}}", "instant": true, "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "refId": "CONF" }
+        {
+          "expr": "gluetun_companion_server_consecutive_failures{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "id": 40,
+      "title": "Erreurs & Détail",
+      "type": "row"
+    },
+    {
+      "id": 41,
+      "type": "piechart",
+      "title": "Erreurs par type",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 33
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "gluetun_companion_errors_total",
+          "legendFormat": "{{type}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "type": "table",
+      "title": "Tableau des serveurs",
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 33
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "gluetun_companion_server_avg_dl_mbps{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "DL"
+        },
+        {
+          "expr": "gluetun_companion_server_avg_ul_mbps{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "UL"
+        },
+        {
+          "expr": "gluetun_companion_server_avg_latency_ms{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "LAT"
+        },
+        {
+          "expr": "gluetun_companion_server_test_count{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "CNT"
+        },
+        {
+          "expr": "gluetun_companion_server_failure_count{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "FAIL"
+        },
+        {
+          "expr": "gluetun_companion_server_confidence{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "CONF"
+        },
+        {
+          "expr": "gluetun_companion_server_enabled{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "ENABLED"
+        },
+        {
+          "expr": "gluetun_companion_server_last_benchmark_ts_seconds{provider=~\"$provider\",profile=~\"$profile\",server=~\"$server\"}",
+          "legendFormat": "{{server}}",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "LAST"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 41
+      },
+      "id": 50,
+      "title": "Observation & pools",
+      "type": "row"
+    },
+    {
+      "id": 51,
+      "type": "stat",
+      "title": "Observation activ?e",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 42
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Off",
+                  "color": "gray"
+                },
+                "1": {
+                  "text": "On",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "gray",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "gluetun_companion_continuous_observation_enabled",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 52,
+      "type": "stat",
+      "title": "Observation en cours",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 42
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Non",
+                  "color": "gray"
+                },
+                "1": {
+                  "text": "Oui",
+                  "color": "yellow"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "gray",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "gluetun_companion_continuous_observation_running",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 53,
+      "type": "stat",
+      "title": "Cycle test? / total",
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 8,
+        "y": 42
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "gluetun_companion_benchmark_done_servers",
+          "legendFormat": "test?s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "expr": "gluetun_companion_benchmark_total_servers",
+          "legendFormat": "total",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 54,
+      "type": "stat",
+      "title": "Cycle restants",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 13,
+        "y": 42
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "gluetun_companion_benchmark_remaining_servers",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "type": "stat",
+      "title": "Pools auto actifs",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 42
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "blue",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "gluetun_companion_rotation_pools_auto_enabled",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 56,
+      "type": "stat",
+      "title": "Pools configur?s",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 42
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "gluetun_companion_rotation_pools_enabled",
+          "legendFormat": "actifs",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        },
+        {
+          "expr": "gluetun_companion_rotation_pools_total",
+          "legendFormat": "total",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
+        }
+      ]
+    },
+    {
+      "id": 57,
+      "type": "table",
+      "title": "Rotations de pools",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "gluetun_companion_rotation_pool_last_speed_mbps",
+          "legendFormat": "{{pool}}",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "POOL_SPEED"
+        },
+        {
+          "expr": "gluetun_companion_rotation_pool_last_rotation_timestamp_seconds",
+          "legendFormat": "{{pool}}",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "POOL_LAST"
+        },
+        {
+          "expr": "gluetun_companion_rotation_pool_next_rotation_timestamp_seconds",
+          "legendFormat": "{{pool}}",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "POOL_NEXT"
+        }
       ]
     }
-
   ]
 }

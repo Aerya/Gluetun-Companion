@@ -839,11 +839,18 @@ L'endpoint `GET /metrics` expose les métriques clés au format texte Prometheus
 - `gluetun_companion_server_consecutive_failures` — échecs consécutifs en cours
 - `gluetun_companion_server_enabled` — 1 si activé pour le benchmark
 - `gluetun_companion_server_active` — 1 si c'est le serveur Gluetun actuellement actif
+- `gluetun_companion_server_last_benchmark_ts_seconds` — timestamp Unix du dernier test enregistré
+
+Les métriques serveur portent les labels `server`, `provider` et `profile`, ce qui permet à Grafana de proposer automatiquement des filtres quand vous ajoutez des serveurs, fournisseurs ou profils VPN.
 
 **Métriques globales** :
 - `gluetun_companion_switches_total` — nombre total de bascules
 - `gluetun_companion_switches_success_total` — bascules réussies
 - `gluetun_companion_benchmark_running` — 1 si un benchmark est en cours
+- `gluetun_companion_benchmark_total_servers`, `gluetun_companion_benchmark_done_servers`, `gluetun_companion_benchmark_remaining_servers` — progression du cycle en cours
+- `gluetun_companion_continuous_observation_enabled`, `gluetun_companion_continuous_observation_running` — état de l'observation continue
+- `gluetun_companion_rotation_pools_total`, `gluetun_companion_rotation_pools_enabled`, `gluetun_companion_rotation_pools_auto_enabled` — état global des pools
+- `gluetun_companion_rotation_pool_last_speed_mbps`, `gluetun_companion_rotation_pool_last_rotation_timestamp_seconds`, `gluetun_companion_rotation_pool_next_rotation_timestamp_seconds` — métriques par pool, avec label `pool`
 - `gluetun_companion_last_switch_timestamp_seconds` — timestamp Unix de la dernière bascule
 
 **Authentification** : par défaut ouvert (standard pour un réseau interne). Deux façons de protéger `/metrics` par Bearer token : définir la variable d'environnement `METRICS_TOKEN`, ou configurer un **token API** dans Paramètres → Maintenance → REST API (les deux sont supportés, `METRICS_TOKEN` a la priorité).
@@ -921,7 +928,10 @@ Un fichier JSON de dashboard Grafana est téléchargeable depuis **Paramètres**
 - Latence, jitter, perte de paquets, DNS (bar gauge)
 - Indice de confiance et score de profil (bar gauge)
 - Erreurs par type (donut chart)
+- Observation continue : activée/en cours, progression du cycle
+- Pools de rotation : nombre de pools, pools automatiques actifs, dernière/prochaine rotation
 - Tableau récapitulatif de tous les serveurs
+- Filtres automatiques Grafana par provider, profil VPN et serveur
 
 ### Métriques Prometheus disponibles
 
@@ -935,6 +945,10 @@ En plus des métriques de base (`avg_dl`, `avg_ul`, `avg_latency`, `test_count`,
 | `gluetun_companion_server_confidence` | Indice de confiance : 0=LOW, 1=MEDIUM, 2=HIGH |
 | `gluetun_companion_server_score` | Score du profil actif [0–1] |
 | `gluetun_companion_server_last_benchmark_ts_seconds` | Timestamp Unix du dernier test |
+| `gluetun_companion_benchmark_total_servers`, `*_done_servers`, `*_remaining_servers` | Progression du cycle de benchmark/observation en cours |
+| `gluetun_companion_continuous_observation_enabled`, `*_running` | État de l'observation continue |
+| `gluetun_companion_rotation_pools_total`, `*_enabled`, `*_auto_enabled` | Compteurs globaux des pools |
+| `gluetun_companion_rotation_pool_last_speed_mbps`, `*_last_rotation_timestamp_seconds`, `*_next_rotation_timestamp_seconds` | Métriques par pool (`pool`) |
 | `gluetun_companion_errors_total{type}` | Compteur d'erreurs par type : timeout, connection, vpn, other |
 
 ---

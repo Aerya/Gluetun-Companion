@@ -2182,6 +2182,8 @@ def metrics():
                 s.name,
                 s.enabled,
                 s.consecutive_failures,
+                COALESCE(vp.provider, '') AS provider,
+                COALESCE(vp.name, '') AS profile,
                 ROUND(AVG(CASE WHEN st.success=1
                                AND (st.test_method IS NULL OR st.test_method != 'proxy_qc')
                                THEN st.download_mbps END), 2) AS avg_dl,
@@ -2196,6 +2198,7 @@ def metrics():
                 MAX(strftime('%s', st.tested_at))                   AS last_ts
             FROM servers s
             LEFT JOIN speed_tests st ON st.server_name = s.name
+            LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
             GROUP BY s.id
             ORDER BY s.name
         ''').fetchall()
@@ -2225,6 +2228,24 @@ def metrics():
               AND TRIM(COALESCE(error_msg,'')) != ''
             GROUP BY error_type
         ''').fetchall()
+        pool_stats = db.execute('''
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN enabled=1 THEN 1 ELSE 0 END) AS enabled,
+                SUM(CASE WHEN enabled=1 AND auto_rotate=1 THEN 1 ELSE 0 END) AS auto_enabled
+            FROM rotation_pools
+        ''').fetchone()
+        pool_rows = db.execute('''
+            SELECT
+                name,
+                enabled,
+                auto_rotate,
+                last_dl_mbps,
+                strftime('%s', last_rotated_at) AS last_ts,
+                strftime('%s', next_rotation_at) AS next_ts
+            FROM rotation_pools
+            ORDER BY name
+        ''').fetchall()
 
     # ── Active server (best-effort) ────────────────────────────────────────
     active_server = ''
@@ -2235,6 +2256,13 @@ def metrics():
         pass
 
     bm_running = int(get_setting('benchmark_running', '0') == '1')
+    bm_total = int(get_setting('benchmark_total_servers', '0') or '0')
+    bm_done = int(get_setting('benchmark_done_servers', '0') or '0')
+    bm_remaining = max(0, bm_total - bm_done)
+    continuous_observation = int(get_setting('continuous_observation', '0') == '1')
+    observation_running = int(
+        bm_running == 1 and get_setting('benchmark_mode', '') == 'observation'
+    )
 
     # ── Stability / confidence / profile scores (extended metrics) ─────────
     stab_map = get_stability_all()
@@ -2249,83 +2277,95 @@ def metrics():
     except Exception:
         pass
 
+    def _server_labels(row_or_name) -> dict:
+        if isinstance(row_or_name, str):
+            match = next((r for r in server_rows if r['name'] == row_or_name), None)
+            if not match:
+                return {'server': row_or_name, 'provider': '', 'profile': ''}
+            row_or_name = match
+        return {
+            'server': row_or_name['name'],
+            'provider': row_or_name['provider'] or '',
+            'profile': row_or_name['profile'] or '',
+        }
+
     # ── Per-server gauges ──────────────────────────────────────────────────
     _metric('gluetun_companion_server_avg_dl_mbps',
             'Average download speed in Mbps (full benchmarks only, proxy_qc excluded)',
             'gauge',
-            [({'server': r['name']}, r['avg_dl']) for r in server_rows])
+            [(_server_labels(r), r['avg_dl']) for r in server_rows])
 
     _metric('gluetun_companion_server_avg_ul_mbps',
             'Average upload speed in Mbps (full benchmarks only, proxy_qc excluded)',
             'gauge',
-            [({'server': r['name']}, r['avg_ul']) for r in server_rows])
+            [(_server_labels(r), r['avg_ul']) for r in server_rows])
 
     _metric('gluetun_companion_server_avg_latency_ms',
             'Average latency in milliseconds (full benchmarks only, proxy_qc excluded)',
             'gauge',
-            [({'server': r['name']}, r['avg_lat']) for r in server_rows])
+            [(_server_labels(r), r['avg_lat']) for r in server_rows])
 
     _metric('gluetun_companion_server_test_count',
             'Total number of speed tests recorded for this server',
             'gauge',
-            [({'server': r['name']}, r['total_tests']) for r in server_rows])
+            [(_server_labels(r), r['total_tests']) for r in server_rows])
 
     _metric('gluetun_companion_server_failure_count',
             'Total number of failed speed tests for this server',
             'gauge',
-            [({'server': r['name']}, r['failed_tests'] or 0) for r in server_rows])
+            [(_server_labels(r), r['failed_tests'] or 0) for r in server_rows])
 
     _metric('gluetun_companion_server_consecutive_failures',
             'Current consecutive failure count (reset to 0 on success)',
             'gauge',
-            [({'server': r['name']}, r['consecutive_failures']) for r in server_rows])
+            [(_server_labels(r), r['consecutive_failures']) for r in server_rows])
 
     _metric('gluetun_companion_server_enabled',
             '1 if the server is enabled for benchmarking, 0 if disabled',
             'gauge',
-            [({'server': r['name']}, 1 if r['enabled'] else 0) for r in server_rows])
+            [(_server_labels(r), 1 if r['enabled'] else 0) for r in server_rows])
 
     _metric('gluetun_companion_server_active',
             '1 if this is the currently active Gluetun server, 0 otherwise',
             'gauge',
-            [({'server': r['name']}, 1 if r['name'] == active_server else 0)
+            [(_server_labels(r), 1 if r['name'] == active_server else 0)
              for r in server_rows])
 
     _metric('gluetun_companion_server_last_benchmark_ts_seconds',
             'Unix timestamp of the last speed test recorded for this server (any method)',
             'gauge',
-            [({'server': r['name']}, int(r['last_ts']))
+            [(_server_labels(r), int(r['last_ts']))
              for r in server_rows if r['last_ts']])
 
     _metric('gluetun_companion_server_avg_jitter_ms',
             'Average jitter in milliseconds (sidecar tests only, proxy_qc excluded)',
             'gauge',
-            [({'server': name}, data.get('avg_jitter'))
+            [(_server_labels(name), data.get('avg_jitter'))
              for name, data in stab_map.items()])
 
     _metric('gluetun_companion_server_avg_loss_pct',
             'Average packet loss percentage (sidecar tests only, proxy_qc excluded)',
             'gauge',
-            [({'server': name}, data.get('avg_loss'))
+            [(_server_labels(name), data.get('avg_loss'))
              for name, data in stab_map.items()])
 
     _metric('gluetun_companion_server_avg_dns_ms',
             'Average DNS latency in milliseconds (sidecar tests only, proxy_qc excluded)',
             'gauge',
-            [({'server': name}, data.get('avg_dns'))
+            [(_server_labels(name), data.get('avg_dns'))
              for name, data in stab_map.items()])
 
     _metric('gluetun_companion_server_confidence',
             'Confidence level: 0=LOW, 1=MEDIUM, 2=HIGH',
             'gauge',
-            [({'server': name}, _CONF_NUM.get(data.get('level', 'LOW'), 0))
+            [(_server_labels(name), _CONF_NUM.get(data.get('level', 'LOW'), 0))
              for name, data in conf_map.items()])
 
     if _profile_scores:
         _metric('gluetun_companion_server_score',
                 'Current usage-profile score in [0, 1] (higher = better for active profile)',
                 'gauge',
-                [({'server': name, 'profile': _active_profile}, score)
+                [({**_server_labels(name), 'usage_profile': _active_profile}, score)
                  for name, score in _profile_scores.items()])
 
     _metric('gluetun_companion_errors_total',
@@ -2348,6 +2388,61 @@ def metrics():
             '1 if a benchmark cycle is currently in progress, 0 otherwise',
             'gauge',
             [({}, bm_running)])
+
+    _metric('gluetun_companion_benchmark_total_servers',
+            'Number of servers planned in the current benchmark or observation cycle',
+            'gauge',
+            [({}, bm_total)])
+
+    _metric('gluetun_companion_benchmark_done_servers',
+            'Number of servers already processed in the current benchmark or observation cycle',
+            'gauge',
+            [({}, min(bm_done, bm_total) if bm_total else bm_done)])
+
+    _metric('gluetun_companion_benchmark_remaining_servers',
+            'Number of servers remaining in the current benchmark or observation cycle',
+            'gauge',
+            [({}, bm_remaining)])
+
+    _metric('gluetun_companion_continuous_observation_enabled',
+            '1 if pyramidal continuous observation is enabled, 0 otherwise',
+            'gauge',
+            [({}, continuous_observation)])
+
+    _metric('gluetun_companion_continuous_observation_running',
+            '1 if the current benchmark process is a continuous observation cycle',
+            'gauge',
+            [({}, observation_running)])
+
+    _metric('gluetun_companion_rotation_pools_total',
+            'Total number of configured rotation pools',
+            'gauge',
+            [({}, pool_stats['total'] or 0)])
+
+    _metric('gluetun_companion_rotation_pools_enabled',
+            'Number of enabled rotation pools',
+            'gauge',
+            [({}, pool_stats['enabled'] or 0)])
+
+    _metric('gluetun_companion_rotation_pools_auto_enabled',
+            'Number of enabled rotation pools with automatic rotation',
+            'gauge',
+            [({}, pool_stats['auto_enabled'] or 0)])
+
+    _metric('gluetun_companion_rotation_pool_last_speed_mbps',
+            'Last measured speed after a pool rotation, when quick bench is enabled',
+            'gauge',
+            [({'pool': r['name']}, r['last_dl_mbps']) for r in pool_rows])
+
+    _metric('gluetun_companion_rotation_pool_last_rotation_timestamp_seconds',
+            'Unix timestamp of the last rotation for each pool',
+            'gauge',
+            [({'pool': r['name']}, int(r['last_ts'])) for r in pool_rows if r['last_ts']])
+
+    _metric('gluetun_companion_rotation_pool_next_rotation_timestamp_seconds',
+            'Unix timestamp of the next scheduled rotation for each pool',
+            'gauge',
+            [({'pool': r['name']}, int(r['next_ts'])) for r in pool_rows if r['next_ts']])
 
     if sw['last_ts']:
         _metric('gluetun_companion_last_switch_timestamp_seconds',

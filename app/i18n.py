@@ -927,7 +927,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_grafana_title':       'Dashboard Grafana',
         'set_grafana_subtitle':    'Téléchargez le dashboard Grafana pré-câblé sur les métriques Prometheus de Companion.',
         'set_grafana_btn':         'Télécharger le dashboard',
-        'set_grafana_metrics_hint':'Métriques disponibles : débit, latence, jitter, perte de paquets, DNS, score de profil, indice de confiance, dernier benchmark, erreurs par type.',
+        'set_grafana_metrics_hint':'Métriques disponibles : débit, latence, jitter, perte de paquets, DNS, score de profil, indice de confiance, dernier benchmark, observation continue, pools et erreurs par type.',
     },
 
     'en': {
@@ -1854,7 +1854,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_grafana_title':       'Grafana dashboard',
         'set_grafana_subtitle':    'Download the Grafana dashboard pre-wired to Companion\'s Prometheus metrics.',
         'set_grafana_btn':         'Download dashboard',
-        'set_grafana_metrics_hint':'Available metrics: throughput, latency, jitter, packet loss, DNS, profile score, confidence index, last benchmark, error counters by type.',
+        'set_grafana_metrics_hint':'Available metrics: throughput, latency, jitter, packet loss, DNS, profile score, confidence index, last benchmark, continuous observation, pools and error counters by type.',
     },
 }
 
