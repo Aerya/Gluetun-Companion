@@ -2374,6 +2374,11 @@ def api_set_profile():
 @login_required
 def api_trigger():
     if get_setting('benchmark_running', '0') == '1':
+        if get_setting('benchmark_mode', '') == 'observation':
+            logger.info('Manual full benchmark requested — pausing continuous observation first')
+            request_stop()
+            trigger_now(current_app._get_current_object())
+            return jsonify({'status': 'started', 'paused_observation': True})
         return jsonify({'status': 'already_running'}), 409
     # Set flag before starting thread so the dashboard spinner appears immediately
     set_setting('benchmark_running', '1')
@@ -2385,6 +2390,11 @@ def api_trigger():
 @login_required
 def api_trigger_quick():
     if get_setting('benchmark_running', '0') == '1':
+        if get_setting('benchmark_mode', '') == 'observation':
+            logger.info('Manual quick benchmark requested — pausing continuous observation first')
+            request_stop()
+            trigger_quick_now(current_app._get_current_object())
+            return jsonify({'status': 'started', 'paused_observation': True})
         return jsonify({'status': 'already_running'}), 409
     # Set flag before starting thread so the spinner appears immediately
     set_setting('benchmark_running', '1')
@@ -2713,8 +2723,14 @@ def api_pool_rotate(pool_id: int):
     if not pool.get('enabled'):
         return jsonify({'ok': False, 'error': 'Pool disabled'}), 409
     if get_setting('benchmark_running', '0') == '1':
+        if get_setting('benchmark_mode', '') == 'observation':
+            logger.info('Manual pool rotation requested — pausing continuous observation first')
+            request_stop()
+        else:
+            return jsonify({'ok': False, 'error': 'Benchmark in progress'}), 409
+    if get_setting('benchmark_running', '0') == '1' and get_setting('benchmark_mode', '') != 'observation':
         return jsonify({'ok': False, 'error': 'Benchmark in progress'}), 409
-    if not scheduler_lock.acquire(blocking=False):
+    if not scheduler_lock.acquire(blocking=True, timeout=180):
         return jsonify({'ok': False, 'error': 'Benchmark in progress'}), 409
     try:
         if get_setting('benchmark_running', '0') == '1':

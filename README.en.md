@@ -450,7 +450,7 @@ In continuous observation, Companion does not run quick check, does not stop the
 
 The dashboard shows live observation state: current server, next server, cycle progress, the latest Companion activity lines, and a direct link to `/history` to review stored results. An internal watchdog regularly checks that observation resumes after a restart or when the regular automatic benchmark cycle is paused.
 
-If the regular automatic cycle is also enabled, it keeps a different goal: compare the configured selection at a regular interval and, if auto-switch is enabled, move Gluetun to the best server. When a scheduled cycle becomes due during continuous observation, Companion pauses observation, runs the normal full benchmark (including pausing configured containers), then resumes observation through the watchdog.
+If the regular automatic cycle is also enabled, it keeps a different goal: compare the configured selection at a regular interval and, if auto-switch is enabled, move Gluetun to the best server. When a scheduled cycle becomes due during continuous observation, Companion pauses observation, runs the normal full benchmark (including pausing configured containers), then resumes observation through the watchdog. Pool rotations and manual tests (quick or full) also have priority: they interrupt the current observation run, execute, then observation resumes if needed.
 
 Usage profiles should not be treated as instant magic: with one or two measurements, they are only an indication. They become genuinely meaningful once servers have several full benchmarks, ideally at different hours.
 

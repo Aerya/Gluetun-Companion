@@ -2573,13 +2573,27 @@ def _check_rotation_pools(app):
             return
 
         for row in due:
+            wait_for_observation = False
             if get_setting('benchmark_running', '0') == '1':
-                logger.info(
-                    'Pool rotation [%d] "%s": benchmark running — deferring',
-                    row['id'], row['name'],
-                )
-                continue
-            if not _lock.acquire(blocking=False):
+                if get_setting('benchmark_mode', '') == 'observation':
+                    logger.info(
+                        'Pool rotation [%d] "%s": due — pausing continuous observation first',
+                        row['id'], row['name'],
+                    )
+                    _progress_log('Observation continue mise en pause : rotation de pool prioritaire')
+                    _stop_event.set()
+                    wait_for_observation = True
+                else:
+                    logger.info(
+                        'Pool rotation [%d] "%s": benchmark running — deferring',
+                        row['id'], row['name'],
+                    )
+                    continue
+            if wait_for_observation:
+                acquired = _lock.acquire(blocking=True, timeout=180)
+            else:
+                acquired = _lock.acquire(blocking=False)
+            if not acquired:
                 logger.info(
                     'Pool rotation [%d] "%s": scheduler lock busy; deferring',
                     row['id'], row['name'],
