@@ -786,14 +786,20 @@ _CATALOGUE_SIDECAR_NAME = 'gluetun-companion-catalogue'
 _CATALOGUE_SIDECAR_PORT = 8767
 
 
-def _remove_container(client, name: str) -> None:
+def _remove_container(client, name: str, kill_first: bool = False) -> None:
     """Stop and remove a container by name, ignoring NotFound."""
     try:
         c = client.containers.get(name)
-        try:
-            c.stop(timeout=10)
-        except Exception:
-            pass
+        if kill_first:
+            try:
+                c.kill()
+            except Exception:
+                pass
+        else:
+            try:
+                c.stop(timeout=10)
+            except Exception:
+                pass
         c.remove(force=True)
     except docker.errors.NotFound:
         pass
@@ -847,8 +853,8 @@ def create_test_gluetun(
         # Remove the speed sidecar first: it shares the test Gluetun network
         # namespace and can otherwise keep the WireGuard session alive while
         # the next test container is being prepared.
-        _remove_container(client, _SIDECAR_NAME)
-        _remove_container(client, _TEST_GLUETUN_NAME)
+        _remove_container(client, _SIDECAR_NAME, kill_first=True)
+        _remove_container(client, _TEST_GLUETUN_NAME, kill_first=True)
 
         client.containers.run(
             image=image,
@@ -883,7 +889,7 @@ def create_speed_sidecar(sidecar_image: str, token: str = '') -> tuple[bool, str
         client.images.pull(sidecar_image)
         logger.info('Sidecar image up to date: %s', sidecar_image)
 
-        _remove_container(client, _SIDECAR_NAME)
+        _remove_container(client, _SIDECAR_NAME, kill_first=True)
 
         env: dict[str, str] = {}
         if token:
@@ -1053,7 +1059,7 @@ def cleanup_test_containers(sidecar_image: str | None = None) -> None:
     """Stop and remove the test Gluetun and sidecar containers, then delete the sidecar image."""
     client = docker.from_env()
     for name in [_SIDECAR_NAME, _TEST_GLUETUN_NAME]:
-        _remove_container(client, name)
+        _remove_container(client, name, kill_first=True)
     if sidecar_image:
         try:
             client.images.remove(sidecar_image, force=True)
