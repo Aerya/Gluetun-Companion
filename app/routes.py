@@ -2104,14 +2104,15 @@ def api_airvpn_servers():
                     })
         load_changes.sort(key=lambda x: abs(x['delta']), reverse=True)
 
-    # ── Recommended flag: health ok + load < 50 % + users < 30 ─────────────
-    _REC_LOAD  = 50
-    _REC_USERS = 30
+    # Recommended flag: low load + enough advertised AirVPN capacity.
+    # This is only a pre-selection helper; real client/server path quality is
+    # learned from Companion benchmarks (latency, jitter, loss, throughput).
+    _REC_LOAD = 70
+    _REC_BW_MAX = 5000
     for s in servers:
         s['recommended'] = (
-            s['health'] == 'ok'
-            and s['load'] < _REC_LOAD
-            and s['users'] < _REC_USERS
+            s['load'] < _REC_LOAD
+            and (s.get('bw_max') or 0) >= _REC_BW_MAX
         )
 
     # Persist snapshot for next call

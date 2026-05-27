@@ -176,7 +176,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Automatic Docker image updates** *(option)* — at switch time, Companion can update images before restarting containers: Gluetun itself, auto-managed network containers, post-switch containers and benchmark-paused containers; togglable per container from Settings
 
 ### AirVPN
-- **Built-in AirVPN server picker** — *+ Add an AirVPN server* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), four tabs — full searchable list, geographic distribution by country, **Recommended** tab (load < 50 %, health OK, < 30 users) and **Changes** tab (newly detected servers, disappeared servers, load shifts, top 5 healthiest countries); multi-select, one-click add
+- **Built-in AirVPN server picker** — *+ Add AirVPN servers* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), four tabs — full searchable list, geographic distribution by country, **Recommended** tab (load < 70 %, bandwidth ≥ 5 Gbit/s) and **Changes** tab (newly detected servers, disappeared servers, load shifts, top 5 healthiest countries); multi-select, one-click add
 - **Visible and filterable AirVPN bandwidth** — Companion stores the capacity advertised by AirVPN (`bw_max`) separately from benchmark results: sortable/filterable column in `/servers`, filter in the AirVPN import modal, badges on the dashboard, history, pool rotations and switches. This is provider metadata, not a measured speed result.
 - **Avoid loaded AirVPN servers** *(optional, dedicated to [AirVPN](https://airvpn.org/?referred_by=483746))* — at benchmark start, **[AirVPN](https://airvpn.org/?referred_by=483746)** servers of type `SERVER_NAMES` whose **load** or **user count** exceeds a configurable threshold are automatically skipped; data from the AirVPN cache (updated every 5 min); servers without AirVPN data are never excluded; thresholds configurable in Settings → Measure → Which servers are allowed
 - **New AirVPN server detection** *(optional)* — compares the AirVPN API with your configured servers every 24 h; badge and dismissable banner on the Servers page + *Changes* tab in the add modal; Discord/Apprise notification with optional mention
@@ -380,10 +380,10 @@ In **Settings → Measure → Containers to pause during benchmark**: list of co
 
 ### AirVPN server picker
 
-On **Servers → + Add an AirVPN server**: a modal loads live data from the [AirVPN API](https://airvpn.org/?referred_by=483746) (5-min server-side cache). Four tabs:
+On **Servers → + Add AirVPN servers**: a modal loads live data from the [AirVPN API](https://airvpn.org/?referred_by=483746) (5-min server-side cache). Four tabs:
 - **Servers** — full list with color-coded load bar (green/orange/red), user count, health status, sortable columns, real-time search
 - **By country** — collapsible sections per country with flag emoji, 🏆 **Best** badge on the least-loaded server, "Select all" button per country
-- **⭐ Recommended** — servers meeting all three criteria: load < 50 %, health OK, and fewer than 30 connected users; green badge showing the count
+- **⭐ Recommended** — servers matching the pre-selection criteria: load < 70 % and AirVPN advertised bandwidth ≥ 5 Gbit/s; green badge showing the count. Real peering between your access link and the VPN server is not known at import time: Companion approximates it later through benchmarks (latency, jitter, loss, throughput).
 - **↔ Changes** — diff since the last check: newly appeared servers (selectable for instant add), disappeared servers, load shifts ≥ 10 % (with ↑↓ arrow and delta badge), top 5 countries ranked by healthy-server percentage then average load
 
 Servers already in the database are grayed out with their checkbox disabled. The search bar filters all tabs simultaneously. Multi-select, one-click add.
@@ -766,7 +766,7 @@ Accessible from **History → Hourly patterns**, this view shows average perform
 3. Any new server that appears in one of those countries is stored in the database for 7 days
 
 **UI surfaces:**
-- **Badge** `+N` on the *Add an AirVPN server* button (Servers page)
+- **Badge** `+N` on the *Add AirVPN servers* button (Servers page)
 - **Dismissable banner** at the top of the Servers page: *"3 new servers available in your countries (NL, FR)"* with a link to the modal
 - **Changes tab** in the add modal: *New servers detected* section with ⭐ *New* badge and checkbox for direct one-click add; unified search filter
 

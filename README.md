@@ -177,7 +177,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Mise à jour automatique des images Docker** *(option)* — au moment de la bascule, Companion peut mettre à jour les images avant de relancer les containers : Gluetun lui-même, les containers réseau auto-gérés, les containers à redémarrer après bascule et les containers en pause pendant le benchmark ; activable individuellement par container depuis les Paramètres
 
 ### AirVPN
-- **Sélecteur de serveurs AirVPN intégré** — bouton *+ Ajouter un serveur AirVPN* sur la page Serveurs : données en direct depuis `airvpn.org/api/status/` (cache 5 min), quatre onglets — liste complète searchable, répartition géographique par pays, onglet **Recommandés** (charge < 50 %, santé OK, < 30 utilisateurs) et onglet **Changements** (nouveaux serveurs détectés, serveurs disparus, évolutions de charge, top 5 pays les plus sains) ; ajout multi-sélection en un clic
+- **Sélecteur de serveurs AirVPN intégré** — bouton *+ Ajouter des serveurs AirVPN* sur la page Serveurs : données en direct depuis `airvpn.org/api/status/` (cache 5 min), quatre onglets — liste complète searchable, répartition géographique par pays, onglet **Recommandés** (charge < 70 %, bande passante ≥ 5 Gbit/s) et onglet **Changements** (nouveaux serveurs détectés, serveurs disparus, évolutions de charge, top 5 pays les plus sains) ; ajout multi-sélection en un clic
 - **Bande passante AirVPN visible et filtrable** — Companion stocke la capacité annoncée par AirVPN (`bw_max`) séparément des benchmarks : colonne triable/filtrable dans `/servers`, filtre dans la fenêtre d'import AirVPN, badges sur le dashboard, l'historique, les rotations de pool et les bascules. C'est une donnée fournisseur, pas une mesure de débit réelle.
 - **Éviter les serveurs AirVPN chargés** *(optionnel, dédié [AirVPN](https://airvpn.org/?referred_by=483746))* — au démarrage du benchmark, les serveurs **[AirVPN](https://airvpn.org/?referred_by=483746)** de type `SERVER_NAMES` dont la **charge** ou le **nombre d'utilisateurs** dépasse un seuil configurable sont automatiquement ignorés ; données issues du cache AirVPN (mis à jour toutes les 5 min) ; les serveurs sans données AirVPN ne sont jamais exclus ; seuils configurables dans Paramètres → Mesurer → Quels serveurs autoriser
 - **Détection de nouveaux serveurs AirVPN** *(optionnel)* — compare l'API AirVPN avec vos serveurs configurés toutes les 24 h ; bannière et badge sur la page Serveurs + onglet *Changements* dans le modal d'ajout ; notification Discord/Apprise avec mention optionnelle
@@ -381,10 +381,10 @@ Dans **Paramètres → Mesurer → Containers à stopper pendant le benchmark** 
 
 ### Sélecteur de serveurs AirVPN
 
-Sur **Serveurs → + Ajouter un serveur AirVPN** : un modal charge les données en direct depuis l'[API AirVPN](https://airvpn.org/?referred_by=483746) (cache 5 min côté serveur). Quatre onglets :
+Sur **Serveurs → + Ajouter des serveurs AirVPN** : un modal charge les données en direct depuis l'[API AirVPN](https://airvpn.org/?referred_by=483746) (cache 5 min côté serveur). Quatre onglets :
 - **Serveurs** — liste complète avec barre de charge colorée (vert/orange/rouge), nombre d'utilisateurs, statut de santé, tri par colonne, recherche en temps réel
 - **Par pays** — sections collapsibles par pays avec flag emoji, badge 🏆 **Best** sur le serveur le moins chargé, bouton "Sélectionner tous" par pays
-- **⭐ Recommandés** — serveurs réunissant les trois critères : charge < 50 %, santé OK et moins de 30 utilisateurs connectés ; badge vert indiquant le nombre disponible
+- **⭐ Recommandés** — serveurs répondant aux critères de présélection : charge < 70 % et bande passante AirVPN annoncée ≥ 5 Gbit/s ; badge vert indiquant le nombre disponible. Le peering réel entre votre accès et le serveur VPN n'est pas connu à l'import : il est approché ensuite par les benchmarks Companion (latence, jitter, perte, débit).
 - **↔ Changements** — diff depuis la dernière consultation : nouveaux serveurs apparus (ajoutables en un clic), serveurs disparus de l'API, changements de charge ≥ 10 % (avec flèche ↑↓ et delta), top 5 pays classés par pourcentage de serveurs sains puis charge moyenne
 
 Les serveurs déjà dans la base sont grisés et leur case à cocher est désactivée. La barre de recherche filtre simultanément tous les onglets. Sélection multiple, ajout en un clic.
@@ -767,7 +767,7 @@ Fonctionnalité **désactivée par défaut**, uniquement pour les utilisateurs A
 3. Si un nouveau serveur apparaît dans un de ces pays, il est stocké dans la base pendant 7 jours
 
 **Surfaces UI :**
-- **Badge** `+N` sur le bouton *Ajouter un serveur AirVPN* (page Serveurs)
+- **Badge** `+N` sur le bouton *Ajouter des serveurs AirVPN* (page Serveurs)
 - **Bannière dismissable** en haut de la page Serveurs : *« 3 nouveaux serveurs disponibles dans vos pays (NL, FR) »* avec lien vers le modal
 - **Onglet Changements** dans le modal d'ajout : section *Nouveaux serveurs détectés* avec badge ⭐ *Nouveau* et case à cocher pour ajout direct ; filtre de recherche unifié
 
