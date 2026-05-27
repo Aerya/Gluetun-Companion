@@ -90,6 +90,12 @@
                 <i class="bi bi-server me-1"></i>
                 <strong>{{ p.candidate_count }}</strong> {{ t.pools_candidates_count }}
               </span>
+              {% if p.exclusions %}
+              <span>
+                <i class="bi bi-slash-circle me-1"></i>
+                <strong>{{ p.exclusions | length }}</strong> {{ t.pools_excluded_count }}
+              </span>
+              {% endif %}
               {% if p.last_server %}
               <span>
                 <i class="bi bi-arrow-right-circle me-1"></i>
@@ -186,6 +192,7 @@
 
         {# ② Critères #}
         <div class="mb-1 fw-semibold small">{{ t.pools_criteria_title }}</div>
+        <div class="text-muted mb-2" style="font-size:.76rem">{{ t.pools_criteria_hint }}</div>
         <div class="mb-2" style="max-width:420px">
           <label class="form-label small fw-semibold" for="pm-criteria-logic">{{ t.pools_criteria_logic_label }}</label>
           <select class="form-select form-select-sm" id="pm-criteria-logic" onchange="_updateCandidatesPreview()">
@@ -201,6 +208,24 @@
         <hr class="my-3">
 
         {# ③ Planification #}
+        <div class="mb-1 fw-semibold small">{{ t.pools_exclusions_title }}</div>
+        <div class="text-muted mb-2" style="font-size:.76rem">{{ t.pools_exclusions_hint }}</div>
+        <div class="d-flex gap-2 mb-2">
+          <input type="text" class="form-control form-control-sm" id="pm-exclusion-input"
+                 list="pm-exclusion-datalist" placeholder="{{ t.pools_exclusions_placeholder }}">
+          <datalist id="pm-exclusion-datalist">
+            {% for s in all_servers %}
+            <option value="{{ s.name }}">
+            {% endfor %}
+          </datalist>
+          <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addExclusionFromInput()">
+            <i class="bi bi-plus"></i>
+          </button>
+        </div>
+        <div id="pm-exclusions-list" class="d-flex flex-wrap gap-1"></div>
+
+        <hr class="my-3">
+
         <div class="mb-1 fw-semibold small">{{ t.pools_schedule_title }}</div>
         <div class="form-check form-switch mb-2">
           <input type="checkbox" class="form-check-input" id="pm-auto-rotate"
@@ -279,6 +304,10 @@ const _T = {
   critMetJitter:      {{ t.pools_crit_met_jitter  | tojson }},
   critMetLoss:        {{ t.pools_crit_met_loss    | tojson }},
   critMetDns:         {{ t.pools_crit_met_dns     | tojson }},
+  excluded:           {{ t.pools_excluded_count | tojson }},
+  beforeExclusions:   {{ t.pools_preview_before_exclusions | tojson }},
+  afterExclusions:    {{ t.pools_preview_after_exclusions | tojson }},
+  finalLimit:         {{ t.pools_preview_final_limit | tojson }},
   serverSide:         {{ t.pools_server_side_resolution | tojson }},
   modalCreate: {{ t.pools_modal_create | tojson }},
   modalEdit:   {{ t.pools_modal_edit   | tojson }},
@@ -315,6 +344,48 @@ const _CSRF         = document.querySelector('meta[name="csrf-token"]')?.content
 
 // ── State for modal ───────────────────────────────────────────────────────────
 let _editPoolId = null;
+let _poolExclusions = new Set();
+
+function _escHtml(s) {
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _renderExclusions() {
+  const wrap = document.getElementById('pm-exclusions-list');
+  if (!wrap) return;
+  const names = [..._poolExclusions].sort();
+  wrap.innerHTML = names.length
+    ? names.map(name => `
+        <span class="badge bg-warning text-dark d-inline-flex align-items-center gap-1">
+          ${_escHtml(name)}
+          <button type="button" class="btn-close" style="font-size:.55rem"
+                  data-exclusion="${_escHtml(name)}" onclick="removeExclusion(this.dataset.exclusion)"
+                  aria-label="${_T.critRemove}"></button>
+        </span>`).join('')
+    : `<span class="text-muted small">—</span>`;
+}
+
+function addExclusion(name) {
+  const value = String(name || '').trim();
+  if (!value) return;
+  _poolExclusions.add(value);
+  const input = document.getElementById('pm-exclusion-input');
+  if (input) input.value = '';
+  _renderExclusions();
+  _updateCandidatesPreview();
+}
+
+function addExclusionFromInput() {
+  addExclusion(document.getElementById('pm-exclusion-input')?.value || '');
+}
+
+function removeExclusion(name) {
+  _poolExclusions.delete(name);
+  _renderExclusions();
+  _updateCandidatesPreview();
+}
 
 function openPoolModal(poolId) {
   _editPoolId = poolId || null;
@@ -334,6 +405,9 @@ function openPoolModal(poolId) {
   document.getElementById('pm-criteria-list').innerHTML = '';
   document.getElementById('pm-interval-row').classList.add('d-none');
   document.getElementById('pm-candidates-preview').textContent = '—';
+
+  _poolExclusions = new Set();
+  _renderExclusions();
 
   if (_editPoolId) {
     // Fetch pool data and fill form
@@ -364,6 +438,8 @@ function _fillModalFromPool(pd) {
   // Criteria
   document.getElementById('pm-criteria-list').innerHTML = '';
   (pd.criteria || []).forEach(c => addCriterion(c));
+  _poolExclusions = new Set(pd.exclusions || []);
+  _renderExclusions();
   _updateCandidatesPreview();
 }
 
@@ -601,6 +677,9 @@ function _doPreview() {
       ? candidateSets.reduce((acc, cur) => new Set([...acc].filter(x => cur.has(x))))
       : candidateSets.reduce((acc, cur) => new Set([...acc, ...cur]), new Set());
   }
+  const beforeExclusions = candidates.size;
+  const excludedMatches = [..._poolExclusions].filter(name => candidates.has(name));
+  excludedMatches.forEach(name => candidates.delete(name));
   const arr = [...candidates].sort();
   let preview = '';
   if (arr.length === 0 && _topMetricNotes.length === 0) {
@@ -608,11 +687,15 @@ function _doPreview() {
   } else {
     const show = arr.slice(0, 8);
     const rest = arr.length - show.length;
-    preview = show.map(n => `<span class="badge bg-secondary me-1">${n}</span>`).join('');
-    if (topN && topN < arr.length) {
-      preview += ` <span class="text-muted ms-1">→ top ${topN}</span>`;
-    }
+    preview = show.map(n => `<span class="badge bg-secondary me-1">${_escHtml(n)}</span>`).join('');
     if (rest > 0) preview += ` <span class="text-muted">+${rest}</span>`;
+    const counters = [
+      `${_T.beforeExclusions}: ${beforeExclusions}`,
+      `${_T.excluded}: ${excludedMatches.length}`,
+      `${_T.afterExclusions}: ${arr.length}`,
+    ];
+    if (topN && topN < arr.length) counters.push(`${_T.finalLimit}: ${topN}`);
+    preview += `<div class="text-muted mt-2">${counters.map(_escHtml).join(' · ')}</div>`;
     if (_topMetricNotes.length) {
       if (preview) preview += ' ';
       preview += _topMetricNotes.map(note =>
@@ -634,6 +717,13 @@ document.getElementById('pm-interval')?.addEventListener('input', function() {
 });
 
 // ── Save pool ─────────────────────────────────────────────────────────────────
+document.getElementById('pm-exclusion-input')?.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    addExclusionFromInput();
+  }
+});
+
 async function savePool() {
   const name = document.getElementById('pm-name').value.trim();
   if (!name) { document.getElementById('pm-name').focus(); return; }
@@ -649,6 +739,7 @@ async function savePool() {
     notify:         document.getElementById('pm-notify').checked,
     enabled:        document.getElementById('pm-enabled').checked,
     criteria:       _buildCriteriaPayload(),
+    exclusions:     [..._poolExclusions],
   };
 
   const url    = _editPoolId ? `/api/pools/${_editPoolId}` : '/api/pools';

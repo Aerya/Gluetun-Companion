@@ -115,9 +115,10 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 ### Pools de rotation
 
 - **Rotation sans benchmark** — basculez vers un serveur d'un groupe prédéfini sans lancer de cycle de mesure complet ; idéal pour la rotation périodique ou les changements ponctuels
-- **Critères combinables** — chaque pool accepte autant de critères que nécessaire : serveur précis, type de filtre Gluetun (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`), profil VPN WireGuard, top métrique, ou tous les serveurs actifs. La logique peut être `OU` (chaque critère ajoute des serveurs) ou `ET` (chaque critère restreint la sélection).
+- **Serveurs candidats lisibles** — chaque pool part de règles simples : serveur précis, type de filtre Gluetun (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`), profil VPN WireGuard, top métrique, ou tous les serveurs actifs. Les règles peuvent ajouter leurs résultats ou garder seulement les serveurs qui respectent toutes les règles.
+- **Exclusions par pool** — excluez des serveurs précis d'un pool sans les désactiver dans Companion ; ils restent disponibles ailleurs, mais ce pool ne les choisira jamais.
 - **3 modes de sélection** : 🎲 aléatoire, 🔄 tour à tour (round-robin avec curseur persistant), 🏆 meilleur débit historique
-- **Top-N** — restreindre le pool aux N meilleurs débits historiques (si non renseigné, tous les candidats sont éligibles)
+- **Limite finale** — après règles et exclusions, restreindre le pool aux N meilleurs débits historiques (si non renseigné, tous les candidats restants sont éligibles)
 - **Manuel ou planifié** — déclenchement immédiat depuis l'UI, ou rotation automatique sur un intervalle configurable (en heures ; ex. toutes les 12 h ou tous les 2 jours)
 - **Mesure après bascule optionnelle** — après chaque bascule, un test proxy rapide mesure le débit du nouveau serveur et l'enregistre dans l'historique (méthode `proxy_qc`). Cette mesure ne choisit pas le serveur ; elle audite la rotation effectuée.
 - **Notifications** — alerte Discord/Apprise à chaque rotation (manuelle ou automatique), avec serveur précédent, nouveau serveur, débit si la mesure après bascule est activée
@@ -662,29 +663,30 @@ Dans **Rotation → Nouveau pool** :
    - 🎲 **Aléatoire** — `random.choice()` parmi les candidats
    - 🔄 **Tour à tour** — cycle alphabétique avec curseur persistant entre deux rotations
    - 🏆 **Meilleur débit historique** — candidat avec le meilleur débit moyen historique
-3. Définissez un **Top-N** optionnel : si renseigné, seuls les N meilleurs débits historiques sont éligibles, même si les critères en sélectionnent davantage
-4. Choisissez la **logique des critères** :
-   - `OU` — chaque critère ajoute des candidats (`France OU Top DNS`)
-   - `ET` — chaque critère restreint les candidats (`France ET Top DNS`)
-5. Ajoutez un ou plusieurs **critères** :
+3. Ajoutez un ou plusieurs **critères** pour construire les **serveurs candidats** :
    - `Tous les serveurs actifs` — inclut l'intégralité des serveurs activés dans Companion
    - `Serveur précis` — saisissez le nom exact ; l'autocomplete propose les serveurs existants
    - `Type de filtre Gluetun` — choisissez la variable (`SERVER_COUNTRIES`, `SERVER_NAMES`, etc.) et optionnellement une valeur (vide = tous les serveurs de ce type)
    - `Profil VPN WireGuard` — tous les serveurs assignés à un profil WireGuard spécifique
    - `Top N par métrique` — ajoute ou restreint selon les meilleurs historiques de débit, jitter, perte ou DNS
-6. Configurez la **planification** : rotation automatique toutes les N heures (désactivée = manuel uniquement)
-7. Activez **Mesurer après bascule** si vous souhaitez enregistrer le débit après chaque rotation. Cette mesure ne sert pas à choisir le serveur.
+4. Choisissez comment combiner les règles :
+   - **Ajouter les résultats de chaque règle** — chaque règle ajoute des serveurs ; les doublons sont fusionnés automatiquement.
+   - **Garder seulement les serveurs qui respectent toutes les règles** — plus strict, utile pour faire « France + profil AirVPN + Top débit ».
+5. Ajoutez si besoin des **exclusions du pool** : ces serveurs restent actifs dans Companion, mais ce pool ne les choisira jamais.
+6. Définissez une **limite finale** optionnelle : si renseignée, seuls les N meilleurs débits historiques restent éligibles après règles et exclusions.
+7. Configurez la **planification** : rotation automatique toutes les N heures (désactivée = manuel uniquement)
+8. Activez **Mesurer après bascule** si vous souhaitez enregistrer le débit après chaque rotation. Cette mesure ne sert pas à choisir le serveur.
 
-L'aperçu des candidats est mis à jour en temps réel dans le modal pendant la configuration.
+L'aperçu est mis à jour en temps réel dans le modal : candidats avant exclusions, nombre de serveurs exclus, serveurs utilisables et limite finale éventuelle.
 
 #### Flux d'exécution d'une rotation
 
 ```
 Rotation déclenchée (manuelle ou automatique) :
   1. Résolution des candidats
-     ├─ logique OU : union de tous les critères
-     ├─ logique ET : intersection de tous les critères
-     └─ Filtrage top-N par débit historique (si activé)
+     ├─ règles ajoutées ensemble ou croisées selon le mode choisi
+     ├─ retrait des exclusions explicites du pool
+     └─ limite finale par débit historique (si activée)
   2. Sélection du serveur cible (random / round-robin / meilleur débit historique)
   3. switch_server() → écriture docker-compose.override.yml + docker compose up -d
      └─ Si profil WireGuard associé : injection VPN_SERVICE_PROVIDER + WIREGUARD_* dans l'override

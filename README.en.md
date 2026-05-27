@@ -114,9 +114,10 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 ### Rotation pools
 
 - **Rotation without benchmarking** — switch to a server from a predefined group without triggering a full measurement cycle; ideal for periodic rotation or quick one-off changes
-- **Composable criteria** — each pool accepts any number of criteria: specific server, Gluetun filter type (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`), WireGuard VPN profile, top metric, or all active servers. Logic can be `OR` (each criterion adds servers) or `AND` (each criterion restricts the selection).
+- **Readable candidate rules** — each pool starts from simple rules: specific server, Gluetun filter type (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`), WireGuard VPN profile, top metric, or all active servers. Rules can either add their results or keep only servers matching every rule.
+- **Per-pool exclusions** — exclude specific servers from one pool without disabling them in Companion; they remain available elsewhere, but this pool will never pick them.
 - **3 selection modes**: 🎲 random, 🔄 round-robin (persistent cursor across rotations), 🏆 best historical download
-- **Top-N** — restrict the pool to the N best historical download speeds (if unset, all candidates are eligible)
+- **Final limit** — after rules and exclusions, restrict the pool to the N best historical download speeds (if unset, all remaining candidates are eligible)
 - **Manual or scheduled** — instant one-click rotation from the UI, or automatic rotation on a configurable interval (in hours; e.g. every 12 h or every 2 days)
 - **Optional post-switch measurement** — after each switch, a fast proxy test measures the new server's speed and records it in the history (method `proxy_qc`). This measurement does not choose the server; it audits the completed rotation.
 - **Notifications** — Discord/Apprise alert on each rotation (manual or automatic), including previous server, new server, and speed if post-switch measurement is enabled
@@ -661,29 +662,30 @@ In **Rotation → New pool**:
    - 🎲 **Random** — `random.choice()` from the candidates
    - 🔄 **Round-robin** — alphabetical cycle with a persistent cursor between rotations
    - 🏆 **Best historical download** — candidate with the highest historical average download speed
-3. Set an optional **Top-N**: if specified, only the N best historical download speeds are eligible, even if the criteria match more
-4. Choose the **criteria logic**:
-   - `OR` — each criterion adds candidates (`France OR Top DNS`)
-   - `AND` — each criterion restricts candidates (`France AND Top DNS`)
-5. Add one or more **criteria**:
+3. Add one or more **criteria** to build the **candidate servers**:
    - `All active servers` — includes every enabled server in Companion
    - `Specific server` — type the exact name; autocomplete suggests existing servers
    - `Gluetun filter type` — choose the variable (`SERVER_COUNTRIES`, `SERVER_NAMES`, etc.) and optionally a value (empty = all servers of that type)
    - `WireGuard VPN profile` — all servers assigned to a specific WireGuard profile
    - `Top N by metric` — adds or restricts using the best historical download, jitter, packet loss or DNS metrics
-6. Configure the **schedule**: automatic rotation every N hours (disabled = manual only)
-7. Enable **Measure after switch** to record speed after each rotation. This measurement is not used to choose the server.
+4. Choose how rules are combined:
+   - **Add the results of each rule** — each rule adds servers; duplicates are merged automatically.
+   - **Keep only servers matching every rule** — stricter, useful for "France + AirVPN profile + Top download".
+5. Add **pool exclusions** if needed: these servers remain active in Companion, but this pool will never pick them.
+6. Set an optional **final limit**: if specified, only the N best historical download speeds remain eligible after rules and exclusions.
+7. Configure the **schedule**: automatic rotation every N hours (disabled = manual only)
+8. Enable **Measure after switch** to record speed after each rotation. This measurement is not used to choose the server.
 
-The candidate preview updates in real time inside the modal as you configure criteria.
+The preview updates in real time inside the modal: candidates before exclusions, excluded servers, usable servers and optional final limit.
 
 #### Rotation execution flow
 
 ```
 Rotation triggered (manual or automatic):
   1. Resolve candidates
-     ├─ OR logic: union of all criteria
-     ├─ AND logic: intersection of all criteria
-     └─ Top-N filter by historical download speed (if set)
+     ├─ rules added together or intersected depending on the selected mode
+     ├─ explicit pool exclusions removed
+     └─ final limit by historical download speed (if set)
   2. Pick target server (random / round-robin / best historical download)
   3. switch_server() → write docker-compose.override.yml + docker compose up -d
      └─ If WireGuard profile attached: inject VPN_SERVICE_PROVIDER + WIREGUARD_* into override

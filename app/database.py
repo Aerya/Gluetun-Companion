@@ -171,6 +171,18 @@ def init_db(db_path: str):
             CREATE INDEX IF NOT EXISTS idx_pool_criteria_pool
                 ON rotation_pool_criteria(pool_id);
 
+            -- Per-pool explicit exclusions. These servers stay active in
+            -- Companion, but this pool will never pick them.
+            CREATE TABLE IF NOT EXISTS rotation_pool_exclusions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                pool_id     INTEGER NOT NULL REFERENCES rotation_pools(id) ON DELETE CASCADE,
+                server_name TEXT    NOT NULL,
+                UNIQUE(pool_id, server_name)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_pool_exclusions_pool
+                ON rotation_pool_exclusions(pool_id);
+
             INSERT OR IGNORE INTO settings (key, value) VALUES
                 ('test_interval_hours',      '6'),
                 ('admin_username',           'admin'),
@@ -981,7 +993,7 @@ def assign_servers_to_profile(server_ids: list[int], profile_id: int) -> int:
 # ---------------------------------------------------------------------------
 
 def get_rotation_pools() -> list[dict]:
-    """Return all rotation pools ordered by name, with their criteria."""
+    """Return all rotation pools ordered by name, with criteria and exclusions."""
     with get_db() as db:
         pools = db.execute(
             'SELECT * FROM rotation_pools ORDER BY name'
@@ -994,12 +1006,17 @@ def get_rotation_pools() -> list[dict]:
                 (pd['id'],),
             ).fetchall()
             pd['criteria'] = [dict(c) for c in crits]
+            excl = db.execute(
+                'SELECT server_name FROM rotation_pool_exclusions WHERE pool_id = ? ORDER BY server_name',
+                (pd['id'],),
+            ).fetchall()
+            pd['exclusions'] = [r['server_name'] for r in excl]
             result.append(pd)
     return result
 
 
 def get_rotation_pool(pool_id: int) -> dict | None:
-    """Return a single pool with its criteria, or None."""
+    """Return a single pool with its criteria and exclusions, or None."""
     with get_db() as db:
         p = db.execute(
             'SELECT * FROM rotation_pools WHERE id = ?', (pool_id,)
@@ -1012,6 +1029,11 @@ def get_rotation_pool(pool_id: int) -> dict | None:
             (pool_id,),
         ).fetchall()
         pd['criteria'] = [dict(c) for c in crits]
+        excl = db.execute(
+            'SELECT server_name FROM rotation_pool_exclusions WHERE pool_id = ? ORDER BY server_name',
+            (pool_id,),
+        ).fetchall()
+        pd['exclusions'] = [r['server_name'] for r in excl]
     return pd
 
 
@@ -1026,8 +1048,9 @@ def create_rotation_pool(
     notify: bool = True,
     top_n: int | None = None,
     criteria: list[dict] | None = None,
+    exclusions: list[str] | None = None,
 ) -> int:
-    """Create a rotation pool and its criteria.  Returns the new pool id."""
+    """Create a rotation pool and its criteria/exclusions.  Returns the new pool id."""
     with get_db() as db:
         cur = db.execute(
             '''INSERT INTO rotation_pools
@@ -1045,6 +1068,13 @@ def create_rotation_pool(
                     'VALUES (?, ?, ?)',
                     (pool_id, c['crit_type'], c.get('crit_value')),
                 )
+        if exclusions:
+            for server_name in exclusions:
+                db.execute(
+                    'INSERT OR IGNORE INTO rotation_pool_exclusions (pool_id, server_name) '
+                    'VALUES (?, ?)',
+                    (pool_id, server_name),
+                )
     return pool_id
 
 
@@ -1060,8 +1090,9 @@ def update_rotation_pool(
     notify: bool | None = None,
     top_n=_UNSET,   # None = clear top_n; _UNSET = don't touch
     criteria: list[dict] | None = None,
+    exclusions: list[str] | None = None,
 ) -> bool:
-    """Update a pool and optionally replace all its criteria.  Returns False if not found."""
+    """Update a pool and optionally replace criteria/exclusions.  Returns False if not found."""
     with get_db() as db:
         if not db.execute('SELECT id FROM rotation_pools WHERE id = ?', (pool_id,)).fetchone():
             return False
@@ -1087,7 +1118,25 @@ def update_rotation_pool(
                     'VALUES (?, ?, ?)',
                     (pool_id, c['crit_type'], c.get('crit_value')),
                 )
+        if exclusions is not None:
+            db.execute('DELETE FROM rotation_pool_exclusions WHERE pool_id = ?', (pool_id,))
+            for server_name in exclusions:
+                db.execute(
+                    'INSERT OR IGNORE INTO rotation_pool_exclusions (pool_id, server_name) '
+                    'VALUES (?, ?)',
+                    (pool_id, server_name),
+                )
     return True
+
+
+def get_pool_exclusions(pool_id: int) -> set[str]:
+    """Return explicit server-name exclusions for a pool."""
+    with get_db() as db:
+        rows = db.execute(
+            'SELECT server_name FROM rotation_pool_exclusions WHERE pool_id = ?',
+            (pool_id,),
+        ).fetchall()
+    return {r['server_name'] for r in rows}
 
 
 def delete_rotation_pool(pool_id: int) -> bool:

@@ -32,6 +32,8 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
     If top_n is set on the pool, restrict to the top-N by historical avg
     download speed (proxy_qc excluded, same window as scoring).
 
+    Explicit per-pool exclusions are applied after criteria and before top_n.
+
     Each returned dict: {id, name, filter_type, vpn_profile_id, avg_dl}
     """
     from .database import get_db
@@ -163,6 +165,17 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
             candidate_names = set.intersection(*non_empty_sets)
         else:
             candidate_names = set.union(*non_empty_sets)
+
+        if not candidate_names:
+            return []
+
+        excluded_names = {
+            r['server_name'] for r in db.execute(
+                'SELECT server_name FROM rotation_pool_exclusions WHERE pool_id = ?',
+                (pool_id,),
+            ).fetchall()
+        }
+        candidate_names -= excluded_names
 
         if not candidate_names:
             return []

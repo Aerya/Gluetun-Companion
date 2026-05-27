@@ -2636,6 +2636,7 @@ def api_pool_create():
         return jsonify({'ok': False, 'error': 'Name is required'}), 400
 
     criteria = _parse_pool_criteria(data.get('criteria') or [])
+    exclusions = _parse_pool_exclusions(data.get('exclusions') or [])
     interval_h = _parse_interval(data)
 
     pool_id = create_rotation_pool(
@@ -2649,6 +2650,7 @@ def api_pool_create():
         notify=bool(data.get('notify', True)),
         top_n=_parse_top_n(data.get('top_n')),
         criteria=criteria,
+        exclusions=exclusions,
     )
     # Schedule first auto-rotation if applicable
     _pool_enabled = bool(data.get('enabled', True))
@@ -2673,6 +2675,7 @@ def api_pool_update(pool_id: int):
     auto_rotate = data.get('auto_rotate')
     criteria_logic = _parse_criteria_logic(data.get('criteria_logic')) if 'criteria_logic' in data else None
     criteria = _parse_pool_criteria(data.get('criteria') or []) if 'criteria' in data else None
+    exclusions = _parse_pool_exclusions(data.get('exclusions') or []) if 'exclusions' in data else None
 
     # top_n: only update if key was present in request; otherwise use sentinel to leave unchanged
     top_n_arg = _parse_top_n(data['top_n']) if 'top_n' in data else _DB_UNSET
@@ -2689,6 +2692,7 @@ def api_pool_update(pool_id: int):
         notify=data.get('notify'),
         top_n=top_n_arg,
         criteria=criteria,
+        exclusions=exclusions,
     )
     _enabled_after = bool(data.get('enabled')) if 'enabled' in data else bool(pool['enabled'])
     _auto_after = bool(auto_rotate) if auto_rotate is not None else bool(pool['auto_rotate'])
@@ -2911,6 +2915,21 @@ def _parse_pool_criteria(raw: list) -> list[dict]:
             except Exception:
                 continue
         result.append({'crit_type': ctype, 'crit_value': cval if ctype != 'all' else None})
+    return result
+
+
+def _parse_pool_exclusions(raw: list) -> list[str]:
+    """Validate and normalise explicit per-pool server exclusions."""
+    if not isinstance(raw, list):
+        return []
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        name = str(item or '').strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        result.append(name)
     return result
 
 
