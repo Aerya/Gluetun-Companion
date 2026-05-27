@@ -1,12 +1,17 @@
 import calendar
+import atexit
 import json
 import logging
 import os
+import signal
+import threading
 from datetime import datetime
 
 from flask import Flask, session
 from .database import init_db
 from .i18n import get_translations
+
+_cleanup_hooks_registered = False
 
 
 def _utc_to_local(dt_str: str | None) -> str:
@@ -54,6 +59,7 @@ def _configure_logging():
 
 
 def create_app():
+    global _cleanup_hooks_registered
     _configure_logging()
 
     app = Flask(
@@ -133,6 +139,40 @@ def create_app():
                 _log.error(
                     'Could not restart paused containers after app restart: %s', _exc
                 )
+
+    # A previous worker/container may have been stopped mid-sidecar test. The
+    # VPN session is held by gluetun-companion-test, not by the speed sidecar,
+    # so clean both temporary containers before accepting new work.
+    try:
+        from .gluetun import cleanup_test_containers
+        cleanup_test_containers()
+        logging.getLogger(__name__).info('Temporary sidecar test containers cleaned at startup')
+    except Exception as _exc:
+        logging.getLogger(__name__).warning(
+            'Could not clean temporary sidecar test containers at startup: %s', _exc
+        )
+
+    if not _cleanup_hooks_registered:
+        _cleanup_hooks_registered = True
+
+        def _cleanup_before_exit(*_args):
+            try:
+                from .gluetun import cleanup_test_containers
+                cleanup_test_containers()
+            except Exception as _exc:
+                logging.getLogger(__name__).warning(
+                    'Could not clean temporary sidecar test containers before exit: %s', _exc
+                )
+            if _args:
+                raise SystemExit(0)
+
+        atexit.register(_cleanup_before_exit)
+        if threading.current_thread() is threading.main_thread():
+            for _sig in (signal.SIGTERM, signal.SIGINT):
+                try:
+                    signal.signal(_sig, _cleanup_before_exit)
+                except Exception:
+                    pass
 
     app.jinja_env.filters['localtime'] = _utc_to_local
 

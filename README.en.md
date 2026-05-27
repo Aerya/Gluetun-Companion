@@ -352,7 +352,7 @@ Benchmark cycle (every X hours)
 - HTTP proxy fallback if sidecar fails entirely (disabled by default)
 
 > ⚠ **Simultaneous connection**: sidecar mode uses one extra VPN connection slot for the entire benchmark duration. Check your provider's limits (AirVPN: 3–5 depending on plan).
-> Companion runs sidecar tests one at a time and waits 20 s by default after container cleanup (`sidecar_disconnect_wait_seconds`) so the provider can close the WireGuard session before the next server starts.
+> Companion runs sidecar tests one at a time and waits 180 s by default after container cleanup (`sidecar_disconnect_wait_seconds`) so the provider can close the WireGuard session before the next server starts.
 
 ### HTTP proxy mode (optional)
 

@@ -473,9 +473,9 @@ def _test_one_server_sidecar(
     finally:
         cleanup_test_containers(sidecar_image)
         try:
-            settle = max(0, int(_sgs('sidecar_disconnect_wait_seconds', '20') or '20'))
+            settle = max(0, int(_sgs('sidecar_disconnect_wait_seconds', '180') or '180'))
         except ValueError:
-            settle = 20
+            settle = 180
         if settle:
             logger.info(
                 '  %s: waiting %ds after sidecar cleanup so provider sessions can close',

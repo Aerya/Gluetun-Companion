@@ -219,7 +219,7 @@ def init_db(db_path: str):
                 ('sidecar_speedtest_method', 'dual'),
                 ('sidecar_iperf_fallback',   '1'),
                 ('sidecar_proxy_fallback',   '0'),
-                ('sidecar_disconnect_wait_seconds', '20'),
+                ('sidecar_disconnect_wait_seconds', '180'),
                 ('post_switch_containers',      '[]'),
                 ('pause_bench_containers',      '[]'),
                 ('auto_benchmark',              '1'),
@@ -293,6 +293,18 @@ def init_db(db_path: str):
                     "UPDATE settings SET value=? WHERE key='notify_mention'",
                     (_legacy[0],),
                 )
+
+        # Early sidecar builds used a 20 s disconnect wait. AirVPN can keep
+        # WireGuard sessions visible for much longer after Docker cleanup, so
+        # migrate that initial default to a safer value without touching custom
+        # user values.
+        _sidecar_wait = db.execute(
+            "SELECT value FROM settings WHERE key='sidecar_disconnect_wait_seconds'"
+        ).fetchone()
+        if _sidecar_wait and (_sidecar_wait[0] or '') in ('', '20'):
+            db.execute(
+                "UPDATE settings SET value='180' WHERE key='sidecar_disconnect_wait_seconds'"
+            )
 
         # Migrations for columns added after initial schema
         for stmt in [
