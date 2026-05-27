@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 _scheduler: BackgroundScheduler | None = None
 _lock = threading.Lock()
 _current_test_trigger: str | None = None
+_observation_watchdog_state: str | None = None
 
 # ── Stop-benchmark signal ──────────────────────────────────────────────────
 # Set via request_stop() from the REST API; cleared at the start of every
@@ -882,21 +883,18 @@ def run_benchmark(app):
 def run_observation_now(app):
     """Run the continuous observation loop immediately, outside the interval schedule."""
     from .database import get_setting
-    if get_setting('auto_benchmark', '1') != '1':
-        logger.info('Continuous observation not started — automatic cycle disabled')
-        return
     if get_setting('continuous_observation', '0') != '1':
         logger.info('Continuous observation not started — option disabled')
         return
     if get_setting('benchmark_running', '0') == '1':
         logger.info('Continuous observation not started — benchmark already running')
         return
-    with _lock:
+    if not _lock.acquire(blocking=False):
+        logger.info('Continuous observation not started — scheduler lock busy')
+        return
+    try:
         cycle_no = 0
-        while (
-            get_setting('auto_benchmark', '1') == '1'
-            and get_setting('continuous_observation', '0') == '1'
-        ):
+        while get_setting('continuous_observation', '0') == '1':
             cycle_no += 1
             logger.info('Continuous observation immediate loop: cycle #%d', cycle_no)
             tested = _do_benchmark(app, observation=True) or 0
@@ -910,6 +908,8 @@ def run_observation_now(app):
                 logger.info('Continuous observation immediate loop complete: no server left below target')
                 break
             time.sleep(30)
+    finally:
+        _lock.release()
 
 
 def run_benchmark_now(app):
@@ -2611,6 +2611,59 @@ def _check_rotation_pools(app):
                 _lock.release()
 
 
+def _check_continuous_observation(app):
+    """
+    Watchdog for pyramidal continuous observation.
+
+    This is deliberately independent from auto_benchmark: rotation pools may put
+    the planned benchmark cycle on standby, but observation is an explicit data
+    collection mode and must resume after restarts as long as there is work left.
+    """
+    from .database import get_setting
+    global _observation_watchdog_state
+
+    with app.app_context():
+        def _state_once(state: str, message: str, level: str = 'info') -> None:
+            global _observation_watchdog_state
+            if _observation_watchdog_state == state:
+                return
+            _observation_watchdog_state = state
+            getattr(logger, level)(message)
+            _progress_log(message)
+
+        if get_setting('continuous_observation', '0') != '1':
+            _observation_watchdog_state = None
+            return
+        if get_setting('benchmark_running', '0') == '1':
+            _observation_watchdog_state = 'running'
+            return
+        if _lock.locked():
+            _state_once(
+                'busy',
+                'Continuous observation watchdog: scheduler lock busy — waiting',
+            )
+            return
+        try:
+            has_work = _has_observation_work_left()
+        except Exception as exc:
+            _state_once(
+                'error',
+                f'Continuous observation watchdog: cannot evaluate work left — {exc}',
+                level='warning',
+            )
+            return
+        if not has_work:
+            _state_once(
+                'complete',
+                'Continuous observation watchdog: enabled, but target is already reached',
+            )
+            return
+        _observation_watchdog_state = 'starting'
+        logger.info('Continuous observation watchdog: work detected — starting/resuming now')
+        _progress_log('Observation continue : reprise automatique')
+        trigger_observation_now(app)
+
+
 def start_scheduler(app):
     global _scheduler
     from .database import get_setting, get_db
@@ -2672,6 +2725,14 @@ def start_scheduler(app):
         replace_existing=True,
         misfire_grace_time=120,
     )
+    _scheduler.add_job(
+        _check_continuous_observation,
+        trigger=IntervalTrigger(minutes=1),
+        args=[app],
+        id='continuous_observation_watchdog',
+        replace_existing=True,
+        misfire_grace_time=120,
+    )
     _scheduler.start()
 
     # Docker event listener — watches Gluetun container for unexpected restarts
@@ -2684,6 +2745,12 @@ def start_scheduler(app):
                 'Scheduler started — benchmark PAUSED (%d active rotation pool(s) — manual trigger still available)',
                 _active_pools,
             )
+            with app.app_context():
+                if get_setting('continuous_observation', '0') == '1':
+                    logger.info(
+                        'Continuous observation enabled at startup — watchdog will resume it even while benchmark cycle is paused'
+                    )
+                    trigger_observation_now(app)
         else:
             logger.info('Scheduler started — automatic benchmark DISABLED (manual trigger only)')
     else:

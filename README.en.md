@@ -448,7 +448,7 @@ This mode makes usage profiles serious without running a huge benchmark every ti
 
 In continuous observation, Companion does not run quick check, does not stop the containers configured in “Containers to stop during benchmark”, and does not automatically switch servers. The goal is to build useful history, not to disturb normal usage.
 
-The dashboard shows live observation state: current server, next server, cycle progress, the latest Companion activity lines, and a direct link to `/history` to review stored results.
+The dashboard shows live observation state: current server, next server, cycle progress, the latest Companion activity lines, and a direct link to `/history` to review stored results. An internal watchdog regularly checks that observation resumes after a restart or when the regular automatic benchmark cycle is paused.
 
 Usage profiles should not be treated as instant magic: with one or two measurements, they are only an indication. They become genuinely meaningful once servers have several full benchmarks, ideally at different hours.
 

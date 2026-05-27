@@ -449,7 +449,7 @@ Ce mode sert à rendre les profils d'usage sérieux sans lancer un benchmark gig
 
 En observation continue, Companion ne fait pas de quick check, ne coupe pas les containers configurés dans “Containers à stopper pendant le benchmark” et ne bascule pas automatiquement de serveur. Le but est d'accumuler de l'historique utilisable, pas de perturber l'usage courant.
 
-Le dashboard affiche l'état live de l'observation : serveur en cours, prochain serveur, progression du cycle, dernières lignes d'activité Companion et lien direct vers `/history` pour consulter les résultats enregistrés.
+Le dashboard affiche l'état live de l'observation : serveur en cours, prochain serveur, progression du cycle, dernières lignes d'activité Companion et lien direct vers `/history` pour consulter les résultats enregistrés. Un watchdog interne vérifie régulièrement que l'observation reprend bien après un redémarrage ou quand le cycle automatique classique est en pause.
 
 Les profils ne doivent pas être compris comme une magie immédiate : avec une ou deux mesures, ils donnent seulement une indication. Ils deviennent vraiment pertinents quand les serveurs ont plusieurs benchmarks complets, idéalement à des heures différentes.
 

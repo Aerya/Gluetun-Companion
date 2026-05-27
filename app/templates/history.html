@@ -412,6 +412,15 @@
       <option value="proxy_qc" {{ 'selected' if method_filter == 'proxy_qc' }}>{{ t.hist_method_proxy_qc }}</option>
     </select>
   </div>
+  <div class="col-auto">
+    <select name="trigger" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="" {{ 'selected' if not trigger_filter }}>{{ t.hist_filter_all_origins }}</option>
+      <option value="manual" {{ 'selected' if trigger_filter == 'manual' }}>{{ t.hist_origin_manual }}</option>
+      <option value="observation" {{ 'selected' if trigger_filter == 'observation' }}>{{ t.hist_origin_observation }}</option>
+      <option value="pool_rotation" {{ 'selected' if trigger_filter == 'pool_rotation' }}>{{ t.hist_origin_pool }}</option>
+      <option value="docker_event" {{ 'selected' if trigger_filter == 'docker_event' }}>{{ t.hist_origin_docker }}</option>
+    </select>
+  </div>
   <input type="hidden" name="sort" id="hist-sort-val" value="{{ sort }}">
   <div class="col-auto d-flex align-items-center gap-1">
     <label class="text-muted" style="font-size:.8rem;white-space:nowrap">{{ t.hist_date_from }}</label>
@@ -431,18 +440,18 @@
   <div class="col-auto">
     {% if show_failed %}
       <input type="hidden" name="show_failed" value="1">
-      <a href="{{ url_for('main.history', server=server_filter, method=method_filter, sort=sort, from_date=from_date, to_date=to_date) }}"
+      <a href="{{ url_for('main.history', server=server_filter, method=method_filter, trigger=trigger_filter, sort=sort, from_date=from_date, to_date=to_date) }}"
          class="btn btn-sm btn-danger" title="{{ t.hist_hide_failed }}">
         <i class="bi bi-x-circle-fill"></i> {{ t.hist_failed_visible }}
       </a>
     {% else %}
-      <a href="{{ url_for('main.history', server=server_filter, method=method_filter, sort=sort, from_date=from_date, to_date=to_date, show_failed='1') }}"
+      <a href="{{ url_for('main.history', server=server_filter, method=method_filter, trigger=trigger_filter, sort=sort, from_date=from_date, to_date=to_date, show_failed='1') }}"
          class="btn btn-sm btn-outline-danger" title="{{ t.hist_show_failed_title }}">
         <i class="bi bi-exclamation-triangle"></i> {{ t.hist_show_failed }}
       </a>
     {% endif %}
   </div>
-  {% if server_filter or method_filter or sort != 'date_desc' or from_date or to_date or show_failed %}
+  {% if server_filter or method_filter or trigger_filter or sort != 'date_desc' or from_date or to_date or show_failed %}
   <div class="col-auto">
     <a href="{{ url_for('main.history') }}" class="btn btn-sm btn-outline-secondary">✕</a>
   </div>
@@ -641,7 +650,7 @@
             {% if r.test_trigger == 'observation' %}
               <span class="badge bg-info text-dark ms-1" style="font-size:.65rem;cursor:help"
                     data-bs-toggle="tooltip" title="{{ t.hist_trigger_observation }}">
-                <i class="bi bi-layers-half"></i> obs
+                <i class="bi bi-layers-half"></i> {{ t.hist_origin_observation }}
               </span>
             {% endif %}
           </td>
@@ -667,7 +676,7 @@
 </div>
 
 {% if pages > 1 %}
-{%- set pg_args = {'sort': sort, 'server': server_filter, 'method': method_filter, 'from_date': from_date, 'to_date': to_date, 'show_failed': '1' if show_failed else ''} %}
+{%- set pg_args = {'sort': sort, 'server': server_filter, 'method': method_filter, 'trigger': trigger_filter, 'from_date': from_date, 'to_date': to_date, 'show_failed': '1' if show_failed else ''} %}
 <nav class="mt-3 d-flex justify-content-center">
   <ul class="pagination pagination-sm mb-0">
     <li class="page-item {{ 'disabled' if page == 1 }}">

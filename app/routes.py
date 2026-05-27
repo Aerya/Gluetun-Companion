@@ -1154,6 +1154,7 @@ def history():
     sort          = request.args.get('sort', 'date_desc')
     server_filter = request.args.get('server', '').strip()
     method_filter = request.args.get('method', '')
+    trigger_filter = request.args.get('trigger', '')
     from_date     = request.args.get('from_date', '').strip()
     to_date       = request.args.get('to_date', '').strip()
     show_failed   = request.args.get('show_failed', '') == '1'
@@ -1169,9 +1170,14 @@ def history():
     if server_filter:
         where_parts.append('server_name = ?')
         params.append(server_filter)
-    if method_filter in ('proxy', 'sidecar'):
+    if method_filter in ('proxy', 'sidecar', 'proxy_qc'):
         where_parts.append('test_method = ?')
         params.append(method_filter)
+    if trigger_filter == 'manual':
+        where_parts.append('(test_trigger IS NULL OR test_trigger = "")')
+    elif trigger_filter in ('observation', 'pool_rotation', 'docker_event'):
+        where_parts.append('test_trigger = ?')
+        params.append(trigger_filter)
     if from_date:
         where_parts.append("DATE(tested_at) >= ?")
         params.append(from_date)
@@ -1254,6 +1260,7 @@ def history():
         tests=tests, per_server=per_server,
         page=page, pages=pages, total=total,
         sort=sort, server_filter=server_filter, method_filter=method_filter,
+        trigger_filter=trigger_filter,
         from_date=from_date, to_date=to_date,
         show_failed=show_failed,
         last_bench_cycle=last_bench_cycle,
@@ -1448,7 +1455,7 @@ def settings():
             except ValueError:
                 pass
             reschedule(float(request.form.get('interval', '6')), enabled=(auto_bm and not active_auto_pools))
-            if observation_enabled and auto_bm and not active_auto_pools:
+            if observation_enabled:
                 trigger_observation_now(current_app._get_current_object())
             if active_auto_pools and auto_bm:
                 flash_t('flash_pool_cycle_standby', 'warning')
