@@ -353,6 +353,7 @@ Cycle de benchmark (toutes les X heures)
 - Proxy HTTP en fallback si le sidecar échoue complètement (désactivé par défaut)
 
 > ⚠ **Connexion simultanée** : le mode sidecar consomme un slot VPN supplémentaire pendant toute la durée du benchmark. Vérifiez les limites de votre fournisseur (AirVPN : 3–5 selon l'abonnement).
+> Companion enchaîne les tests sidecar un par un et attend par défaut 20 s après le nettoyage des containers (`sidecar_disconnect_wait_seconds`) pour laisser le fournisseur fermer la session WireGuard avant le serveur suivant.
 
 ### Mode Proxy HTTP (optionnel)
 

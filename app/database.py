@@ -219,6 +219,7 @@ def init_db(db_path: str):
                 ('sidecar_speedtest_method', 'dual'),
                 ('sidecar_iperf_fallback',   '1'),
                 ('sidecar_proxy_fallback',   '0'),
+                ('sidecar_disconnect_wait_seconds', '20'),
                 ('post_switch_containers',      '[]'),
                 ('pause_bench_containers',      '[]'),
                 ('auto_benchmark',              '1'),

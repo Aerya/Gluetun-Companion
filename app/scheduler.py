@@ -472,6 +472,16 @@ def _test_one_server_sidecar(
 
     finally:
         cleanup_test_containers(sidecar_image)
+        try:
+            settle = max(0, int(_sgs('sidecar_disconnect_wait_seconds', '20') or '20'))
+        except ValueError:
+            settle = 20
+        if settle:
+            logger.info(
+                '  %s: waiting %ds after sidecar cleanup so provider sessions can close',
+                server_name, settle,
+            )
+            time.sleep(settle)
 
 
 def _test_direct_proxy(
@@ -698,56 +708,32 @@ def _test_server_sidecar_with_retry(
     extra_env: 'dict[str, str] | None' = None,
 ) -> dict | None:
     last_err = 'Unknown error'
-    _STOP_POLL = 2.0  # seconds between stop-event checks while waiting for a result
     for attempt in range(max_retries + 1):
-        ex = ThreadPoolExecutor(max_workers=1)
-        future = ex.submit(
-            _test_one_server_sidecar,
-            server_name, filter_type,
-            real_container, sidecar_image, sidecar_host, sidecar_port,
-            wait_secs, dl_duration, dl_streams, sidecar_method,
-            sidecar_iperf_fallback,
-            extra_env,
-        )
+        if _stop_event.is_set():
+            logger.info('  %s: stop requested before sidecar test', server_name)
+            return None
         try:
-            # Poll in short intervals so a stop request interrupts mid-test
-            deadline = time.monotonic() + timeout_secs
-            while True:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise FuturesTimeout()
-                try:
-                    result = future.result(timeout=min(_STOP_POLL, remaining))
-                    break
-                except FuturesTimeout:
-                    if _stop_event.is_set():
-                        logger.info(
-                            '  %s: stop requested mid-sidecar-test — abandoning thread',
-                            server_name,
-                        )
-                        ex.shutdown(wait=False, cancel_futures=True)
-                        return None
-            ex.shutdown(wait=False)
-            return result
-        except FuturesTimeout:
-            last_err = f'Timed out after {timeout_secs}s'
-            logger.warning('  %s sidecar timed out (%ds)', server_name, timeout_secs)
-            ex.shutdown(wait=False, cancel_futures=True)
-            break
+            return _test_one_server_sidecar(
+                server_name, filter_type,
+                real_container, sidecar_image, sidecar_host, sidecar_port,
+                wait_secs, dl_duration, dl_streams, sidecar_method,
+                sidecar_iperf_fallback,
+                extra_env,
+            )
         except Exception as exc:
             last_err = str(exc)
-            ex.shutdown(wait=False)
             if attempt < max_retries:
                 logger.warning(
-                    '  Sidecar retry %d/%d for %s: %s', attempt + 1, max_retries, server_name, exc
+                    '  Sidecar retry %d/%d for %s: %s',
+                    attempt + 1, max_retries, server_name, exc,
                 )
-                # Interruptible retry delay — honour stop requests immediately
                 if _stop_event.wait(timeout=5):
                     logger.info('  %s: stop requested during sidecar retry delay', server_name)
                     return None
 
     _record_test(server_name, success=False, error=last_err)
     return None
+
 
 
 # ---------------------------------------------------------------------------

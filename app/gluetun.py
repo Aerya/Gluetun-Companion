@@ -844,6 +844,10 @@ def create_test_gluetun(
         sysctls  = attrs['HostConfig'].get('Sysctls') or {}
         devices  = attrs['HostConfig'].get('Devices') or []
 
+        # Remove the speed sidecar first: it shares the test Gluetun network
+        # namespace and can otherwise keep the WireGuard session alive while
+        # the next test container is being prepared.
+        _remove_container(client, _SIDECAR_NAME)
         _remove_container(client, _TEST_GLUETUN_NAME)
 
         client.containers.run(
