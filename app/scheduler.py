@@ -852,29 +852,20 @@ def run_benchmark(app):
             )
             return
 
-    observation = get_setting('continuous_observation', '0') == '1'
+    if (
+        get_setting('benchmark_running', '0') == '1'
+        and get_setting('benchmark_mode', '') == 'observation'
+    ):
+        logger.info('Scheduled benchmark due — pausing continuous observation first')
+        _progress_log('Observation continue mise en pause : cycle planifie prioritaire')
+        _stop_event.set()
+
     with _lock:
-        if observation:
-            cycle_no = 0
-            while (
-                get_setting('auto_benchmark', '1') == '1'
-                and get_setting('continuous_observation', '0') == '1'
-            ):
-                cycle_no += 1
-                logger.info('Continuous observation loop: cycle #%d', cycle_no)
-                tested = _do_benchmark(app, observation=True) or 0
-                if _stop_event.is_set():
-                    logger.info('Continuous observation loop stopped by user request')
-                    break
-                if tested <= 0:
-                    logger.info('Continuous observation loop stopped: no successful test in last cycle')
-                    break
-                if not _has_observation_work_left():
-                    logger.info('Continuous observation loop complete: no server left below target')
-                    break
-                time.sleep(30)
-        else:
-            _do_benchmark(app, observation=False)
+        # The scheduled job is the classic decision cycle: it may pause
+        # configured containers and auto-switch to the best server. Continuous
+        # observation is only background collection and resumes later via its
+        # watchdog if work remains.
+        _do_benchmark(app, observation=False)
 
     # Restore IntervalTrigger in case we were running from a one-shot DateTrigger
     _restore_interval_trigger()
@@ -1534,6 +1525,13 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                 _progress_log(f'OK {row["name"]} - {float(result.get("dl", 0) or 0):.1f} Mbps')
                 _update_consecutive_failures(row['name'], success=True, threshold=auto_exclude)
             else:
+                if _stop_event.is_set():
+                    logger.info(
+                        'Benchmark interrupted during %s — not counting it as a server failure',
+                        row['name'],
+                    )
+                    _progress_log(f'Interrompu {row["name"]} - cycle prioritaire')
+                    break
                 _progress_log(f'Echec {row["name"]}')
                 _excluded_failures = _update_consecutive_failures(
                     row['name'], success=False, threshold=auto_exclude
@@ -1553,7 +1551,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             set_setting('benchmark_done_servers', str(idx))
 
         # ── No successful result at all → notify failure ─────────────────────
-        if not results and _notif_bench_fail:
+        if not results and _notif_bench_fail and not observation and not _stop_event.is_set():
             _fail_dur = round(time.time() - cycle_start, 1)
             from .notify import send_benchmark_failure_notification
             send_benchmark_failure_notification(
