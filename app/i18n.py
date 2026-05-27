@@ -130,6 +130,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Servers ──
         'srv_title':             'Serveurs configurés',
+        'srv_filtered_count':    'affichés',
         'srv_import':            'Importer depuis Gluetun',
         'srv_named_servers_hint':          'Companion benchmarke chaque serveur <strong>individuellement par son nom</strong>. Configurer <code>SERVER_COUNTRIES</code>, <code>SERVER_REGIONS</code> ou <code>SERVER_CITIES</code> ajoute une seule entrée (ex&nbsp;: « France ») — Companion ne découvre <em>pas</em> automatiquement les serveurs individuels de ce pays. Ajoutez plusieurs serveurs (<code>SERVER_NAMES</code> et/ou <code>SERVER_COUNTRIES</code> et/ou <code>SERVER_REGIONS</code> et/ou <code>SERVER_CITIES</code> et/ou <code>SERVER_HOSTNAMES</code>) pour que le benchmark fonctionne. <strong>Minimum 2 serveurs nommés requis.</strong>',
         'srv_named_servers_popup_title':   'Comment ajouter des serveurs',
@@ -1063,6 +1064,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Servers ──
         'srv_title':             'Configured servers',
+        'srv_filtered_count':    'shown',
         'srv_import':            'Import from Gluetun',
         'srv_named_servers_hint':          'Companion benchmarks each server <strong>individually, by name</strong>. Setting <code>SERVER_COUNTRIES</code>, <code>SERVER_REGIONS</code> or <code>SERVER_CITIES</code> adds a single entry (e.g. "France") — Companion does <em>not</em> automatically discover individual servers in that country. Add multiple servers (<code>SERVER_NAMES</code> and/or <code>SERVER_COUNTRIES</code> and/or <code>SERVER_REGIONS</code> and/or <code>SERVER_CITIES</code> and/or <code>SERVER_HOSTNAMES</code>) for benchmarking to work. <strong>Minimum 2 named servers required.</strong>',
         'srv_named_servers_popup_title':   'How to add servers',

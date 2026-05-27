@@ -624,6 +624,9 @@ def servers():
         filter_types = [r['filter_type'] for r in db.execute(
             'SELECT DISTINCT filter_type FROM servers ORDER BY filter_type'
         ).fetchall()]
+        configured_server_count = db.execute(
+            'SELECT COUNT(*) AS n FROM servers'
+        ).fetchone()['n']
 
     existing_names     = [r['name'] for r in rows if r['filter_type'] == 'name']
     existing_all_names = [r['name'] for r in rows]  # all filter types (for catalogue picker)
@@ -751,6 +754,7 @@ def servers():
         from_date=from_date, to_date=to_date,
         filter_types=filter_types,
         page=page, pages=srv_pages, total=total_servers, per_page=per_page,
+        configured_server_count=configured_server_count,
         active_server=active_server,
         confidence=_confidence_all,
         stability=_stability,
