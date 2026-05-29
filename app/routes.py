@@ -172,17 +172,24 @@ def _benchmark_progress() -> dict:
         elapsed = max(0, int(time.time() - float(started))) if started else 0
     except (TypeError, ValueError):
         elapsed = 0
+    current = get_setting('benchmark_current_server', '')
+    in_progress = 1 if (running and current) else 0
+    done_clamped = min(done, total) if total else done
     return {
-        'running': running,
-        'mode': get_setting('benchmark_mode', ''),
-        'current': get_setting('benchmark_current_server', ''),
-        'next': get_setting('benchmark_next_server', ''),
-        'log_lines': log_lines[-5:],
-        'started_at': started,
-        'elapsed_secs': elapsed,
-        'total': total,
-        'done': min(done, total) if total else done,
-        'remaining': max(0, total - done) if total else 0,
+        'running':       running,
+        'mode':          get_setting('benchmark_mode', ''),
+        'current':       current,
+        'next':          get_setting('benchmark_next_server', ''),
+        'log_lines':     log_lines[-5:],
+        'started_at':    started,
+        'elapsed_secs':  elapsed,
+        'total':         total,
+        'done':          done_clamped,
+        'in_progress':   in_progress,
+        # "position" = servers done + the one currently in progress
+        'position':      min(done_clamped + in_progress, total) if total else done_clamped,
+        # remaining = not yet started (excludes current)
+        'remaining':     max(0, total - done_clamped - in_progress) if total else 0,
     }
 
 
@@ -3152,9 +3159,10 @@ def api_status():
         'current_server_testing':  get_setting('benchmark_current_server', ''),
         'benchmark_mode':         progress['mode'],
         'benchmark_elapsed_secs': progress['elapsed_secs'],
-        'benchmark_total_servers': progress['total'],
-        'benchmark_done_servers': progress['done'],
-        'benchmark_remaining_servers': progress['remaining'],
+        'benchmark_total_servers':    progress['total'],
+        'benchmark_done_servers':     progress['done'],
+        'benchmark_position':         progress['position'],
+        'benchmark_remaining_servers':progress['remaining'],
         'benchmark_next_server':   progress['next'],
         'benchmark_log_lines':     progress['log_lines'],
         'server_count':            history_counts['enabled'],

@@ -483,14 +483,15 @@ window._onBenchmarkStatus = function(d) {};   // page-level hook (no-op default)
             wrapEl.style.display = 'none';
           }
           // Progress bar
-          const done  = d.benchmark_done_servers  || 0;
-          const total = d.benchmark_total_servers || 0;
+          const done    = d.benchmark_done_servers  || 0;
+          const total   = d.benchmark_total_servers || 0;
           const progText = document.getElementById('bench-progress-text');
           const progWrap = document.getElementById('bench-progress-bar-wrap');
           const progBar  = document.getElementById('bench-progress-bar');
           if (total > 0) {
-            const pct = Math.round((done / total) * 100);
-            if (progText) progText.textContent = done + ' / ' + total;
+            const display = d.benchmark_position || done;
+            const pct     = Math.round((display / total) * 100);
+            if (progText) progText.textContent = display + ' / ' + total;
             if (progWrap) progWrap.classList.remove('d-none');
             if (progBar)  progBar.style.width = pct + '%';
           } else {
