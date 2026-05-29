@@ -576,7 +576,7 @@ Important: a usage profile is only reliable when enough history exists. At first
 
 **Scoring time window**: by default, the averages used to rank servers are computed over the **last 30 days**. This can be adjusted in **Settings → Decide → Scoring window**: 7 d, 14 d, 30 d, or all data. A shorter window favours recent performance; a longer window smooths out one-off spikes.
 
-**Outlier detection**: enable in **Settings → Decide → Filter outlier values**. When active, each per-server, per-metric result series is filtered using the IQR method (interquartile range × 1.5) before computing averages. Clearly aberrant measurements (network spike, transient saturation) are excluded from scoring — they remain visible in the history. Requires at least 4 measurements per server to take effect.
+**Outlier detection**: enable in **Settings → Decide → Filter outlier values**. When active, isolated measurements that are clearly out of range are excluded from averages and scoring — they remain visible in the history. Concrete example: if a server normally delivers 80–100 Mbps but one exceptional test returns 5 or 200 Mbps (transient spike, momentary saturation, failed test), that value is excluded from calculations. The IQR method automatically determines the normal range per server and per metric (speed, latency, jitter…) with no threshold to configure. Requires at least 4 measurements per server to take effect.
 
 ### WireGuard VPN profiles
 

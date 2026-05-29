@@ -439,7 +439,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_scoring_window_30':     '30 jours',
         'set_scoring_window_0':      'Tout l\'historique',
         'set_outlier_label':         'Détection d\'outliers (IQR × 1,5)',
-        'set_outlier_hint':          'Exclut automatiquement les résultats aberrants du calcul des moyennes. Méthode IQR : valeurs hors des bornes [Q1 − 1,5×IQR ; Q3 + 1,5×IQR] ignorées. Nécessite ≥ 4 mesures par serveur.',
+        'set_outlier_hint':          'Ignore les mesures isolées manifestement hors-norme (pic réseau passager, test raté, saturation ponctuelle) lors du calcul des moyennes et du scoring. Exemple : si un serveur donne habituellement 80–100 Mbps et qu\'un test exceptionnel affiche 5 ou 200 Mbps, cette valeur est écartée des calculs — elle reste visible dans l\'historique. La méthode IQR identifie automatiquement la "plage normale" par serveur et par métrique ; aucun seuil à configurer. Requiert ≥ 4 mesures par serveur pour s\'appliquer.',
         # Score breakdown labels
         'score_detail_title':        'Détail du score — profil',
         'score_detail_dl':           'Débit',
@@ -1378,7 +1378,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_scoring_window_30':     '30 days',
         'set_scoring_window_0':      'All history',
         'set_outlier_label':         'Outlier detection (IQR × 1.5)',
-        'set_outlier_hint':          'Automatically excludes aberrant results from average calculations. IQR method: values outside [Q1 − 1.5×IQR ; Q3 + 1.5×IQR] are ignored. Requires ≥ 4 measurements per server.',
+        'set_outlier_hint':          'Ignores isolated measurements that are clearly out of range (transient network spike, failed test, momentary saturation) when computing averages and scores. Example: if a server normally delivers 80–100 Mbps but one exceptional test returns 5 or 200 Mbps, that value is excluded from calculations — it remains visible in the history. The IQR method automatically identifies the "normal range" per server and per metric; no threshold to configure. Requires ≥ 4 measurements per server to take effect.',
         # Score breakdown labels
         'score_detail_title':        'Score breakdown — profile',
         'score_detail_dl':           'Throughput',

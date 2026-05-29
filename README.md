@@ -577,7 +577,7 @@ Important : un profil d'usage n'est fiable que si l'historique est suffisant. Au
 
 **Fenêtre temporelle de scoring** : par défaut, les moyennes utilisées pour le classement des serveurs sont calculées sur les **30 derniers jours**. Ce paramètre est ajustable dans **Paramètres → Décider → Fenêtre de scoring** : 7 j, 14 j, 30 j, ou toutes les données. Une fenêtre courte favorise les performances récentes ; une fenêtre longue lisse les pics ponctuels.
 
-**Détection d'outliers** : option activable dans **Paramètres → Décider → Filtrage des valeurs aberrantes**. Lorsqu'elle est active, chaque série de résultats par serveur et par métrique est filtrée via la méthode IQR (interquartile range × 1,5) avant le calcul des moyennes. Les mesures manifestement aberrantes (pic réseau, saturation ponctuelle) sont ignorées pour le scoring — elles restent visibles dans l'historique. Requiert au minimum 4 mesures par serveur pour s'appliquer.
+**Détection d'outliers** : option activable dans **Paramètres → Décider → Filtrage des valeurs aberrantes**. Lorsqu'elle est active, les mesures isolées manifestement hors-norme sont ignorées lors du calcul des moyennes et du scoring — elles restent visibles dans l'historique. Exemple concret : si un serveur donne habituellement 80–100 Mbps et qu'un test exceptionnel affiche 5 ou 200 Mbps (pic réseau passager, saturation ponctuelle, test raté), cette valeur est écartée des calculs. La méthode IQR détermine automatiquement la plage normale par serveur et par métrique (débit, latence, jitter…) sans seuil à configurer. Requiert au minimum 4 mesures par serveur pour s'appliquer.
 
 ### Profils VPN WireGuard
 
