@@ -205,6 +205,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'srv_catalogue_filter_hostname':  'Hostname',
         'srv_catalogue_add_btn':          'Ajouter à la liste',
         'srv_catalogue_switch_btn':       'Tester & basculer',
+        'srv_catalogue_no_account':       'Aucun compte {provider} configuré dans Companion. Ajoutez un profil VPN WireGuard dans Paramètres pour utiliser ce provider.',
         'srv_catalogue_search':           'Rechercher…',
         'srv_catalogue_already_added':    'Déjà ajouté',
         'srv_catalogue_loading':          'Chargement du catalogue…',
@@ -852,6 +853,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_run_now_hint':  'Utilise la sélection complète et le mode configuré.',
 
         # ── Notice : clé WireGuard sidecar ──
+        'notice_wg_setup_title':     '👋 Bienvenue dans Gluetun Companion',
+        'notice_wg_setup_body':      'Configurez un ou plusieurs comptes WireGuard. Companion peut basculer automatiquement entre les profils selon les résultats des benchmarks.',
+        'notice_wg_setup_link':      'Configurer les profils WireGuard →',
+        'notice_wg_setup_dismiss':   'Plus tard',
+        'notice_wg_setup_tip':       'Configurez un ou plusieurs comptes WireGuard dans Paramètres. Companion peut basculer entre les profils selon les benchmarks.',
+        'notice_wg_setup_tip_link':  'Configurer →',
         'notice_wg_sidecar_title':   '⚠️ WireGuard sidecar par profil',
         'notice_wg_sidecar_body':    'Pour les benchmarks sidecar WireGuard, Companion peut utiliser une <strong>clé sidecar dédiée</strong> par profil ou, en option avancée, réutiliser la configuration WireGuard du profil principal. Une clé AirVPN ne peut pas s\'authentifier contre Mullvad ou Proton : il n\'y a donc pas de clé globale multi-fournisseurs.',
         'notice_wg_sidecar_action':  'Dans <strong>Paramètres → Profils VPN WireGuard</strong>, choisissez pour chaque profil une clé sidecar dédiée ou l\'option de réutilisation du profil principal.',
@@ -1147,6 +1154,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'srv_catalogue_filter_hostname':  'Hostname',
         'srv_catalogue_add_btn':          'Add to list',
         'srv_catalogue_switch_btn':       'Test & switch',
+        'srv_catalogue_no_account':       'No {provider} account configured in Companion. Add a WireGuard VPN profile in Settings to use this provider.',
         'srv_catalogue_search':           'Search…',
         'srv_catalogue_already_added':    'Already added',
         'srv_catalogue_loading':          'Loading catalogue…',
@@ -1792,6 +1800,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ── Run Now hints ──
         'dash_run_now_hint': 'Uses the full selection and configured mode.',
         'set_run_now_hint':  'Uses the full selection and configured mode.',
+
+        # ── Notice: WireGuard setup ──
+        'notice_wg_setup_title':     '👋 Welcome to Gluetun Companion',
+        'notice_wg_setup_body':      'Set up one or more WireGuard accounts. Companion can automatically switch between profiles based on benchmark results.',
+        'notice_wg_setup_link':      'Configure WireGuard profiles →',
+        'notice_wg_setup_dismiss':   'Later',
+        'notice_wg_setup_tip':       'Set up one or more WireGuard accounts in Settings. Companion can switch between profiles based on benchmarks.',
+        'notice_wg_setup_tip_link':  'Configure →',
 
         # ── Notice: WireGuard sidecar key ──
         'notice_wg_sidecar_title':   '⚠️ Per-profile WireGuard sidecar',

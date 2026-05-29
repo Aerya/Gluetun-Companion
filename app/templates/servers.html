@@ -387,7 +387,7 @@
           <tr class="{{ '' if s.enabled else 'opacity-50' }}" data-srv="{{ s.name }}"
               {% if is_active %}style="border-left:3px solid var(--bs-success)"{% endif %}>
             <td>
-              {{ server_flag(s.name) }} <code>{{ s.name }}</code>
+              {{ server_flag(s.name) }}{{ server_provider_icon(s.name) | safe }} <code>{{ s.name }}</code>
               {% if is_active %}
               <span class="badge bg-success ms-1" style="font-size:.7rem">{{ t.srv_active_badge }}</span>
               {% endif %}
@@ -736,6 +736,15 @@
           </table>
         </div>
       </div>
+      {% if not _g_has_wg_profiles %}
+      <div class="alert alert-info py-2 mx-3 mb-0 mt-2 d-flex align-items-center gap-2" style="font-size:.8rem">
+        <i class="bi bi-shield-lock-fill flex-shrink-0"></i>
+        <span>
+          {{ t.notice_wg_setup_tip }}
+          <a href="{{ url_for('main.settings') }}#wireguard" class="alert-link ms-1">{{ t.notice_wg_setup_tip_link }}</a>
+        </span>
+      </div>
+      {% endif %}
       <div class="modal-footer justify-content-between align-items-center">
         <small class="text-muted" id="cat-count"></small>
         <div id="cat-bulk-bar" class="d-none d-flex align-items-center gap-2">
@@ -869,19 +878,37 @@
           </div>
         </div>
       </div>
+      {% if not _g_has_airvpn_profile %}
+      <div class="alert alert-info py-2 mx-3 mb-0 d-flex align-items-center gap-2" style="font-size:.8rem;border-bottom-left-radius:0;border-bottom-right-radius:0">
+        <i class="bi bi-shield-lock-fill flex-shrink-0"></i>
+        <span>
+          {{ t.notice_wg_setup_tip }}
+          <a href="{{ url_for('main.settings') }}#wireguard" class="alert-link ms-1">{{ t.notice_wg_setup_tip_link }}</a>
+        </span>
+      </div>
+      {% endif %}
       <div class="modal-footer">
         <div class="me-auto d-flex align-items-center gap-3">
           <span id="airvpn-count" class="text-muted fw-semibold">0 {{ t.srv_airvpn_selected }}</span>
+          {% if _g_has_airvpn_profile %}
           <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none"
                   onclick="airvpnSelectAllVisible()">{{ t.srv_airvpn_select_all }}</button>
           <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-muted"
                   onclick="airvpnDeselectAll()">{{ t.srv_airvpn_deselect_all }}</button>
+          {% endif %}
         </div>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t.cmn_cancel }}</button>
         <button type="button" class="btn btn-success fw-semibold" id="airvpn-add-btn"
-                disabled onclick="airvpnAddSelected()">
+                disabled {% if not _g_has_airvpn_profile %}style="display:none"{% endif %}
+                onclick="airvpnAddSelected()">
           <i class="bi bi-plus-lg"></i> {{ t.srv_airvpn_add_btn }}
         </button>
+        {% if not _g_has_airvpn_profile %}
+        <a href="{{ url_for('main.settings') }}#wireguard"
+           class="btn btn-primary fw-semibold">
+          <i class="bi bi-shield-lock me-1"></i> {{ t.notice_wg_setup_link }}
+        </a>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -1349,7 +1376,27 @@ const _catT = {
   switchBtn:    {{ t.srv_catalogue_switch_btn | tojson }},
   selected:     {{ t.srv_catalogue_selected | tojson }},
   bulkAdded:    {{ t.srv_catalogue_bulk_added | tojson }},
+  noAccount:    {{ t.srv_catalogue_no_account | tojson }},
 };
+
+// Providers the user has configured (vpn_profiles + active Gluetun provider).
+// Empty = no restriction (basic single-provider install with no profiles configured).
+const _catAllowedProviders = new Set({{ catalogue_allowed_providers | tojson }});
+function _catCanAdd(provider) {
+  if (_catAllowedProviders.size === 0) return true;   // unrestricted
+  return _catAllowedProviders.has((provider || '').toLowerCase());
+}
+
+// Provider icon helper: returns an <img> tag or '' for unknown providers
+const _STATIC_PROVIDERS = '/static/providers/';
+const _KNOWN_PROVIDERS  = new Set(['airvpn','ivpn','mullvad','nordvpn','protonvpn','surfshark','fastestvpn','windscribe','wireguard']);
+function _providerIcon(provider, size) {
+  const p = (provider || '').toLowerCase();
+  if (!p || !_KNOWN_PROVIDERS.has(p)) return '';
+  const s = size || 16;
+  return `<img src="${_STATIC_PROVIDERS}${p}.svg" alt="${_esc(p)}" width="${s}" height="${s}" `
+       + `style="vertical-align:middle;object-fit:contain;border-radius:2px;margin-right:3px" title="${_esc(p)}">`;
+}
 
 let _catEntries = [];
 let _catProviders = [];
@@ -1425,42 +1472,54 @@ function _renderCatalogueTable(entries) {
   _catUpdateBulkBar();
 
   entries.forEach(e => {
-    const exists = _catExisting.has(e.value);
+    const exists  = _catExisting.has(e.value);
+    const canAdd  = !exists && _catCanAdd(e.provider);
+    const noAccTip = _catT.noAccount.replace('{provider}', e.provider || '?');
+
     const tr = document.createElement('tr');
     tr.dataset.value      = (e.value || '').toLowerCase();
     tr.dataset.country    = (e.country || '').toLowerCase();
     tr.dataset.filterType = filterFt;
-    if (exists) tr.classList.add('opacity-50');
+    if (exists || !canAdd) tr.classList.add('opacity-50');
 
     const flag = e.country_code
       ? String.fromCodePoint(...[...e.country_code.toUpperCase()].map(c => 0x1F1E6 - 65 + c.charCodeAt(0)))
       : '';
 
-    // Checkbox cell: empty placeholder for already-added rows so columns align
+    // Checkbox: only interactive when the user can actually add this entry
     const checkCell = exists
       ? '<td></td>'
-      : `<td><input type="checkbox" class="form-check-input cat-row-check"
-              data-value="${_esc(e.value)}" data-filter-type="${_esc(filterFt)}"
-              onchange="_catUpdateBulkBar()"></td>`;
+      : canAdd
+        ? `<td><input type="checkbox" class="form-check-input cat-row-check"
+                data-value="${_esc(e.value)}" data-filter-type="${_esc(filterFt)}"
+                onchange="_catUpdateBulkBar()"></td>`
+        : '<td></td>';   // no checkbox for locked providers
 
     tr.innerHTML = `
       ${checkCell}
       <td class="fw-semibold">${_esc(e.value)}</td>
       <td><small class="text-muted">${flag} ${_esc(e.country || '')}</small></td>
-      <td><small class="text-muted">${_esc(e.provider || '')}</small></td>
+      <td><small class="text-muted">${_providerIcon(e.provider, 14)}${_esc(e.provider || '')}</small></td>
       <td class="text-end">
         ${exists
           ? `<span class="badge bg-secondary">${_esc(_catT.alreadyAdded)}</span>`
-          : `<button class="btn btn-outline-success btn-sm me-1"
-                     onclick="catalogueAdd(${JSON.stringify(e.value)},${JSON.stringify(filterFt)})"
-                     title="${_esc(_catT.addBtn)}">
-               <i class="bi bi-plus-lg"></i>
-             </button>
-             <button class="btn btn-outline-primary btn-sm"
-                     onclick="catalogueSwitch(${JSON.stringify(e.value)},${JSON.stringify(filterFt)})"
-                     title="${_esc(_catT.switchBtn)}">
-               <i class="bi bi-lightning-fill"></i>
-             </button>`
+          : canAdd
+            ? `<button class="btn btn-outline-success btn-sm me-1"
+                       onclick="catalogueAdd(${JSON.stringify(e.value)},${JSON.stringify(filterFt)})"
+                       title="${_esc(_catT.addBtn)}">
+                 <i class="bi bi-plus-lg"></i>
+               </button>
+               <button class="btn btn-outline-primary btn-sm"
+                       onclick="catalogueSwitch(${JSON.stringify(e.value)},${JSON.stringify(filterFt)})"
+                       title="${_esc(_catT.switchBtn)}">
+                 <i class="bi bi-lightning-fill"></i>
+               </button>`
+            : `<button class="btn btn-outline-secondary btn-sm me-1" disabled title="${_esc(noAccTip)}">
+                 <i class="bi bi-plus-lg"></i>
+               </button>
+               <button class="btn btn-outline-secondary btn-sm" disabled title="${_esc(noAccTip)}">
+                 <i class="bi bi-lightning-fill"></i>
+               </button>`
         }
       </td>
     `;

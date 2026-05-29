@@ -2266,7 +2266,12 @@ if (document.readyState === 'loading') {
     tab.addEventListener('shown.bs.tab', rememberActiveTab);
   });
 
-  const target = localStorage.getItem(storageKey);
+  // URL hash takes priority: /settings#wireguard opens the WireGuard tab directly
+  const hashTarget = window.location.hash
+    ? '#settings-' + window.location.hash.slice(1)
+    : null;
+  const lsTarget = localStorage.getItem(storageKey);
+  const target = hashTarget || lsTarget;
   if (target) {
     const tab = Array.from(document.querySelectorAll('#settings-tabs [data-bs-toggle="tab"]'))
       .find(el => el.dataset.bsTarget === target);

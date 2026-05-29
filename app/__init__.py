@@ -243,9 +243,14 @@ def create_app():
         try:
             _profiles = get_vpn_profiles()
             _has_wg = len(_profiles) > 0
+            _has_airvpn = any(p.get('provider', '').lower() == 'airvpn' for p in _profiles)
         except Exception:
             _has_wg = False
-        return {'_g_has_wg_profiles': _has_wg}
+            _has_airvpn = False
+        return {
+            '_g_has_wg_profiles':    _has_wg,
+            '_g_has_airvpn_profile': _has_airvpn,
+        }
 
     @app.context_processor
     def inject_flag_utils():
@@ -284,7 +289,49 @@ def create_app():
             name = label.split('=', 1)[-1].strip() if '=' in label else label.strip()
             return _flag_emoji(_flags.get(name, ''))
 
-        return {'server_flag': server_flag}
+        # Build server→provider lookup from gluetun_catalogue
+        try:
+            from .database import get_db as _get_db2
+            with _get_db2() as _db2:
+                _prov_rows = _db2.execute(
+                    'SELECT name, provider FROM gluetun_catalogue WHERE provider != ""'
+                ).fetchall()
+            _providers: dict[str, str] = {r['name']: r['provider'].lower() for r in _prov_rows}
+        except Exception:
+            _providers = {}
+
+        # Known provider SVG files (matches wg_providers.py keys)
+        _PROVIDER_ICONS: set[str] = {
+            'airvpn', 'ivpn', 'mullvad', 'nordvpn', 'protonvpn',
+            'surfshark', 'fastestvpn', 'windscribe', 'wireguard',
+        }
+
+        def server_provider_icon(label: str | None, size: int = 16) -> str:
+            """Return an <img> tag for the provider icon of a server, or '' if unknown.
+
+            ``label`` accepts both raw server names and SERVER_NAMES=xxx formatted labels.
+            The icon is served from /static/providers/<provider>.svg at ``size`` px.
+            """
+            if not label or label in ('-', '—'):
+                return ''
+            name = label.split('=', 1)[-1].strip() if '=' in label else label.strip()
+            provider = _providers.get(name, '')
+            if not provider or provider not in _PROVIDER_ICONS:
+                return ''
+            from flask import url_for
+            try:
+                url = url_for('static', filename=f'providers/{provider}.svg')
+            except Exception:
+                return ''
+            s = str(size)
+            return (
+                f'<img src="{url}" alt="{provider}" '
+                f'width="{s}" height="{s}" '
+                f'style="vertical-align:middle;object-fit:contain;border-radius:2px" '
+                f'title="{provider}">'
+            )
+
+        return {'server_flag': server_flag, 'server_provider_icon': server_provider_icon}
 
     from .routes import bp
     app.register_blueprint(bp)

@@ -25,7 +25,7 @@
       {%- endif %}
     </strong>
     {% if last_bench_cycle.servers_tested %}&nbsp;·&nbsp;{{ last_bench_cycle.servers_tested }} {{ t.dash_servers_tested }}{% endif %}
-    {% if last_bench_cycle.best_server %}&nbsp;·&nbsp;<i class="bi bi-trophy-fill text-warning" style="font-size:.75rem"></i> {{ server_flag(last_bench_cycle.best_server) }} <code style="font-size:.75rem">{{ last_bench_cycle.best_server | strip_prefix }}</code>{% endif %}
+    {% if last_bench_cycle.best_server %}&nbsp;·&nbsp;<i class="bi bi-trophy-fill text-warning" style="font-size:.75rem"></i> {{ server_flag(last_bench_cycle.best_server) }}{{ server_provider_icon(last_bench_cycle.best_server) | safe }} <code style="font-size:.75rem">{{ last_bench_cycle.best_server | strip_prefix }}</code>{% endif %}
   </span>
   {% endif %}
   <div class="ms-auto d-flex gap-2">
@@ -535,7 +535,7 @@
         {% for r in tests %}
         <tr>
           <td>
-            {{ server_flag(r.server_name) }} <code>{{ r.server_name }}</code>
+            {{ server_flag(r.server_name) }}{{ server_provider_icon(r.server_name) | safe }} <code>{{ r.server_name }}</code>
             {% if r.airvpn_bw_max %}
             <span class="badge bg-info text-dark ms-1" style="font-size:.62rem">{{ r.airvpn_bw_max | bw_label }}</span>
             {% endif %}

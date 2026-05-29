@@ -745,6 +745,20 @@ def servers():
         new_airvpn_countries = ', '.join(sorted(cc_set))
 
     _all_vpn_profiles = get_vpn_profiles()
+
+    # Providers the user is allowed to add from the catalogue:
+    # union of (configured vpn_profiles providers) + (active Gluetun provider).
+    # Empty list = no restriction (basic single-provider install with no profiles).
+    _configured_providers: set[str] = {p['provider'].lower() for p in _all_vpn_profiles if p.get('provider')}
+    try:
+        from .catalogue import detect_active_provider as _detect_prov
+        _active_prov = _detect_prov(current_app.config['GLUETUN_CONTAINER'])
+        if _active_prov:
+            _configured_providers.add(_active_prov)
+    except Exception:
+        pass
+    _catalogue_allowed_providers = sorted(_configured_providers)
+
     return render_template(
         'servers.html', servers=page_rows,
         filter_labels=FILTER_LABELS, filter_vars=FILTER_VARS,
@@ -772,6 +786,7 @@ def servers():
         scoring_window_days=_score_window or 0,
         outlier_detection=_outlier_on,
         vpn_profiles=_all_vpn_profiles,
+        catalogue_allowed_providers=_catalogue_allowed_providers,
         profile_filter=profile_filter,
         conf_filter=conf_filter,
         top_n=top_n,

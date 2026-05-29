@@ -170,21 +170,80 @@
   {% endwith %}
 
   {# ── Global live benchmark banner ────────────────────────────────────── #}
-  <div id="global-bench-banner" class="alert alert-success d-flex align-items-center gap-2 py-2 px-3 mb-3 d-none"
+  <div id="global-bench-banner" class="alert alert-success py-2 px-3 mb-3 d-none"
        style="font-size:.85rem">
-    <span class="spinner-border spinner-border-sm flex-shrink-0"></span>
-    <span>
-      <span id="bench-mode-label" class="badge bg-light text-dark me-1" style="font-size:.75rem"></span>
-      <span id="live-testing-wrap">{{ t.dash_testing_server }} <strong><span id="live-testing"></span></strong></span>
-    </span>
-    <button class="btn btn-sm btn-outline-light ms-auto" id="btn-stop-bench"
-            onclick="stopBenchmark()" style="font-size:.8rem;padding:.15rem .55rem">
-      <i class="bi bi-stop-fill"></i> {{ t.dash_stop_bench }}
-    </button>
+    <div class="d-flex align-items-center gap-2">
+      <span class="spinner-border spinner-border-sm flex-shrink-0"></span>
+      <span>
+        <span id="bench-mode-label" class="badge bg-light text-dark me-1" style="font-size:.75rem"></span>
+        <span id="live-testing-wrap">{{ t.dash_testing_server }} <strong><span id="live-testing"></span></strong></span>
+      </span>
+      <span id="bench-progress-text" class="text-white-50 ms-1" style="font-size:.78rem;white-space:nowrap"></span>
+      <button class="btn btn-sm btn-outline-light ms-auto flex-shrink-0" id="btn-stop-bench"
+              onclick="stopBenchmark()" style="font-size:.8rem;padding:.15rem .55rem">
+        <i class="bi bi-stop-fill"></i> {{ t.dash_stop_bench }}
+      </button>
+    </div>
+    <div id="bench-progress-bar-wrap" class="d-none mt-1">
+      <div class="progress" style="height:4px;background:rgba(255,255,255,.2)">
+        <div id="bench-progress-bar" class="progress-bar bg-white" style="width:0%;transition:width .4s ease"></div>
+      </div>
+    </div>
   </div>
 
   {% block content %}{% endblock %}
 </div>
+
+{# ── Notice : premier lancement — configurer un profil WireGuard ────────────
+   Shown when no WireGuard profile exists yet (fresh install or DB reset).
+   Dismissable via localStorage key; re-appears after each DB reset until
+   at least one profile is configured.
+   ────────────────────────────────────────────────────────────────────────── #}
+{% if not _g_has_wg_profiles %}
+<div class="modal fade" id="noticeWgSetupModal" tabindex="-1"
+     aria-labelledby="noticeWgSetupLabel" aria-modal="true" role="dialog">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-primary border-opacity-50">
+      <div class="modal-header border-0 pb-1">
+        <h5 class="modal-title fw-bold" id="noticeWgSetupLabel">
+          {{ t.notice_wg_setup_title }}
+        </h5>
+      </div>
+      <div class="modal-body pt-1" style="font-size:.9rem">
+        <p class="mb-3">{{ t.notice_wg_setup_body }}</p>
+        <a href="{{ url_for('main.settings') }}#wireguard"
+           class="btn btn-primary fw-semibold w-100">
+          <i class="bi bi-shield-lock me-1"></i> {{ t.notice_wg_setup_link }}
+        </a>
+      </div>
+      <div class="modal-footer border-0 pt-0 justify-content-end">
+        <button type="button" class="btn btn-link text-muted btn-sm p-0"
+                id="noticeWgSetupDismiss">
+          {{ t.notice_wg_setup_dismiss }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  const KEY = 'companion_wg_setup_dismissed_v1';
+  if (localStorage.getItem(KEY)) return;
+  document.addEventListener('DOMContentLoaded', function () {
+    const modal = new bootstrap.Modal(document.getElementById('noticeWgSetupModal'));
+    document.getElementById('noticeWgSetupDismiss').addEventListener('click', function () {
+      localStorage.setItem(KEY, '1');
+      modal.hide();
+    });
+    // Clicking the configure link also dismisses
+    document.querySelector('#noticeWgSetupModal a[href]').addEventListener('click', function () {
+      localStorage.setItem(KEY, '1');
+    });
+    modal.show();
+  });
+})();
+</script>
+{% endif %}
 
 {# ── Notice : clé WireGuard dédiée sidecar ──────────────────────────────────
    Shown once per browser (localStorage key notice_wg_sidecar_key_v1).
@@ -422,6 +481,21 @@ window._onBenchmarkStatus = function(d) {};   // page-level hook (no-op default)
             if (wrapEl) wrapEl.style.display = '';
           } else if (wrapEl) {
             wrapEl.style.display = 'none';
+          }
+          // Progress bar
+          const done  = d.benchmark_done_servers  || 0;
+          const total = d.benchmark_total_servers || 0;
+          const progText = document.getElementById('bench-progress-text');
+          const progWrap = document.getElementById('bench-progress-bar-wrap');
+          const progBar  = document.getElementById('bench-progress-bar');
+          if (total > 0) {
+            const pct = Math.round((done / total) * 100);
+            if (progText) progText.textContent = done + ' / ' + total;
+            if (progWrap) progWrap.classList.remove('d-none');
+            if (progBar)  progBar.style.width = pct + '%';
+          } else {
+            if (progText) progText.textContent = '';
+            if (progWrap) progWrap.classList.add('d-none');
           }
           // Reflect persisted stop-requested state after page refresh
           if (d.benchmark_stop_requested && stopBtn && !stopBtn.disabled) {

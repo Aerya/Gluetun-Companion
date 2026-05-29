@@ -155,7 +155,7 @@
       {% if public_ip %}
       <div class="d-flex align-items-center gap-2 mb-2">
         <i class="bi bi-globe2 text-muted" style="font-size:.85rem"></i>
-        {{ server_flag(current_server) }} <code style="font-size:.85rem">{{ public_ip }}</code>
+        {{ server_flag(current_server) }}{{ server_provider_icon(current_server) | safe }} <code style="font-size:.85rem">{{ public_ip }}</code>
       </div>
       {% endif %}
       <div class="d-flex align-items-center gap-2 mb-1" style="font-size:.8rem;color:var(--muted)">
@@ -201,7 +201,7 @@
           <div class="text-muted mb-1" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
             <i class="bi bi-server"></i> {{ t.dash_active_server }}
           </div>
-          {{ server_flag(current_server) }} <code style="font-size:1rem;font-weight:600">{{ current_server | strip_prefix or '—' }}</code>
+          {{ server_flag(current_server) }}{{ server_provider_icon(current_server) | safe }} <code style="font-size:1rem;font-weight:600">{{ current_server | strip_prefix or '—' }}</code>
           {% if vpn_status != 'running' and current_server %}
           <span class="badge bg-warning text-dark ms-1" style="font-size:.65rem;vertical-align:middle">
             <i class="bi bi-wifi-off"></i> {{ t.dash_vpn_not_connected }}
@@ -233,7 +233,7 @@
 
   {# ── Benchmark controls ─────────────────────────────────────────────────── #}
   <div class="col-12 col-md-4">
-    <div class="card h-100 p-3">
+    <div class="card h-100 p-3 {{ 'opacity-75' if vpn_status != 'running' and not benchmark_running }}">
       <div class="text-muted mb-2" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
         <i class="bi bi-clock-history"></i> {{ t.dash_next_test }}
       </div>
@@ -254,7 +254,8 @@
       <div class="d-grid gap-2">
         <button class="btn btn-outline-info btn-sm"
                 id="btn-trigger-quick" onclick="triggerQuick()"
-                {{ 'disabled' if benchmark_running }}>
+                {{ 'disabled' if benchmark_running or vpn_status != 'running' }}
+                {% if vpn_status != 'running' and not benchmark_running %}title="{{ t.dash_bench_vpn_required }}"{% endif %}>
           {% if benchmark_running %}
             <span class="spinner-border spinner-border-sm"></span> {{ t.dash_running }}
           {% else %}
@@ -689,7 +690,7 @@
       <div class="col-12 col-xl-6">
         <div class="d-flex align-items-center gap-2" style="min-height:28px">
           <div style="width:130px;font-size:.8rem;min-width:0" title="{{ s.server_name }}">
-            <div class="text-truncate">{{ server_flag(s.server_name) }} <code>{{ s.server_name }}</code></div>
+            <div class="text-truncate">{{ server_flag(s.server_name) }}{{ server_provider_icon(s.server_name) | safe }} <code>{{ s.server_name }}</code></div>
             {% if s.profile_name %}
             <div class="text-truncate" style="font-size:.65rem;color:var(--bs-secondary-color);margin-top:.05rem">{{ s.profile_name }}</div>
             {% endif %}
@@ -771,7 +772,7 @@
         {% for r in recent_tests %}
         <tr>
           <td>
-            {{ server_flag(r.server_name) }} <code>{{ r.server_name }}</code>
+            {{ server_flag(r.server_name) }}{{ server_provider_icon(r.server_name) | safe }} <code>{{ r.server_name }}</code>
             {% if r.airvpn_bw_max %}
             <span class="badge bg-info text-dark ms-1" style="font-size:.62rem">{{ r.airvpn_bw_max | bw_label }}</span>
             {% endif %}
