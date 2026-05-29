@@ -289,46 +289,90 @@ def create_app():
             name = label.split('=', 1)[-1].strip() if '=' in label else label.strip()
             return _flag_emoji(_flags.get(name, ''))
 
-        # Build server→provider lookup from gluetun_catalogue
+        # Build server→provider lookup from multiple sources
         try:
             from .database import get_db as _get_db2
             with _get_db2() as _db2:
+                # 1. Gluetun catalogue (all providers)
                 _prov_rows = _db2.execute(
                     'SELECT name, provider FROM gluetun_catalogue WHERE provider != ""'
                 ).fetchall()
-            _providers: dict[str, str] = {r['name']: r['provider'].lower() for r in _prov_rows}
+                _providers: dict[str, str] = {r['name']: r['provider'].lower() for r in _prov_rows}
+                # 2. AirVPN snapshot (individual AirVPN servers not always in catalogue)
+                try:
+                    _av_rows = _db2.execute('SELECT name FROM airvpn_snapshot').fetchall()
+                    for r in _av_rows:
+                        _providers.setdefault(r['name'], 'airvpn')
+                except Exception:
+                    pass
+                # 3. Servers with assigned VPN profile → use profile provider
+                try:
+                    _sp_rows = _db2.execute(
+                        'SELECT s.name, vp.provider FROM servers s '
+                        'JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id '
+                        'WHERE vp.provider != ""'
+                    ).fetchall()
+                    for r in _sp_rows:
+                        _providers.setdefault(r['name'], r['provider'].lower())
+                except Exception:
+                    pass
         except Exception:
             _providers = {}
 
-        # Known provider SVG files (matches wg_providers.py keys)
-        _PROVIDER_ICONS: set[str] = {
-            'airvpn', 'ivpn', 'mullvad', 'nordvpn', 'protonvpn',
-            'surfshark', 'fastestvpn', 'windscribe', 'wireguard',
+        # Providers with a bundled SVG in /static/providers/
+        _PROVIDER_SVG: set[str] = {
+            'airvpn', 'cyberghost', 'expressvpn', 'fastestvpn', 'ivpn',
+            'mullvad', 'nordvpn', 'private internet access', 'protonvpn',
+            'purevpn', 'surfshark', 'torguard', 'windscribe', 'wireguard',
+        }
+
+        # Provider → official domain for favicon fallback
+        _PROVIDER_DOMAIN: dict[str, str] = {
+            'giganews':              'giganews.com',
+            'hidemyass':             'hidemyass.com',
+            'ipvanish':              'ipvanish.com',
+            'ovpn':                  'ovpn.com',
+            'perfect privacy':       'perfect-privacy.com',
+            'privado':               'privado.com',
+            'privatevpn':            'privatevpn.com',
+            'slickvpn':              'slickvpn.com',
+            'vpn unlimited':         'vpnunlimited.com',
+            'vpnsecure':             'vpnsecure.me',
+            'vyprvpn':               'vyprvpn.com',
         }
 
         def server_provider_icon(label: str | None, size: int = 16) -> str:
-            """Return an <img> tag for the provider icon of a server, or '' if unknown.
+            """Return an <img> for the provider icon of a server.
 
-            ``label`` accepts both raw server names and SERVER_NAMES=xxx formatted labels.
-            The icon is served from /static/providers/<provider>.svg at ``size`` px.
+            Priority:
+            1. Bundled SVG in /static/providers/ (highest quality)
+            2. Favicon from Google's favicon service (real icon, any provider)
             """
             if not label or label in ('-', '—'):
                 return ''
             name = label.split('=', 1)[-1].strip() if '=' in label else label.strip()
             provider = _providers.get(name, '')
-            if not provider or provider not in _PROVIDER_ICONS:
-                return ''
-            from flask import url_for
-            try:
-                url = url_for('static', filename=f'providers/{provider}.svg')
-            except Exception:
+            if not provider:
                 return ''
             s = str(size)
+            style = 'vertical-align:middle;object-fit:contain;border-radius:2px'
+            if provider in _PROVIDER_SVG:
+                from flask import url_for
+                try:
+                    url = url_for('static', filename=f'providers/{provider}.svg')
+                    return (
+                        f'<img src="{url}" alt="{provider}" '
+                        f'width="{s}" height="{s}" style="{style}" title="{provider}">'
+                    )
+                except Exception:
+                    pass
+            domain = _PROVIDER_DOMAIN.get(provider, '')
+            if not domain:
+                return ''
+            favicon_url = f'https://www.google.com/s2/favicons?domain={domain}&sz=64'
             return (
-                f'<img src="{url}" alt="{provider}" '
-                f'width="{s}" height="{s}" '
-                f'style="vertical-align:middle;object-fit:contain;border-radius:2px" '
-                f'title="{provider}">'
+                f'<img src="{favicon_url}" alt="{provider}" '
+                f'width="{s}" height="{s}" style="{style}" title="{provider}">'
             )
 
         return {'server_flag': server_flag, 'server_provider_icon': server_provider_icon}

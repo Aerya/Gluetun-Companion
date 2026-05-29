@@ -512,6 +512,8 @@
       to_s:      {{ (sw.to_server   or '—') | tojson }},
       flag_from: {{ server_flag(sw.from_server) | tojson }},
       flag_to:   {{ server_flag(sw.to_server)   | tojson }},
+      icon_from: {{ server_provider_icon(sw.from_server) | tojson }},
+      icon_to:   {{ server_provider_icon(sw.to_server)   | tojson }},
       from_prof: {{ (sw.from_profile_name or '') | tojson }},
       to_prof:   {{ (sw.to_profile_name   or '') | tojson }},
       from_bw:   {{ (sw.from_airvpn_bw_max | bw_label) | tojson }},
@@ -585,13 +587,13 @@
           '<td>' +
             '<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:.35rem;align-items:start;min-width:240px">' +
               '<div>' +
-                '<div><code class="text-muted" style="font-size:.8rem">' + sw.flag_from + ' ' + _esc(sw.from_s) + '</code></div>' +
+                '<div><code class="text-muted" style="font-size:.8rem">' + sw.flag_from + (sw.icon_from||'') + ' ' + _esc(sw.from_s) + '</code></div>' +
                 (sw.from_prof ? '<div style="font-size:.67rem;color:var(--bs-secondary-color)">' + _esc(sw.from_prof) + '</div>' : '') +
                 (sw.from_bw ? '<div><span class="badge bg-info text-dark" style="font-size:.62rem">' + _esc(sw.from_bw) + '</span></div>' : '') +
               '</div>' +
               '<i class="bi bi-arrow-right text-muted" style="font-size:.7rem;padding-top:.2rem"></i>' +
               '<div>' +
-                '<div><code class="text-success" style="font-size:.8rem">' + sw.flag_to + ' ' + _esc(sw.to_s) + '</code></div>' +
+                '<div><code class="text-success" style="font-size:.8rem">' + sw.flag_to + (sw.icon_to||'') + ' ' + _esc(sw.to_s) + '</code></div>' +
                 (sw.to_prof ? '<div style="font-size:.67rem;color:var(--bs-secondary-color)">' + _esc(sw.to_prof) + '</div>' : '') +
                 (sw.to_bw ? '<div><span class="badge bg-info text-dark" style="font-size:.62rem">' + _esc(sw.to_bw) + '</span></div>' : '') +
               '</div>' +

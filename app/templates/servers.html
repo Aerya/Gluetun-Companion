@@ -3,6 +3,33 @@
 
 {% block content %}
 <style>
+  /* ── Sticky first (SERVEUR) + last (ACTIONS) columns ───────────────────── */
+  #view-table table th:first-child,
+  #view-table table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--bs-body-bg);
+    box-shadow: 3px 0 5px rgba(0,0,0,.1);
+  }
+  #view-table table th:last-child,
+  #view-table table td:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: var(--bs-body-bg);
+    box-shadow: -3px 0 5px rgba(0,0,0,.1);
+  }
+  /* Preserve row hover on sticky cells */
+  #view-table .table-hover tbody tr:hover th,
+  #view-table .table-hover tbody tr:hover td {
+    --bs-table-bg-state: var(--bs-table-hover-bg);
+  }
+  #view-table .table-hover tbody tr:hover td:first-child,
+  #view-table .table-hover tbody tr:hover td:last-child {
+    background: var(--bs-table-hover-bg, rgba(255,255,255,.075));
+  }
+
   .server-actions {
     align-items: center;
   }
@@ -1387,15 +1414,39 @@ function _catCanAdd(provider) {
   return _catAllowedProviders.has((provider || '').toLowerCase());
 }
 
-// Provider icon helper: returns an <img> tag or '' for unknown providers
+// Provider icon helper: <img> for known SVGs, colored badge for the rest
 const _STATIC_PROVIDERS = '/static/providers/';
-const _KNOWN_PROVIDERS  = new Set(['airvpn','ivpn','mullvad','nordvpn','protonvpn','surfshark','fastestvpn','windscribe','wireguard']);
+const _KNOWN_PROVIDERS  = new Set([
+  'airvpn','cyberghost','expressvpn','fastestvpn','ivpn',
+  'mullvad','nordvpn','private internet access','protonvpn',
+  'purevpn','surfshark','torguard','windscribe','wireguard',
+]);
+const _PROVIDER_DOMAINS = {
+  'giganews':        'giganews.com',
+  'hidemyass':       'hidemyass.com',
+  'ipvanish':        'ipvanish.com',
+  'ovpn':            'ovpn.com',
+  'perfect privacy': 'perfect-privacy.com',
+  'privado':         'privado.com',
+  'privatevpn':      'privatevpn.com',
+  'slickvpn':        'slickvpn.com',
+  'vpn unlimited':   'vpnunlimited.com',
+  'vpnsecure':       'vpnsecure.me',
+  'vyprvpn':         'vyprvpn.com',
+};
 function _providerIcon(provider, size) {
-  const p = (provider || '').toLowerCase();
-  if (!p || !_KNOWN_PROVIDERS.has(p)) return '';
+  const p = (provider || '').toLowerCase().trim();
+  if (!p) return '';
   const s = size || 16;
-  return `<img src="${_STATIC_PROVIDERS}${p}.svg" alt="${_esc(p)}" width="${s}" height="${s}" `
-       + `style="vertical-align:middle;object-fit:contain;border-radius:2px;margin-right:3px" title="${_esc(p)}">`;
+  const style = `width:${s}px;height:${s}px;vertical-align:middle;object-fit:contain;border-radius:2px;margin-right:3px`;
+  if (_KNOWN_PROVIDERS.has(p)) {
+    const enc = encodeURIComponent(p);
+    return `<img src="${_STATIC_PROVIDERS}${enc}.svg" alt="${_esc(p)}" style="${style}" title="${_esc(p)}">`;
+  }
+  const domain = _PROVIDER_DOMAINS[p];
+  if (!domain) return '';
+  const favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+  return `<img src="${favicon}" alt="${_esc(p)}" style="${style}" title="${_esc(p)}">`;
 }
 
 let _catEntries = [];
