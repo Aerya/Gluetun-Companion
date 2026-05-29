@@ -21,7 +21,17 @@ _stop_event = threading.Event()
 def request_stop() -> None:
     """Signal the running benchmark to stop after the current server test."""
     _stop_event.set()
+    # Persist the stop request so the UI can reflect it after a page refresh
+    from .database import set_setting
+    set_setting('benchmark_stop_requested', '1')
     logger.info('Stop requested by user — benchmark will abort after current server')
+
+
+def _clear_benchmark_running() -> None:
+    """Clear benchmark_running and benchmark_stop_requested in one call."""
+    from .database import set_setting
+    set_setting('benchmark_running', '0')
+    set_setting('benchmark_stop_requested', '0')
 
 
 def _progress_log(message: str) -> None:
@@ -1096,6 +1106,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
     )
 
     _stop_event.clear()   # reset any leftover stop signal from a previous run
+    set_setting('benchmark_stop_requested', '0')
     _current_test_trigger = 'observation' if observation else None
     set_setting('benchmark_running', '1')
     cycle_start = time.time()
@@ -1209,7 +1220,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
         if qc_passed:
             duration_secs = round(time.time() - cycle_start, 1)
             logger.info('=== Quick check passed (%.0fs) — full benchmark skipped ===', duration_secs)
-            set_setting('benchmark_running', '0')
+            _clear_benchmark_running()
             set_setting('benchmark_current_server', '')
             set_setting('benchmark_next_server', '')
             set_setting('benchmark_started_at', '')
@@ -1891,7 +1902,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                 'Paused containers restarted: %d/%d',
                 len(_resumed), len(pause_containers),
             )
-        set_setting('benchmark_running', '0')
+        _clear_benchmark_running()
         _current_test_trigger = None
         set_setting('benchmark_current_server', '')
         set_setting('benchmark_next_server', '')
@@ -2088,7 +2099,7 @@ def _do_single_server(app, server_name: str, filter_type: str):
         else:
             _update_consecutive_failures(server_name, success=False, threshold=auto_exclude)
     finally:
-        set_setting('benchmark_running', '0')
+        _clear_benchmark_running()
 
 
 # ---------------------------------------------------------------------------
@@ -2370,7 +2381,7 @@ def _run_event_triggered_quick_check(app):
                 trigger='docker_event',
             )
         finally:
-            set_setting('benchmark_running', '0')
+            _clear_benchmark_running()
             set_setting('benchmark_current_server', '')
 
         # ── Evaluate result ────────────────────────────────────────────────
@@ -2615,7 +2626,7 @@ def _check_rotation_pools(app):
                     )
             except Exception as exc:
                 logger.error('Pool rotation [%d]: unexpected error: %s', row['id'], exc)
-                set_setting('benchmark_running', '0')
+                _clear_benchmark_running()
                 set_setting('benchmark_current_server', '')
             finally:
                 _lock.release()
@@ -2802,6 +2813,7 @@ def run_quick_check_now(app):
 
     with _lock:
         _stop_event.clear()   # reset any leftover stop signal
+        set_setting('benchmark_stop_requested', '0')
         set_setting('benchmark_running', '1')
         set_setting('benchmark_mode', 'quick')
         try:
@@ -2870,7 +2882,7 @@ def run_quick_check_now(app):
             else:
                 logger.warning('Quick benchmark: proxy test failed for %s', server_name)
         finally:
-            set_setting('benchmark_running', '0')
+            _clear_benchmark_running()
             set_setting('benchmark_mode', '')
             set_setting('benchmark_current_server', '')
 

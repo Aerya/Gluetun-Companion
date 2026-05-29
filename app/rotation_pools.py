@@ -416,7 +416,7 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
         logger.error('Pool rotation [%d]: switch to %s failed: %s',
                      pool_id, server['name'], err)
         set_pool_last_error(pool_id, str(err))
-        set_setting('benchmark_running', '0')
+        set_setting('benchmark_running', '0'); set_setting('benchmark_stop_requested', '0')
         set_setting('benchmark_current_server', '')
         return {'ok': False, 'server': server['name'], 'dl_mbps': None, 'error': err}
 
@@ -526,7 +526,7 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     if pool['notify']:
         _send_pool_notification(pool, server['name'], from_server, dl_mbps, to_ipv4, to_ipv6, manual)
 
-    set_setting('benchmark_running', '0')
+    set_setting('benchmark_running', '0'); set_setting('benchmark_stop_requested', '0')
     set_setting('benchmark_current_server', '')
     return {'ok': True, 'server': server['name'], 'dl_mbps': dl_mbps, 'error': None}
 

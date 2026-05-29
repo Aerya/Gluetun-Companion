@@ -19,7 +19,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'login_username':   'Utilisateur',
         'login_password':   'Mot de passe',
         'login_submit':     'Connexion',
-        'login_first_hint': 'Première connexion : entrez les identifiants souhaités — le compte sera créé automatiquement.',
+        'login_create':     'Créer le compte',
+        'login_first_hint': 'Première utilisation — choisissez votre identifiant et mot de passe. Ce compte sera le seul administrateur de cette instance.',
 
         # ── Common ──
         'cmn_server':        'Serveur',
@@ -52,8 +53,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'filter_label_hostname': 'Hostname',
 
         # ── Dashboard ──
-        'dash_vpn_status':      'Statut VPN',
-        'dash_active_server':   'Serveur actif',
+        'dash_vpn_status':        'Statut VPN',
+        'dash_active_server':     'Serveur actif',
+        'dash_vpn_not_connected': 'VPN non connecté',
+        'dash_bench_vpn_required':'VPN non connecté — impossible de lancer un benchmark',
         'dash_active_servers':  'Serveurs actifs',
         'dash_next_test':       'Prochain test',
         'dash_last_cycle':      'Dernier cycle :',
@@ -957,8 +960,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ── Login ──
         'login_username':   'Username',
         'login_password':   'Password',
-        'login_submit':     'Login',
-        'login_first_hint': 'First login: enter the credentials you want — the account will be created automatically.',
+        'login_submit':     'Sign in',
+        'login_create':     'Create account',
+        'login_first_hint': 'First launch — choose your username and password. This account will be the sole administrator of this instance.',
 
         # ── Common ──
         'cmn_server':        'Server',
@@ -991,8 +995,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'filter_label_hostname': 'Hostname',
 
         # ── Dashboard ──
-        'dash_vpn_status':      'VPN Status',
-        'dash_active_server':   'Active server',
+        'dash_vpn_status':        'VPN Status',
+        'dash_active_server':     'Active server',
+        'dash_vpn_not_connected': 'VPN not connected',
+        'dash_bench_vpn_required':'VPN not connected — cannot run a benchmark',
         'dash_active_servers':  'Active servers',
         'dash_next_test':       'Next test',
         'dash_last_cycle':      'Last cycle:',

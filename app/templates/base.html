@@ -144,7 +144,8 @@
           </a>
         </li>
         <li class="nav-item">
-          <button class="btn btn-link nav-link px-2" onclick="toggleTheme()" title="{{ t.nav_theme_toggle }}">
+          <button class="btn btn-link nav-link px-2" onclick="cycleTheme()" title="{{ t.nav_theme_toggle }}"
+                  id="theme-btn">
             <i id="theme-icon" class="bi bi-moon-fill"></i>
           </button>
         </li>
@@ -158,7 +159,7 @@
   </div>
 </nav>
 
-<div class="container-fluid py-4 px-4">
+<div class="container-fluid py-4 px-3 px-md-4" style="max-width:1800px;margin-left:auto;margin-right:auto">
   {% with msgs = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in msgs %}
     <div class="alert alert-{{ cat }} alert-dismissible fade show py-2">
@@ -328,23 +329,41 @@
 })();
 </script>
 <script>
-// ── Dark / light toggle ──────────────────────────────────────────────────
+// ── Theme: auto / dark / light (cycles through all three) ───────────────
 (function () {
-  const saved = localStorage.getItem('theme') || 'dark';
-  document.documentElement.setAttribute('data-bs-theme', saved);
-  document.addEventListener('DOMContentLoaded', () => {
+  const _icons = { dark: 'bi bi-moon-fill', light: 'bi bi-sun-fill', auto: 'bi bi-circle-half' };
+  function _resolveAuto() {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  function _applyTheme(pref) {
+    const effective = pref === 'auto' ? _resolveAuto() : pref;
+    document.documentElement.setAttribute('data-bs-theme', effective);
     const icon = document.getElementById('theme-icon');
-    if (icon) icon.className = saved === 'dark' ? 'bi bi-moon-fill' : 'bi bi-sun-fill';
+    if (icon) icon.className = _icons[pref] || _icons.dark;
+  }
+  const saved = localStorage.getItem('theme') || 'auto';
+  _applyTheme(saved);
+  // Re-apply when OS preference changes (only relevant in auto mode)
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if ((localStorage.getItem('theme') || 'auto') === 'auto') _applyTheme('auto');
   });
+  document.addEventListener('DOMContentLoaded', () => _applyTheme(localStorage.getItem('theme') || 'auto'));
 })();
-function toggleTheme() {
-  const html = document.documentElement;
-  const next = html.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
-  html.setAttribute('data-bs-theme', next);
+function cycleTheme() {
+  const order = ['auto', 'dark', 'light'];
+  const current = localStorage.getItem('theme') || 'auto';
+  const next = order[(order.indexOf(current) + 1) % order.length];
   localStorage.setItem('theme', next);
+  const effective = next === 'auto'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : next;
+  document.documentElement.setAttribute('data-bs-theme', effective);
   const icon = document.getElementById('theme-icon');
-  if (icon) icon.className = next === 'dark' ? 'bi bi-moon-fill' : 'bi bi-sun-fill';
+  const icons = { dark: 'bi bi-moon-fill', light: 'bi bi-sun-fill', auto: 'bi bi-circle-half' };
+  if (icon) icon.className = icons[next];
 }
+// legacy alias kept for any inline onclick="toggleTheme()" references
+function toggleTheme() { cycleTheme(); }
 
 // ── VPN down alert (polls every 30s, badge appears after 2 consecutive failures) ──
 (function () {
@@ -394,7 +413,7 @@ window._onBenchmarkStatus = function(d) {};   // page-level hook (no-op default)
         const modeEl    = document.getElementById('bench-mode-label');
         const wrapEl    = document.getElementById('live-testing-wrap');
         const stopBtn   = document.getElementById('btn-stop-bench');
-        if (d.benchmark_running) {
+        if (d.benchmark_running || d.benchmark_stop_requested) {
           if (banner) banner.classList.remove('d-none');
           const mode = d.benchmark_mode || '';
           if (modeEl) modeEl.textContent = _modeLabels[mode] || _modeDefault;
@@ -402,8 +421,12 @@ window._onBenchmarkStatus = function(d) {};   // page-level hook (no-op default)
             liveEl.textContent = d.current_server_testing;
             if (wrapEl) wrapEl.style.display = '';
           } else if (wrapEl) {
-            // No current server (pool rotation, quick check before server is set)
             wrapEl.style.display = 'none';
+          }
+          // Reflect persisted stop-requested state after page refresh
+          if (d.benchmark_stop_requested && stopBtn && !stopBtn.disabled) {
+            stopBtn.disabled = true;
+            stopBtn.innerHTML = '<i class="bi bi-check-lg"></i> ' + _stopReqLabel;
           }
         } else {
           if (banner) banner.classList.add('d-none');

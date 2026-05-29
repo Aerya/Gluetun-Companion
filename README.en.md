@@ -189,7 +189,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **CSV export** of the full history
 
 ### UI & notifications
-- **Web UI** dark/light, FR/EN — auth, dashboard with sparkline, paginated history, charts, switches page with Mbps gain and connection time
+- **Web UI** dark/light/auto, FR/EN — auth, dashboard with sparkline, paginated history, charts, switches page with Mbps gain and connection time
 - **Contextual notifications** — 10 independently-configurable alert types (auto/manual switch, auto-exclude, benchmark with no results, benchmark complete, quick check result, pool rotation, new AirVPN servers, catalogue changes, optimal window change) via Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…); severity levels 🔴/🟡/🔵; global Discord mention with configurable severity threshold
 - **Automatic purge** of SQLite history with configurable retention (in days)
 

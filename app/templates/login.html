@@ -39,6 +39,12 @@
     {% endfor %}
   {% endwith %}
 
+  {% if first_login %}
+  <div class="alert py-2 mb-3" style="background:rgba(56,139,253,.15);border:1px solid rgba(56,139,253,.4);border-radius:6px;font-size:.8rem;color:#79c0ff">
+    <i class="bi bi-person-plus-fill me-1"></i> {{ t.login_first_hint }}
+  </div>
+  {% endif %}
+
   <form method="post" autocomplete="on">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
     <div class="mb-3">
@@ -49,15 +55,11 @@
       <label class="form-label small">{{ t.login_password }}</label>
       <input type="password" name="password" class="form-control" required>
     </div>
-    <button type="submit" class="btn btn-success w-100 fw-semibold">
-      <i class="bi bi-box-arrow-in-right"></i> {{ t.login_submit }}
+    <button type="submit" class="btn w-100 fw-semibold {{ 'btn-primary' if first_login else 'btn-success' }}">
+      <i class="bi {{ 'bi-person-plus-fill' if first_login else 'bi-box-arrow-in-right' }}"></i>
+      {{ t.login_create if first_login else t.login_submit }}
     </button>
   </form>
-  {% if first_login %}
-  <p class="text-center mt-3" style="font-size:.75rem;color:#8b949e">
-    {{ t.login_first_hint }}
-  </p>
-  {% endif %}
 
   <div class="text-center mt-3">
     <a href="{{ url_for('main.set_lang', code='en' if lang == 'fr' else 'fr') }}"
