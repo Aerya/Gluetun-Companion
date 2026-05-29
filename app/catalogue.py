@@ -578,11 +578,19 @@ def refresh_catalogue_from_sidecar(
 
 
 def catalogue_stats() -> dict:
-    """Return summary stats for the catalogue (for display in UI)."""
+    """Return summary stats for the catalogue (for display in UI).
+
+    Counts are distinct server names — not raw row counts — so the number
+    shown in the provider dropdown matches what the user can actually import.
+    """
     with get_db() as db:
-        total = db.execute('SELECT COUNT(*) FROM gluetun_catalogue').fetchone()[0]
+        total = db.execute(
+            "SELECT COUNT(DISTINCT name) FROM gluetun_catalogue WHERE name != ''"
+        ).fetchone()[0]
         providers = db.execute(
-            'SELECT provider, COUNT(*) as n FROM gluetun_catalogue GROUP BY provider ORDER BY provider'
+            "SELECT provider, COUNT(DISTINCT name) as n "
+            "FROM gluetun_catalogue WHERE name != '' "
+            "GROUP BY provider ORDER BY provider"
         ).fetchall()
     last_refresh = get_setting('catalogue_last_refresh', '')
     return {
