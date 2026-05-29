@@ -489,9 +489,27 @@ window._onBenchmarkStatus = function(d) {};   // page-level hook (no-op default)
           const progWrap = document.getElementById('bench-progress-bar-wrap');
           const progBar  = document.getElementById('bench-progress-bar');
           if (total > 0) {
-            const display = d.benchmark_position || done;
-            const pct     = Math.round((display / total) * 100);
-            if (progText) progText.textContent = display + ' / ' + total;
+            const display   = d.benchmark_position || done;
+            const remaining = d.benchmark_remaining_servers || 0;
+            const elapsed   = d.benchmark_elapsed_secs || 0;
+            const pct       = Math.round((display / total) * 100);
+            // Estimate remaining time based on completed servers only (more accurate avg)
+            let etaStr = '';
+            if (done >= 1 && elapsed > 0) {
+              const avgSecs     = elapsed / done;          // avg per completed server
+              const leftServers = remaining + (d.benchmark_position > done ? 1 : 0);
+              const etaSecs     = Math.round(avgSecs * leftServers);
+              if (etaSecs < 60) {
+                etaStr = '< 1 min';
+              } else if (etaSecs < 3600) {
+                etaStr = '~' + Math.round(etaSecs / 60) + ' min';
+              } else {
+                const h = Math.floor(etaSecs / 3600);
+                const m = Math.round((etaSecs % 3600) / 60);
+                etaStr = '~' + h + 'h' + (m > 0 ? m + 'min' : '');
+              }
+            }
+            if (progText) progText.textContent = pct + '%' + (etaStr ? '  ·  ' + etaStr : '');
             if (progWrap) progWrap.classList.remove('d-none');
             if (progBar)  progBar.style.width = pct + '%';
           } else {

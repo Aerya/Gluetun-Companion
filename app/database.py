@@ -250,6 +250,7 @@ def init_db(db_path: str):
                 ('api_token',                   ''),
                 ('adaptive_scheduling',         '0'),
                 ('adaptive_auto_shift',         '0'),
+                ('pending_optimal_hour',        ''),
                 ('notif_auto_switch',           '1'),
                 ('notif_manual_switch',         '0'),
                 ('notif_already_best',          '0'),
@@ -697,11 +698,11 @@ def update_airvpn_snapshot(servers: list[dict]) -> None:
         )
 
 
-def get_hourly_benchmark_stats(min_samples: int = 3) -> dict:
+def get_hourly_benchmark_stats(min_samples: int = 6) -> dict:
     """Compute per-hour download stats for adaptive scheduling.
 
     Returns a dict with:
-      has_enough_data  — True when ≥ 6 distinct hours have ≥ min_samples tests
+      has_enough_data  — True when ≥ 8 distinct hours have ≥ min_samples tests
       hours            — {hour_int: {n, avg_dl, cv_pct, score}}
       good_hours       — hours whose score ≥ 70 % of the best (sorted)
       bad_hours        — hours whose score < 50 % of the best (sorted)
@@ -728,7 +729,7 @@ def get_hourly_benchmark_stats(min_samples: int = 3) -> dict:
             ORDER BY hour
         ''', (min_samples,)).fetchall()
 
-    if len(rows) < 6:
+    if len(rows) < 8:
         return {
             'has_enough_data': False,
             'hours': {},

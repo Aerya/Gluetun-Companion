@@ -417,18 +417,24 @@ Idéal pour des intervalles fréquents (ex. toutes les 2–3 h) où l'on veut un
 
 Activer via **Paramètres → Mesurer → Optimiser l’heure**.
 
-Companion analyse l'historique des tests pour calculer, pour chaque tranche horaire (0h–23h), le **débit moyen** et le **coefficient de variation** (CV = σ/μ). Une heure avec un débit élevé et une faible variance est une bonne fenêtre de benchmark — les mesures y sont représentatives et reproductibles.
+Companion analyse l’historique des tests pour calculer, pour chaque tranche horaire (0h–23h), le **débit moyen** et le **coefficient de variation** (CV = σ/μ). Une heure avec un débit élevé et une faible variance est une bonne fenêtre de benchmark — les mesures y sont représentatives et reproductibles.
 
 **Score par heure** = `débit_moyen × max(0, 1 − CV/100)`
 
 - 🟢 **Bonne fenêtre** — score ≥ 70 % du maximum
 - 🔴 **À éviter** — score < 50 % du maximum
 
-**Prérequis** : au moins 3 tests dans au moins 6 tranches horaires différentes. Les résultats s'affichent directement dans la carte Paramètres dès que les données sont suffisantes.
+**Quand c’est utile** : si votre FAI régule la bande passante à certaines heures (throttling le soir, par exemple), ou si les serveurs VPN que vous utilisez sont significativement plus chargés à certains moments de la journée. Dans ce cas, benchmarker aux heures creuses donne des mesures plus fidèles à la réalité d’usage.
 
-**Décalage automatique** *(sous-option)* : si le cycle planifié tombe sur une heure défavorable, le benchmark est décalé d'un maximum de 3 h vers la prochaine fenêtre favorable. Si aucune n'est trouvée dans ce délai, le benchmark s'exécute immédiatement. Une fois terminé, le planificateur reprend son intervalle normal.
+**Quand c’est inutile** : si votre réseau est stable 24h/24 et que vos serveurs VPN ont une charge relativement constante, cette option n’apportera rien de concret. Elle ne change pas quel serveur est le plus rapide — elle change seulement *quand* vous le mesurez.
 
-> Cette option est complémentaire du cycle automatique — elle ne le remplace pas. L'intervalle configuré reste la référence ; le décalage adaptatif n'ajuste que le prochain déclenchement si l'heure est jugée défavorable.
+**Prérequis** : au moins **6 tests** dans au moins **8 tranches horaires** différentes. Les résultats se stabilisent après plusieurs jours de benchmarks automatiques. En dessous de ce seuil, les moyennes par heure sont trop sensibles aux valeurs aberrantes pour être fiables.
+
+**Décalage automatique** *(sous-option)* : si le cycle planifié tombe sur une heure défavorable, le benchmark est décalé d’un maximum de 3 h vers la prochaine fenêtre favorable. Si aucune n’est trouvée dans ce délai, le benchmark s’exécute immédiatement. Une fois terminé, le planificateur reprend son intervalle normal.
+
+**Stabilité de la fenêtre optimale** : la meilleure heure n’est confirmée et notifiée qu’après **deux cycles consécutifs** pointant vers la même heure. Cela évite les fausses alertes dues au bruit statistique (une seule mesure exceptionnelle suffisait autrefois à faire changer la fenêtre).
+
+> Cette option est complémentaire du cycle automatique — elle ne le remplace pas. L’intervalle configuré reste la référence ; le décalage adaptatif n’ajuste que le prochain déclenchement si l’heure est jugée défavorable.
 
 ### Sélection intelligente du benchmark *(recommandée pour les gros catalogues)*
 
@@ -764,7 +770,8 @@ Accessible depuis **Historique → Patterns horaires**, cette vue affiche les pe
 - Heures en heure locale (variable d'environnement `TZ` respectée)
 - Meilleure et pire heure affichées en stat cards
 - Tests rapides (`proxy_qc`) exclus
-- Utile pour planifier les benchmarks aux créneaux les plus favorables
+- **Visualisation pure** — cette vue n'influence pas le planificateur. C'est l'[Optimisation horaire](#optimisation-horaire-option) dans les Paramètres qui utilise ces données pour décaler les benchmarks automatiques.
+- Utile pour visualiser si un serveur VPN donné a des performances qui varient significativement selon l'heure
 
 ### Détection de nouveaux serveurs AirVPN
 

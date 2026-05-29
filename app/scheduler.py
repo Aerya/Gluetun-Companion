@@ -1855,16 +1855,26 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             )
 
         # ── Optimal benchmark hour change notification ────────────────────────
+        # Only fires when best_hour is stable across 2 consecutive cycles
+        # (avoids spamming on statistical noise with few data points).
         if get_setting('notif_optimal_hour_change', '0') == '1':
             from .database import get_hourly_benchmark_stats as _hour_stats_fn
             try:
                 _hour_stats = _hour_stats_fn()
                 if _hour_stats.get('has_enough_data') and _hour_stats.get('best_hour') is not None:
                     _new_hour = _hour_stats['best_hour']
-                    _old_hour_str = get_setting('last_optimal_hour', '')
+                    _old_hour_str    = get_setting('last_optimal_hour', '')
+                    _pending_str     = get_setting('pending_optimal_hour', '')
                     _old_hour = int(_old_hour_str) if _old_hour_str.lstrip('-').isdigit() else None
-                    if _old_hour != _new_hour:
+                    _pending  = int(_pending_str)  if _pending_str.lstrip('-').isdigit()  else None
+
+                    if _new_hour == _old_hour:
+                        # Stable — clear any pending candidate
+                        set_setting('pending_optimal_hour', '')
+                    elif _new_hour == _pending:
+                        # Confirmed stable for 2 cycles → notify now
                         set_setting('last_optimal_hour', str(_new_hour))
+                        set_setting('pending_optimal_hour', '')
                         from .notify import send_optimal_hour_notification
                         send_optimal_hour_notification(
                             old_hour=_old_hour,
@@ -1877,8 +1887,15 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                             mention_level=_mention_level,
                         )
                         logger.info(
-                            'Optimal benchmark hour changed: %s → %02dh',
+                            'Optimal benchmark hour changed (confirmed): %s → %02dh',
                             _old_hour_str or '(none)', _new_hour,
+                        )
+                    else:
+                        # New candidate — store it, wait for next cycle to confirm
+                        set_setting('pending_optimal_hour', str(_new_hour))
+                        logger.info(
+                            'Optimal benchmark hour candidate: %02dh (will notify if confirmed next cycle)',
+                            _new_hour,
                         )
             except Exception as _hour_exc:
                 logger.warning('Optimal hour notification error: %s', _hour_exc)

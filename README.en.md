@@ -423,9 +423,15 @@ Companion analyses the test history to compute, for each hour of the day (0–23
 - 🟢 **Good window** — score ≥ 70 % of the maximum
 - 🔴 **Avoid** — score < 50 % of the maximum
 
-**Requirements**: at least 3 tests in at least 6 different hour slots. Results are displayed directly in the Settings card as soon as enough data is available.
+**When it's useful**: if your ISP throttles bandwidth at certain hours (e.g. evening congestion), or if the VPN servers you use are significantly more loaded at certain times of day. In that case, benchmarking during off-peak hours gives measurements that better reflect real-world usage.
+
+**When it adds no value**: if your network is stable 24/7 and your VPN servers have a relatively constant load, this option won't make a practical difference. It doesn't change *which* server is fastest — only *when* you measure it.
+
+**Requirements**: at least **6 tests** in at least **8 different hour slots**. Results stabilise after several days of automatic benchmarks. Below this threshold, per-hour averages are too sensitive to outliers to be reliable.
 
 **Auto-shift** *(sub-option)*: if a scheduled cycle falls on an unfavorable hour, the benchmark is deferred by up to 3 h to the next favorable window. If none is found within that delay, the benchmark runs immediately. Once complete, the scheduler resumes its normal interval.
+
+**Optimal window stability**: the best hour is only confirmed and notified after **two consecutive cycles** pointing to the same hour. This prevents false alerts caused by statistical noise (previously, a single exceptional measurement was enough to trigger a window change notification).
 
 > This option complements the automatic cycle — it does not replace it. The configured interval remains the reference; the adaptive shift only adjusts the next trigger if the hour is deemed unfavorable.
 
@@ -763,7 +769,8 @@ Accessible from **History → Hourly patterns**, this view shows average perform
 - Hours displayed in local time (respects the `TZ` environment variable)
 - Best and worst hour shown in stat cards
 - Quick checks (`proxy_qc`) excluded
-- Useful for scheduling benchmarks during peak performance windows
+- **Visualisation only** — this view does not influence the scheduler. The [Time optimization](#time-optimization-option) setting in Parameters is what uses this data to shift automatic benchmarks.
+- Useful for checking whether a specific VPN server shows meaningful performance variation by hour of day
 
 ### New AirVPN server detection
 
