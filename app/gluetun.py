@@ -287,24 +287,34 @@ def _compose_recreate(
     ``docker compose up -d --force-recreate <service>`` lets Compose resolve
     the *current* container ID for X and recreate the dependent properly.
 
-    Priority for compose_dir / compose_project:
-      1. Values passed explicitly (e.g. from gluetun's known COMPOSE_DIR)
-      2. ``com.docker.compose.project.working_dir`` / ``com.docker.compose.project``
-         labels on the container (host path — only works when not running inside
-         a container, i.e. bare-metal install)
-      3. Falls back to a plain ``docker restart`` as last resort.
+    Candidate strategy (tried in order, first success wins):
+      1. Container's own ``com.docker.compose.project.working_dir`` label —
+         correct for containers in a *different* Compose stack than Gluetun.
+         Works when that stack's directory is mounted inside the Companion
+         container, or when running Companion bare-metal.
+      2. Caller-supplied ``compose_dir`` — Gluetun's own compose directory,
+         which is always mounted inside the Companion container.  Correct for
+         containers in the *same* stack as Gluetun.
+      3. Plain ``docker restart`` — last resort; may fail if the parent
+         container was recreated (stale namespace reference).
     """
     client = docker.from_env()
     c = client.containers.get(container_name)
-    labels = c.labels
+    labels  = c.labels
     service = labels.get('com.docker.compose.service', '') or container_name
 
-    # Resolve working directory: prefer the caller-supplied path (already
-    # mounted inside the companion) over the host-side label path.
-    work_dir = compose_dir or labels.get('com.docker.compose.project.working_dir', '')
-    project  = compose_project or labels.get('com.docker.compose.project', '')
+    own_work_dir = labels.get('com.docker.compose.project.working_dir', '')
+    own_project  = labels.get('com.docker.compose.project', '')
 
-    if work_dir:
+    # Build (work_dir, project) candidates in priority order.
+    candidates: list[tuple[str, str]] = []
+    if own_work_dir:
+        candidates.append((own_work_dir, own_project or compose_project))
+    if compose_dir and compose_dir != own_work_dir:
+        candidates.append((compose_dir, compose_project or own_project))
+
+    last_err = ''
+    for work_dir, project in candidates:
         cmd = ['docker', 'compose']
         if project:
             cmd += ['-p', project]
@@ -320,18 +330,26 @@ def _compose_recreate(
             text=True,
             timeout=90,
         )
-        if result.returncode != 0:
-            err = (result.stderr or result.stdout or 'unknown error').strip()
-            raise RuntimeError(f'docker compose up failed for {container_name}: {err}')
-    else:
-        # No compose dir known — plain restart (may fail for network-dependent
-        # containers after their parent was recreated)
+        if result.returncode == 0:
+            return   # success
+        last_err = (result.stderr or result.stdout or 'unknown error').strip()
         logger.warning(
-            'No compose dir for %s — falling back to plain restart '
-            '(may fail if using network_mode: service:X)',
-            container_name,
+            'Compose recreate attempt failed for %s (cwd=%s): %s — trying next candidate',
+            container_name, work_dir, last_err,
         )
-        c.restart(timeout=15)
+
+    if candidates:
+        # All compose attempts failed
+        raise RuntimeError(f'docker compose up failed for {container_name}: {last_err}')
+
+    # No compose info at all — plain restart (may fail for network-dependent
+    # containers after their parent was recreated)
+    logger.warning(
+        'No compose dir for %s — falling back to plain restart '
+        '(may fail if using network_mode: service:X)',
+        container_name,
+    )
+    c.restart(timeout=15)
 
 
 def restart_network_dependents(
@@ -607,6 +625,35 @@ def list_network_dependents(container_name: str) -> list[str]:
     except Exception as exc:
         logger.warning('list_network_dependents: %s', exc)
     return sorted(result)
+
+
+def list_network_dependents_for_recreate(container_name: str) -> list[str]:
+    """
+    Extended version of ``list_network_dependents`` for use as a pre-switch
+    capture.  Returns the union of:
+
+    * Containers that currently reference ``container_name`` by name or ID
+      (the normal case — Gluetun hasn't been recreated yet).
+    * Containers whose NetworkMode references a **dead** container ID
+      (orphaned from a previous Gluetun recreate that didn't fix dependents).
+
+    The second set handles the scenario where a previous switch failed to
+    recreate the dependents (VPN timeout, compose error, etc.) — leaving them
+    with a stale container reference (``SandboxKey`` empty).  Without this,
+    ``list_network_dependents`` returns ``[]`` for already-broken dependents
+    and the next switch silently skips them again.
+    """
+    current  = set(list_network_dependents(container_name))
+    orphaned = set(list_orphaned_network_dependents())
+    combined = sorted(current | orphaned)
+    if orphaned - current:
+        logger.info(
+            'list_network_dependents_for_recreate: also including %d already-orphaned '
+            'container(s) in pre-switch list: %s',
+            len(orphaned - current),
+            ', '.join(sorted(orphaned - current)),
+        )
+    return combined
 
 
 def list_orphaned_network_dependents() -> list[str]:

@@ -950,9 +950,13 @@ def manual_switch(server_id):
                     _mp_vars[_k] = ''
             _manual_wg_profile = {'compose_provider': _mp_compose_prov, 'vars': _mp_vars}
 
-    # Capture dependents BEFORE the switch — after Gluetun restarts they will
-    # have stopped, so list_network_dependents() would return an empty list.
-    from .gluetun import list_network_dependents as _list_deps
+    # Capture dependents BEFORE the switch.  Use the extended variant so that
+    # containers already orphaned from a previous failed switch (NetworkMode
+    # pointing to a dead container ID, SandboxKey empty) are also included.
+    # Plain list_network_dependents() would return [] for such containers,
+    # causing "recreated 0 network dependent(s)" even though qBittorrent /
+    # Prowlarr / MeTube are up but connected to a dead namespace.
+    from .gluetun import list_network_dependents_for_recreate as _list_deps
     pre_switch_deps = _list_deps(container)
 
     ok, err = switch_server(
@@ -980,11 +984,16 @@ def manual_switch(server_id):
                     proxy_user=proxy_user,
                     proxy_password=proxy_pass,
                 )
+                # Recreate dependents regardless of VPN status — Gluetun's
+                # container IS alive (switch_server() just recreated it), so
+                # its network namespace is valid even if the VPN tunnel hasn't
+                # come up yet.  Leaving dependents attached to the old (dead)
+                # namespace would break them permanently until the next switch.
+                restarted, _ = restart_network_dependents(
+                    container, compose_dir, project,
+                    explicit_list=pre_switch_deps,
+                )
                 if vpn_ok:
-                    restarted, _ = restart_network_dependents(
-                        container, compose_dir, project,
-                        explicit_list=pre_switch_deps,
-                    )
                     logger.info(
                         'Manual switch: VPN up in %.0fs — recreated %d network dependent(s): %s',
                         elapsed, len(restarted), ', '.join(restarted) or 'none',
@@ -994,8 +1003,9 @@ def manual_switch(server_id):
                     )
                 else:
                     logger.warning(
-                        'Manual switch: VPN not ready after %.0fs — network dependents NOT recreated',
-                        elapsed,
+                        'Manual switch: VPN not ready after %.0fs — '
+                        'recreated %d network dependent(s) anyway: %s',
+                        elapsed, len(restarted), ', '.join(restarted) or 'none',
                     )
                     to_ipv4, to_ipv6 = None, None
 

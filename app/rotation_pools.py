@@ -293,7 +293,8 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     )
     from .gluetun import (
         switch_server, wait_for_vpn, get_public_ips, get_current_filters,
-        list_network_dependents, restart_network_dependents,
+        list_network_dependents, list_network_dependents_for_recreate,
+        restart_network_dependents,
     )
     from .crypto import decrypt as crypto_decrypt, is_encrypted as is_enc
     from .wg_providers import WG_PROVIDERS
@@ -376,7 +377,7 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     # ── Snapshot current server + IPs + speed before switching ──────────────
     _cur_filters  = get_current_filters(container)
     from_server   = list(_cur_filters.values())[0].split(',')[0].strip() if _cur_filters else None
-    pre_deps      = list_network_dependents(container)
+    pre_deps      = list_network_dependents_for_recreate(container)
 
     # Capture current public IP before the switch
     try:
@@ -425,18 +426,22 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
         proxy_user=proxy_user,
         proxy_password=proxy_pass,
     )
+    # Recreate dependents regardless of VPN status — Gluetun's container IS
+    # alive (switch_server() just recreated it), so its network namespace is
+    # valid even if the VPN tunnel hasn't come up yet.
+    restarted, _ = restart_network_dependents(
+        container, compose_dir, project, explicit_list=pre_deps,
+    )
     if vpn_up:
-        restarted, _ = restart_network_dependents(
-            container, compose_dir, project, explicit_list=pre_deps,
-        )
         logger.info(
             'Pool rotation [%d]: VPN up in %.0fs; recreated %d network dependent(s): %s',
             pool_id, _elapsed, len(restarted), ', '.join(restarted) or 'none',
         )
     else:
         logger.warning(
-            'Pool rotation [%d]: VPN not up within %ds; network dependents not recreated',
-            pool_id, wait_secs,
+            'Pool rotation [%d]: VPN not up within %ds; '
+            'recreated %d network dependent(s) anyway: %s',
+            pool_id, wait_secs, len(restarted), ', '.join(restarted) or 'none',
         )
 
     # Record switch — IPs/to_mbps added via UPDATE once the bench completes

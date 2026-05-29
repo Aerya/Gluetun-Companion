@@ -159,7 +159,7 @@ def _test_one_server(
     from .gluetun import (
         FILTER_VARS, switch_server, wait_for_vpn, get_public_ips,
         restart_network_dependents, restart_containers_in_order,
-        list_network_dependents,
+        list_network_dependents, list_network_dependents_for_recreate,
     )
     from .database import get_setting as _gs
     from .speedtest import test_download, test_latency, test_upload, test_stability
@@ -168,9 +168,11 @@ def _test_one_server(
     logger.info('Testing: %s', label)
     set_setting('benchmark_current_server', server_name)
 
-    # Capture network dependents BEFORE switching Gluetun so containers whose
-    # NetworkMode stores the old container ID (not the name) are not missed.
-    pre_switch_deps = list_network_dependents(container)
+    # Capture network dependents BEFORE switching Gluetun.  Use the extended
+    # variant so that containers already orphaned from a previous failed switch
+    # (SandboxKey empty, NetworkMode references a dead container ID) are also
+    # included — plain list_network_dependents() would miss them.
+    pre_switch_deps = list_network_dependents_for_recreate(container)
 
     ok, err = switch_server(server_name, filter_type, container, compose_dir, project,
                             wg_profile=wg_profile)
@@ -181,16 +183,22 @@ def _test_one_server(
         proxy_host, proxy_port, timeout=wait_secs,
         proxy_user=proxy_user, proxy_password=proxy_pass,
     )
-    if not connected:
-        raise RuntimeError(f'VPN connection timeout after {connect_secs:.0f}s')
 
-    # VPN is up — recreate services that lost their network namespace
-    # (compose_dir/project let us use `docker compose up` with the already-
-    # mounted path rather than the container-inaccessible host-label path)
+    # Recreate dependents regardless of VPN status — Gluetun's container IS
+    # alive (switch_server() recreated it), so its network namespace is valid.
+    # Waiting for VPN success before recreating would leave dependents stuck in
+    # a dead namespace on timeout, breaking them for all subsequent switches.
     restarted, _ = restart_network_dependents(container, compose_dir, project,
                                                explicit_list=pre_switch_deps)
     if restarted:
-        logger.info('Recreated network dependents: %s', ', '.join(restarted))
+        logger.info(
+            'Recreated network dependents%s: %s',
+            '' if connected else ' (VPN not yet up)',
+            ', '.join(restarted),
+        )
+
+    if not connected:
+        raise RuntimeError(f'VPN connection timeout after {connect_secs:.0f}s')
     # NOTE: post_switch_containers are intentionally NOT restarted here.
     # They are only restarted once after the final winning-server switch in
     # _do_benchmark, not after every per-server test during a benchmark cycle.
@@ -1082,7 +1090,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
         get_public_ips, get_current_filters, format_filters,
         restart_network_dependents, restart_containers_in_order,
         stop_containers, start_stopped_containers,
-        list_network_dependents,
+        list_network_dependents, list_network_dependents_for_recreate,
     )
 
     _stop_event.clear()   # reset any leftover stop signal from a previous run
@@ -1688,9 +1696,10 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             from_mbps = from_result['dl'] if from_result else None
 
             if best_label != from_label:
-                # Capture network dependents BEFORE Gluetun is recreated so that
-                # containers whose NetworkMode stores the old container ID are not missed.
-                pre_switch_net_deps = list_network_dependents(container)
+                # Capture network dependents BEFORE Gluetun is recreated — use
+                # the extended variant that also detects already-orphaned containers
+                # (stale NetworkMode from a previous failed switch).
+                pre_switch_net_deps = list_network_dependents_for_recreate(container)
 
                 updated_images: list[str] = []
                 if pull_gluetun:
@@ -1905,7 +1914,8 @@ def _do_single_server(app, server_name: str, filter_type: str):
     from .wg_providers import WG_PROVIDERS as _WGP_SS
     from .gluetun import (
         switch_server, wait_for_vpn,
-        get_current_filters, restart_network_dependents, list_network_dependents,
+        get_current_filters, restart_network_dependents,
+        list_network_dependents, list_network_dependents_for_recreate,
     )
 
     set_setting('benchmark_running', '1')
@@ -2029,7 +2039,7 @@ def _do_single_server(app, server_name: str, filter_type: str):
                 # Test succeeded (sidecar or proxy fallback) → switch real Gluetun
                 logger.info('Single-server test passed (%.1f Mbps) → switching Gluetun to %s',
                             result['dl'], server_name)
-                pre_deps = list_network_dependents(container)
+                pre_deps = list_network_dependents_for_recreate(container)
                 ok, err = switch_server(server_name, filter_type, container, compose_dir, project,
                                         wg_profile=_ss_wg_profile)
                 if ok:
