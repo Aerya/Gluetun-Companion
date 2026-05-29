@@ -1877,6 +1877,8 @@ def settings():
         observation=(cfg['continuous_observation'] == '1')
     )
     bench_est_settings = _bench_estimate(benchmark_estimated_count_settings)
+    settings_bench_progress = _benchmark_progress()
+    settings_history_counts = _server_history_counts()
     settings_sidebar = {
         'active_server': '',
         'active_server_name': '',
@@ -2020,6 +2022,10 @@ def settings():
         bench_est=bench_est_settings,
         benchmark_estimated_count=benchmark_estimated_count_settings,
         settings_sidebar=settings_sidebar,
+        benchmark_progress=settings_bench_progress,
+        server_count=settings_history_counts['enabled'],
+        tested_servers=settings_history_counts['tested'],
+        untested_servers=settings_history_counts['untested'],
         next_run=None if active_auto_pools else get_next_run(),
         gluetun_container=current_app.config['GLUETUN_CONTAINER'],
         adaptive_stats=adaptive_stats,

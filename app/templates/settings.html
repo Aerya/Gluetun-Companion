@@ -489,16 +489,75 @@
         <div id="settings-measure-grid" class="settings-pane-main"></div>
         <aside class="settings-pane-aside">
           {{ settings_world_map() }}
+          {% if cfg.continuous_observation == '1' %}
+          {# ── Observation active : même bloc que le dashboard ──────────── #}
+          <div class="card p-3 mb-3 {{ 'obs-live-card' if benchmark_progress.running and benchmark_progress.mode == 'observation' else '' }}"
+               style="font-size:.85rem">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <div class="d-flex align-items-center gap-2 fw-semibold" style="font-size:.9rem">
+                <span class="obs-led {{ '' if benchmark_progress.running and benchmark_progress.mode == 'observation' else 'd-none' }}"></span>
+                <i class="bi bi-layers-half text-info"></i> {{ t.dash_observation_title }}
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <a href="{{ url_for('main.history') }}" class="btn btn-sm btn-outline-info py-0 px-2">
+                  <i class="bi bi-clock-history"></i> {{ t.dash_observation_history }}
+                </a>
+                <span class="badge {{ 'bg-success' if benchmark_progress.running and benchmark_progress.mode == 'observation' else 'bg-secondary' }}">
+                  {{ t.dash_running if benchmark_progress.running and benchmark_progress.mode == 'observation' else 'ON' }}
+                </span>
+              </div>
+            </div>
+            <div class="progress mb-2" style="height:6px">
+              {% set obs_pct = ((benchmark_progress.done / benchmark_progress.total * 100) | int) if benchmark_progress.total else 0 %}
+              <div class="progress-bar bg-info" style="width:{{ obs_pct }}%"></div>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <div class="obs-server-pill">
+                  <div class="small text-muted">{{ t.dash_observation_current }}</div>
+                  <strong class="d-block text-truncate">{{ benchmark_progress.current or '—' }}</strong>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="obs-server-pill">
+                  <div class="small text-muted">{{ t.dash_observation_next }}</div>
+                  <strong class="d-block text-truncate">{{ benchmark_progress.next or '—' }}</strong>
+                </div>
+              </div>
+            </div>
+            <div class="dash-observation-metric"><span>{{ t.set_side_active_server }}</span><strong class="text-truncate" style="max-width:150px">{{ settings_sidebar.active_server or '—' }}</strong></div>
+            <div class="dash-observation-metric"><span>{{ t.set_side_enabled_servers }}</span><strong>{{ server_count }}</strong></div>
+            <div class="dash-observation-metric"><span>{{ t.set_side_tested_servers }}</span><strong>{{ tested_servers }}</strong></div>
+            <div class="dash-observation-metric"><span>{{ t.set_side_untested_servers }}</span><strong class="{{ 'text-warning' if untested_servers else 'text-success' }}">{{ untested_servers }}</strong></div>
+            <div class="dash-observation-metric"><span>{{ t.set_overview_test_mode }}</span><strong>{{ 'sidecar' if cfg.sidecar_mode == '1' else 'proxy' }}</strong></div>
+            <div class="dash-observation-metric"><span>{{ t.dash_bench_est_total }}</span><strong>~{{ bench_est.total_min_s }}–{{ bench_est.total_max_s }}</strong></div>
+            <div class="dash-observation-metric"><span>{{ t.dash_observation_elapsed }}</span><strong>{{ benchmark_progress.elapsed_secs }}s</strong></div>
+            <div class="dash-observation-metric"><span>{{ t.dash_observation_tested }}</span><strong>{{ benchmark_progress.done }}/{{ benchmark_progress.total }}</strong></div>
+            <div class="dash-observation-metric"><span>{{ t.dash_observation_remaining }}</span><strong>{{ benchmark_progress.remaining }}</strong></div>
+            {% if benchmark_progress.log_lines %}
+            <div class="mt-2">
+              <div class="small text-muted mb-1"><i class="bi bi-terminal"></i> {{ t.dash_observation_logs }}</div>
+              <div class="obs-log">
+                {% for line in benchmark_progress.log_lines %}
+                <div class="obs-log-line"><span class="text-muted">{{ line.ts }}</span> {{ line.msg }}</div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+          </div>
+          {% else %}
+          {# ── Mode standard ─────────────────────────────────────────────── #}
           <div class="settings-help-card">
             <h6><i class="bi bi-hdd-network me-1"></i>{{ t.set_side_server_map }}</h6>
             <div class="metric"><span>{{ t.set_side_active_server }}</span><strong class="text-truncate">{{ settings_sidebar.active_server or '—' }}</strong></div>
             <div class="metric"><span>{{ t.set_side_enabled_servers }}</span><strong>{{ settings_sidebar.enabled_servers }}</strong></div>
             <div class="metric"><span>{{ t.set_side_tested_servers }}</span><strong>{{ settings_sidebar.tested_servers }}</strong></div>
             <div class="metric"><span>{{ t.set_side_untested_servers }}</span><strong class="{{ 'text-warning' if settings_sidebar.untested_servers else 'text-success' }}">{{ settings_sidebar.untested_servers }}</strong></div>
-            <div class="metric"><span>{{ t.set_overview_strategy }}</span><strong>{% if cfg.continuous_observation == '1' %}{{ t.set_observation_label }}{% elif cfg.benchmark_scope_mode == 'smart' %}{{ t.set_scope_smart }}{% else %}{{ t.set_scope_all }}{% endif %}</strong></div>
+            <div class="metric"><span>{{ t.set_overview_strategy }}</span><strong>{% if cfg.benchmark_scope_mode == 'smart' %}{{ t.set_scope_smart }}{% else %}{{ t.set_scope_all }}{% endif %}</strong></div>
             <div class="metric"><span>{{ t.set_overview_test_mode }}</span><strong>{{ 'sidecar' if cfg.sidecar_mode == '1' else 'proxy' }}</strong></div>
             <div class="metric"><span>{{ t.dash_bench_est_total }}</span><strong>~{{ bench_est.total_min_s }}–{{ bench_est.total_max_s }}</strong></div>
           </div>
+          {% endif %}
           {{ readme_card(t.set_side_readme, t.set_side_readme_measure_full, readme_links.measure) }}
         </aside>
       </div>
