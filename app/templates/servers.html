@@ -707,10 +707,30 @@
 
         {# ── Filters row ── #}
         <div class="d-flex gap-2 flex-wrap mb-3">
-          <select class="form-select form-select-sm" style="max-width:200px"
-                  id="cat-provider-select" onchange="loadCatalogue()">
-            <option value="">{{ t.srv_catalogue_provider_all }}</option>
-          </select>
+          {# Custom provider dropdown with icons #}
+          <div class="dropdown" style="min-width:200px;max-width:220px">
+            <button class="btn btn-sm btn-outline-secondary w-100 d-flex align-items-center gap-2 text-start"
+                    type="button" id="cat-provider-btn" data-bs-toggle="dropdown"
+                    aria-expanded="false" style="height:31px;font-size:.875rem">
+              <span id="cat-provider-icon-slot"></span>
+              <span id="cat-provider-label" class="text-truncate flex-grow-1">{{ t.srv_catalogue_provider_all }}</span>
+              <i class="bi bi-chevron-down ms-auto flex-shrink-0" style="font-size:.7rem"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-dark py-1 overflow-auto"
+                id="cat-provider-menu"
+                style="max-height:320px;min-width:220px;font-size:.85rem">
+              <li>
+                <a class="dropdown-item d-flex align-items-center gap-2 active"
+                   href="#" data-value="" onclick="_catSelectProvider(this,event)">
+                  <span style="width:16px;height:16px;display:inline-block"></span>
+                  {{ t.srv_catalogue_provider_all }}
+                </a>
+              </li>
+              <li><hr class="dropdown-divider my-1"></li>
+            </ul>
+          </div>
+          {# Hidden value holder — keeps .value reads working #}
+          <input type="hidden" id="cat-provider-select" value="">
           <select class="form-select form-select-sm" style="max-width:180px"
                   id="cat-filter-select" onchange="loadCatalogue()">
             <option value="name">{{ t.srv_catalogue_filter_name }}</option>
@@ -1466,12 +1486,16 @@ document.getElementById('catalogueModal').addEventListener('show.bs.modal', () =
       .then(r => r.json())
       .then(data => {
         _catProviders = data.providers || [];
-        const sel = document.getElementById('cat-provider-select');
+        const menu = document.getElementById('cat-provider-menu');
         _catProviders.forEach(p => {
-          const opt = document.createElement('option');
-          opt.value = p.name;
-          opt.textContent = p.name + ' (' + p.count + ')';
-          sel.appendChild(opt);
+          const li  = document.createElement('li');
+          const ico = _providerIcon(p.name, 16);
+          li.innerHTML = `<a class="dropdown-item d-flex align-items-center gap-2" href="#"
+            data-value="${_esc(p.name)}" onclick="_catSelectProvider(this,event)">
+            <span style="width:16px;height:16px;display:inline-flex;align-items:center;flex-shrink:0">${ico}</span>
+            <span class="text-truncate">${_esc(p.name)} <small class="text-muted">(${p.count})</small></span>
+          </a>`;
+          menu.appendChild(li);
         });
         loadCatalogue();
       })
@@ -1480,6 +1504,32 @@ document.getElementById('catalogueModal').addEventListener('show.bs.modal', () =
     loadCatalogue();
   }
 });
+
+function _catSelectProvider(el, e) {
+  if (e) e.preventDefault();
+  const val   = el.dataset.value || '';
+  const label = val || '{{ t.srv_catalogue_provider_all }}';
+  const ico   = val ? _providerIcon(val, 16) : '';
+  // Update hidden input
+  document.getElementById('cat-provider-select').value = val;
+  // Update button display
+  document.getElementById('cat-provider-label').textContent = val
+    ? val + ' (' + ((_catProviders.find(p => p.name === val) || {}).count || '') + ')'
+    : '{{ t.srv_catalogue_provider_all }}';
+  const iconSlot = document.getElementById('cat-provider-icon-slot');
+  iconSlot.innerHTML = ico
+    ? `<span style="width:16px;height:16px;display:inline-flex;align-items:center;flex-shrink:0">${ico}</span>`
+    : '<span style="width:16px;display:inline-block"></span>';
+  // Mark active item
+  document.querySelectorAll('#cat-provider-menu .dropdown-item').forEach(a => {
+    a.classList.toggle('active', (a.dataset.value || '') === val);
+  });
+  // Close dropdown and reload
+  const btn = document.getElementById('cat-provider-btn');
+  const dd  = bootstrap.Dropdown.getInstance(btn);
+  if (dd) dd.hide();
+  loadCatalogue();
+}
 
 function loadCatalogue() {
   const provider    = document.getElementById('cat-provider-select').value;
@@ -1621,19 +1671,27 @@ async function catalogueRefresh() {
     if (data.ok) {
       // Refresh providers list and reload catalogue
       _catProviders = [];
-      const sel = document.getElementById('cat-provider-select');
-      // Clear all provider options except the "all" placeholder
-      while (sel.options.length > 1) sel.remove(1);
+      // Reset to "all providers" selection
+      document.getElementById('cat-provider-select').value = '';
+      document.getElementById('cat-provider-label').textContent = '{{ t.srv_catalogue_provider_all }}';
+      document.getElementById('cat-provider-icon-slot').innerHTML = '';
+      // Clear dynamic items from menu (keep "all" + divider = first 2 items)
+      const menu = document.getElementById('cat-provider-menu');
+      while (menu.children.length > 2) menu.removeChild(menu.lastChild);
       // Re-fetch providers then reload table
       fetch('{{ url_for("main.api_catalogue_providers") }}')
         .then(r => r.json())
         .then(pdata => {
           _catProviders = pdata.providers || [];
           _catProviders.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = p.name;
-            opt.textContent = p.name + ' (' + p.count + ')';
-            sel.appendChild(opt);
+            const li  = document.createElement('li');
+            const ico = _providerIcon(p.name, 16);
+            li.innerHTML = `<a class="dropdown-item d-flex align-items-center gap-2" href="#"
+              data-value="${_esc(p.name)}" onclick="_catSelectProvider(this,event)">
+              <span style="width:16px;height:16px;display:inline-flex;align-items:center;flex-shrink:0">${ico}</span>
+              <span class="text-truncate">${_esc(p.name)} <small class="text-muted">(${p.count})</small></span>
+            </a>`;
+            menu.appendChild(li);
           });
           loadCatalogue();
         })
