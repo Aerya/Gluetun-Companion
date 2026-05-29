@@ -3,6 +3,10 @@
 
 {% block content %}
 <style>
+  /* ── Catalogue modal: dropdown above sticky thead ────────────────────── */
+  #catalogueModal .dropdown-menu { z-index: 1055; }
+  #catalogueModal #cat-table-wrap thead.sticky-top { z-index: 5; }
+
   /* ── Sticky first (SERVEUR) + last (ACTIONS) columns ───────────────────── */
   #view-table table th:first-child,
   #view-table table td:first-child {
