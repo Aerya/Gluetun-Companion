@@ -170,7 +170,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 **Prerequisites** — the catalogue sidecar only needs outbound HTTPS access (Docker bridge network, enabled by default). **No `docker-compose.yml` changes required.**
 
 ### Docker container management
-- **Gluetun network containers (auto-managed)** — all containers using `network_mode: service:gluetun` are detected and restarted automatically after each switch
+- **Gluetun network containers (auto-managed)** — all containers using `network_mode: service:gluetun` are detected and recreated automatically after each switch, regardless of their state: containers still functional **or already stuck in a dead namespace** (left over from a previously failed switch). Containers in a **different Compose stack** from Gluetun are also handled if their directory is accessible from Companion or if their `com.docker.compose` labels are present
 - **Containers to restart after switch** — only for containers routing through Gluetun's HTTP/SOCKS5 proxy; ordered list (drag & drop)
 - **Pause during benchmark** — list of containers (torrent, Usenet…) stopped before the benchmark starts and automatically restarted when it ends, even on error
 - **Automatic Docker image updates** *(option)* — at switch time, Companion can update images before restarting containers: Gluetun itself, auto-managed network containers, post-switch containers and benchmark-paused containers; togglable per container from Settings
@@ -378,6 +378,14 @@ In **Settings → Decide → Containers to restart after switch**: ordered list 
 ### Containers to pause during benchmark
 
 In **Settings → Measure → Containers to pause during benchmark**: list of containers stopped before the benchmark and restarted after — in all cases, even if the benchmark crashes. If a container is in both lists, the pause list takes priority (no duplicate restart). Useful for `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`.
+
+### "Test running" banner and Stop button
+
+While any test is active (full benchmark, continuous observation, quick proxy test, sidecar, pool rotation), a green banner appears at the top of every page showing the **test type** and the **server under test**. A **Stop** button is available for all modes:
+
+- **Benchmark / Observation / Sidecar** — stops after the current server (≤ 2 seconds).
+- **Quick test (proxy)** — stops after the current sample (≤ one sample duration, typically 8 s).
+- **Pool rotation** — stop signal sent; the rotation completes cleanly.
 
 ### AirVPN server picker
 
@@ -707,7 +715,7 @@ The scheduler checks every **5 minutes** whether any pool has a pending rotation
 
 > Pool rotations and benchmarks share the same operational lock: a rotation will not trigger during an active benchmark, and vice versa.
 
-When at least one automatic rotation pool is active, the classic automatic cycle in **Settings → Measure** is paused: the toggle is disabled in the UI, manual benchmarks remain available, and pool rotations become the primary scheduler.
+When at least one automatic rotation pool is active, the classic automatic cycle in **Settings → Measure** is paused: the toggle is disabled in the UI, manual benchmarks remain available, and pool rotations become the primary scheduler. This pause **persists across container restarts**: Companion detects active pools at startup and will not re-enable the benchmark cycle even if `auto_benchmark=1` remained in the database.
 
 Pool rotations are visible on the dashboard `/` and in `/history`. A switch appears as pool activity; if **Measure after switch** is enabled, the `proxy_qc` test also gets the `pool` badge.
 

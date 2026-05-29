@@ -506,6 +506,7 @@ def _test_direct_proxy(
     Test download speed via the existing proxy without any server switch.
     Used for quick check in proxy mode (Gluetun never restarted).
     Returns median download Mbps, or None on failure.
+    Respects _stop_event — exits after the current sample if stop is requested.
     """
     from .speedtest import test_download
     try:
@@ -513,6 +514,7 @@ def _test_direct_proxy(
             proxy_host, proxy_port,
             duration=dl_duration, samples=dl_samples, warmup=warmup, streams=dl_streams,
             proxy_user=proxy_user, proxy_password=proxy_pass,
+            stop_event=_stop_event,
         )
         return dl_median
     except Exception as exc:
@@ -2799,7 +2801,9 @@ def run_quick_check_now(app):
     from .gluetun import get_current_filters, get_public_ips
 
     with _lock:
+        _stop_event.clear()   # reset any leftover stop signal
         set_setting('benchmark_running', '1')
+        set_setting('benchmark_mode', 'quick')
         try:
             container  = app.config['GLUETUN_CONTAINER']
             proxy_host = app.config['GLUETUN_HOST']
@@ -2867,6 +2871,7 @@ def run_quick_check_now(app):
                 logger.warning('Quick benchmark: proxy test failed for %s', server_name)
         finally:
             set_setting('benchmark_running', '0')
+            set_setting('benchmark_mode', '')
             set_setting('benchmark_current_server', '')
 
 

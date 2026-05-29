@@ -576,7 +576,7 @@
                 </button>
               </form>
               <form method="post" action="{{ url_for('main.manual_switch', server_id=s.id) }}" class="d-inline"
-                    onsubmit="return confirm('{{ t.srv_confirm_switch_a }} {{ filter_vars.get(s.filter_type) }}={{ s.name }} {{ t.srv_confirm_switch_b }}')">
+                    onsubmit="return confirm('{{ t.srv_confirm_switch_a }} {{ s.name }} {{ t.srv_confirm_switch_b }}')">
                 <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                 <button class="btn btn-success btn-sm py-1 px-2" title="{{ t.srv_switch_now }}">
                   <i class="bi bi-arrow-right-circle-fill fs-6"></i>

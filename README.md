@@ -171,7 +171,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 **Prérequis** — le sidecar catalogue a uniquement besoin d'un accès HTTPS sortant (réseau bridge Docker, activé par défaut). **Aucune modification de `docker-compose.yml` requise.**
 
 ### Gestion des containers Docker
-- **Containers réseau Gluetun (auto-gérés)** — tous les containers en `network_mode: service:gluetun` sont détectés et relancés automatiquement après chaque bascule
+- **Containers réseau Gluetun (auto-gérés)** — tous les containers en `network_mode: service:gluetun` sont détectés et recréés automatiquement après chaque bascule, quel que soit leur état : containers encore fonctionnels **ou déjà dans un namespace mort** (suite à une bascule précédente ratée). Les containers dans une **stack Compose différente** de Gluetun sont également gérés si leur répertoire est accessible depuis Companion ou si leurs labels `com.docker.compose` sont présents
 - **Containers à redémarrer après bascule** — uniquement pour les containers utilisant le proxy HTTP/SOCKS5 de Gluetun ; liste ordonnée (glisser-déposer)
 - **Pause pendant le benchmark** — liste de containers (torrents, Usenet…) stoppés avant le début du benchmark et relancés automatiquement à la fin, même en cas d'erreur
 - **Mise à jour automatique des images Docker** *(option)* — au moment de la bascule, Companion peut mettre à jour les images avant de relancer les containers : Gluetun lui-même, les containers réseau auto-gérés, les containers à redémarrer après bascule et les containers en pause pendant le benchmark ; activable individuellement par container depuis les Paramètres
@@ -379,6 +379,14 @@ Dans **Paramètres → Décider → Containers à redémarrer après bascule** :
 ### Containers à stopper pendant le benchmark
 
 Dans **Paramètres → Mesurer → Containers à stopper pendant le benchmark** : liste de containers stoppés avant le benchmark et relancés après — dans tous les cas, même si le benchmark plante. Si un container est dans les deux listes, la liste de pause a priorité (pas de doublon). Utile pour `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`.
+
+### Bandeau « Test en cours » et bouton Arrêter
+
+Pendant tout test actif (benchmark complet, observation continue, test rapide proxy, sidecar, rotation de pool), un bandeau vert s'affiche en haut de chaque page avec le **type de test en cours** et le **serveur testé**. Le bouton **Arrêter** est disponible pour tous les modes :
+
+- **Benchmark / Observation / Sidecar** — arrêt après le serveur en cours (≤ 2 secondes).
+- **Test rapide (proxy)** — arrêt après l'échantillon en cours (≤ durée d'un échantillon, typiquement 8 s).
+- **Rotation de pool** — signal d'arrêt envoyé ; la rotation se termine proprement.
 
 ### Sélecteur de serveurs AirVPN
 
@@ -708,7 +716,7 @@ Le scheduler vérifie toutes les **5 minutes** si des pools ont une rotation en 
 
 > Les rotations de pool et les benchmarks partagent le même verrou opérationnel : une rotation ne se déclenche pas pendant un benchmark actif, et inversement.
 
-Quand au moins un pool de rotation automatique est actif, le cycle automatique classique de **Paramètres → Mesurer** passe en pause : le toggle est désactivé dans l'UI, les benchmarks manuels restent disponibles, et les rotations de pool deviennent le planificateur principal.
+Quand au moins un pool de rotation automatique est actif, le cycle automatique classique de **Paramètres → Mesurer** passe en pause : le toggle est désactivé dans l'UI, les benchmarks manuels restent disponibles, et les rotations de pool deviennent le planificateur principal. Cette mise en pause **persiste au redémarrage du container** : Companion détecte les pools actifs au démarrage et ne relance pas le cycle benchmark même si la base de données conservait `auto_benchmark=1`.
 
 Les rotations de pool sont visibles sur le dashboard `/` et dans `/history`. Une bascule apparaît comme activité de pool ; si l'option **Mesurer après bascule** est activée, le test `proxy_qc` reçoit aussi le badge `pool`.
 

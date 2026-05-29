@@ -172,7 +172,10 @@
   <div id="global-bench-banner" class="alert alert-success d-flex align-items-center gap-2 py-2 px-3 mb-3 d-none"
        style="font-size:.85rem">
     <span class="spinner-border spinner-border-sm flex-shrink-0"></span>
-    <span>{{ t.dash_testing_server }} <strong><span id="live-testing"></span></strong></span>
+    <span>
+      <span id="bench-mode-label" class="badge bg-light text-dark me-1" style="font-size:.75rem"></span>
+      <span id="live-testing-wrap">{{ t.dash_testing_server }} <strong><span id="live-testing"></span></strong></span>
+    </span>
     <button class="btn btn-sm btn-outline-light ms-auto" id="btn-stop-bench"
             onclick="stopBenchmark()" style="font-size:.8rem;padding:.15rem .55rem">
       <i class="bi bi-stop-fill"></i> {{ t.dash_stop_bench }}
@@ -372,19 +375,38 @@ window._onBenchmarkStatus = function(d) {};   // page-level hook (no-op default)
 (function () {
   const _stopLabel    = '{{ t.dash_stop_bench }}';
   const _stopReqLabel = '{{ t.dash_stop_requested }}';
+  const _testingLabel = '{{ t.dash_testing_server }}';
+  const _modeLabels   = {
+    'benchmark':   '{{ t.dash_bench_mode_benchmark }}',
+    'observation': '{{ t.dash_bench_mode_observation }}',
+    'quick':       '{{ t.dash_bench_mode_quick }}',
+    'pool':        '{{ t.dash_bench_mode_pool }}',
+  };
+  const _modeDefault  = '{{ t.dash_bench_mode_other }}';
+
   function _pollBench() {
     fetch('{{ url_for("main.api_status") }}')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (!d) return;
-        const banner  = document.getElementById('global-bench-banner');
-        const liveEl  = document.getElementById('live-testing');
-        const stopBtn = document.getElementById('btn-stop-bench');
+        const banner    = document.getElementById('global-bench-banner');
+        const liveEl    = document.getElementById('live-testing');
+        const modeEl    = document.getElementById('bench-mode-label');
+        const wrapEl    = document.getElementById('live-testing-wrap');
+        const stopBtn   = document.getElementById('btn-stop-bench');
         if (d.benchmark_running) {
-          if (banner)  banner.classList.remove('d-none');
-          if (liveEl && d.current_server_testing) liveEl.textContent = d.current_server_testing;
+          if (banner) banner.classList.remove('d-none');
+          const mode = d.benchmark_mode || '';
+          if (modeEl) modeEl.textContent = _modeLabels[mode] || _modeDefault;
+          if (liveEl && d.current_server_testing) {
+            liveEl.textContent = d.current_server_testing;
+            if (wrapEl) wrapEl.style.display = '';
+          } else if (wrapEl) {
+            // No current server (pool rotation, quick check before server is set)
+            wrapEl.style.display = 'none';
+          }
         } else {
-          if (banner)  banner.classList.add('d-none');
+          if (banner) banner.classList.add('d-none');
           if (stopBtn && stopBtn.disabled) {
             stopBtn.disabled = false;
             stopBtn.innerHTML = '<i class="bi bi-stop-fill"></i> ' + _stopLabel;
@@ -395,6 +417,7 @@ window._onBenchmarkStatus = function(d) {};   // page-level hook (no-op default)
       .catch(() => {});
   }
   setInterval(_pollBench, 3000);
+  _pollBench();   // run immediately on page load
 })();
 
 function stopBenchmark() {

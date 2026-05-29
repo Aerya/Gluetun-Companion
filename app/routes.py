@@ -971,7 +971,7 @@ def manual_switch(server_id):
             (from_label, to_label, 'manual', int(ok)),
         ).lastrowid
     if ok:
-        flash_t('flash_switched', 'success', to=to_label)
+        flash_t('flash_switched', 'success', to=row['name'])
 
         # In the background: wait for VPN, get new IPs, recreate dependents, then notify.
         app = current_app._get_current_object()

@@ -343,6 +343,7 @@ def test_download(
     streams: int = 1,
     proxy_user: str | None = None,
     proxy_password: str | None = None,
+    stop_event: 'threading.Event | None' = None,
 ) -> tuple[float, list[dict]]:
     """
     Test download speed through the proxy against `samples` diverse endpoints.
@@ -351,6 +352,9 @@ def test_download(
     so the VPN tunnel is saturated the same way a download manager would.
     Returns (median_mbps, [{'endpoint', 'mbps', 'error'}, ...]).
     Raises RuntimeError if no endpoint succeeded.
+
+    ``stop_event`` — optional threading.Event; when set the loop exits after the
+    current sample completes so callers can interrupt a multi-sample test.
     """
     px = _proxies(proxy_host, proxy_port, proxy_user, proxy_password)
     cap = 150 * 1024 * 1024
@@ -360,6 +364,8 @@ def test_download(
     speeds: list[float] = []
 
     for label, url_tpl in endpoints:
+        if stop_event and stop_event.is_set():
+            break   # stop requested between samples
         try:
             if url_tpl == 'fastcom://':
                 url = _resolve_fastcom_url(px)
