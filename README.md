@@ -70,6 +70,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
   - [Écoute Docker events](#écoute-docker-events)
   - [Profils d'usage](#profils-dusage)
   - [Profils VPN WireGuard](#profils-vpn-wireguard)
+    - [Custom WireGuard : serveur personnel unique](#custom-wireguard--serveur-personnel-unique)
   - [Pools de rotation](#pools-de-rotation)
   - [Score de sélection — composantes de stabilité](#score-de-sélection--composantes-de-stabilité)
   - [Score de confiance par serveur](#score-de-confiance-par-serveur)
@@ -599,6 +600,31 @@ Dans **Paramètres → WireGuard** :
 4. Les options *Actif* et *Rotation autorisée* permettent d'inclure ou exclure le profil des cycles automatiques
 
 > **Sécurité des clés** : les valeurs chiffrées sont préfixées `enc:` en base. Elles ne sont déchiffrées qu'au moment de la construction de l'override Compose ou du lancement d'un container sidecar — jamais exposées dans les logs ni dans l'export de configuration.
+
+#### Custom WireGuard : serveur personnel unique
+
+Le provider **Custom WireGuard** sert aux configurations Gluetun `VPN_SERVICE_PROVIDER=custom`, notamment quand vous avez un seul serveur WireGuard personnel ou un fournisseur sans catalogue de serveurs Gluetun.
+
+Dans ce mode, Companion ne renseigne **aucune variable `SERVER_*`** (`SERVER_NAMES`, `SERVER_COUNTRIES`, etc.). Les champs du profil custom décrivent directement l'unique endpoint WireGuard :
+
+- `WIREGUARD_ENDPOINT_IP`
+- `WIREGUARD_ENDPOINT_PORT`
+- `WIREGUARD_PUBLIC_KEY`
+- `WIREGUARD_PRIVATE_KEY`
+- `WIREGUARD_ADDRESSES`
+- `WIREGUARD_PRESHARED_KEY` si votre configuration l'utilise
+
+La ligne ajoutée dans **Serveurs** devient simplement un nom de suivi statistique, par exemple `Serveur perso`, `Home-WG` ou `VPS-Paris`. Elle permet d'attacher les benchmarks, l'historique, Prometheus et Grafana à ce serveur, sans faire de comparatif entre plusieurs destinations.
+
+Configuration recommandée :
+
+1. Créez un profil **Custom WireGuard** dans **Paramètres → WireGuard**.
+2. Copiez les valeurs de votre fichier WireGuard `.conf` dans les champs du profil.
+3. Ajoutez une seule entrée dans **Serveurs** avec un nom libre.
+4. Assignez cette entrée au profil Custom WireGuard.
+5. Laissez l'observation ou les benchmarks planifiés mesurer régulièrement ce serveur.
+
+À la bascule, Companion écrit `VPN_SERVICE_PROVIDER=custom`, `VPN_TYPE=wireguard` et les variables `WIREGUARD_*` dans `docker-compose.override.yml`, puis laisse toutes les variables `SERVER_*` vides.
 
 #### ⚠️ Clé WireGuard sidecar par profil (recommandée)
 

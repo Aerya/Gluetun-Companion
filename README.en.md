@@ -70,6 +70,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [Docker events listener](#docker-events-listener)
   - [Usage profiles](#usage-profiles)
   - [WireGuard VPN profiles](#wireguard-vpn-profiles)
+    - [Custom WireGuard: personal single server](#custom-wireguard-personal-single-server)
   - [Rotation pools](#rotation-pools)
   - [Selection score — stability components](#selection-score--stability-components)
   - [Per-server confidence score](#per-server-confidence-score)
@@ -598,6 +599,31 @@ In **Settings → WireGuard**:
 4. The *Active* and *Rotation allowed* toggles include or exclude the profile from automatic cycles
 
 > **Key security**: encrypted values are stored with the prefix `enc:` in the database. They are only decrypted at the moment the Compose override is written or a sidecar container is launched — never exposed in logs or configuration exports.
+
+#### Custom WireGuard: personal single server
+
+The **Custom WireGuard** provider is for Gluetun `VPN_SERVICE_PROVIDER=custom` setups, especially when you have one personal WireGuard server or a provider with no Gluetun server catalogue.
+
+In this mode, Companion does **not set any `SERVER_*` variable** (`SERVER_NAMES`, `SERVER_COUNTRIES`, etc.). The custom profile fields describe the single WireGuard endpoint directly:
+
+- `WIREGUARD_ENDPOINT_IP`
+- `WIREGUARD_ENDPOINT_PORT`
+- `WIREGUARD_PUBLIC_KEY`
+- `WIREGUARD_PRIVATE_KEY`
+- `WIREGUARD_ADDRESSES`
+- `WIREGUARD_PRESHARED_KEY` if your configuration uses one
+
+The row added in **Servers** becomes only a statistics label, for example `Personal server`, `Home-WG` or `VPS-Paris`. It lets Companion attach benchmarks, history, Prometheus and Grafana metrics to that server without comparing it against other destinations.
+
+Recommended setup:
+
+1. Create a **Custom WireGuard** profile in **Settings → WireGuard**.
+2. Copy the values from your WireGuard `.conf` file into the profile fields.
+3. Add one entry in **Servers** with any clear label.
+4. Assign that entry to the Custom WireGuard profile.
+5. Let scheduled observation or benchmarks measure that server regularly.
+
+On switch, Companion writes `VPN_SERVICE_PROVIDER=custom`, `VPN_TYPE=wireguard` and the `WIREGUARD_*` variables to `docker-compose.override.yml`, while leaving all `SERVER_*` variables empty.
 
 #### ⚠️ Per-profile WireGuard sidecar key (recommended)
 

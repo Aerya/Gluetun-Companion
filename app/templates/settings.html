@@ -2772,8 +2772,19 @@ function _wgShowFields(providerKey, existingVars) {
   }
   // Help link
   if (p.help_url) {
-    helpEl.innerHTML = `<a href="${p.help_url}" target="_blank" rel="noreferrer" style="font-size:.75rem">
-      <i class="bi bi-box-arrow-up-right me-1"></i>{{ t.set_wg_help_link }}</a>`;
+    const customDocUrl = _lang === 'fr'
+      ? '{{ readme_url }}#custom-wireguard--serveur-personnel-unique'
+      : '{{ readme_url }}#custom-wireguard-personal-single-server';
+    const helpUrl = providerKey === 'custom' ? customDocUrl : p.help_url;
+    const helpText = providerKey === 'custom'
+      ? '{{ t.set_wg_custom_help_link }}'
+      : '{{ t.set_wg_help_link }}';
+    const helpTitle = providerKey === 'custom'
+      ? '{{ t.set_wg_custom_help_tooltip }}'
+      : '{{ t.set_wg_help_link }}';
+    helpEl.innerHTML = `<a href="${helpUrl}" target="_blank" rel="noreferrer"
+        title="${helpTitle}" style="font-size:.75rem">
+      <i class="bi bi-box-arrow-up-right me-1"></i>${helpText}</a>`;
     helpEl.style.display = '';
   }
 
@@ -3017,4 +3028,3 @@ function refreshCatalogue() {
   <span>❤️</span>
 </footer>
 {% endblock %}
-

@@ -187,6 +187,8 @@ def switch_server(
     When *wg_profile* is provided, VPN_SERVICE_PROVIDER, VPN_TYPE=wireguard and
     all profile vars are also written to the override so that Gluetun switches
     both the server filter AND the WireGuard credentials in a single restart.
+    For VPN_SERVICE_PROVIDER=custom, Gluetun has no SERVER_* selector; all
+    SERVER_* vars are cleared and the server name is only used as a stats label.
 
     Returns (success, error_message).
     """
@@ -202,19 +204,31 @@ def switch_server(
         """Sanitise a value against YAML injection."""
         return raw.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '').replace('\r', '')
 
+    compose_provider = ''
+    profile_vars: dict[str, str] = {}
+    if wg_profile:
+        compose_provider = wg_profile.get('compose_provider', '')
+        if wg_profile.get('vars') is not None:
+            profile_vars = dict(wg_profile.get('vars') or {})
+        else:
+            profile_vars = dict(wg_profile.get('extra_env') or {})
+            compose_provider = compose_provider or profile_vars.pop('VPN_SERVICE_PROVIDER', '')
+            profile_vars.pop('VPN_TYPE', None)
+
+    uses_server_filter = compose_provider != 'custom'
+
     # Build environment block: set target filter var, blank-out all others
     env_lines = ''
     for label, var in FILTER_VARS.items():
-        raw = filter_value if var == env_var else ''
+        raw = filter_value if uses_server_filter and var == env_var else ''
         env_lines += f'      {var}: "{_safe(raw)}"\n'
 
     # WireGuard profile vars (provider + credentials)
     if wg_profile:
-        compose_provider = wg_profile.get('compose_provider', '')
         if compose_provider:
             env_lines += f'      VPN_SERVICE_PROVIDER: "{_safe(compose_provider)}"\n'
         env_lines += '      VPN_TYPE: "wireguard"\n'
-        for k, v in (wg_profile.get('vars') or {}).items():
+        for k, v in profile_vars.items():
             env_lines += f'      {k}: "{_safe(v)}"\n'
 
     # Use the Compose service name (not the container name) as the YAML key so
@@ -884,9 +898,11 @@ def create_test_gluetun(
             if '=' in var:
                 k, v = var.split('=', 1)
                 env[k] = v
+        is_custom_provider = (extra_env or {}).get('VPN_SERVICE_PROVIDER') == 'custom'
         for label, var in FILTER_VARS.items():
             env[var] = ''
-        env[FILTER_VARS.get(filter_type, 'SERVER_NAMES')] = filter_value
+        if not is_custom_provider:
+            env[FILTER_VARS.get(filter_type, 'SERVER_NAMES')] = filter_value
 
         # Apply WireGuard profile vars (provider, credentials) if provided
         if extra_env:
