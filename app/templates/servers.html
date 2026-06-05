@@ -21,8 +21,19 @@
     position: sticky;
     right: 0;
     z-index: 4;
-    background-color: var(--bs-body-bg);
+    background: var(--bs-body-bg) !important;
+    background-clip: padding-box;
     box-shadow: -3px 0 5px rgba(0,0,0,.1);
+  }
+  #view-table table td:last-child {
+    isolation: isolate;
+  }
+  #view-table table td:last-child::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--bs-body-bg);
   }
   #view-table table thead th:first-child,
   #view-table table thead th:last-child {
@@ -35,13 +46,31 @@
   }
   #view-table .table-hover tbody tr:hover td:first-child,
   #view-table .table-hover tbody tr:hover td:last-child {
-    background-color: var(--bs-body-bg);
+    background: var(--bs-body-bg) !important;
   }
   #view-table .table-hover tbody tr:hover td:first-child {
     box-shadow: 3px 0 5px rgba(0,0,0,.1), inset 0 0 0 9999px var(--bs-table-hover-bg);
   }
   #view-table .table-hover tbody tr:hover td:last-child {
     box-shadow: -3px 0 5px rgba(0,0,0,.1), inset 0 0 0 9999px var(--bs-table-hover-bg);
+  }
+  #view-table .table-hover tbody tr:hover td:last-child::before {
+    background:
+      linear-gradient(var(--bs-table-hover-bg), var(--bs-table-hover-bg)),
+      var(--bs-body-bg);
+  }
+
+  #view-table .srv-last-tested-cell {
+    width: 8.75rem;
+    min-width: 8.75rem;
+    max-width: 8.75rem;
+  }
+  #view-table .srv-last-tested {
+    display: block;
+    width: 8.1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .server-actions {
@@ -605,8 +634,11 @@
                 <small class="{{ _dcls }}">{{ '%.0f'|format(_stab.avg_dns) }} ms</small>
               {%- else -%}<span class="text-muted">—</span>{%- endif -%}
             </td>
-            <td>
-              <small class="text-muted">{{ (s.last_tested | localtime | truncate(16, True, '')) if s.last_tested else t.cmn_never }}</small>
+            <td class="srv-last-tested-cell">
+              <small class="text-muted srv-last-tested"
+                     title="{{ (s.last_tested | localtime) if s.last_tested else t.cmn_never }}">
+                {{ (s.last_tested | localtime | truncate(16, True, '')) if s.last_tested else t.cmn_never }}
+              </small>
             </td>
             <td class="text-end" style="white-space:nowrap">
               <form method="post" action="{{ url_for('main.test_server_now', server_id=s.id) }}" class="d-inline"
