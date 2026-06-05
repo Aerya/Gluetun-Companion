@@ -384,7 +384,12 @@ def dashboard():
         tested_servers = history_counts['tested']
         untested_servers = history_counts['untested']
         benchmark_estimated_count = _benchmark_scope_estimated_count(observation=False)
+        observation_estimated_count = _benchmark_scope_estimated_count(observation=True)
         bench_est = _bench_estimate(benchmark_estimated_count)
+        dashboard_benchmark_progress = _benchmark_progress()
+        observation_bench_est = _bench_estimate(
+            _progress_estimated_count(dashboard_benchmark_progress) or observation_estimated_count
+        )
         server_stats = db.execute('''
             SELECT st.server_name,
                    vp.name  AS profile_name,
@@ -465,12 +470,14 @@ def dashboard():
         last_switch=last_switch,
         recent_pool_switches=recent_pool_switches,
         dashboard_map_points=dashboard_map_points,
-        benchmark_progress=_benchmark_progress(),
+        benchmark_progress=dashboard_benchmark_progress,
         server_count=server_count,
         tested_servers=tested_servers,
         untested_servers=untested_servers,
         benchmark_estimated_count=benchmark_estimated_count,
+        observation_estimated_count=observation_estimated_count,
         bench_est=bench_est,
+        observation_bench_est=observation_bench_est,
         server_stats=server_stats,
         next_run=get_next_run() if get_setting('auto_benchmark', '1') == '1' else None,
         benchmark_running=benchmark_running,
@@ -1944,6 +1951,9 @@ def settings():
     )
     bench_est_settings = _bench_estimate(benchmark_estimated_count_settings)
     settings_bench_progress = _benchmark_progress()
+    settings_observation_bench_est = _bench_estimate(
+        _progress_estimated_count(settings_bench_progress) or benchmark_estimated_count_settings
+    )
     settings_history_counts = _server_history_counts()
     settings_sidebar = {
         'active_server': '',
@@ -2089,6 +2099,7 @@ def settings():
         benchmark_estimated_count=benchmark_estimated_count_settings,
         settings_sidebar=settings_sidebar,
         benchmark_progress=settings_bench_progress,
+        observation_bench_est=settings_observation_bench_est,
         server_count=settings_history_counts['enabled'],
         tested_servers=settings_history_counts['tested'],
         untested_servers=settings_history_counts['untested'],
@@ -3111,12 +3122,24 @@ def _bench_estimate(server_count: int = 0) -> dict:
     return {
         'per_min_s':   _fmt(per_min),
         'per_max_s':   _fmt(per_max),
+        'per_min_secs': per_min,
+        'per_max_secs': per_max,
         'total_min_s': _fmt(total_min) if server_count else '—',
         'total_max_s': _fmt(total_max) if server_count else '—',
+        'total_min_secs': total_min,
+        'total_max_secs': total_max,
+        'server_count': server_count,
         'warn':        server_count > 0 and total_max > 1800,  # > 30 min
         'mode':        'sidecar' if sidecar else 'proxy',
         'max_retries': max_retries,
     }
+
+
+def _progress_estimated_count(progress: dict) -> int:
+    """Servers still to account for in a running cycle, including the current one."""
+    if not progress.get('running') or not progress.get('total'):
+        return 0
+    return max(0, int(progress.get('remaining') or 0) + int(progress.get('in_progress') or 0))
 
 
 def _benchmark_scope_estimated_count(observation: bool = False) -> int:
@@ -3158,6 +3181,11 @@ def _benchmark_scope_estimated_count(observation: bool = False) -> int:
                         continue
                     kept.append(r)
                 rows = kept
+            try:
+                from .scheduler import _apply_benchmark_scope
+                return len(_apply_benchmark_scope(list(rows), observation=observation))
+            except Exception:
+                logger.debug('benchmark scope estimate: scheduler scope unavailable', exc_info=True)
             if observation:
                 cap = (
                     int(get_setting('observation_explore_n', '20') or '20')
@@ -3279,6 +3307,7 @@ def api_status():
     px_user = get_setting('proxy_username') or None
     px_pass = get_setting('proxy_password') or None
     progress = _benchmark_progress()
+    live_est = _bench_estimate(_progress_estimated_count(progress))
     history_counts = _server_history_counts()
     return jsonify({
         'vpn_status':             get_vpn_status(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
@@ -3293,6 +3322,9 @@ def api_status():
         'benchmark_done_servers':     progress['done'],
         'benchmark_position':         progress['position'],
         'benchmark_remaining_servers':progress['remaining'],
+        'benchmark_estimate_servers':  live_est['server_count'],
+        'benchmark_estimate_total_min_s': live_est['total_min_s'],
+        'benchmark_estimate_total_max_s': live_est['total_max_s'],
         'benchmark_next_server':   progress['next'],
         'benchmark_log_lines':     progress['log_lines'],
         'server_count':            history_counts['enabled'],

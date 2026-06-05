@@ -329,7 +329,10 @@
       </div>
       <div class="dash-observation-metric">
         <span>{{ t.dash_bench_est_total }}</span>
-        <strong>~{{ bench_est.total_min_s }}–{{ bench_est.total_max_s }}</strong>
+        <strong>
+          <span id="obsEstimateTotal">~{{ observation_bench_est.total_min_s }}–{{ observation_bench_est.total_max_s }}</span>
+          <span class="text-muted fw-normal" style="font-size:.72rem">(<span id="obsEstimateCount">{{ observation_bench_est.server_count }}</span> {{ t.dash_bench_est_srvs }})</span>
+        </strong>
       </div>
       <div class="dash-observation-metric">
         <span>{{ t.dash_observation_elapsed }}</span>

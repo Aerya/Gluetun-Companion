@@ -539,7 +539,7 @@
             <div class="dash-observation-metric"><span>{{ t.set_side_tested_servers }}</span><strong>{{ tested_servers }}</strong></div>
             <div class="dash-observation-metric"><span>{{ t.set_side_untested_servers }}</span><strong class="{{ 'text-warning' if untested_servers else 'text-success' }}">{{ untested_servers }}</strong></div>
             <div class="dash-observation-metric"><span>{{ t.set_overview_test_mode }}</span><strong>{{ 'sidecar' if cfg.sidecar_mode == '1' else 'proxy' }}</strong></div>
-            <div class="dash-observation-metric"><span>{{ t.dash_bench_est_total }}</span><strong>~{{ bench_est.total_min_s }}–{{ bench_est.total_max_s }}</strong></div>
+            <div class="dash-observation-metric"><span>{{ t.dash_bench_est_total }}</span><strong><span id="obsEstimateTotal">~{{ observation_bench_est.total_min_s }}–{{ observation_bench_est.total_max_s }}</span> <span class="text-muted fw-normal" style="font-size:.72rem">(<span id="obsEstimateCount">{{ observation_bench_est.server_count }}</span> {{ t.dash_bench_est_srvs }})</span></strong></div>
             <div class="dash-observation-metric"><span>{{ t.dash_observation_elapsed }}</span><strong>{{ benchmark_progress.elapsed_secs }}s</strong></div>
             <div class="dash-observation-metric"><span>{{ t.dash_observation_tested }}</span><strong>{{ benchmark_progress.done }}/{{ benchmark_progress.total }}</strong></div>
             <div class="dash-observation-metric"><span>{{ t.dash_observation_remaining }}</span><strong>{{ benchmark_progress.remaining }}</strong></div>

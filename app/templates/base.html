@@ -463,6 +463,14 @@ window._onBenchmarkStatus = function(d) {};   // page-level hook (no-op default)
             const remaining = d.benchmark_remaining_servers || 0;
             const elapsed   = d.benchmark_elapsed_secs || 0;
             const pct       = Math.round((display / total) * 100);
+            const obsEstimateTotal = document.getElementById('obsEstimateTotal');
+            if (obsEstimateTotal && d.benchmark_estimate_servers > 0) {
+              obsEstimateTotal.textContent = '~' + d.benchmark_estimate_total_min_s + '–' + d.benchmark_estimate_total_max_s;
+            }
+            const obsEstimateCount = document.getElementById('obsEstimateCount');
+            if (obsEstimateCount && d.benchmark_estimate_servers > 0) {
+              obsEstimateCount.textContent = String(d.benchmark_estimate_servers);
+            }
             // Estimate remaining time based on completed servers only (more accurate avg)
             let etaStr = '';
             if (done >= 1 && elapsed > 0) {
