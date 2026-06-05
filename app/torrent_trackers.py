@@ -13,6 +13,30 @@ from .database import get_db, get_setting, set_setting
 
 SUPPORTED_CLIENT_TYPES = {'qbittorrent', 'rtorrent'}
 _TRACKER_SKIP_PREFIXES = ('** [', 'dht:', 'pex:', 'lsd:')
+_SENSITIVE_QUERY_KEYS = {
+    'passkey', 'pass_key', 'authkey', 'auth_key', 'key', 'token', 'apikey',
+    'api_key', 'uid', 'pid', 'rsskey',
+}
+
+
+def _strip_sensitive_tracker_path(path: str) -> str:
+    parts = [p for p in (path or '').split('/') if p]
+    if not parts:
+        return '/announce'
+    def _token_like(value: str) -> bool:
+        if len(value) < 16:
+            return False
+        allowed = sum(ch.isalnum() or ch in ('-', '_') for ch in value)
+        return allowed == len(value)
+    kept: list[str] = []
+    for part in parts:
+        if _token_like(part):
+            continue
+        kept.append(part)
+        low = part.lower()
+        if low == 'announce' or low.startswith('announce.'):
+            break
+    return '/' + '/'.join(kept)
 
 
 class _TimeoutTransport(xmlrpc.client.Transport):
@@ -76,13 +100,20 @@ def normalize_tracker_url(url: str) -> str:
     netloc = host
     if parts.port:
         netloc += f':{parts.port}'
-    path = parts.path or '/announce'
+    path = _strip_sensitive_tracker_path(parts.path or '/announce')
     query = parts.query
     if query:
-        # Keep passkeys and other tracker-specific query values, but stable-sort
-        # to avoid duplicates caused only by parameter order.
-        query = urlencode(sorted(parse_qsl(query, keep_blank_values=True)))
+        kept = [
+            (k, v)
+            for k, v in parse_qsl(query, keep_blank_values=True)
+            if k.lower() not in _SENSITIVE_QUERY_KEYS
+        ]
+        query = urlencode(sorted(kept))
     return urlunsplit((scheme, netloc, path, query, ''))
+
+
+def display_tracker_url(url: str) -> str:
+    return normalize_tracker_url(url) or ''
 
 
 def tracker_parts(url: str) -> dict:
@@ -318,7 +349,57 @@ def persist_tracker_hits(client_id: int, hits: list[TrackerHit]) -> dict:
     return {'found': len(seen_urls), 'new': new_count}
 
 
+def scrub_tracker_passkeys() -> dict:
+    """Merge existing tracker rows whose URL only differs by sensitive query args."""
+    merged = 0
+    updated = 0
+    with get_db() as db:
+        rows = db.execute('SELECT * FROM tracker_urls').fetchall()
+        for row in rows:
+            clean = normalize_tracker_url(row['url'])
+            if not clean or clean == row['url']:
+                continue
+            parts = tracker_parts(clean)
+            target = db.execute('SELECT id FROM tracker_urls WHERE url=?', (clean,)).fetchone()
+            if target:
+                target_id = target['id']
+                old_id = row['id']
+                db.execute(
+                    '''UPDATE OR IGNORE tracker_sources
+                       SET tracker_id=?
+                       WHERE tracker_id=?''',
+                    (target_id, old_id),
+                )
+                db.execute(
+                    '''UPDATE tracker_checks
+                       SET tracker_id=?
+                       WHERE tracker_id=?''',
+                    (target_id, old_id),
+                )
+                db.execute('DELETE FROM tracker_sources WHERE tracker_id=?', (old_id,))
+                db.execute('DELETE FROM tracker_urls WHERE id=?', (old_id,))
+                merged += 1
+            else:
+                db.execute(
+                    '''UPDATE tracker_urls
+                       SET url=?, scheme=?, host=?, port=?, path=?
+                       WHERE id=?''',
+                    (clean, parts['scheme'], parts['host'], parts['port'], parts['path'], row['id']),
+                )
+                updated += 1
+        db.execute('''
+            UPDATE tracker_urls
+               SET torrent_count = (
+                   SELECT COUNT(DISTINCT torrent_hash)
+                   FROM tracker_sources
+                   WHERE tracker_sources.tracker_id = tracker_urls.id
+               )
+        ''')
+    return {'updated': updated, 'merged': merged}
+
+
 def list_trackers() -> list[dict]:
+    scrub_tracker_passkeys()
     with get_db() as db:
         rows = db.execute('''
             SELECT tu.*,
@@ -330,7 +411,12 @@ def list_trackers() -> list[dict]:
             GROUP BY tu.id
             ORDER BY tu.enabled DESC, tu.host COLLATE NOCASE, tu.url COLLATE NOCASE
         ''').fetchall()
-        return [dict(r) for r in rows]
+        out = []
+        for r in rows:
+            d = dict(r)
+            d['display_url'] = display_tracker_url(d['url'])
+            out.append(d)
+        return out
 
 
 def tracker_summary() -> dict:
@@ -506,6 +592,7 @@ def _persist_tracker_check(result: dict, server_name: str = '') -> None:
 
 
 def check_enabled_trackers(tracker_ids: list[int] | None = None, server_name: str = '') -> dict:
+    scrub_tracker_passkeys()
     timeout = float(get_setting('tracker_check_timeout_secs', '3') or '3')
     concurrency = int(get_setting('tracker_check_concurrency', '12') or '12')
     threshold = int(get_setting('tracker_check_threshold_pct', '80') or '80')

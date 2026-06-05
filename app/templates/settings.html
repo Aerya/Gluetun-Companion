@@ -623,10 +623,10 @@
         <aside class="settings-pane-aside">
           <div class="settings-help-card">
             <h6><i class="bi bi-broadcast-pin me-1"></i>Trackers</h6>
-            <div class="metric"><span>Clients</span><strong>{{ trackers_summary.clients }}</strong></div>
-            <div class="metric"><span>{{ 'URLs connues' if session.get('lang','fr') == 'fr' else 'Known URLs' }}</span><strong>{{ trackers_summary.total }}</strong></div>
-            <div class="metric"><span>{{ 'Contrôlées' if session.get('lang','fr') == 'fr' else 'Checked' }}</span><strong>{{ trackers_summary.enabled }}</strong></div>
-            <div class="metric"><span>{{ 'Seuil OK' if session.get('lang','fr') == 'fr' else 'OK threshold' }}</span><strong>{{ trackers_summary.threshold }}%</strong></div>
+            <div class="metric"><span>Clients</span><strong id="tracker-summary-clients">{{ trackers_summary.clients }}</strong></div>
+            <div class="metric"><span>{{ 'URLs connues' if session.get('lang','fr') == 'fr' else 'Known URLs' }}</span><strong id="tracker-summary-total">{{ trackers_summary.total }}</strong></div>
+            <div class="metric"><span>{{ 'Contrôlées' if session.get('lang','fr') == 'fr' else 'Checked' }}</span><strong id="tracker-summary-enabled">{{ trackers_summary.enabled }}</strong></div>
+            <div class="metric"><span>{{ 'Seuil OK' if session.get('lang','fr') == 'fr' else 'OK threshold' }}</span><strong id="tracker-summary-threshold">{{ trackers_summary.threshold }}%</strong></div>
           </div>
           {{ readme_card(t.set_side_readme,
             'Companion récupère les trackers depuis vos clients BitTorrent avant de stopper les containers, puis teste les URLs activées depuis le chemin VPN.' if session.get('lang','fr') == 'fr' else
@@ -2122,7 +2122,7 @@
             <td style="min-width:260px">
               <div class="d-flex align-items-center gap-2">
                 <span class="badge bg-{{ 'primary' if tr.scheme in ('http','https') else 'warning text-dark' }}">{{ tr.scheme }}</span>
-                <code class="text-break">{{ tr.url }}</code>
+                <code class="text-break">{{ tr.display_url or tr.url }}</code>
               </div>
               <div class="small text-muted">{{ tr.host }}{% if tr.port %}:{{ tr.port }}{% endif %}</div>
             </td>
@@ -3321,6 +3321,17 @@ function _trackerBadge(status) {
   if (!status || status === 'unknown') return '<span class="badge bg-secondary">unknown</span>';
   return `<span class="badge bg-danger">${_escHtml(status)}</span>`;
 }
+function _updateTrackerSummary(summary) {
+  if (!summary) return;
+  const set = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+  set('tracker-summary-clients', summary.clients ?? 0);
+  set('tracker-summary-total', summary.total ?? 0);
+  set('tracker-summary-enabled', summary.enabled ?? 0);
+  set('tracker-summary-threshold', `${summary.threshold ?? 80}%`);
+}
 function _renderTrackerRows(trackers) {
   const tbody = document.getElementById('tracker-table-body');
   if (!tbody) return;
@@ -3340,7 +3351,7 @@ function _renderTrackerRows(trackers) {
       <td style="min-width:260px">
         <div class="d-flex align-items-center gap-2">
           <span class="badge ${schemeCls}">${_escHtml(tr.scheme || '?')}</span>
-          <code class="text-break">${_escHtml(tr.url)}</code>
+          <code class="text-break">${_escHtml(tr.display_url || tr.url)}</code>
         </div>
         <div class="small text-muted">${_escHtml(tr.host || '')}${tr.port ? ':' + tr.port : ''}</div>
       </td>
@@ -3364,6 +3375,7 @@ function trackerDiscover(clientId) {
     .then(r => r.json())
     .then(data => {
       _renderTrackerRows(data.trackers || []);
+      _updateTrackerSummary(data.tracker_summary);
       const s = data.summary || {};
       const err = (s.errors || []).map(e => `${e.client}: ${e.error}`).join(' · ');
       const msg = `+${s.trackers_new || 0} new / ${s.trackers_found || 0} found` + (err ? ` · ${err}` : '');
@@ -3385,6 +3397,7 @@ function trackerCheck() {
     .then(r => r.json())
     .then(data => {
       _renderTrackerRows(data.trackers || []);
+      _updateTrackerSummary(data.tracker_summary);
       const cls = data.ok ? 'text-success' : 'text-warning';
       _trackerMsg(`${data.success_pct}% · ${data.passed}/${data.total} · threshold ${data.threshold}%`, cls);
     })
@@ -3398,6 +3411,9 @@ function trackerToggle(id, enabled) {
     body: JSON.stringify({enabled}),
   }).then(r => {
     if (!r.ok) throw new Error('toggle failed');
+    return r.json();
+  }).then(data => {
+    _updateTrackerSummary(data.tracker_summary);
     _trackerMsg(enabled ? 'Tracker enabled' : 'Tracker ignored', 'text-muted');
   }).catch(() => _trackerMsg('Toggle failed', 'text-danger'));
 }
