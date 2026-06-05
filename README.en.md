@@ -53,6 +53,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [Multi-provider WireGuard](#multi-provider-wireguard)
   - [Gluetun server catalogue](#gluetun-server-catalogue)
   - [Docker container management](#docker-container-management)
+  - [BitTorrent tracker checks](#bittorrent-tracker-checks)
   - [AirVPN](#airvpn)
   - [Analysis & history](#analysis--history)
   - [UI & notifications](#ui--notifications)
@@ -68,6 +69,8 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [Allowed servers before benchmark](#allowed-servers-before-benchmark-option)
   - [Avoid loaded AirVPN servers](#avoid-loaded-airvpn-servers-option-dedicated-to-airvpn)
   - [Docker events listener](#docker-events-listener)
+  - [BitTorrent tracker checks through the VPN](#bittorrent-tracker-checks-through-the-vpn)
+  - [BitTorrent clients and tracker discovery](#bittorrent-clients-and-tracker-discovery)
   - [Usage profiles](#usage-profiles)
   - [WireGuard VPN profiles](#wireguard-vpn-profiles)
     - [Custom WireGuard: personal single server](#custom-wireguard-personal-single-server)
@@ -175,6 +178,12 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Containers to restart after switch** — only for containers routing through Gluetun's HTTP/SOCKS5 proxy; ordered list (drag & drop)
 - **Pause during benchmark** — list of containers (torrent, Usenet…) stopped before the benchmark starts and automatically restarted when it ends, even on error
 - **Automatic Docker image updates** *(option)* — at switch time, Companion can update images before restarting containers: Gluetun itself, auto-managed network containers, post-switch containers and benchmark-paused containers; togglable per container from Settings
+
+### BitTorrent tracker checks
+- **Multiple clients** — configure one or more qBittorrent or rTorrent/ruTorrent clients in **Settings → Trackers**; each client can be a tracker source, even if its container is also stopped during benchmarks
+- **Persistent discovery** — Companion fetches tracker URLs from loaded torrents, deduplicates them, then displays source clients, torrent count, last check and success status
+- **Per-URL control** — each tracker can be enabled or ignored individually for future checks
+- **VPN compatibility score** — enabled trackers are checked through the VPN path; by default, 80% success is enough to consider the server compatible, avoiding false negatives when a single tracker is down
 
 ### AirVPN
 - **Built-in AirVPN server picker** — *+ Add AirVPN servers* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), four tabs — full searchable list, geographic distribution by country, **Recommended** tab (load < 70 %, bandwidth ≥ 5 Gbit/s) and **Changes** tab (newly detected servers, disappeared servers, load shifts, top 5 healthiest countries); multi-select, one-click add
@@ -379,6 +388,34 @@ In **Settings → Decide → Containers to restart after switch**: ordered list 
 ### Containers to pause during benchmark
 
 In **Settings → Measure → Containers to pause during benchmark**: list of containers stopped before the benchmark and restarted after — in all cases, even if the benchmark crashes. If a container is in both lists, the pause list takes priority (no duplicate restart). Useful for `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`.
+
+### BitTorrent tracker checks through the VPN
+
+In **Settings → Trackers**, Companion can verify whether the trackers actually used by your torrents are reachable from the VPN server being tested or selected. The goal is not to perform a full real announce for every torrent, but to verify useful connectivity with four levels:
+
+1. **DNS** — the tracker domain can be resolved.
+2. **Port** — the TCP/UDP tracker port responds.
+3. **Tracker endpoint** — the `/announce` URL or UDP tracker handshake responds. HTTP `400`, `401`, `403` or `invalid request` responses can still count as reachable: the tracker rejected the test request, but the endpoint is accessible.
+4. **Aggregated score** — if the percentage of reachable trackers is above the configured threshold (80% by default), the VPN server is considered compatible.
+
+This threshold avoids false negatives: a private or public tracker can be temporarily down without making the VPN server bad. Companion stores per-URL history so it can gradually distinguish globally unavailable trackers from trackers blocked only on specific VPN paths.
+
+HTTP/HTTPS trackers are checked through Gluetun's HTTP proxy when configured. UDP trackers require Companion to be able to send UDP from the VPN path; if your installation only exposes the HTTP proxy, UDP URLs can still be listed and managed, but real UDP checks depend on your network topology.
+
+### BitTorrent clients and tracker discovery
+
+Companion can manage multiple BitTorrent sources: for example one main qBittorrent instance, another qBittorrent dedicated to cross-seed, and an rTorrent/ruTorrent instance. Each configured client contains:
+
+- type: `qBittorrent` or `rTorrent / ruTorrent RPC2`;
+- API/WebUI URL;
+- credentials;
+- optional Docker container name;
+- category or tag filters;
+- options to include/exclude paused torrents or private torrents.
+
+For qBittorrent, Companion uses the Web API: torrent list, then the trackers endpoint for each hash. For rTorrent/ruTorrent, Companion uses XML-RPC/RPC2 and fetches trackers per torrent.
+
+Discovery always runs **before** stopping containers configured in "Containers to pause during benchmark". So if `qbittorrent` or `rutorrent` is stopped during measurement, Companion uses the already cached tracker list. Discovered URLs remain visible in the UI and can be enabled or ignored one by one for future cycles.
 
 ### "Test running" banner and Stop button
 

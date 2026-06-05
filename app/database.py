@@ -187,6 +187,72 @@ def init_db(db_path: str):
             CREATE INDEX IF NOT EXISTS idx_pool_exclusions_pool
                 ON rotation_pool_exclusions(pool_id);
 
+            CREATE TABLE IF NOT EXISTS torrent_clients (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                name              TEXT    NOT NULL,
+                client_type       TEXT    NOT NULL DEFAULT 'qbittorrent',
+                base_url          TEXT    NOT NULL DEFAULT '',
+                username          TEXT    NOT NULL DEFAULT '',
+                password          TEXT    NOT NULL DEFAULT '',
+                container_name    TEXT    NOT NULL DEFAULT '',
+                enabled           INTEGER NOT NULL DEFAULT 1,
+                include_paused    INTEGER NOT NULL DEFAULT 1,
+                include_private   INTEGER NOT NULL DEFAULT 1,
+                category_filter   TEXT    NOT NULL DEFAULT '',
+                tag_filter        TEXT    NOT NULL DEFAULT '',
+                created_at        TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at        TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS tracker_urls (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                url              TEXT    UNIQUE NOT NULL,
+                scheme           TEXT    NOT NULL DEFAULT '',
+                host             TEXT    NOT NULL DEFAULT '',
+                port             INTEGER,
+                path             TEXT    NOT NULL DEFAULT '',
+                enabled          INTEGER NOT NULL DEFAULT 1,
+                first_seen_at    TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_seen_at     TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_checked_at  TEXT,
+                last_status      TEXT    NOT NULL DEFAULT 'unknown',
+                last_error       TEXT    NOT NULL DEFAULT '',
+                success_count    INTEGER NOT NULL DEFAULT 0,
+                failure_count    INTEGER NOT NULL DEFAULT 0,
+                torrent_count    INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS tracker_sources (
+                client_id     INTEGER NOT NULL REFERENCES torrent_clients(id) ON DELETE CASCADE,
+                tracker_id    INTEGER NOT NULL REFERENCES tracker_urls(id) ON DELETE CASCADE,
+                torrent_hash  TEXT    NOT NULL DEFAULT '',
+                torrent_name  TEXT    NOT NULL DEFAULT '',
+                last_seen_at  TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (client_id, tracker_id, torrent_hash)
+            );
+
+            CREATE TABLE IF NOT EXISTS tracker_checks (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                tracker_id      INTEGER NOT NULL REFERENCES tracker_urls(id) ON DELETE CASCADE,
+                server_name     TEXT    NOT NULL DEFAULT '',
+                vpn_ipv4        TEXT    NOT NULL DEFAULT '',
+                level_dns       INTEGER NOT NULL DEFAULT 0,
+                level_port      INTEGER NOT NULL DEFAULT 0,
+                level_endpoint  INTEGER NOT NULL DEFAULT 0,
+                success         INTEGER NOT NULL DEFAULT 0,
+                status          TEXT    NOT NULL DEFAULT '',
+                error_msg       TEXT    NOT NULL DEFAULT '',
+                elapsed_ms      INTEGER NOT NULL DEFAULT 0,
+                checked_at      TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_tracker_urls_host
+                ON tracker_urls(host);
+            CREATE INDEX IF NOT EXISTS idx_tracker_sources_tracker
+                ON tracker_sources(tracker_id);
+            CREATE INDEX IF NOT EXISTS idx_tracker_checks_tracker
+                ON tracker_checks(tracker_id);
+
             INSERT OR IGNORE INTO settings (key, value) VALUES
                 ('test_interval_hours',      '6'),
                 ('admin_username',           'admin'),
@@ -269,6 +335,10 @@ def init_db(db_path: str):
                 ('catalogue_bench_on_import',  '0'),
                 ('catalogue_sidecar_port',     '8767'),
                 ('catalogue_last_refresh',     ''),
+                ('tracker_check_enabled',      '0'),
+                ('tracker_check_threshold_pct','80'),
+                ('tracker_check_timeout_secs', '3'),
+                ('tracker_check_concurrency',  '12'),
                 -- WireGuard multi-provider rotation
                 ('wg_rotation_mode',           'none'),   -- none | free | conditional
                 ('wg_rotation_threshold',      '10');     -- % score gain required (conditional mode)
@@ -350,6 +420,12 @@ def init_db(db_path: str):
             "ALTER TABLE airvpn_snapshot ADD COLUMN bw_mbps INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE airvpn_snapshot ADD COLUMN bw_max_mbps INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE airvpn_snapshot ADD COLUMN avail_mbps INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE torrent_clients ADD COLUMN container_name TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE torrent_clients ADD COLUMN include_paused INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE torrent_clients ADD COLUMN include_private INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE torrent_clients ADD COLUMN category_filter TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE torrent_clients ADD COLUMN tag_filter TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE tracker_urls ADD COLUMN torrent_count INTEGER NOT NULL DEFAULT 0",
         ]:
             try:
                 db.execute(stmt)

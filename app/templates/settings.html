@@ -432,6 +432,10 @@
       (readme_url ~ ('#notifications-contextuelles' if session.get('lang','fr') == 'fr' else '#contextual-notifications'), t.set_tab_notifications),
       (readme_url ~ ('#notifications-de-rotation-de-pool' if session.get('lang','fr') == 'fr' else '#pool-rotation-notifications'), t.pools_notify_label)
     ],
+    'trackers': [
+      (readme_url ~ ('#contrôle-des-trackers-bittorrent-via-le-vpn' if session.get('lang','fr') == 'fr' else '#bittorrent-tracker-checks-through-the-vpn'), 'Contrôle trackers' if session.get('lang','fr') == 'fr' else 'Tracker checks'),
+      (readme_url ~ ('#clients-bittorrent-et-découverte-des-trackers' if session.get('lang','fr') == 'fr' else '#bittorrent-clients-and-tracker-discovery'), 'Clients BitTorrent' if session.get('lang','fr') == 'fr' else 'BitTorrent clients')
+    ],
     'maintenance': [
       (readme_url ~ ('#endpoint-prometheus-metrics' if session.get('lang','fr') == 'fr' else '#prometheus-metrics-endpoint'), 'Prometheus /metrics'),
       (readme_url ~ ('#rest-api' if session.get('lang','fr') == 'fr' else '#rest-api'), t.set_api_title),
@@ -474,6 +478,11 @@
     <li class="nav-item" role="presentation">
       <button class="nav-link" id="tab-notifications" data-bs-toggle="tab" data-bs-target="#settings-notifications" type="button" role="tab">
         <i class="bi bi-bell me-1"></i>{{ t.set_tab_notifications }}
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-trackers" data-bs-toggle="tab" data-bs-target="#settings-trackers" type="button" role="tab">
+        <i class="bi bi-broadcast-pin me-1"></i>Trackers
       </button>
     </li>
     <li class="nav-item" role="presentation">
@@ -605,6 +614,24 @@
             <div class="metric"><span>{{ t.set_side_mentions }}</span><strong>{{ cfg.notify_mention_level }}</strong></div>
           </div>
           {{ readme_card(t.set_side_readme, t.set_side_readme_notifications_full, readme_links.notifications) }}
+        </aside>
+      </div>
+    </div>
+    <div class="tab-pane fade" id="settings-trackers" role="tabpanel" aria-labelledby="tab-trackers">
+      <div class="settings-pane-layout">
+        <div id="settings-trackers-grid" class="settings-pane-main"></div>
+        <aside class="settings-pane-aside">
+          <div class="settings-help-card">
+            <h6><i class="bi bi-broadcast-pin me-1"></i>Trackers</h6>
+            <div class="metric"><span>Clients</span><strong>{{ trackers_summary.clients }}</strong></div>
+            <div class="metric"><span>{{ 'URLs connues' if session.get('lang','fr') == 'fr' else 'Known URLs' }}</span><strong>{{ trackers_summary.total }}</strong></div>
+            <div class="metric"><span>{{ 'Contrôlées' if session.get('lang','fr') == 'fr' else 'Checked' }}</span><strong>{{ trackers_summary.enabled }}</strong></div>
+            <div class="metric"><span>{{ 'Seuil OK' if session.get('lang','fr') == 'fr' else 'OK threshold' }}</span><strong>{{ trackers_summary.threshold }}%</strong></div>
+          </div>
+          {{ readme_card(t.set_side_readme,
+            'Companion récupère les trackers depuis vos clients BitTorrent avant de stopper les containers, puis teste les URLs activées depuis le chemin VPN.' if session.get('lang','fr') == 'fr' else
+            'Companion discovers trackers from your BitTorrent clients before stopping containers, then checks enabled URLs through the VPN path.',
+            readme_links.trackers) }}
         </aside>
       </div>
     </div>
@@ -1869,6 +1896,257 @@
 </div>{# end containers row #}
 </section>
 
+{# ═════════════════════════════════════════════════════════════════════════════
+   BitTorrent tracker checks
+   ═════════════════════════════════════════════════════════════════════════════ #}
+<section class="settings-section">
+
+  <div class="card p-4 mb-4" id="card-tracker-settings">
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+      <div>
+        <h6 class="fw-bold mb-1 text-info">
+          <i class="bi bi-broadcast-pin"></i>
+          {{ 'Contrôle des trackers BitTorrent' if session.get('lang','fr') == 'fr' else 'BitTorrent tracker checks' }}
+        </h6>
+        <p class="text-muted mb-0 settings-wide-hint">
+          {{ 'Les trackers activés sont testés depuis le chemin VPN. 80% de réussite par défaut suffit pour considérer le serveur compatible.' if session.get('lang','fr') == 'fr' else 'Enabled trackers are checked through the VPN path. By default, 80% success is enough to consider the server compatible.' }}
+        </p>
+      </div>
+      <span class="badge {{ 'bg-success' if cfg.tracker_check_enabled == '1' else 'bg-secondary' }}">
+        {{ 'ON' if cfg.tracker_check_enabled == '1' else 'OFF' }}
+      </span>
+    </div>
+
+    <form method="post" class="row g-3 align-items-end">
+      <input type="hidden" name="action" value="tracker_settings">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="col-12">
+        <div class="form-check form-switch">
+          <input type="checkbox" name="tracker_check_enabled" class="form-check-input"
+                 id="tracker_check_enabled" {{ 'checked' if cfg.tracker_check_enabled == '1' }}>
+          <label class="form-check-label fw-semibold" for="tracker_check_enabled">
+            {{ 'Activer le contrôle trackers pendant les vérifications VPN' if session.get('lang','fr') == 'fr' else 'Enable tracker checks during VPN verification' }}
+          </label>
+        </div>
+      </div>
+      <div class="col-sm-4">
+        <label class="form-label small mb-1">{{ 'Seuil OK' if session.get('lang','fr') == 'fr' else 'OK threshold' }}</label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="tracker_check_threshold_pct" class="form-control"
+                 value="{{ cfg.tracker_check_threshold_pct }}" min="1" max="100">
+          <span class="input-group-text">%</span>
+        </div>
+      </div>
+      <div class="col-sm-4">
+        <label class="form-label small mb-1">Timeout</label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="tracker_check_timeout_secs" class="form-control"
+                 value="{{ cfg.tracker_check_timeout_secs }}" min="1" max="15">
+          <span class="input-group-text">s</span>
+        </div>
+      </div>
+      <div class="col-sm-4">
+        <label class="form-label small mb-1">{{ 'Concurrence' if session.get('lang','fr') == 'fr' else 'Concurrency' }}</label>
+        <input type="number" name="tracker_check_concurrency" class="form-control form-control-sm"
+               value="{{ cfg.tracker_check_concurrency }}" min="1" max="64">
+      </div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button type="submit" class="btn btn-sm btn-info fw-semibold text-dark">
+          <i class="bi bi-save"></i> {{ t.cmn_save }}
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-success" id="btn-trackers-discover"
+                onclick="trackerDiscover()">
+          <i class="bi bi-search"></i> {{ 'Découvrir les trackers' if session.get('lang','fr') == 'fr' else 'Discover trackers' }}
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="btn-trackers-check"
+                onclick="trackerCheck()">
+          <i class="bi bi-lightning-charge"></i> {{ 'Tester les URLs activées' if session.get('lang','fr') == 'fr' else 'Check enabled URLs' }}
+        </button>
+        <span class="small text-muted align-self-center" id="tracker-action-result"></span>
+      </div>
+    </form>
+  </div>
+
+  <div class="card p-4 mb-4" id="card-torrent-clients">
+    <h6 class="fw-bold mb-3">
+      <i class="bi bi-hdd-stack text-primary"></i>
+      {{ 'Clients BitTorrent' if session.get('lang','fr') == 'fr' else 'BitTorrent clients' }}
+    </h6>
+
+    {% if torrent_clients %}
+    <div class="d-flex flex-column gap-2 mb-3">
+      {% for c in torrent_clients %}
+      <details class="border rounded p-2" style="border-color:var(--bs-border-color)!important">
+        <summary class="d-flex align-items-center gap-2" style="cursor:pointer">
+          <span class="badge {{ 'bg-success' if c.enabled else 'bg-secondary' }}">{{ 'ON' if c.enabled else 'OFF' }}</span>
+          <strong>{{ c.name }}</strong>
+          <code class="small">{{ c.client_type }}</code>
+          <span class="text-muted small text-truncate">{{ c.base_url }}</span>
+        </summary>
+        <form method="post" class="row g-2 mt-2">
+          <input type="hidden" name="action" value="torrent_client_save">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="client_id" value="{{ c.id }}">
+          <div class="col-md-4">
+            <label class="form-label small mb-1">{{ 'Nom' if session.get('lang','fr') == 'fr' else 'Name' }}</label>
+            <input name="client_name" class="form-control form-control-sm" value="{{ c.name }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">Type</label>
+            <select name="client_type" class="form-select form-select-sm">
+              <option value="qbittorrent" {{ 'selected' if c.client_type == 'qbittorrent' }}>qBittorrent</option>
+              <option value="rtorrent" {{ 'selected' if c.client_type == 'rtorrent' }}>rTorrent / ruTorrent RPC2</option>
+            </select>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label small mb-1">URL</label>
+            <input name="base_url" class="form-control form-control-sm font-monospace" value="{{ c.base_url }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">{{ 'Utilisateur' if session.get('lang','fr') == 'fr' else 'Username' }}</label>
+            <input name="client_username" class="form-control form-control-sm" value="{{ c.username }}" autocomplete="off">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">{{ 'Mot de passe' if session.get('lang','fr') == 'fr' else 'Password' }}</label>
+            <input name="client_password" type="password" class="form-control form-control-sm" placeholder="{{ 'inchangé' if session.get('lang','fr') == 'fr' else 'unchanged' }}" autocomplete="new-password">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">Container</label>
+            <input name="container_name" class="form-control form-control-sm" value="{{ c.container_name }}" placeholder="qbittorrent">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">{{ 'Catégories' if session.get('lang','fr') == 'fr' else 'Categories' }}</label>
+            <input name="category_filter" class="form-control form-control-sm" value="{{ c.category_filter }}" placeholder="movies,tv">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">Tags</label>
+            <input name="tag_filter" class="form-control form-control-sm" value="{{ c.tag_filter }}" placeholder="seed,cross-seed">
+          </div>
+          <div class="col-md-9 d-flex flex-wrap align-items-end gap-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="client_enabled" id="client_enabled_{{ c.id }}" {{ 'checked' if c.enabled }}>
+              <label class="form-check-label small" for="client_enabled_{{ c.id }}">Actif</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="include_paused" id="include_paused_{{ c.id }}" {{ 'checked' if c.include_paused }}>
+              <label class="form-check-label small" for="include_paused_{{ c.id }}">{{ 'Inclure pause' if session.get('lang','fr') == 'fr' else 'Include paused' }}</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="include_private" id="include_private_{{ c.id }}" {{ 'checked' if c.include_private }}>
+              <label class="form-check-label small" for="include_private_{{ c.id }}">{{ 'Inclure privés' if session.get('lang','fr') == 'fr' else 'Include private' }}</label>
+            </div>
+          </div>
+          <div class="col-12 d-flex gap-2">
+            <button class="btn btn-sm btn-primary"><i class="bi bi-save"></i> {{ t.cmn_save }}</button>
+            <button type="button" class="btn btn-sm btn-outline-success" onclick="trackerDiscover({{ c.id }})">
+              <i class="bi bi-search"></i> {{ 'Scanner ce client' if session.get('lang','fr') == 'fr' else 'Scan this client' }}
+            </button>
+          </div>
+        </form>
+        <form method="post" class="mt-2" onsubmit="return confirm('Supprimer ce client ?')">
+          <input type="hidden" name="action" value="torrent_client_delete">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="client_id" value="{{ c.id }}">
+          <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash3"></i> {{ 'Supprimer' if session.get('lang','fr') == 'fr' else 'Delete' }}</button>
+        </form>
+      </details>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post" class="border rounded p-3" style="border-color:var(--bs-border-color)!important">
+      <input type="hidden" name="action" value="torrent_client_save">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="fw-semibold mb-2"><i class="bi bi-plus-circle me-1"></i>{{ 'Ajouter un client' if session.get('lang','fr') == 'fr' else 'Add a client' }}</div>
+      <div class="row g-2">
+        <div class="col-md-3"><input name="client_name" class="form-control form-control-sm" placeholder="qBittorrent"></div>
+        <div class="col-md-3">
+          <select name="client_type" class="form-select form-select-sm">
+            <option value="qbittorrent">qBittorrent</option>
+            <option value="rtorrent">rTorrent / ruTorrent RPC2</option>
+          </select>
+        </div>
+        <div class="col-md-6"><input name="base_url" class="form-control form-control-sm font-monospace" placeholder="http://qbittorrent:8080"></div>
+        <div class="col-md-3"><input name="client_username" class="form-control form-control-sm" placeholder="{{ 'Utilisateur' if session.get('lang','fr') == 'fr' else 'Username' }}" autocomplete="off"></div>
+        <div class="col-md-3"><input name="client_password" type="password" class="form-control form-control-sm" placeholder="{{ 'Mot de passe' if session.get('lang','fr') == 'fr' else 'Password' }}" autocomplete="new-password"></div>
+        <div class="col-md-3"><input name="container_name" class="form-control form-control-sm" placeholder="container"></div>
+        <div class="col-md-3 d-flex gap-3 align-items-center">
+          <input type="hidden" name="client_enabled" value="on">
+          <input type="hidden" name="include_paused" value="on">
+          <input type="hidden" name="include_private" value="on">
+          <button class="btn btn-sm btn-success"><i class="bi bi-plus-lg"></i> {{ 'Ajouter' if session.get('lang','fr') == 'fr' else 'Add' }}</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="card p-4 mb-4" id="card-tracker-list">
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+      <div>
+        <h6 class="fw-bold mb-1">
+          <i class="bi bi-list-check text-success"></i>
+          {{ 'URLs de trackers détectées' if session.get('lang','fr') == 'fr' else 'Discovered tracker URLs' }}
+        </h6>
+        <p class="text-muted small mb-0">
+          {{ 'Désactive une URL pour ne plus la contrôler pendant les tests futurs.' if session.get('lang','fr') == 'fr' else 'Disable a URL to skip it in future checks.' }}
+        </p>
+      </div>
+      <span class="badge bg-secondary" id="tracker-total-badge">{{ trackers | length }}</span>
+    </div>
+
+    <div class="table-responsive" style="max-height:520px">
+      <table class="table table-sm align-middle mb-0" style="font-size:.82rem">
+        <thead class="sticky-top" style="z-index:1">
+          <tr>
+            <th>{{ 'Contrôle' if session.get('lang','fr') == 'fr' else 'Check' }}</th>
+            <th>URL</th>
+            <th>{{ 'Sources' if session.get('lang','fr') == 'fr' else 'Sources' }}</th>
+            <th>{{ 'Torrents' if session.get('lang','fr') == 'fr' else 'Torrents' }}</th>
+            <th>{{ 'Dernier test' if session.get('lang','fr') == 'fr' else 'Last check' }}</th>
+            <th>{{ 'Résultat' if session.get('lang','fr') == 'fr' else 'Result' }}</th>
+          </tr>
+        </thead>
+        <tbody id="tracker-table-body">
+          {% for tr in trackers %}
+          <tr data-tracker-id="{{ tr.id }}">
+            <td>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input tracker-enabled-toggle" type="checkbox"
+                       {{ 'checked' if tr.enabled }}
+                       onchange="trackerToggle({{ tr.id }}, this.checked)">
+              </div>
+            </td>
+            <td style="min-width:260px">
+              <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-{{ 'primary' if tr.scheme in ('http','https') else 'warning text-dark' }}">{{ tr.scheme }}</span>
+                <code class="text-break">{{ tr.url }}</code>
+              </div>
+              <div class="small text-muted">{{ tr.host }}{% if tr.port %}:{{ tr.port }}{% endif %}</div>
+            </td>
+            <td>{{ tr.client_names or '—' }}</td>
+            <td>{{ tr.torrent_count }}</td>
+            <td class="text-muted">{{ (tr.last_checked_at or '—')[:19] }}</td>
+            <td>
+              {% if tr.last_status == 'ok' %}
+                <span class="badge bg-success">OK</span>
+              {% elif tr.last_status == 'unknown' %}
+                <span class="badge bg-secondary">unknown</span>
+              {% else %}
+                <span class="badge bg-danger">{{ tr.last_status }}</span>
+              {% endif %}
+              {% if tr.last_error %}<div class="small text-muted text-truncate" style="max-width:260px">{{ tr.last_error }}</div>{% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="text-center text-muted py-4">{{ 'Aucun tracker détecté pour le moment.' if session.get('lang','fr') == 'fr' else 'No trackers discovered yet.' }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</section>
+
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    Notifications + Maintenance
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
@@ -2250,6 +2528,12 @@ function arrangeSettingsTabs() {
   [
     cardWithAction('notifications'),
   ].forEach(el => move(pane('settings-notifications-grid'), el));
+
+  [
+    byId('card-tracker-settings'),
+    byId('card-torrent-clients'),
+    byId('card-tracker-list'),
+  ].forEach(el => move(pane('settings-trackers-grid'), el));
 
   [
     cardWithAction('catalogue'),
@@ -3014,6 +3298,104 @@ function refreshCatalogue() {
       btn.classList.replace('btn-outline-info', 'btn-outline-danger');
       setTimeout(() => { btn.innerHTML = origHtml; btn.classList.replace('btn-outline-danger', 'btn-outline-info'); btn.disabled = false; }, 3000);
     });
+}
+
+// ── BitTorrent tracker checks ─────────────────────────────────────────────
+const _trackerCsrf = '{{ csrf_token() }}';
+function _escHtml(v) {
+  return String(v ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+  }[ch]));
+}
+function _trackerMsg(text, cls) {
+  const el = document.getElementById('tracker-action-result');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'small align-self-center ' + (cls || 'text-muted');
+}
+function _trackerBadge(status) {
+  if (status === 'ok') return '<span class="badge bg-success">OK</span>';
+  if (!status || status === 'unknown') return '<span class="badge bg-secondary">unknown</span>';
+  return `<span class="badge bg-danger">${_escHtml(status)}</span>`;
+}
+function _renderTrackerRows(trackers) {
+  const tbody = document.getElementById('tracker-table-body');
+  if (!tbody) return;
+  document.getElementById('tracker-total-badge').textContent = trackers.length;
+  if (!trackers.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">{{ "Aucun tracker détecté pour le moment." if session.get("lang","fr") == "fr" else "No trackers discovered yet." }}</td></tr>';
+    return;
+  }
+  tbody.innerHTML = trackers.map(tr => {
+    const schemeCls = (tr.scheme === 'http' || tr.scheme === 'https') ? 'bg-primary' : 'bg-warning text-dark';
+    const err = tr.last_error ? `<div class="small text-muted text-truncate" style="max-width:260px">${_escHtml(tr.last_error)}</div>` : '';
+    return `<tr data-tracker-id="${tr.id}">
+      <td><div class="form-check form-switch mb-0">
+        <input class="form-check-input tracker-enabled-toggle" type="checkbox" ${tr.enabled ? 'checked' : ''}
+               onchange="trackerToggle(${tr.id}, this.checked)">
+      </div></td>
+      <td style="min-width:260px">
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge ${schemeCls}">${_escHtml(tr.scheme || '?')}</span>
+          <code class="text-break">${_escHtml(tr.url)}</code>
+        </div>
+        <div class="small text-muted">${_escHtml(tr.host || '')}${tr.port ? ':' + tr.port : ''}</div>
+      </td>
+      <td>${_escHtml(tr.client_names || '—')}</td>
+      <td>${tr.torrent_count || 0}</td>
+      <td class="text-muted">${_escHtml((tr.last_checked_at || '—').slice(0, 19))}</td>
+      <td>${_trackerBadge(tr.last_status)}${err}</td>
+    </tr>`;
+  }).join('');
+}
+function trackerDiscover(clientId) {
+  const btn = clientId ? null : document.getElementById('btn-trackers-discover');
+  const old = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Scan'; }
+  _trackerMsg('{{ "Découverte en cours…" if session.get("lang","fr") == "fr" else "Discovery running…" }}', 'text-info');
+  fetch('{{ url_for("main.api_trackers_discover") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _trackerCsrf},
+    body: JSON.stringify({client_id: clientId || null}),
+  })
+    .then(r => r.json())
+    .then(data => {
+      _renderTrackerRows(data.trackers || []);
+      const s = data.summary || {};
+      const msg = `+${s.trackers_new || 0} new / ${s.trackers_found || 0} found` + (s.errors?.length ? ` · ${s.errors.length} error(s)` : '');
+      _trackerMsg(msg, s.errors?.length ? 'text-warning' : 'text-success');
+    })
+    .catch(() => _trackerMsg('Discovery failed', 'text-danger'))
+    .finally(() => { if (btn) { btn.disabled = false; btn.innerHTML = old; } });
+}
+function trackerCheck() {
+  const btn = document.getElementById('btn-trackers-check');
+  const old = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Check'; }
+  _trackerMsg('{{ "Test en cours…" if session.get("lang","fr") == "fr" else "Check running…" }}', 'text-info');
+  fetch('{{ url_for("main.api_trackers_check") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _trackerCsrf},
+    body: JSON.stringify({}),
+  })
+    .then(r => r.json())
+    .then(data => {
+      _renderTrackerRows(data.trackers || []);
+      const cls = data.ok ? 'text-success' : 'text-warning';
+      _trackerMsg(`${data.success_pct}% · ${data.passed}/${data.total} · threshold ${data.threshold}%`, cls);
+    })
+    .catch(() => _trackerMsg('Check failed', 'text-danger'))
+    .finally(() => { if (btn) { btn.disabled = false; btn.innerHTML = old; } });
+}
+function trackerToggle(id, enabled) {
+  fetch(`{{ url_for("main.api_tracker_enabled", tracker_id=0) }}`.replace('/0/', `/${id}/`), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _trackerCsrf},
+    body: JSON.stringify({enabled}),
+  }).then(r => {
+    if (!r.ok) throw new Error('toggle failed');
+    _trackerMsg(enabled ? 'Tracker enabled' : 'Tracker ignored', 'text-muted');
+  }).catch(() => _trackerMsg('Toggle failed', 'text-danger'));
 }
 </script>
 {% endblock %}

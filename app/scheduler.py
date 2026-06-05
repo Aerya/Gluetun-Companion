@@ -1186,6 +1186,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
     sidecar_method        = get_setting('sidecar_speedtest_method', 'dual')
     sidecar_iperf_fallback = get_setting('sidecar_iperf_fallback', '1')
     sidecar_proxy_fallback = get_setting('sidecar_proxy_fallback', '0') == '1'
+    tracker_checks_enabled = get_setting('tracker_check_enabled', '0') == '1'
 
     # ── Notification settings ────────────────────────────────────────────────
     _discord_url      = get_setting('discord_webhook_url') or None
@@ -1247,6 +1248,18 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
     pull_post_switch_set = set(_json.loads(get_setting('pull_post_switch_containers', '[]')))
     pull_pause_bench_set = set(_json.loads(get_setting('pull_pause_bench_containers', '[]')))
     pull_network_set     = set(_json.loads(get_setting('pull_network_containers', '[]')))
+
+    if tracker_checks_enabled and not observation:
+        try:
+            from .torrent_trackers import discover_trackers
+            _progress_log('Decouverte trackers BitTorrent')
+            _td = discover_trackers()
+            logger.info(
+                'Tracker discovery before benchmark: %d found, %d new, %d error(s)',
+                _td.get('trackers_found', 0), _td.get('trackers_new', 0), len(_td.get('errors', [])),
+            )
+        except Exception as exc:
+            logger.warning('Tracker discovery before benchmark failed: %s', exc)
 
     if pause_containers:
         logger.info(
@@ -1530,6 +1543,21 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             if result:
                 results.append(result)
                 _progress_log(f'OK {row["name"]} - {float(result.get("dl", 0) or 0):.1f} Mbps')
+                if tracker_checks_enabled and not observation:
+                    try:
+                        from .torrent_trackers import check_enabled_trackers
+                        _tc = check_enabled_trackers(server_name=row['name'])
+                        logger.info(
+                            'Tracker check for %s: %.1f%% (%d/%d, threshold %d%%)',
+                            row['name'], _tc.get('success_pct', 0),
+                            _tc.get('passed', 0), _tc.get('total', 0), _tc.get('threshold', 80),
+                        )
+                        _progress_log(
+                            f'Trackers {row["name"]}: {_tc.get("success_pct", 0)}% '
+                            f'({_tc.get("passed", 0)}/{_tc.get("total", 0)})'
+                        )
+                    except Exception as exc:
+                        logger.warning('Tracker check for %s failed: %s', row['name'], exc)
                 _update_consecutive_failures(row['name'], success=True, threshold=auto_exclude)
             else:
                 if _stop_event.is_set():

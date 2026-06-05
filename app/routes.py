@@ -41,6 +41,11 @@ from .scheduler import (
     get_next_run, reschedule, trigger_now, trigger_quick_now,
     trigger_single_server, trigger_observation_now, request_stop, _lock as scheduler_lock,
 )
+from .torrent_trackers import (
+    check_enabled_trackers, delete_torrent_client, discover_trackers,
+    list_torrent_clients, list_trackers, save_torrent_client,
+    save_tracker_settings, set_tracker_enabled, tracker_summary,
+)
 
 bp = Blueprint('main', __name__)
 
@@ -1664,6 +1669,42 @@ def settings():
             set_setting('pull_network_containers', json.dumps(pull_list))
             flash_t('flash_post_switch_saved', 'success')  # reuse generic "saved" flash
 
+        elif action == 'tracker_settings':
+            set_setting('tracker_check_enabled', '1' if request.form.get('tracker_check_enabled') else '0')
+            try:
+                save_tracker_settings(
+                    int(request.form.get('tracker_check_threshold_pct', '80') or '80'),
+                    int(request.form.get('tracker_check_timeout_secs', '3') or '3'),
+                    int(request.form.get('tracker_check_concurrency', '12') or '12'),
+                )
+            except ValueError:
+                save_tracker_settings(80, 3, 12)
+            flash_t('flash_settings_saved', 'success')
+
+        elif action == 'torrent_client_save':
+            save_torrent_client({
+                'id': request.form.get('client_id', '').strip(),
+                'name': request.form.get('client_name', '').strip(),
+                'client_type': request.form.get('client_type', 'qbittorrent').strip(),
+                'base_url': request.form.get('base_url', '').strip(),
+                'username': request.form.get('client_username', '').strip(),
+                'password': request.form.get('client_password', ''),
+                'container_name': request.form.get('container_name', '').strip(),
+                'enabled': bool(request.form.get('client_enabled')),
+                'include_paused': bool(request.form.get('include_paused')),
+                'include_private': bool(request.form.get('include_private')),
+                'category_filter': request.form.get('category_filter', '').strip(),
+                'tag_filter': request.form.get('tag_filter', '').strip(),
+            })
+            flash_t('flash_settings_saved', 'success')
+
+        elif action == 'torrent_client_delete':
+            try:
+                delete_torrent_client(int(request.form.get('client_id', '0') or '0'))
+                flash_t('flash_settings_saved', 'success')
+            except ValueError:
+                flash('Client BitTorrent introuvable.', 'danger')
+
         # ── WireGuard profiles ──────────────────────────────────────────────
         elif action == 'wg_profile_save':
             _provider = request.form.get('wg_provider', '').strip()
@@ -1849,6 +1890,10 @@ def settings():
         'airvpn_bench_max_users':         get_setting('airvpn_bench_max_users', '0'),
         'wg_rotation_mode':               get_setting('wg_rotation_mode', 'none'),
         'wg_rotation_threshold':          get_setting('wg_rotation_threshold', '10'),
+        'tracker_check_enabled':          get_setting('tracker_check_enabled', '0'),
+        'tracker_check_threshold_pct':    get_setting('tracker_check_threshold_pct', '80'),
+        'tracker_check_timeout_secs':     get_setting('tracker_check_timeout_secs', '3'),
+        'tracker_check_concurrency':      get_setting('tracker_check_concurrency', '12'),
     }
     # WireGuard profiles — loaded separately (with masked secrets for display)
     _raw_profiles = get_vpn_profiles()
@@ -2057,6 +2102,9 @@ def settings():
         wg_orphan_count=_orphan_count,
         has_wg_profiles=_has_wg_profiles,
         active_auto_pools=active_auto_pools,
+        torrent_clients=list_torrent_clients(),
+        trackers=list_trackers(),
+        trackers_summary=tracker_summary(),
     )
 
 
@@ -2602,6 +2650,61 @@ def api_notify_test():
 def api_docker_containers():
     """Return the list of currently running Docker container names."""
     return jsonify(list_docker_containers())
+
+
+@bp.route('/api/trackers/discover', methods=['POST'])
+@login_required
+def api_trackers_discover():
+    data = request.get_json(silent=True) or {}
+    raw_client_id = data.get('client_id')
+    client_id = None
+    if raw_client_id:
+        try:
+            client_id = int(raw_client_id)
+        except ValueError:
+            client_id = None
+    summary = discover_trackers(client_id)
+    return jsonify({
+        'ok': not summary.get('errors'),
+        'summary': summary,
+        'trackers': list_trackers(),
+        'tracker_summary': tracker_summary(),
+    })
+
+
+@bp.route('/api/trackers/check', methods=['POST'])
+@login_required
+def api_trackers_check():
+    data = request.get_json(silent=True) or {}
+    ids = data.get('tracker_ids') or None
+    if ids:
+        try:
+            ids = [int(v) for v in ids]
+        except (TypeError, ValueError):
+            ids = None
+    try:
+        filters = get_current_filters(current_app.config['GLUETUN_CONTAINER'])
+        server_name = next(iter(filters.values()), '') if filters else ''
+    except Exception:
+        server_name = ''
+    result = check_enabled_trackers(ids, server_name=server_name)
+    return jsonify({
+        **result,
+        'trackers': list_trackers(),
+        'tracker_summary': tracker_summary(),
+    })
+
+
+@bp.route('/api/trackers/<int:tracker_id>/enabled', methods=['POST'])
+@login_required
+def api_tracker_enabled(tracker_id: int):
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get('enabled'))
+    ok = set_tracker_enabled(tracker_id, enabled)
+    return jsonify({
+        'ok': ok,
+        'tracker_summary': tracker_summary(),
+    }), (200 if ok else 404)
 
 
 # ---------------------------------------------------------------------------

@@ -53,6 +53,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
   - [Multi-provider WireGuard](#multi-provider-wireguard)
   - [Catalogue de serveurs Gluetun](#catalogue-de-serveurs-gluetun)
   - [Gestion des containers Docker](#gestion-des-containers-docker)
+  - [Contrôle trackers BitTorrent](#contrôle-trackers-bittorrent)
   - [AirVPN](#airvpn)
   - [Analyse & historique](#analyse--historique)
   - [Interface & notifications](#interface--notifications)
@@ -68,6 +69,8 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
   - [Serveurs autorisés avant benchmark](#serveurs-autorisés-avant-benchmark-option)
   - [Éviter les serveurs AirVPN chargés](#éviter-les-serveurs-airvpn-chargés-option-dédié-airvpn)
   - [Écoute Docker events](#écoute-docker-events)
+  - [Contrôle des trackers BitTorrent via le VPN](#contrôle-des-trackers-bittorrent-via-le-vpn)
+  - [Clients BitTorrent et découverte des trackers](#clients-bittorrent-et-découverte-des-trackers)
   - [Profils d'usage](#profils-dusage)
   - [Profils VPN WireGuard](#profils-vpn-wireguard)
     - [Custom WireGuard : serveur personnel unique](#custom-wireguard--serveur-personnel-unique)
@@ -176,6 +179,12 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Containers à redémarrer après bascule** — uniquement pour les containers utilisant le proxy HTTP/SOCKS5 de Gluetun ; liste ordonnée (glisser-déposer)
 - **Pause pendant le benchmark** — liste de containers (torrents, Usenet…) stoppés avant le début du benchmark et relancés automatiquement à la fin, même en cas d'erreur
 - **Mise à jour automatique des images Docker** *(option)* — au moment de la bascule, Companion peut mettre à jour les images avant de relancer les containers : Gluetun lui-même, les containers réseau auto-gérés, les containers à redémarrer après bascule et les containers en pause pendant le benchmark ; activable individuellement par container depuis les Paramètres
+
+### Contrôle trackers BitTorrent
+- **Clients multiples** — configurez un ou plusieurs clients qBittorrent ou rTorrent/ruTorrent dans **Paramètres → Trackers** ; chaque client peut servir de source de trackers, même s'il fait aussi partie des containers stoppés pendant le benchmark
+- **Découverte persistante** — Companion récupère les URLs de trackers depuis les torrents chargés, les déduplique, puis affiche la liste avec source, nombre de torrents, dernier test et taux de réussite
+- **Contrôle par URL** — chaque tracker peut être activé ou ignoré individuellement pour les vérifications futures
+- **Score de compatibilité VPN** — les trackers activés sont testés depuis le chemin VPN ; par défaut, 80 % de réussite suffit pour considérer le serveur compatible afin d'éviter les faux négatifs quand un tracker est simplement down
 
 ### AirVPN
 - **Sélecteur de serveurs AirVPN intégré** — bouton *+ Ajouter des serveurs AirVPN* sur la page Serveurs : données en direct depuis `airvpn.org/api/status/` (cache 5 min), quatre onglets — liste complète searchable, répartition géographique par pays, onglet **Recommandés** (charge < 70 %, bande passante ≥ 5 Gbit/s) et onglet **Changements** (nouveaux serveurs détectés, serveurs disparus, évolutions de charge, top 5 pays les plus sains) ; ajout multi-sélection en un clic
@@ -380,6 +389,34 @@ Dans **Paramètres → Décider → Containers à redémarrer après bascule** :
 ### Containers à stopper pendant le benchmark
 
 Dans **Paramètres → Mesurer → Containers à stopper pendant le benchmark** : liste de containers stoppés avant le benchmark et relancés après — dans tous les cas, même si le benchmark plante. Si un container est dans les deux listes, la liste de pause a priorité (pas de doublon). Utile pour `qbittorrent`, `sabnzbd`, `nzbget`, `transmission`.
+
+### Contrôle des trackers BitTorrent via le VPN
+
+Dans **Paramètres → Trackers**, Companion peut vérifier si les trackers réellement utilisés par vos torrents sont accessibles depuis le serveur VPN testé ou sélectionné. L'objectif n'est pas de faire un vrai announce complet pour chaque torrent, mais de vérifier la connectivité utile avec quatre niveaux :
+
+1. **DNS** — le domaine du tracker peut être résolu.
+2. **Port** — le port TCP/UDP du tracker répond.
+3. **Endpoint tracker** — l'URL `/announce` ou le handshake UDP tracker répond. Une réponse HTTP `400`, `401`, `403` ou `invalid request` peut être considérée comme joignable : le tracker refuse la requête de test, mais il est bien accessible.
+4. **Score agrégé** — si le pourcentage de trackers accessibles dépasse le seuil configuré (80 % par défaut), le serveur VPN est réputé compatible.
+
+Ce seuil évite les faux négatifs : un tracker privé ou public peut être temporairement down, sans que le serveur VPN soit mauvais. Companion conserve l'historique par URL afin de distinguer progressivement un tracker globalement indisponible d'un tracker bloqué seulement sur certains chemins VPN.
+
+Les trackers HTTP/HTTPS sont testés via le proxy HTTP Gluetun quand il est configuré. Les trackers UDP nécessitent que Companion puisse envoyer de l'UDP depuis le chemin VPN ; si votre installation ne fournit que le proxy HTTP, ils peuvent être listés et gérés, mais leur test réel dépendra de votre topologie réseau.
+
+### Clients BitTorrent et découverte des trackers
+
+Companion peut gérer plusieurs sources BitTorrent : par exemple un qBittorrent principal, un autre qBittorrent dédié au cross-seed, et un rTorrent/ruTorrent. Chaque client configuré contient :
+
+- type : `qBittorrent` ou `rTorrent / ruTorrent RPC2` ;
+- URL API/WebUI ;
+- identifiants ;
+- container Docker associé, optionnel ;
+- filtres de catégorie ou tags ;
+- options pour inclure/exclure les torrents en pause ou les torrents privés.
+
+Pour qBittorrent, Companion utilise l'API Web : liste des torrents, puis endpoint trackers par hash. Pour rTorrent/ruTorrent, Companion utilise XML-RPC/RPC2 et récupère les trackers par torrent.
+
+La découverte est toujours faite **avant** de stopper les containers configurés dans “Containers à stopper pendant le benchmark”. Ainsi, si `qbittorrent` ou `rutorrent` est arrêté pendant la mesure, Companion utilise la liste de trackers déjà mise en cache. Les URLs découvertes restent visibles dans l'interface et peuvent être activées ou ignorées une par une pour les cycles futurs.
 
 ### Bandeau « Test en cours » et bouton Arrêter
 
