@@ -22,7 +22,7 @@ Gérez automatiquement vos serveurs VPN WireGuard dans [Gluetun](https://github.
 <a href="https://github.com/Tecnativa/docker-socket-proxy"><img src="https://img.shields.io/badge/socket--proxy-compatible-blueviolet?logo=docker&logoColor=white" alt="Docker socket-proxy"></a>
 </p>
 
-> **Tu l'utilises ? Tu l'aimes ? [⭐ Mets une étoile !](https://github.com/Aerya/Gluetun-Companion/stargazers)** — ça prend deux secondes.
+> **Vous l'utilisez ? Vous l'aimez ? [⭐ Ajouter une étoile !](https://github.com/Aerya/Gluetun-Companion/stargazers)** — ça prend deux secondes.
 
 ---
 

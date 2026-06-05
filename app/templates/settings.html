@@ -2103,7 +2103,7 @@
           {{ 'URLs de trackers détectées' if session.get('lang','fr') == 'fr' else 'Discovered tracker URLs' }}
         </h6>
         <p class="text-muted small mb-0">
-          {{ 'Désactive une URL pour ne plus la contrôler pendant les tests futurs.' if session.get('lang','fr') == 'fr' else 'Disable a URL to skip it in future checks.' }}
+          {{ 'Désactiver une URL pour ne plus la contrôler pendant les tests futurs.' if session.get('lang','fr') == 'fr' else 'Disable a URL to skip it in future checks.' }}
         </p>
       </div>
       <span class="badge bg-secondary" id="tracker-total-badge">{{ trackers | length }}</span>
