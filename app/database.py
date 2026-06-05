@@ -254,6 +254,8 @@ def init_db(db_path: str):
                 port               INTEGER NOT NULL,
                 protocols          TEXT    NOT NULL DEFAULT 'tcp,udp',
                 torrent_client_id  INTEGER REFERENCES torrent_clients(id) ON DELETE SET NULL,
+                on_port_change_cmd TEXT    NOT NULL DEFAULT '',
+                last_applied_port  INTEGER,
                 enabled            INTEGER NOT NULL DEFAULT 1,
                 notes              TEXT    NOT NULL DEFAULT '',
                 created_at         TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -356,6 +358,12 @@ def init_db(db_path: str):
                 ('tracker_check_threshold_pct','80'),
                 ('tracker_check_timeout_secs', '3'),
                 ('tracker_check_concurrency',  '12'),
+                ('port_forward_enabled',       '0'),
+                ('port_forward_auto_sync',     '0'),
+                ('port_forward_gluetun_api_url', 'http://host.docker.internal:8000'),
+                ('port_forward_gluetun_api_key', ''),
+                ('port_forward_hook_timeout_secs', '20'),
+                ('port_forward_last_auto_result', ''),
                 -- WireGuard multi-provider rotation
                 ('wg_rotation_mode',           'none'),   -- none | free | conditional
                 ('wg_rotation_threshold',      '10');     -- % score gain required (conditional mode)
@@ -447,6 +455,8 @@ def init_db(db_path: str):
             "ALTER TABLE port_forwards ADD COLUMN mode TEXT NOT NULL DEFAULT 'manual'",
             "ALTER TABLE port_forwards ADD COLUMN protocols TEXT NOT NULL DEFAULT 'tcp,udp'",
             "ALTER TABLE port_forwards ADD COLUMN torrent_client_id INTEGER REFERENCES torrent_clients(id) ON DELETE SET NULL",
+            "ALTER TABLE port_forwards ADD COLUMN on_port_change_cmd TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE port_forwards ADD COLUMN last_applied_port INTEGER",
             "ALTER TABLE port_forwards ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE port_forwards ADD COLUMN notes TEXT NOT NULL DEFAULT ''",
         ]:

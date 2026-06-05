@@ -2104,11 +2104,77 @@
           {{ 'Ports forwardés VPN' if session.get('lang','fr') == 'fr' else 'VPN forwarded ports' }}
         </h6>
         <p class="text-muted small mb-0">
-          {{ 'Déclarer les ports AirVPN/manual puis vérifier Gluetun, Docker et qBittorrent.' if session.get('lang','fr') == 'fr' else 'Declare AirVPN/manual ports, then verify Gluetun, Docker and qBittorrent.' }}
+          {{ 'Déclarer les règles par fournisseur. Si l’automatisme est activé, Companion applique les règles quand Gluetun change de fournisseur VPN et après reconnexion native.' if session.get('lang','fr') == 'fr' else 'Declare rules per provider. When automation is enabled, Companion applies rules when Gluetun changes VPN provider and after native reconnection.' }}
         </p>
       </div>
       <span class="badge bg-secondary">{{ port_forwards | length }}</span>
     </div>
+
+    <form method="post" class="border rounded p-3 mb-3" style="border-color:var(--bs-border-color)!important">
+      <input type="hidden" name="action" value="port_forward_settings">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="row g-3 align-items-end">
+        <div class="col-lg-4">
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" name="port_forward_enabled"
+                   id="port_forward_enabled" {{ 'checked' if cfg.port_forward_enabled == '1' }}>
+            <label class="form-check-label fw-semibold" for="port_forward_enabled">
+              {{ 'Activer les règles de port forwarding VPN' if session.get('lang','fr') == 'fr' else 'Enable VPN port forwarding rules' }}
+            </label>
+          </div>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="port_forward_auto_sync"
+                   id="port_forward_auto_sync" {{ 'checked' if cfg.port_forward_auto_sync == '1' }}>
+            <label class="form-check-label fw-semibold" for="port_forward_auto_sync">
+              {{ 'Appliquer automatiquement les règles au changement de fournisseur VPN' if session.get('lang','fr') == 'fr' else 'Automatically apply rules when the VPN provider changes' }}
+            </label>
+          </div>
+          <div class="form-text">
+            {{ 'Désactiver le second interrupteur conserve les règles en mode manuel.' if session.get('lang','fr') == 'fr' else 'Disabling the second switch keeps rules in manual mode.' }}
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <label class="form-label small mb-1">Gluetun Control Server</label>
+          <input name="port_forward_gluetun_api_url" class="form-control form-control-sm font-monospace"
+                 value="{{ cfg.port_forward_gluetun_api_url }}" placeholder="http://host.docker.internal:8000">
+          <div class="form-text">
+            {% if gluetun_native_portforward.ok %}
+            {{ 'Port natif détecté' if session.get('lang','fr') == 'fr' else 'Native port detected' }} :
+            <code>{{ gluetun_native_portforward.ports | join(', ') }}</code>
+            {% else %}
+            {{ 'Port natif non disponible' if session.get('lang','fr') == 'fr' else 'Native port unavailable' }}
+            {% endif %}
+          </div>
+        </div>
+        <div class="col-lg-2">
+          <label class="form-label small mb-1">X-API-Key</label>
+          <input name="port_forward_gluetun_api_key" type="password"
+                 class="form-control form-control-sm font-monospace"
+                 placeholder="{{ 'déjà configurée' if cfg.port_forward_gluetun_api_key_set == '1' and session.get('lang','fr') == 'fr' else ('configured' if cfg.port_forward_gluetun_api_key_set == '1' else 'optional') }}"
+                 autocomplete="new-password">
+          {% if cfg.port_forward_gluetun_api_key_set == '1' %}
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" name="port_forward_gluetun_api_key_action"
+                   value="clear" id="port_forward_gluetun_api_key_clear">
+            <label class="form-check-label small" for="port_forward_gluetun_api_key_clear">
+              {{ 'Effacer' if session.get('lang','fr') == 'fr' else 'Clear' }}
+            </label>
+          </div>
+          {% endif %}
+        </div>
+        <div class="col-lg-1">
+          <label class="form-label small mb-1">{{ 'Timeout hook' if session.get('lang','fr') == 'fr' else 'Hook timeout' }}</label>
+          <div class="input-group input-group-sm">
+            <input name="port_forward_hook_timeout_secs" type="number" class="form-control"
+                   value="{{ cfg.port_forward_hook_timeout_secs }}" min="1" max="120">
+            <span class="input-group-text">s</span>
+          </div>
+        </div>
+        <div class="col-lg-1">
+          <button class="btn btn-sm btn-primary w-100"><i class="bi bi-save"></i></button>
+        </div>
+      </div>
+    </form>
 
     {% if port_forwards %}
     <div class="d-flex flex-column gap-2 mb-3">
@@ -2119,7 +2185,7 @@
           <strong>{{ pf.name }}</strong>
           <code>{{ pf.port }}/{{ pf.protocols }}</code>
           <span class="badge {{ 'bg-success' if pf.overall_state == 'ok' else ('bg-danger' if pf.overall_state == 'bad' else 'bg-secondary') }}">{{ pf.overall_label }}</span>
-          <span class="text-muted small">{{ 'AirVPN' if pf.provider == 'airvpn' else 'Manual' }} · {{ 'Manuel' if session.get('lang','fr') == 'fr' else 'Manual' }}</span>
+          <span class="text-muted small">{{ pf.provider }} · {{ 'Natif Gluetun' if pf.mode == 'native' and session.get('lang','fr') == 'fr' else ('Gluetun native' if pf.mode == 'native' else ('Manuel' if session.get('lang','fr') == 'fr' else 'Manual')) }}</span>
           {% if pf.client_name %}
           <span class="text-muted small text-truncate">{{ pf.client_name }}</span>
           {% endif %}
@@ -2169,14 +2235,16 @@
           <div class="col-md-2">
             <label class="form-label small mb-1">{{ 'Fournisseur' if session.get('lang','fr') == 'fr' else 'Provider' }}</label>
             <select name="pf_provider" class="form-select form-select-sm">
-              <option value="airvpn" {{ 'selected' if pf.provider == 'airvpn' }}>AirVPN</option>
-              <option value="manual" {{ 'selected' if pf.provider == 'manual' }}>{{ 'Manuel' if session.get('lang','fr') == 'fr' else 'Manual' }}</option>
+              {% for pk, pdef in port_forward_providers %}
+              <option value="{{ pk }}" {{ 'selected' if pf.provider == pk }}>{{ pdef.label }}</option>
+              {% endfor %}
             </select>
           </div>
           <div class="col-md-2">
             <label class="form-label small mb-1">Mode</label>
             <select name="pf_mode" class="form-select form-select-sm">
-              <option value="manual" selected>{{ 'Manuel' if session.get('lang','fr') == 'fr' else 'Manual' }}</option>
+              <option value="manual" {{ 'selected' if pf.mode == 'manual' }}>{{ 'Manuel' if session.get('lang','fr') == 'fr' else 'Manual' }}</option>
+              <option value="native" {{ 'selected' if pf.mode == 'native' }}>{{ 'Natif Gluetun' if session.get('lang','fr') == 'fr' else 'Gluetun native' }}</option>
             </select>
           </div>
           <div class="col-md-2">
@@ -2209,6 +2277,12 @@
           <div class="col-md-6">
             <input name="pf_notes" class="form-control form-control-sm" value="{{ pf.notes }}" placeholder="{{ 'Note' if session.get('lang','fr') == 'fr' else 'Note' }}">
           </div>
+          <div class="col-md-9">
+            <input name="pf_on_port_change_cmd" class="form-control form-control-sm font-monospace"
+                   value="{{ pf.on_port_change_cmd }}"
+                   placeholder="{{ 'Commande optionnelle on_port_change : rtorrent, script custom, serveur WireGuard perso' if session.get('lang','fr') == 'fr' else 'Optional on_port_change command: rtorrent, custom script, personal WireGuard server' }}">
+            <div class="form-text">{port} {provider} {name} {protocols} {client}</div>
+          </div>
           <div class="col-md-3 d-flex gap-2">
             <button class="btn btn-sm btn-primary"><i class="bi bi-save"></i> {{ t.cmn_save }}</button>
             {% if pf.client_type == 'qbittorrent' %}
@@ -2237,16 +2311,18 @@
         <div class="col-md-3"><input name="pf_name" class="form-control form-control-sm" placeholder="qBittorrent AirVPN"></div>
         <div class="col-md-2">
           <select name="pf_provider" class="form-select form-select-sm">
-            <option value="airvpn">AirVPN</option>
-            <option value="manual">{{ 'Manuel' if session.get('lang','fr') == 'fr' else 'Manual' }}</option>
+            {% for pk, pdef in port_forward_providers %}
+            <option value="{{ pk }}">{{ pdef.label }}</option>
+            {% endfor %}
           </select>
         </div>
         <div class="col-md-2">
           <select name="pf_mode" class="form-select form-select-sm">
             <option value="manual">{{ 'Manuel' if session.get('lang','fr') == 'fr' else 'Manual' }}</option>
+            <option value="native">{{ 'Natif Gluetun' if session.get('lang','fr') == 'fr' else 'Gluetun native' }}</option>
           </select>
         </div>
-        <div class="col-md-2"><input name="pf_port" type="number" class="form-control form-control-sm" placeholder="19975" min="1" max="65535" required></div>
+        <div class="col-md-2"><input name="pf_port" type="number" class="form-control form-control-sm" placeholder="19975" min="0" max="65535"></div>
         <div class="col-md-3">
           <select name="pf_torrent_client_id" class="form-select form-select-sm">
             <option value="">{{ 'Client BitTorrent optionnel' if session.get('lang','fr') == 'fr' else 'Optional BitTorrent client' }}</option>
@@ -2267,6 +2343,10 @@
           </div>
         </div>
         <div class="col-md-6"><input name="pf_notes" class="form-control form-control-sm" placeholder="{{ 'Note' if session.get('lang','fr') == 'fr' else 'Note' }}"></div>
+        <div class="col-md-9">
+          <input name="pf_on_port_change_cmd" class="form-control form-control-sm font-monospace"
+                 placeholder="{{ 'Commande optionnelle on_port_change' if session.get('lang','fr') == 'fr' else 'Optional on_port_change command' }}">
+        </div>
         <div class="col-md-3">
           <button class="btn btn-sm btn-success fw-semibold"><i class="bi bi-save"></i> {{ 'Enregistrer le port' if session.get('lang','fr') == 'fr' else 'Save port' }}</button>
         </div>

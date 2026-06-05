@@ -48,7 +48,8 @@ from .torrent_trackers import (
     tracker_summary,
 )
 from .port_forwarding import (
-    delete_port_forward, inspect_port_forwards, save_port_forward,
+    apply_after_provider_change, delete_port_forward, get_gluetun_provider,
+    inspect_port_forwards, read_gluetun_native_ports, save_port_forward,
     sync_qbit_listen_port,
 )
 
@@ -980,6 +981,7 @@ def manual_switch(server_id):
     lang        = get_setting('ui_lang', 'fr')
 
     from_label = format_filters(get_current_filters(container))
+    from_provider = get_gluetun_provider(container)
 
     # Capture the old server's IP before switching
     from_ipv4, from_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
@@ -1002,6 +1004,12 @@ def manual_switch(server_id):
                 except ValueError:
                     _mp_vars[_k] = ''
             _manual_wg_profile = {'compose_provider': _mp_compose_prov, 'vars': _mp_vars}
+    to_provider = (
+        (_manual_wg_profile or {}).get('compose_provider')
+        or row['vp_provider']
+        or from_provider
+        or ''
+    ).strip().lower()
 
     # Capture dependents BEFORE the switch.  Use the extended variant so that
     # containers already orphaned from a previous failed switch (NetworkMode
@@ -1046,6 +1054,15 @@ def manual_switch(server_id):
                     container, compose_dir, project,
                     explicit_list=pre_switch_deps,
                 )
+                pf_result = apply_after_provider_change(
+                    from_provider, to_provider, reason='manual_switch',
+                )
+                if pf_result.get('provider_changed') and not pf_result.get('skipped_reason'):
+                    logger.info(
+                        'Manual switch port forwards: provider %s -> %s, applied %s/%s',
+                        from_provider or '?', to_provider or '?',
+                        pf_result.get('applied', 0), pf_result.get('rules', 0),
+                    )
                 if vpn_ok:
                     logger.info(
                         'Manual switch: VPN up in %.0fs — recreated %d network dependent(s): %s',
@@ -1708,6 +1725,23 @@ def settings():
                 save_tracker_settings(80, 3, 12)
             flash_t('flash_settings_saved', 'success')
 
+        elif action == 'port_forward_settings':
+            set_setting('port_forward_enabled', '1' if request.form.get('port_forward_enabled') else '0')
+            set_setting('port_forward_auto_sync', '1' if request.form.get('port_forward_auto_sync') else '0')
+            set_setting('port_forward_gluetun_api_url', request.form.get('port_forward_gluetun_api_url', '').strip())
+            api_key_action = request.form.get('port_forward_gluetun_api_key_action', '')
+            api_key = request.form.get('port_forward_gluetun_api_key', '')
+            if api_key_action == 'clear':
+                set_setting('port_forward_gluetun_api_key', '')
+            elif api_key:
+                set_setting('port_forward_gluetun_api_key', api_key)
+            try:
+                hook_timeout = int(request.form.get('port_forward_hook_timeout_secs', '20') or '20')
+            except ValueError:
+                hook_timeout = 20
+            set_setting('port_forward_hook_timeout_secs', str(max(1, min(hook_timeout, 120))))
+            flash_t('flash_settings_saved', 'success')
+
         elif action == 'torrent_client_save':
             _base_url = request.form.get('base_url', '').strip()
             if not _base_url:
@@ -1747,6 +1781,7 @@ def settings():
                     'port': request.form.get('pf_port', '').strip(),
                     'protocols': request.form.getlist('pf_protocols'),
                     'torrent_client_id': request.form.get('pf_torrent_client_id', '').strip(),
+                    'on_port_change_cmd': request.form.get('pf_on_port_change_cmd', '').strip(),
                     'enabled': bool(request.form.get('pf_enabled')),
                     'notes': request.form.get('pf_notes', '').strip(),
                 })
@@ -1950,6 +1985,12 @@ def settings():
         'tracker_check_threshold_pct':    get_setting('tracker_check_threshold_pct', '80'),
         'tracker_check_timeout_secs':     get_setting('tracker_check_timeout_secs', '3'),
         'tracker_check_concurrency':      get_setting('tracker_check_concurrency', '12'),
+        'port_forward_enabled':           get_setting('port_forward_enabled', '0'),
+        'port_forward_auto_sync':         get_setting('port_forward_auto_sync', '0'),
+        'port_forward_gluetun_api_url':   get_setting('port_forward_gluetun_api_url', 'http://host.docker.internal:8000'),
+        'port_forward_gluetun_api_key_set': '1' if get_setting('port_forward_gluetun_api_key', '') else '0',
+        'port_forward_hook_timeout_secs': get_setting('port_forward_hook_timeout_secs', '20'),
+        'port_forward_last_auto_result':  get_setting('port_forward_last_auto_result', ''),
     }
     # WireGuard profiles — loaded separately (with masked secrets for display)
     _raw_profiles = get_vpn_profiles()
@@ -2166,6 +2207,11 @@ def settings():
         trackers=list_trackers(),
         trackers_summary=tracker_summary(),
         port_forwards=inspect_port_forwards(current_app.config['GLUETUN_CONTAINER']),
+        port_forward_providers=[('manual', {'label': 'Manual'})] + get_all_providers(),
+        gluetun_native_portforward=read_gluetun_native_ports(
+            get_setting('port_forward_gluetun_api_url', 'http://host.docker.internal:8000'),
+            timeout=1.0,
+        ),
     )
 
 

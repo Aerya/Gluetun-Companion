@@ -1761,6 +1761,11 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                 # the extended variant that also detects already-orphaned containers
                 # (stale NetworkMode from a previous failed switch).
                 pre_switch_net_deps = list_network_dependents_for_recreate(container)
+                try:
+                    from .port_forwarding import get_gluetun_provider
+                    from_provider = get_gluetun_provider(container)
+                except Exception:
+                    from_provider = ''
 
                 updated_images: list[str] = []
                 if pull_gluetun:
@@ -1785,6 +1790,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                             if k not in ('VPN_SERVICE_PROVIDER', 'VPN_TYPE')
                         },
                     }
+                to_provider = ((_best_wg or {}).get('compose_provider') or from_provider or '').strip().lower()
                 ok, err = switch_server(
                     best['server'], best['filter_type'], container, compose_dir, project,
                     wg_profile=_best_wg,
@@ -1813,6 +1819,9 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                             'Post-switch containers: %d/%d recreated',
                             len(_restarted2), len(_post_switch),
                         )
+                    _apply_port_forwards_after_provider_change(
+                        from_provider, to_provider, 'auto_best',
+                    )
                     to_ipv4, to_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
                     logger.info(
                         'Switched to best: %s  (%s / %s)  connect %.0fs',
@@ -2005,6 +2014,11 @@ def _do_single_server(app, server_name: str, filter_type: str):
         project     = app.config.get('COMPOSE_PROJECT', '')
         proxy_host  = app.config['GLUETUN_HOST']
         proxy_port  = app.config['GLUETUN_PROXY_PORT']
+        try:
+            from .port_forwarding import get_gluetun_provider
+            from_provider = get_gluetun_provider(container)
+        except Exception:
+            from_provider = ''
 
         wait_secs    = int(get_setting('connection_wait_seconds', '45'))
         proxy_user   = get_setting('proxy_username', '') or None
@@ -2068,6 +2082,8 @@ def _do_single_server(app, server_name: str, filter_type: str):
                     except ValueError:
                         pass
 
+        to_provider = ((_ss_wg_profile or {}).get('compose_provider') or from_provider or '').strip().lower()
+
         if sidecar_mode:
             # ── Sidecar mode: test in isolation, switch only on success ──────
             # Build sidecar env: profile vars + dedicated key override, or
@@ -2130,6 +2146,9 @@ def _do_single_server(app, server_name: str, filter_type: str):
                     )
                     if restarted:
                         logger.info('Recreated network dependents: %s', ', '.join(restarted))
+                    _apply_port_forwards_after_provider_change(
+                        from_provider, to_provider, 'single_server',
+                    )
                     if connected:
                         logger.info('Gluetun now on %s', server_name)
                     else:
@@ -2237,6 +2256,35 @@ def _record_switch(
             (from_server, to_server, reason, int(success),
              connect_secs, from_mbps, to_mbps, to_ipv4, to_ipv6),
         )
+
+
+def _apply_port_forwards_after_provider_change(
+    old_provider: str,
+    new_provider: str,
+    reason: str,
+) -> dict:
+    from .port_forwarding import apply_after_provider_change
+    result = apply_after_provider_change(old_provider, new_provider, reason=reason)
+    if result.get('provider_changed') and not result.get('skipped_reason'):
+        logger.info(
+            'Port forwards after provider change %s -> %s: applied %s/%s, ok=%s',
+            old_provider or '?', new_provider or '?',
+            result.get('applied', 0), result.get('rules', 0), result.get('ok'),
+        )
+    return result
+
+
+def _apply_port_forwards_for_current_provider(container: str, reason: str) -> dict:
+    from .database import get_setting
+    if get_setting('port_forward_enabled', '0') != '1':
+        return {'ok': True, 'skipped_reason': 'disabled'}
+    if get_setting('port_forward_auto_sync', '0') != '1':
+        return {'ok': True, 'skipped_reason': 'manual_only'}
+    from .port_forwarding import apply_provider_port_forwards, get_gluetun_provider
+    provider = get_gluetun_provider(container)
+    if not provider:
+        return {'ok': False, 'skipped_reason': 'missing_provider'}
+    return apply_provider_port_forwards(provider, reason=reason)
 
 
 def _update_consecutive_failures(
@@ -2592,6 +2640,19 @@ def _docker_event_loop(app, container_name: str) -> None:
                             logger.info('Docker event: no orphaned network-dependent containers found')
                     except Exception as _exc:
                         logger.warning('Docker event: error recreating orphaned containers: %s', _exc)
+
+                    try:
+                        pf = _apply_port_forwards_for_current_provider(
+                            container_name, 'docker_reconnect',
+                        )
+                        if not pf.get('skipped_reason'):
+                            logger.info(
+                                'Docker event: port forwards reapplied for provider %s (%s/%s)',
+                                pf.get('provider') or '?',
+                                pf.get('applied', 0), pf.get('rules', 0),
+                            )
+                    except Exception as _exc:
+                        logger.warning('Docker event: port forward reapply failed: %s', _exc)
 
                     logger.info('Docker event: running automatic quick check now')
                     _run_event_triggered_quick_check(a)
