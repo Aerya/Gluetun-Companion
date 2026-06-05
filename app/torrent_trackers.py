@@ -167,21 +167,27 @@ def delete_torrent_client(client_id: int) -> bool:
 
 def _qbit_session(client: dict, timeout: float) -> requests.Session:
     sess = requests.Session()
+    sess.headers.update({'User-Agent': 'Gluetun-Companion/trackers'})
+    base_url = (client.get('base_url') or '').rstrip('/')
+    if not base_url:
+        raise RuntimeError('qBittorrent URL is empty')
     if client.get('username') or client.get('password'):
         resp = sess.post(
-            client['base_url'].rstrip('/') + '/api/v2/auth/login',
+            base_url + '/api/v2/auth/login',
             data={'username': client.get('username', ''), 'password': client.get('password', '')},
             timeout=timeout,
         )
         if resp.status_code >= 400 or 'Fails.' in resp.text:
-            raise RuntimeError('qBittorrent authentication failed')
+            raise RuntimeError(f'qBittorrent authentication failed ({resp.status_code}: {resp.text[:120]})')
     return sess
 
 
 def _qbit_trackers(client: dict, timeout: float = 8.0) -> list[TrackerHit]:
     sess = _qbit_session(client, timeout)
-    resp = sess.get(client['base_url'].rstrip('/') + '/api/v2/torrents/info', timeout=timeout)
-    resp.raise_for_status()
+    base_url = client['base_url'].rstrip('/')
+    resp = sess.get(base_url + '/api/v2/torrents/info', timeout=timeout)
+    if resp.status_code >= 400:
+        raise RuntimeError(f'qBittorrent torrents/info failed ({resp.status_code}: {resp.text[:120]})')
     torrents = resp.json() or []
     cat_filter = {v.strip() for v in (client.get('category_filter') or '').split(',') if v.strip()}
     tag_filter = {v.strip() for v in (client.get('tag_filter') or '').split(',') if v.strip()}
@@ -203,11 +209,12 @@ def _qbit_trackers(client: dict, timeout: float = 8.0) -> list[TrackerHit]:
         if not h:
             continue
         tr = sess.get(
-            client['base_url'].rstrip() + '/api/v2/torrents/trackers',
+            base_url + '/api/v2/torrents/trackers',
             params={'hash': h},
             timeout=timeout,
         )
-        tr.raise_for_status()
+        if tr.status_code >= 400:
+            raise RuntimeError(f'qBittorrent trackers failed for {h[:8]} ({tr.status_code}: {tr.text[:120]})')
         for item in tr.json() or []:
             url = normalize_tracker_url(item.get('url', ''))
             if url:

@@ -2074,7 +2074,10 @@
           <input type="hidden" name="client_enabled" value="on">
           <input type="hidden" name="include_paused" value="on">
           <input type="hidden" name="include_private" value="on">
-          <button class="btn btn-sm btn-success"><i class="bi bi-plus-lg"></i> {{ 'Ajouter' if session.get('lang','fr') == 'fr' else 'Add' }}</button>
+          <button class="btn btn-sm btn-success fw-semibold">
+            <i class="bi bi-save"></i>
+            {{ 'Enregistrer le client' if session.get('lang','fr') == 'fr' else 'Save client' }}
+          </button>
         </div>
       </div>
     </form>
@@ -3362,8 +3365,9 @@ function trackerDiscover(clientId) {
     .then(data => {
       _renderTrackerRows(data.trackers || []);
       const s = data.summary || {};
-      const msg = `+${s.trackers_new || 0} new / ${s.trackers_found || 0} found` + (s.errors?.length ? ` · ${s.errors.length} error(s)` : '');
-      _trackerMsg(msg, s.errors?.length ? 'text-warning' : 'text-success');
+      const err = (s.errors || []).map(e => `${e.client}: ${e.error}`).join(' · ');
+      const msg = `+${s.trackers_new || 0} new / ${s.trackers_found || 0} found` + (err ? ` · ${err}` : '');
+      _trackerMsg(msg, err ? 'text-warning' : 'text-success');
     })
     .catch(() => _trackerMsg('Discovery failed', 'text-danger'))
     .finally(() => { if (btn) { btn.disabled = false; btn.innerHTML = old; } });

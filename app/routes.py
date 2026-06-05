@@ -1682,21 +1682,25 @@ def settings():
             flash_t('flash_settings_saved', 'success')
 
         elif action == 'torrent_client_save':
-            save_torrent_client({
-                'id': request.form.get('client_id', '').strip(),
-                'name': request.form.get('client_name', '').strip(),
-                'client_type': request.form.get('client_type', 'qbittorrent').strip(),
-                'base_url': request.form.get('base_url', '').strip(),
-                'username': request.form.get('client_username', '').strip(),
-                'password': request.form.get('client_password', ''),
-                'container_name': request.form.get('container_name', '').strip(),
-                'enabled': bool(request.form.get('client_enabled')),
-                'include_paused': bool(request.form.get('include_paused')),
-                'include_private': bool(request.form.get('include_private')),
-                'category_filter': request.form.get('category_filter', '').strip(),
-                'tag_filter': request.form.get('tag_filter', '').strip(),
-            })
-            flash_t('flash_settings_saved', 'success')
+            _base_url = request.form.get('base_url', '').strip()
+            if not _base_url:
+                flash('URL du client BitTorrent obligatoire.', 'danger')
+            else:
+                save_torrent_client({
+                    'id': request.form.get('client_id', '').strip(),
+                    'name': request.form.get('client_name', '').strip(),
+                    'client_type': request.form.get('client_type', 'qbittorrent').strip(),
+                    'base_url': _base_url,
+                    'username': request.form.get('client_username', '').strip(),
+                    'password': request.form.get('client_password', ''),
+                    'container_name': request.form.get('container_name', '').strip(),
+                    'enabled': bool(request.form.get('client_enabled')),
+                    'include_paused': bool(request.form.get('include_paused')),
+                    'include_private': bool(request.form.get('include_private')),
+                    'category_filter': request.form.get('category_filter', '').strip(),
+                    'tag_filter': request.form.get('tag_filter', '').strip(),
+                })
+                flash_t('flash_settings_saved', 'success')
 
         elif action == 'torrent_client_delete':
             try:
