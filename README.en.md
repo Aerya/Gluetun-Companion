@@ -187,7 +187,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Per-URL control** — each tracker can be enabled or ignored individually for future checks
 - **VPN compatibility score** — enabled trackers are checked through the VPN path; by default, 80% success is enough to consider the server compatible, avoiding false negatives when a single tracker is down
 - **Optional switch criterion** — when enabled, a benchmarked server below the tracker threshold is excluded from the auto-switch pick; pools ignore servers already known as tracker-incompatible
-- **Per-provider port forwarding** — declare AirVPN/manual, Gluetun-native or custom rules in **Settings → Trackers**; when automation is enabled, Companion applies the new provider's rules after a Gluetun switch and resynchronizes qBittorrent or configured hooks
+- **Per-provider port forwarding** — declare AirVPN/manual, Gluetun-native or custom rules in **Settings → Port Forwarding**; when automation is enabled, Companion applies the new provider's rules after a Gluetun switch and resynchronizes qBittorrent or configured hooks
 
 ### AirVPN
 - **Built-in AirVPN server picker** — *+ Add AirVPN servers* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), four tabs — full searchable list, geographic distribution by country, **Recommended** tab (load < 70 %, bandwidth ≥ 5 Gbit/s) and **Changes** tab (newly detected servers, disappeared servers, load shifts, top 5 healthiest countries); multi-select, one-click add
@@ -430,7 +430,7 @@ Discovery always runs **before** stopping containers configured in "Containers t
 
 ### VPN forwarded port inventory
 
-In **Settings → Trackers → VPN forwarded ports**, Companion manages incoming ports required by BitTorrent clients per VPN provider. Three states are available:
+In **Settings → Port Forwarding**, Companion manages incoming ports required by BitTorrent clients per VPN provider. Three states are available:
 
 - **Disabled** — rules remain stored but are not applied.
 - **Manual active** — rules can be declared, checked and synchronized on demand.

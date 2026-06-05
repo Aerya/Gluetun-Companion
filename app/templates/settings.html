@@ -434,7 +434,9 @@
     ],
     'trackers': [
       (readme_url ~ ('#contrôle-des-trackers-bittorrent-via-le-vpn' if session.get('lang','fr') == 'fr' else '#bittorrent-tracker-checks-through-the-vpn'), 'Contrôle trackers' if session.get('lang','fr') == 'fr' else 'Tracker checks'),
-      (readme_url ~ ('#clients-bittorrent-et-découverte-des-trackers' if session.get('lang','fr') == 'fr' else '#bittorrent-clients-and-tracker-discovery'), 'Clients BitTorrent' if session.get('lang','fr') == 'fr' else 'BitTorrent clients'),
+      (readme_url ~ ('#clients-bittorrent-et-découverte-des-trackers' if session.get('lang','fr') == 'fr' else '#bittorrent-clients-and-tracker-discovery'), 'Clients BitTorrent' if session.get('lang','fr') == 'fr' else 'BitTorrent clients')
+    ],
+    'port_forwarding': [
       (readme_url ~ ('#inventaire-des-ports-forwardés-vpn' if session.get('lang','fr') == 'fr' else '#vpn-forwarded-port-inventory'), 'Ports forwardés' if session.get('lang','fr') == 'fr' else 'Forwarded ports')
     ],
     'maintenance': [
@@ -484,6 +486,11 @@
     <li class="nav-item" role="presentation">
       <button class="nav-link" id="tab-trackers" data-bs-toggle="tab" data-bs-target="#settings-trackers" type="button" role="tab">
         <i class="bi bi-broadcast-pin me-1"></i>Trackers
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-port-forwarding" data-bs-toggle="tab" data-bs-target="#settings-port-forwarding" type="button" role="tab">
+        <i class="bi bi-diagram-3 me-1"></i>Port Forwarding
       </button>
     </li>
     <li class="nav-item" role="presentation">
@@ -633,6 +640,24 @@
             'Companion récupère les trackers depuis vos clients BitTorrent avant de stopper les containers, puis teste les URLs activées depuis le chemin VPN.' if session.get('lang','fr') == 'fr' else
             'Companion discovers trackers from your BitTorrent clients before stopping containers, then checks enabled URLs through the VPN path.',
             readme_links.trackers) }}
+        </aside>
+      </div>
+    </div>
+    <div class="tab-pane fade" id="settings-port-forwarding" role="tabpanel" aria-labelledby="tab-port-forwarding">
+      <div class="settings-pane-layout">
+        <div id="settings-port-forwarding-grid" class="settings-pane-main"></div>
+        <aside class="settings-pane-aside">
+          <div class="settings-help-card">
+            <h6><i class="bi bi-diagram-3 me-1"></i>{{ 'Port forwarding' if session.get('lang','fr') == 'fr' else 'Port forwarding' }}</h6>
+            <div class="metric"><span>{{ 'Règles' if session.get('lang','fr') == 'fr' else 'Rules' }}</span><strong>{{ port_forwards | length }}</strong></div>
+            <div class="metric"><span>{{ 'Contrôle' if session.get('lang','fr') == 'fr' else 'Enabled' }}</span><strong>{{ 'ON' if cfg.port_forward_enabled == '1' else 'OFF' }}</strong></div>
+            <div class="metric"><span>{{ 'Auto fournisseur' if session.get('lang','fr') == 'fr' else 'Provider auto' }}</span><strong>{{ 'ON' if cfg.port_forward_auto_sync == '1' else 'OFF' }}</strong></div>
+            <div class="metric"><span>{{ 'Port natif' if session.get('lang','fr') == 'fr' else 'Native port' }}</span><strong>{% if gluetun_native_portforward.ok %}{{ gluetun_native_portforward.ports | join(', ') }}{% else %}—{% endif %}</strong></div>
+          </div>
+          {{ readme_card(t.set_side_readme,
+            'Companion applique les règles de port forwarding par fournisseur VPN et peut synchroniser qBittorrent ou exécuter une commande on_port_change.' if session.get('lang','fr') == 'fr' else
+            'Companion applies VPN-provider port forwarding rules and can synchronize qBittorrent or run an on_port_change command.',
+            readme_links.port_forwarding) }}
         </aside>
       </div>
     </div>
@@ -2119,18 +2144,28 @@
             <input class="form-check-input" type="checkbox" name="port_forward_enabled"
                    id="port_forward_enabled" {{ 'checked' if cfg.port_forward_enabled == '1' }}>
             <label class="form-check-label fw-semibold" for="port_forward_enabled">
-              {{ 'Activer les règles de port forwarding VPN' if session.get('lang','fr') == 'fr' else 'Enable VPN port forwarding rules' }}
+              {{ 'Utiliser les règles de port forwarding' if session.get('lang','fr') == 'fr' else 'Use port forwarding rules' }}
             </label>
+            <span class="text-muted ms-1" data-bs-toggle="tooltip"
+                  data-bs-title="{{ 'Active l’inventaire, les vérifications et les synchronisations manuelles. Si cette option est désactivée, aucune règle n’est appliquée.' if session.get('lang','fr') == 'fr' else 'Enables inventory, checks and manual synchronization. When disabled, no rule is applied.' }}">
+              <i class="bi bi-question-circle"></i>
+            </span>
           </div>
           <div class="form-check form-switch">
             <input class="form-check-input" type="checkbox" name="port_forward_auto_sync"
                    id="port_forward_auto_sync" {{ 'checked' if cfg.port_forward_auto_sync == '1' }}>
             <label class="form-check-label fw-semibold" for="port_forward_auto_sync">
-              {{ 'Appliquer automatiquement les règles au changement de fournisseur VPN' if session.get('lang','fr') == 'fr' else 'Automatically apply rules when the VPN provider changes' }}
+              {{ 'Automatiser après changement de fournisseur VPN' if session.get('lang','fr') == 'fr' else 'Automate after VPN provider change' }}
             </label>
+            <a class="text-muted ms-1" href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md#port-forwarding"
+               target="_blank" rel="noopener"
+               data-bs-toggle="tooltip"
+               data-bs-title="{{ 'Après une bascule vers un autre fournisseur, Companion applique les règles correspondantes. Les règles natives lisent le port via l’API Gluetun GET /v1/portforward.' if session.get('lang','fr') == 'fr' else 'After switching to another provider, Companion applies matching rules. Native rules read the port through the Gluetun API GET /v1/portforward.' }}">
+              <i class="bi bi-question-circle"></i>
+            </a>
           </div>
           <div class="form-text">
-            {{ 'Désactiver le second interrupteur conserve les règles en mode manuel.' if session.get('lang','fr') == 'fr' else 'Disabling the second switch keeps rules in manual mode.' }}
+            {{ 'Premier interrupteur : règles disponibles. Second interrupteur : application automatique après bascule fournisseur.' if session.get('lang','fr') == 'fr' else 'First switch: rules are available. Second switch: automatic application after provider switch.' }}
           </div>
         </div>
         <div class="col-lg-4">
@@ -2806,9 +2841,12 @@ function arrangeSettingsTabs() {
   [
     byId('card-tracker-settings'),
     byId('card-torrent-clients'),
-    byId('card-port-forwards'),
     byId('card-tracker-list'),
   ].forEach(el => move(pane('settings-trackers-grid'), el));
+
+  [
+    byId('card-port-forwards'),
+  ].forEach(el => move(pane('settings-port-forwarding-grid'), el));
 
   [
     cardWithAction('catalogue'),
@@ -2853,6 +2891,10 @@ if (document.readyState === 'loading') {
   const storageKey = 'gluetun_companion_settings_tab';
   const feedback = () => document.getElementById('settings-save-feedback');
   const savedText = {{ t.flash_settings_saved | tojson }};
+
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+    bootstrap.Tooltip.getOrCreateInstance(el);
+  });
 
   function showSettingsFeedback(message, category) {
     const box = feedback();

@@ -188,7 +188,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Contrôle par URL** — chaque tracker peut être activé ou ignoré individuellement pour les vérifications futures
 - **Score de compatibilité VPN** — les trackers activés sont testés depuis le chemin VPN ; par défaut, 80 % de réussite suffit pour considérer le serveur compatible afin d'éviter les faux négatifs quand un tracker est simplement down
 - **Critère de bascule optionnel** — si l'option est activée, un serveur benchmarké sous le seuil trackers est exclu du choix auto-switch ; les pools ignorent les serveurs déjà connus comme incompatibles
-- **Port forwarding par fournisseur** — déclarez des règles AirVPN/manual, Gluetun natif ou custom dans **Paramètres → Trackers** ; si l’automatisme est activé, Companion applique les règles du nouveau fournisseur quand Gluetun bascule et resynchronise qBittorrent ou les hooks configurés
+- **Port forwarding par fournisseur** — déclarez des règles AirVPN/manual, Gluetun natif ou custom dans **Paramètres → Port Forwarding** ; si l’automatisme est activé, Companion applique les règles du nouveau fournisseur quand Gluetun bascule et resynchronise qBittorrent ou les hooks configurés
 
 ### AirVPN
 - **Sélecteur de serveurs AirVPN intégré** — bouton *+ Ajouter des serveurs AirVPN* sur la page Serveurs : données en direct depuis `airvpn.org/api/status/` (cache 5 min), quatre onglets — liste complète searchable, répartition géographique par pays, onglet **Recommandés** (charge < 70 %, bande passante ≥ 5 Gbit/s) et onglet **Changements** (nouveaux serveurs détectés, serveurs disparus, évolutions de charge, top 5 pays les plus sains) ; ajout multi-sélection en un clic
@@ -431,7 +431,7 @@ La découverte est toujours faite **avant** de stopper les containers configuré
 
 ### Inventaire des ports forwardés VPN
 
-Dans **Paramètres → Trackers → Ports forwardés VPN**, Companion gère les ports entrants nécessaires aux clients BitTorrent par fournisseur VPN. Trois états sont possibles :
+Dans **Paramètres → Port Forwarding**, Companion gère les ports entrants nécessaires aux clients BitTorrent par fournisseur VPN. Trois états sont possibles :
 
 - **Désactivé** — les règles restent stockées mais ne sont pas appliquées.
 - **Actif manuel** — les règles peuvent être déclarées, vérifiées et synchronisées à la demande.
