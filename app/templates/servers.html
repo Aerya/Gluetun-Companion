@@ -12,17 +12,21 @@
   #view-table table td:first-child {
     position: sticky;
     left: 0;
-    z-index: 2;
-    background: var(--bs-body-bg);
+    z-index: 3;
+    background-color: var(--bs-body-bg);
     box-shadow: 3px 0 5px rgba(0,0,0,.1);
   }
   #view-table table th:last-child,
   #view-table table td:last-child {
     position: sticky;
     right: 0;
-    z-index: 2;
-    background: var(--bs-body-bg);
+    z-index: 4;
+    background-color: var(--bs-body-bg);
     box-shadow: -3px 0 5px rgba(0,0,0,.1);
+  }
+  #view-table table thead th:first-child,
+  #view-table table thead th:last-child {
+    z-index: 5;
   }
   /* Preserve row hover on sticky cells */
   #view-table .table-hover tbody tr:hover th,
@@ -31,7 +35,13 @@
   }
   #view-table .table-hover tbody tr:hover td:first-child,
   #view-table .table-hover tbody tr:hover td:last-child {
-    background: var(--bs-table-hover-bg, rgba(255,255,255,.075));
+    background-color: var(--bs-body-bg);
+  }
+  #view-table .table-hover tbody tr:hover td:first-child {
+    box-shadow: 3px 0 5px rgba(0,0,0,.1), inset 0 0 0 9999px var(--bs-table-hover-bg);
+  }
+  #view-table .table-hover tbody tr:hover td:last-child {
+    box-shadow: -3px 0 5px rgba(0,0,0,.1), inset 0 0 0 9999px var(--bs-table-hover-bg);
   }
 
   .server-actions {
