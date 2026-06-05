@@ -44,7 +44,8 @@ from .scheduler import (
 from .torrent_trackers import (
     check_enabled_trackers, delete_torrent_client, discover_trackers,
     list_torrent_clients, list_trackers, save_torrent_client,
-    save_tracker_settings, set_tracker_enabled, tracker_summary,
+    save_tracker_settings, set_tracker_enabled, tracker_status_for_servers,
+    tracker_summary,
 )
 
 bp = Blueprint('main', __name__)
@@ -531,6 +532,8 @@ _SERVERS_SORT = {
     'loss_desc':      'avg_loss   DESC NULLS LAST, s.name',
     'dns_asc':        'avg_dns    ASC  NULLS LAST, s.name',
     'dns_desc':       'avg_dns    DESC NULLS LAST, s.name',
+    'trackers_desc':  's.name',
+    'trackers_asc':   's.name',
 }
 
 _SERVERS_VALID_PER_PAGE = {10, 20, 50, 100, 0}   # 0 = all
@@ -661,6 +664,18 @@ def servers():
     # These are used as a fallback for profile scoring when the filtered stats return None
     # (which happens for servers that only have proxy_qc quick-check tests, not full benchmarks).
     rows = [dict(r) for r in rows]
+    tracker_statuses = tracker_status_for_servers([r['name'] for r in rows])
+    for r in rows:
+        r['tracker_status'] = tracker_statuses.get(r['name'], {'known': False})
+
+    if sort in ('trackers_asc', 'trackers_desc'):
+        def _tracker_sort_key(r: dict) -> tuple:
+            st = r.get('tracker_status') or {}
+            if not st.get('known'):
+                return (0, 0.0, r['name'].lower())
+            return (1 if st.get('ok') else 2, float(st.get('success_pct') or 0), r['name'].lower())
+        rows.sort(key=_tracker_sort_key, reverse=(sort == 'trackers_desc'))
+
     for r in rows:
         r['_raw_avg_dl']  = r.get('avg_dl')
         r['_raw_avg_ul']  = r.get('avg_ul')
@@ -1671,6 +1686,7 @@ def settings():
 
         elif action == 'tracker_settings':
             set_setting('tracker_check_enabled', '1' if request.form.get('tracker_check_enabled') else '0')
+            set_setting('tracker_require_for_switch', '1' if request.form.get('tracker_require_for_switch') else '0')
             try:
                 save_tracker_settings(
                     int(request.form.get('tracker_check_threshold_pct', '80') or '80'),
@@ -1895,6 +1911,7 @@ def settings():
         'wg_rotation_mode':               get_setting('wg_rotation_mode', 'none'),
         'wg_rotation_threshold':          get_setting('wg_rotation_threshold', '10'),
         'tracker_check_enabled':          get_setting('tracker_check_enabled', '0'),
+        'tracker_require_for_switch':     get_setting('tracker_require_for_switch', '0'),
         'tracker_check_threshold_pct':    get_setting('tracker_check_threshold_pct', '80'),
         'tracker_check_timeout_secs':     get_setting('tracker_check_timeout_secs', '3'),
         'tracker_check_concurrency':      get_setting('tracker_check_concurrency', '12'),

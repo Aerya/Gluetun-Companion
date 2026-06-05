@@ -423,6 +423,11 @@
                  data-bs-toggle="tooltip" data-bs-placement="bottom"
                  title="{{ t.stab_col_tooltip }}"></i>
             </th>
+            <th class="text-center" style="cursor:pointer;user-select:none;white-space:nowrap"
+                onclick="_srvSort('trackers','desc')">
+              {{ 'Trackers' }}
+              <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('trackers_asc','trackers_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='trackers_asc' else ('▼' if sort=='trackers_desc' else '⇅') }}</span>
+            </th>
             <th style="cursor:pointer;user-select:none;white-space:nowrap"
                 onclick="_srvSort('jitter','asc')">
               {{ t.hist_col_jitter }}
@@ -615,6 +620,22 @@
                    data-bs-toggle="tooltip" data-bs-placement="top" title="{{ _stab_tip | join(' · ') }}"></i>
               {%- endif -%}
             </td>
+            <td class="text-center">
+              {%- set _trk = s.tracker_status or {} -%}
+              {%- if not _trk.known -%}
+                <span class="text-muted" style="font-size:.75rem"
+                      data-bs-toggle="tooltip" data-bs-placement="top"
+                      title="{{ 'Aucun test tracker pour ce serveur' if session.get('lang','fr') == 'fr' else 'No tracker check for this server' }}">—</span>
+              {%- else -%}
+                {%- set _trk_cls = 'bg-success' if _trk.ok else 'bg-danger' -%}
+                {%- set _trk_tip = (_trk.success_pct|string ~ '% · ' ~ _trk.passed|string ~ '/' ~ _trk.tested|string ~ ' · seuil ' ~ _trk.threshold|string ~ '%') -%}
+                <span class="badge {{ _trk_cls }}" style="font-size:.68rem"
+                      data-bs-toggle="tooltip" data-bs-placement="top"
+                      title="{{ _trk_tip }}">
+                  {{ 'OK' if _trk.ok else (_trk.success_pct|string ~ '%') }}
+                </span>
+              {%- endif -%}
+            </td>
             <td>
               {%- set _stab = stability.get(s.name, {}) -%}
               {%- if _stab.n and _stab.avg_jitter is not none -%}
@@ -673,7 +694,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="18" class="text-center text-muted py-5">
+            <td colspan="19" class="text-center text-muted py-5">
               <i class="bi bi-hdd-network" style="font-size:2rem;opacity:.3"></i><br>
               {{ t.srv_empty }}<br>
               <small>{{ t.srv_empty_hint | safe }}</small>

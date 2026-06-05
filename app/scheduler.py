@@ -1187,6 +1187,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
     sidecar_iperf_fallback = get_setting('sidecar_iperf_fallback', '1')
     sidecar_proxy_fallback = get_setting('sidecar_proxy_fallback', '0') == '1'
     tracker_checks_enabled = get_setting('tracker_check_enabled', '0') == '1'
+    tracker_required_for_switch = get_setting('tracker_require_for_switch', '0') == '1'
 
     # ── Notification settings ────────────────────────────────────────────────
     _discord_url      = get_setting('discord_webhook_url') or None
@@ -1547,6 +1548,8 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                     try:
                         from .torrent_trackers import check_enabled_trackers
                         _tc = check_enabled_trackers(server_name=row['name'])
+                        result['tracker_check'] = _tc
+                        result['tracker_ok'] = True if int(_tc.get('total') or 0) == 0 else bool(_tc.get('ok'))
                         logger.info(
                             'Tracker check for %s: %.1f%% (%d/%d, threshold %d%%)',
                             row['name'], _tc.get('success_pct', 0),
@@ -1557,6 +1560,8 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                             f'({_tc.get("passed", 0)}/{_tc.get("total", 0)})'
                         )
                     except Exception as exc:
+                        result['tracker_ok'] = False
+                        result['tracker_check'] = {'error': str(exc)}
                         logger.warning('Tracker check for %s failed: %s', row['name'], exc)
                 _update_consecutive_failures(row['name'], success=True, threshold=auto_exclude)
             else:
@@ -1602,7 +1607,22 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
 
         best_server_label: str | None = None
         best_server_name: str | None = None
-        if auto_sw and results:
+        decision_results = results
+        if auto_sw and results and tracker_required_for_switch and tracker_checks_enabled and not observation:
+            _before_tracker_filter = len(results)
+            decision_results = [r for r in results if r.get('tracker_ok')]
+            if decision_results:
+                logger.info(
+                    'Tracker eligibility: keeping %d/%d benchmark result(s) for auto-switch',
+                    len(decision_results), _before_tracker_filter,
+                )
+            else:
+                logger.warning(
+                    'Tracker eligibility: no benchmark result passed tracker threshold; auto-switch skipped'
+                )
+                _progress_log('Auto-switch ignore : aucun serveur compatible trackers')
+
+        if auto_sw and decision_results:
             current_pct      = float(get_setting('weighted_score_current_pct', '65'))
             stability_weight = float(get_setting('stability_weight', '30'))
             active_profile   = get_setting('active_profile', 'balanced')
@@ -1630,11 +1650,11 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                         reconnect_count=_reconnect_map.get(r['server'], 0),
                         stability_weight=stability_weight,
                     )
-                    for r in results
+                    for r in decision_results
                 }
             # Profile-based normalised score → pick best (unconstrained first)
-            _profile_scores = _score_results(results, active_profile, _ws_map)
-            best = max(results, key=lambda r: _profile_scores.get(r['server'], 0.0))
+            _profile_scores = _score_results(decision_results, active_profile, _ws_map)
+            best = max(decision_results, key=lambda r: _profile_scores.get(r['server'], 0.0))
 
             # ── WireGuard rotation policy ─────────────────────────────────────
             # Applied only when multiple VPN profiles are configured.
@@ -1664,7 +1684,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
 
                 if _wg_rotation_mode == 'none':
                     # Stay in current profile: only consider servers with the same profile id
-                    _same = [r for r in results if _row_profile(r['server']) == _cur_profile_id]
+                    _same = [r for r in decision_results if _row_profile(r['server']) == _cur_profile_id]
                     if _same:
                         best = max(_same, key=lambda r: _profile_scores.get(r['server'], 0.0))
                         logger.info(
@@ -1691,7 +1711,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                             _best_pid = _cur_profile_id  # force same-profile fallback below
                         if _best_pid != _cur_profile_id:
                             # Global best is a rotation-allowed cross-profile — check gain
-                            _same = [r for r in results if _row_profile(r['server']) == _cur_profile_id]
+                            _same = [r for r in decision_results if _row_profile(r['server']) == _cur_profile_id]
                             if _same:
                                 _cur_pb = max(_same, key=lambda r: _profile_scores.get(r['server'], 0.0))
                                 _cur_pb_score  = _profile_scores.get(_cur_pb['server'], 0.0)
@@ -1716,7 +1736,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                                     )
                         else:
                             # Forced back to same profile — pick best within it
-                            _same = [r for r in results if _row_profile(r['server']) == _cur_profile_id]
+                            _same = [r for r in decision_results if _row_profile(r['server']) == _cur_profile_id]
                             if _same:
                                 best = max(_same, key=lambda r: _profile_scores.get(r['server'], 0.0))
 

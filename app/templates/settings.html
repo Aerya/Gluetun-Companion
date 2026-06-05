@@ -1929,6 +1929,18 @@
           </label>
         </div>
       </div>
+      <div class="col-12">
+        <div class="form-check form-switch">
+          <input type="checkbox" name="tracker_require_for_switch" class="form-check-input"
+                 id="tracker_require_for_switch" {{ 'checked' if cfg.tracker_require_for_switch == '1' }}>
+          <label class="form-check-label fw-semibold" for="tracker_require_for_switch">
+            {{ 'Exiger un résultat trackers OK pour les bascules automatiques et les pools' if session.get('lang','fr') == 'fr' else 'Require an OK tracker result for automatic switches and pools' }}
+          </label>
+          <div class="form-text">
+            {{ 'Pendant un benchmark, un serveur sous le seuil est exclu du choix final. Dans les pools, les serveurs déjà connus sous le seuil sont ignorés; les serveurs jamais testés restent candidats.' if session.get('lang','fr') == 'fr' else 'During a benchmark, servers below the threshold are excluded from the final pick. In pools, servers already known below threshold are ignored; never-tested servers remain candidates.' }}
+          </div>
+        </div>
+      </div>
       <div class="col-sm-4">
         <label class="form-label small mb-1">{{ 'Seuil OK' if session.get('lang','fr') == 'fr' else 'OK threshold' }}</label>
         <div class="input-group input-group-sm">

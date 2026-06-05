@@ -227,6 +227,32 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
         candidates.sort(key=lambda x: x['avg_dl'], reverse=True)
         candidates = candidates[:top_n]
 
+    try:
+        from .database import get_setting
+        if get_setting('tracker_check_enabled', '0') == '1' and get_setting('tracker_require_for_switch', '0') == '1':
+            from .torrent_trackers import tracker_status_for_servers
+            statuses = tracker_status_for_servers([c['name'] for c in candidates])
+            kept = []
+            skipped = []
+            for cand in candidates:
+                status = statuses.get(cand['name'])
+                cand['tracker_status'] = status or {'known': False}
+                if status and status.get('known') and not status.get('ok'):
+                    skipped.append(
+                        f"{cand['name']}({status.get('success_pct', 0)}% "
+                        f"{status.get('passed', 0)}/{status.get('tested', 0)})"
+                    )
+                    continue
+                kept.append(cand)
+            if skipped:
+                logger.info(
+                    'Pool %d tracker filter: skipped %d known-incompatible candidate(s): %s',
+                    pool_id, len(skipped), ', '.join(skipped),
+                )
+            candidates = kept
+    except Exception as exc:
+        logger.warning('Pool %d tracker eligibility filter failed: %s', pool_id, exc)
+
     return candidates
 
 

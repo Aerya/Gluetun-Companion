@@ -336,6 +336,7 @@ def init_db(db_path: str):
                 ('catalogue_sidecar_port',     '8767'),
                 ('catalogue_last_refresh',     ''),
                 ('tracker_check_enabled',      '0'),
+                ('tracker_require_for_switch', '0'),
                 ('tracker_check_threshold_pct','80'),
                 ('tracker_check_timeout_secs', '3'),
                 ('tracker_check_concurrency',  '12'),

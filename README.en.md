@@ -182,8 +182,10 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 ### BitTorrent tracker checks
 - **Multiple clients** — configure one or more qBittorrent or rTorrent/ruTorrent clients in **Settings → Trackers**; each client can be a tracker source, even if its container is also stopped during benchmarks
 - **Persistent discovery** — Companion fetches tracker URLs from loaded torrents, deduplicates them, then displays source clients, torrent count, last check and success status
+- **Passkeys hidden** — private passkeys and tokens are stripped from detected URLs before storage/display, including query-string keys and token-like path segments
 - **Per-URL control** — each tracker can be enabled or ignored individually for future checks
 - **VPN compatibility score** — enabled trackers are checked through the VPN path; by default, 80% success is enough to consider the server compatible, avoiding false negatives when a single tracker is down
+- **Optional switch criterion** — when enabled, a benchmarked server below the tracker threshold is excluded from the auto-switch pick; pools ignore servers already known as tracker-incompatible
 
 ### AirVPN
 - **Built-in AirVPN server picker** — *+ Add AirVPN servers* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), four tabs — full searchable list, geographic distribution by country, **Recommended** tab (load < 70 %, bandwidth ≥ 5 Gbit/s) and **Changes** tab (newly detected servers, disappeared servers, load shifts, top 5 healthiest countries); multi-select, one-click add
@@ -400,6 +402,13 @@ In **Settings → Trackers**, Companion can verify whether the trackers actually
 
 This threshold avoids false negatives: a private or public tracker can be temporarily down without making the VPN server bad. Companion stores per-URL history so it can gradually distinguish globally unavailable trackers from trackers blocked only on specific VPN paths.
 
+Two separate toggles are available in **Settings → Trackers**:
+
+- **Enable tracker checks during VPN verification** runs discovery before benchmarks, then checks enabled URLs for each tested server.
+- **Require an OK tracker result for automatic switches and pools** turns that score into an eligibility criterion: during a benchmark, servers below the threshold are excluded from the final pick; in pool rotation, servers already known below threshold are ignored, while never-tested servers remain candidates.
+
+The **Servers** page shows a sortable **Trackers** column with the latest known result per server (`OK`, below-threshold percentage, or `—` when never tested). This makes compatible and problematic servers easy to spot.
+
 HTTP/HTTPS trackers are checked through Gluetun's HTTP proxy when configured. UDP trackers require Companion to be able to send UDP from the VPN path; if your installation only exposes the HTTP proxy, UDP URLs can still be listed and managed, but real UDP checks depend on your network topology.
 
 ### BitTorrent clients and tracker discovery
@@ -415,7 +424,7 @@ Companion can manage multiple BitTorrent sources: for example one main qBittorre
 
 For qBittorrent, Companion uses the Web API: torrent list, then the trackers endpoint for each hash. For rTorrent/ruTorrent, Companion uses XML-RPC/RPC2 and fetches trackers per torrent.
 
-Discovery always runs **before** stopping containers configured in "Containers to pause during benchmark". So if `qbittorrent` or `rutorrent` is stopped during measurement, Companion uses the already cached tracker list. Discovered URLs remain visible in the UI and can be enabled or ignored one by one for future cycles.
+Discovery always runs **before** stopping containers configured in "Containers to pause during benchmark". So if `qbittorrent` or `rutorrent` is stopped during measurement, Companion uses the already cached tracker list. Discovered URLs remain visible in the UI and can be enabled or ignored one by one for future cycles. URLs are normalized without passkeys (`?passkey=...`, `authkey`, `token`, private path segments, etc.) so secrets are not exposed in the interface.
 
 ### "Test running" banner and Stop button
 
@@ -765,6 +774,7 @@ Rotation triggered (manual or automatic):
   1. Resolve candidates
      ├─ rules added together or intersected depending on the selected mode
      ├─ explicit pool exclusions removed
+     ├─ known tracker-incompatible servers removed (if enabled)
      └─ final limit by historical download speed (if set)
   2. Pick target server (random / round-robin / best historical download)
   3. switch_server() → write docker-compose.override.yml + docker compose up -d

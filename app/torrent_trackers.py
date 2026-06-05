@@ -439,6 +439,94 @@ def tracker_summary() -> dict:
         }
 
 
+def tracker_status_for_servers(server_names: list[str] | None = None) -> dict[str, dict]:
+    """Return the latest enabled-tracker check aggregate for each server."""
+    threshold = int(get_setting('tracker_check_threshold_pct', '80') or '80')
+    with get_db() as db:
+        enabled_total = db.execute(
+            'SELECT COUNT(*) AS n FROM tracker_urls WHERE enabled=1'
+        ).fetchone()['n'] or 0
+        if not enabled_total:
+            return {}
+
+        params: list = []
+        server_filter = ''
+        if server_names:
+            names = [str(n) for n in server_names if n]
+            if not names:
+                return {}
+            placeholders = ','.join('?' for _ in names)
+            server_filter = f'AND tc.server_name IN ({placeholders})'
+            params.extend(names)
+
+        rows = db.execute(f'''
+            WITH latest AS (
+                SELECT tc.*
+                FROM tracker_checks tc
+                JOIN tracker_urls tu ON tu.id = tc.tracker_id AND tu.enabled = 1
+                JOIN (
+                    SELECT tracker_id, server_name, MAX(checked_at) AS checked_at
+                    FROM tracker_checks
+                    WHERE server_name != ''
+                    GROUP BY tracker_id, server_name
+                ) lx
+                  ON lx.tracker_id = tc.tracker_id
+                 AND lx.server_name = tc.server_name
+                 AND lx.checked_at = tc.checked_at
+                WHERE tc.server_name != ''
+                {server_filter}
+            )
+            SELECT server_name,
+                   COUNT(*) AS tested,
+                   SUM(CASE WHEN success=1 THEN 1 ELSE 0 END) AS passed,
+                   MAX(checked_at) AS last_checked_at,
+                   GROUP_CONCAT(CASE WHEN success=0 THEN status END, ', ') AS failures
+            FROM latest
+            GROUP BY server_name
+        ''', params).fetchall()
+
+    statuses: dict[str, dict] = {}
+    for row in rows:
+        tested = int(row['tested'] or 0)
+        passed = int(row['passed'] or 0)
+        pct = round((passed / tested) * 100, 1) if tested else 0.0
+        statuses[row['server_name']] = {
+            'known': tested > 0,
+            'total': enabled_total,
+            'tested': tested,
+            'passed': passed,
+            'failed': max(0, tested - passed),
+            'success_pct': pct,
+            'threshold': threshold,
+            'ok': pct >= threshold if tested else False,
+            'last_checked_at': row['last_checked_at'],
+            'failures': row['failures'] or '',
+        }
+    return statuses
+
+
+def tracker_status_for_server(server_name: str) -> dict:
+    return tracker_status_for_servers([server_name]).get(server_name, {
+        'known': False,
+        'total': 0,
+        'tested': 0,
+        'passed': 0,
+        'failed': 0,
+        'success_pct': 0.0,
+        'threshold': int(get_setting('tracker_check_threshold_pct', '80') or '80'),
+        'ok': False,
+        'last_checked_at': None,
+        'failures': '',
+    })
+
+
+def tracker_server_is_eligible(server_name: str, allow_unknown: bool = True) -> tuple[bool, dict]:
+    status = tracker_status_for_server(server_name)
+    if not status.get('known'):
+        return allow_unknown, status
+    return bool(status.get('ok')), status
+
+
 def set_tracker_enabled(tracker_id: int, enabled: bool) -> bool:
     with get_db() as db:
         cur = db.execute(
