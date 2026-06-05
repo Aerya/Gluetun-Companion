@@ -71,6 +71,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
   - [Écoute Docker events](#écoute-docker-events)
   - [Contrôle des trackers BitTorrent via le VPN](#contrôle-des-trackers-bittorrent-via-le-vpn)
   - [Clients BitTorrent et découverte des trackers](#clients-bittorrent-et-découverte-des-trackers)
+  - [Inventaire des ports forwardés VPN](#inventaire-des-ports-forwardés-vpn)
   - [Profils d'usage](#profils-dusage)
   - [Profils VPN WireGuard](#profils-vpn-wireguard)
     - [Custom WireGuard : serveur personnel unique](#custom-wireguard--serveur-personnel-unique)
@@ -187,6 +188,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Contrôle par URL** — chaque tracker peut être activé ou ignoré individuellement pour les vérifications futures
 - **Score de compatibilité VPN** — les trackers activés sont testés depuis le chemin VPN ; par défaut, 80 % de réussite suffit pour considérer le serveur compatible afin d'éviter les faux négatifs quand un tracker est simplement down
 - **Critère de bascule optionnel** — si l'option est activée, un serveur benchmarké sous le seuil trackers est exclu du choix auto-switch ; les pools ignorent les serveurs déjà connus comme incompatibles
+- **Inventaire des ports forwardés** — déclarez les ports AirVPN/manual dans **Paramètres → Trackers** ; Companion vérifie leur présence dans Gluetun, les ports Docker publiés et le port d'écoute qBittorrent lié
 
 ### AirVPN
 - **Sélecteur de serveurs AirVPN intégré** — bouton *+ Ajouter des serveurs AirVPN* sur la page Serveurs : données en direct depuis `airvpn.org/api/status/` (cache 5 min), quatre onglets — liste complète searchable, répartition géographique par pays, onglet **Recommandés** (charge < 70 %, bande passante ≥ 5 Gbit/s) et onglet **Changements** (nouveaux serveurs détectés, serveurs disparus, évolutions de charge, top 5 pays les plus sains) ; ajout multi-sélection en un clic
@@ -426,6 +428,39 @@ Companion peut gérer plusieurs sources BitTorrent : par exemple un qBittorrent 
 Pour qBittorrent, Companion utilise l'API Web : liste des torrents, puis endpoint trackers par hash. Pour rTorrent/ruTorrent, Companion utilise XML-RPC/RPC2 et récupère les trackers par torrent.
 
 La découverte est toujours faite **avant** de stopper les containers configurés dans “Containers à stopper pendant le benchmark”. Ainsi, si `qbittorrent` ou `rutorrent` est arrêté pendant la mesure, Companion utilise la liste de trackers déjà mise en cache. Les URLs découvertes restent visibles dans l'interface et peuvent être activées ou ignorées une par une pour les cycles futurs. Les URLs sont normalisées sans passkey (`?passkey=...`, `authkey`, `token`, segments privés du chemin, etc.) pour éviter d'exposer des secrets dans l'interface.
+
+### Inventaire des ports forwardés VPN
+
+Dans **Paramètres → Trackers → Ports forwardés VPN**, Companion peut inventorier les ports entrants nécessaires aux clients BitTorrent. Le premier support couvre **AirVPN/manual** : le port reste réservé/configuré côté fournisseur par l'administrateur, puis Companion vérifie que la stack locale est cohérente.
+
+Chaque entrée contient :
+
+- nom lisible ;
+- fournisseur (`AirVPN` ou `Manual`) ;
+- mode (`Manual`) ;
+- port ;
+- protocoles `TCP` et/ou `UDP` ;
+- client BitTorrent lié, optionnel ;
+- note libre.
+
+Pour chaque port déclaré, l'interface affiche :
+
+- présence du port dans `FIREWALL_VPN_INPUT_PORTS` ;
+- présence du port dans `FIREWALL_INPUT_PORTS` ;
+- publication Docker du port sur le container Gluetun, par protocole ;
+- port d'écoute qBittorrent lorsque l'entrée est liée à un client qBittorrent.
+
+Le bouton **Sync qBittorrent** met à jour le `listen_port` qBittorrent via l'API Web (`/api/v2/app/setPreferences`) avec le port déclaré. La synchronisation automatique rTorrent/ruTorrent n'est pas activée à ce stade : les installations ruTorrent exposent des chemins de configuration trop variables pour être modifiées sans convention explicite.
+
+Pour AirVPN, Companion ne crée pas le port sur le panel AirVPN. Le flux attendu est :
+
+1. réserver le port dans le panel AirVPN ;
+2. publier le port sur Gluetun, par exemple `19975:19975/tcp` et `19975:19975/udp` ;
+3. ajouter le port à `FIREWALL_INPUT_PORTS` et `FIREWALL_VPN_INPUT_PORTS` ;
+4. déclarer le port dans Companion ;
+5. lier le port au client qBittorrent concerné et utiliser **Sync qBittorrent** si nécessaire.
+
+Les fournisseurs avec port forwarding dynamique Gluetun intégré (par exemple ProtonVPN selon la configuration Gluetun) nécessitent une étape supplémentaire : lire le port attribué au runtime, puis le propager vers les clients. Cette brique n'est pas incluse dans le support AirVPN/manual initial.
 
 ### Bandeau « Test en cours » et bouton Arrêter
 

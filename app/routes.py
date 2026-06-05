@@ -47,6 +47,10 @@ from .torrent_trackers import (
     save_tracker_settings, set_tracker_enabled, tracker_status_for_servers,
     tracker_summary,
 )
+from .port_forwarding import (
+    delete_port_forward, inspect_port_forwards, save_port_forward,
+    sync_qbit_listen_port,
+)
 
 bp = Blueprint('main', __name__)
 
@@ -1733,6 +1737,30 @@ def settings():
                 flash('Client BitTorrent introuvable.', 'danger')
 
         # ── WireGuard profiles ──────────────────────────────────────────────
+        elif action == 'port_forward_save':
+            try:
+                save_port_forward({
+                    'id': request.form.get('port_forward_id', '').strip(),
+                    'name': request.form.get('pf_name', '').strip(),
+                    'provider': request.form.get('pf_provider', 'airvpn').strip(),
+                    'mode': request.form.get('pf_mode', 'manual').strip(),
+                    'port': request.form.get('pf_port', '').strip(),
+                    'protocols': request.form.getlist('pf_protocols'),
+                    'torrent_client_id': request.form.get('pf_torrent_client_id', '').strip(),
+                    'enabled': bool(request.form.get('pf_enabled')),
+                    'notes': request.form.get('pf_notes', '').strip(),
+                })
+                flash_t('flash_settings_saved', 'success')
+            except ValueError as exc:
+                flash(str(exc), 'danger')
+
+        elif action == 'port_forward_delete':
+            try:
+                delete_port_forward(int(request.form.get('port_forward_id', '0') or '0'))
+                flash_t('flash_settings_saved', 'success')
+            except ValueError:
+                flash('Port forward introuvable.', 'danger')
+
         elif action == 'wg_profile_save':
             _provider = request.form.get('wg_provider', '').strip()
             _name     = request.form.get('wg_profile_name', '').strip()
@@ -2137,6 +2165,7 @@ def settings():
         torrent_clients=list_torrent_clients(),
         trackers=list_trackers(),
         trackers_summary=tracker_summary(),
+        port_forwards=inspect_port_forwards(current_app.config['GLUETUN_CONTAINER']),
     )
 
 
@@ -2737,6 +2766,13 @@ def api_tracker_enabled(tracker_id: int):
         'ok': ok,
         'tracker_summary': tracker_summary(),
     }), (200 if ok else 404)
+
+
+@bp.route('/api/port-forwards/<int:port_forward_id>/sync-qbittorrent', methods=['POST'])
+@login_required
+def api_port_forward_sync_qbittorrent(port_forward_id: int):
+    result = sync_qbit_listen_port(port_forward_id)
+    return jsonify(result), (200 if result.get('ok') else 400)
 
 
 # ---------------------------------------------------------------------------

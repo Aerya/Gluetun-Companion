@@ -246,12 +246,28 @@ def init_db(db_path: str):
                 checked_at      TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS port_forwards (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                name               TEXT    NOT NULL DEFAULT '',
+                provider           TEXT    NOT NULL DEFAULT 'airvpn',
+                mode               TEXT    NOT NULL DEFAULT 'manual',
+                port               INTEGER NOT NULL,
+                protocols          TEXT    NOT NULL DEFAULT 'tcp,udp',
+                torrent_client_id  INTEGER REFERENCES torrent_clients(id) ON DELETE SET NULL,
+                enabled            INTEGER NOT NULL DEFAULT 1,
+                notes              TEXT    NOT NULL DEFAULT '',
+                created_at         TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at         TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE INDEX IF NOT EXISTS idx_tracker_urls_host
                 ON tracker_urls(host);
             CREATE INDEX IF NOT EXISTS idx_tracker_sources_tracker
                 ON tracker_sources(tracker_id);
             CREATE INDEX IF NOT EXISTS idx_tracker_checks_tracker
                 ON tracker_checks(tracker_id);
+            CREATE INDEX IF NOT EXISTS idx_port_forwards_client
+                ON port_forwards(torrent_client_id);
 
             INSERT OR IGNORE INTO settings (key, value) VALUES
                 ('test_interval_hours',      '6'),
@@ -427,6 +443,12 @@ def init_db(db_path: str):
             "ALTER TABLE torrent_clients ADD COLUMN category_filter TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE torrent_clients ADD COLUMN tag_filter TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE tracker_urls ADD COLUMN torrent_count INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE port_forwards ADD COLUMN provider TEXT NOT NULL DEFAULT 'airvpn'",
+            "ALTER TABLE port_forwards ADD COLUMN mode TEXT NOT NULL DEFAULT 'manual'",
+            "ALTER TABLE port_forwards ADD COLUMN protocols TEXT NOT NULL DEFAULT 'tcp,udp'",
+            "ALTER TABLE port_forwards ADD COLUMN torrent_client_id INTEGER REFERENCES torrent_clients(id) ON DELETE SET NULL",
+            "ALTER TABLE port_forwards ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE port_forwards ADD COLUMN notes TEXT NOT NULL DEFAULT ''",
         ]:
             try:
                 db.execute(stmt)

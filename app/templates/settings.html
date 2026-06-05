@@ -434,7 +434,8 @@
     ],
     'trackers': [
       (readme_url ~ ('#contrôle-des-trackers-bittorrent-via-le-vpn' if session.get('lang','fr') == 'fr' else '#bittorrent-tracker-checks-through-the-vpn'), 'Contrôle trackers' if session.get('lang','fr') == 'fr' else 'Tracker checks'),
-      (readme_url ~ ('#clients-bittorrent-et-découverte-des-trackers' if session.get('lang','fr') == 'fr' else '#bittorrent-clients-and-tracker-discovery'), 'Clients BitTorrent' if session.get('lang','fr') == 'fr' else 'BitTorrent clients')
+      (readme_url ~ ('#clients-bittorrent-et-découverte-des-trackers' if session.get('lang','fr') == 'fr' else '#bittorrent-clients-and-tracker-discovery'), 'Clients BitTorrent' if session.get('lang','fr') == 'fr' else 'BitTorrent clients'),
+      (readme_url ~ ('#inventaire-des-ports-forwardés-vpn' if session.get('lang','fr') == 'fr' else '#vpn-forwarded-port-inventory'), 'Ports forwardés' if session.get('lang','fr') == 'fr' else 'Forwarded ports')
     ],
     'maintenance': [
       (readme_url ~ ('#endpoint-prometheus-metrics' if session.get('lang','fr') == 'fr' else '#prometheus-metrics-endpoint'), 'Prometheus /metrics'),
@@ -2095,6 +2096,184 @@
     </form>
   </div>
 
+  <div class="card p-4 mb-4" id="card-port-forwards">
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+      <div>
+        <h6 class="fw-bold mb-1">
+          <i class="bi bi-diagram-3 text-info"></i>
+          {{ 'Ports forwardés VPN' if session.get('lang','fr') == 'fr' else 'VPN forwarded ports' }}
+        </h6>
+        <p class="text-muted small mb-0">
+          {{ 'Déclarer les ports AirVPN/manual puis vérifier Gluetun, Docker et qBittorrent.' if session.get('lang','fr') == 'fr' else 'Declare AirVPN/manual ports, then verify Gluetun, Docker and qBittorrent.' }}
+        </p>
+      </div>
+      <span class="badge bg-secondary">{{ port_forwards | length }}</span>
+    </div>
+
+    {% if port_forwards %}
+    <div class="d-flex flex-column gap-2 mb-3">
+      {% for pf in port_forwards %}
+      <details class="border rounded p-2" style="border-color:var(--bs-border-color)!important">
+        <summary class="d-flex flex-wrap align-items-center gap-2" style="cursor:pointer">
+          <span class="badge {{ 'bg-success' if pf.enabled else 'bg-secondary' }}">{{ 'ON' if pf.enabled else 'OFF' }}</span>
+          <strong>{{ pf.name }}</strong>
+          <code>{{ pf.port }}/{{ pf.protocols }}</code>
+          <span class="badge {{ 'bg-success' if pf.overall_state == 'ok' else ('bg-danger' if pf.overall_state == 'bad' else 'bg-secondary') }}">{{ pf.overall_label }}</span>
+          <span class="text-muted small">{{ 'AirVPN' if pf.provider == 'airvpn' else 'Manual' }} · {{ 'Manuel' if session.get('lang','fr') == 'fr' else 'Manual' }}</span>
+          {% if pf.client_name %}
+          <span class="text-muted small text-truncate">{{ pf.client_name }}</span>
+          {% endif %}
+        </summary>
+
+        <div class="table-responsive mt-3">
+          <table class="table table-sm align-middle mb-3">
+            <thead>
+              <tr>
+                <th>Gluetun VPN</th>
+                <th>{{ 'Entrée Gluetun' if session.get('lang','fr') == 'fr' else 'Gluetun input' }}</th>
+                <th>Docker</th>
+                <th>Client</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="badge {{ 'bg-success' if pf.gluetun_vpn_input.state == 'ok' else ('bg-danger' if pf.gluetun_vpn_input.state == 'bad' else 'bg-secondary') }}">{{ pf.gluetun_vpn_input.label }}</span> <code class="small">FIREWALL_VPN_INPUT_PORTS</code></td>
+                <td><span class="badge {{ 'bg-success' if pf.gluetun_input.state == 'ok' else ('bg-danger' if pf.gluetun_input.state == 'bad' else 'bg-secondary') }}">{{ pf.gluetun_input.label }}</span> <code class="small">FIREWALL_INPUT_PORTS</code></td>
+                <td>
+                  {% for proto, st in pf.docker_ports.items() %}
+                  <span class="badge {{ 'bg-success' if st.state == 'ok' else ('bg-danger' if st.state == 'bad' else 'bg-secondary') }}">{{ st.label }}</span>
+                  {% endfor %}
+                </td>
+                <td>
+                  <span class="badge {{ 'bg-success' if pf.client_status.state == 'ok' else ('bg-danger' if pf.client_status.state == 'bad' else 'bg-secondary') }}">{{ pf.client_status.label }}</span>
+                  {% if pf.client_listen_port %}
+                  <code class="small">{{ pf.client_listen_port }}</code>
+                  {% endif %}
+                  {% if pf.client_error %}
+                  <span class="text-warning small">{{ pf.client_error }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <form method="post" class="row g-2">
+          <input type="hidden" name="action" value="port_forward_save">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="port_forward_id" value="{{ pf.id }}">
+          <div class="col-md-3">
+            <label class="form-label small mb-1">{{ 'Nom' if session.get('lang','fr') == 'fr' else 'Name' }}</label>
+            <input name="pf_name" class="form-control form-control-sm" value="{{ pf.name }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small mb-1">{{ 'Fournisseur' if session.get('lang','fr') == 'fr' else 'Provider' }}</label>
+            <select name="pf_provider" class="form-select form-select-sm">
+              <option value="airvpn" {{ 'selected' if pf.provider == 'airvpn' }}>AirVPN</option>
+              <option value="manual" {{ 'selected' if pf.provider == 'manual' }}>{{ 'Manuel' if session.get('lang','fr') == 'fr' else 'Manual' }}</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small mb-1">Mode</label>
+            <select name="pf_mode" class="form-select form-select-sm">
+              <option value="manual" selected>{{ 'Manuel' if session.get('lang','fr') == 'fr' else 'Manual' }}</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small mb-1">Port</label>
+            <input name="pf_port" type="number" class="form-control form-control-sm" value="{{ pf.port }}" min="1" max="65535">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">{{ 'Client lié' if session.get('lang','fr') == 'fr' else 'Linked client' }}</label>
+            <select name="pf_torrent_client_id" class="form-select form-select-sm">
+              <option value="">{{ 'Aucun' if session.get('lang','fr') == 'fr' else 'None' }}</option>
+              {% for c in torrent_clients %}
+              <option value="{{ c.id }}" {{ 'selected' if pf.torrent_client_id == c.id }}>{{ c.name }} · {{ c.client_type }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3 d-flex align-items-center gap-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="pf_enabled" id="pf_enabled_{{ pf.id }}" {{ 'checked' if pf.enabled }}>
+              <label class="form-check-label small" for="pf_enabled_{{ pf.id }}">Actif</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="pf_protocols" value="tcp" id="pf_tcp_{{ pf.id }}" {{ 'checked' if 'tcp' in pf.protocol_list }}>
+              <label class="form-check-label small" for="pf_tcp_{{ pf.id }}">TCP</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="pf_protocols" value="udp" id="pf_udp_{{ pf.id }}" {{ 'checked' if 'udp' in pf.protocol_list }}>
+              <label class="form-check-label small" for="pf_udp_{{ pf.id }}">UDP</label>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <input name="pf_notes" class="form-control form-control-sm" value="{{ pf.notes }}" placeholder="{{ 'Note' if session.get('lang','fr') == 'fr' else 'Note' }}">
+          </div>
+          <div class="col-md-3 d-flex gap-2">
+            <button class="btn btn-sm btn-primary"><i class="bi bi-save"></i> {{ t.cmn_save }}</button>
+            {% if pf.client_type == 'qbittorrent' %}
+            <button type="button" class="btn btn-sm btn-outline-info" onclick="portForwardSyncQbit({{ pf.id }}, this)">
+              <i class="bi bi-arrow-repeat"></i> {{ 'Synchroniser qBittorrent' if session.get('lang','fr') == 'fr' else 'Sync qBittorrent' }}
+            </button>
+            {% endif %}
+          </div>
+        </form>
+        <form method="post" class="mt-2" onsubmit="return confirm('{{ 'Supprimer ce port forward ?' if session.get('lang','fr') == 'fr' else 'Delete this forwarded port?' }}')">
+          <input type="hidden" name="action" value="port_forward_delete">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="port_forward_id" value="{{ pf.id }}">
+          <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash3"></i> {{ 'Supprimer' if session.get('lang','fr') == 'fr' else 'Delete' }}</button>
+        </form>
+      </details>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post" class="border rounded p-3" style="border-color:var(--bs-border-color)!important">
+      <input type="hidden" name="action" value="port_forward_save">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="fw-semibold mb-2"><i class="bi bi-plus-circle me-1"></i>{{ 'Ajouter un port forwardé' if session.get('lang','fr') == 'fr' else 'Add forwarded port' }}</div>
+      <div class="row g-2">
+        <div class="col-md-3"><input name="pf_name" class="form-control form-control-sm" placeholder="qBittorrent AirVPN"></div>
+        <div class="col-md-2">
+          <select name="pf_provider" class="form-select form-select-sm">
+            <option value="airvpn">AirVPN</option>
+            <option value="manual">{{ 'Manuel' if session.get('lang','fr') == 'fr' else 'Manual' }}</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <select name="pf_mode" class="form-select form-select-sm">
+            <option value="manual">{{ 'Manuel' if session.get('lang','fr') == 'fr' else 'Manual' }}</option>
+          </select>
+        </div>
+        <div class="col-md-2"><input name="pf_port" type="number" class="form-control form-control-sm" placeholder="19975" min="1" max="65535" required></div>
+        <div class="col-md-3">
+          <select name="pf_torrent_client_id" class="form-select form-select-sm">
+            <option value="">{{ 'Client BitTorrent optionnel' if session.get('lang','fr') == 'fr' else 'Optional BitTorrent client' }}</option>
+            {% for c in torrent_clients %}
+            <option value="{{ c.id }}">{{ c.name }} · {{ c.client_type }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-center gap-3">
+          <input type="hidden" name="pf_enabled" value="on">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="pf_protocols" value="tcp" id="pf_new_tcp" checked>
+            <label class="form-check-label small" for="pf_new_tcp">TCP</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="pf_protocols" value="udp" id="pf_new_udp" checked>
+            <label class="form-check-label small" for="pf_new_udp">UDP</label>
+          </div>
+        </div>
+        <div class="col-md-6"><input name="pf_notes" class="form-control form-control-sm" placeholder="{{ 'Note' if session.get('lang','fr') == 'fr' else 'Note' }}"></div>
+        <div class="col-md-3">
+          <button class="btn btn-sm btn-success fw-semibold"><i class="bi bi-save"></i> {{ 'Enregistrer le port' if session.get('lang','fr') == 'fr' else 'Save port' }}</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
   <div class="card p-4 mb-4" id="card-tracker-list">
     <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
       <div>
@@ -2547,6 +2726,7 @@ function arrangeSettingsTabs() {
   [
     byId('card-tracker-settings'),
     byId('card-torrent-clients'),
+    byId('card-port-forwards'),
     byId('card-tracker-list'),
   ].forEach(el => move(pane('settings-trackers-grid'), el));
 
@@ -2648,6 +2828,7 @@ if (document.readyState === 'loading') {
     const actionInput = form.querySelector('input[name="action"]');
     const action = actionInput ? actionInput.value : '';
     if (!action || action === 'wg_profile_delete') return;
+    if (action === 'port_forward_save' || action === 'port_forward_delete') return;
 
     event.preventDefault();
     rememberActiveTab();
@@ -3428,6 +3609,32 @@ function trackerToggle(id, enabled) {
     _updateTrackerSummary(data.tracker_summary);
     _trackerMsg(enabled ? 'Tracker enabled' : 'Tracker ignored', 'text-muted');
   }).catch(() => _trackerMsg('Toggle failed', 'text-danger'));
+}
+
+function portForwardSyncQbit(id, btn) {
+  const oldHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>{{ "Sync..." if session.get("lang","fr") == "fr" else "Sync..." }}';
+  }
+  fetch(`{{ url_for("main.api_port_forward_sync_qbittorrent", port_forward_id=0) }}`.replace('/0/', `/${id}/`), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _trackerCsrf},
+    body: JSON.stringify({}),
+  })
+    .then(async response => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.ok) throw new Error(data.error || 'sync failed');
+      _trackerMsg('{{ "Port qBittorrent synchronisé." if session.get("lang","fr") == "fr" else "qBittorrent port synchronized." }}', 'text-success');
+      window.setTimeout(() => window.location.reload(), 650);
+    })
+    .catch(err => _trackerMsg(err.message || 'Sync failed', 'text-danger'))
+    .finally(() => {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = oldHtml;
+      }
+    });
 }
 </script>
 {% endblock %}
