@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
          *) echo "Unsupported arch: $ARCH" && exit 1 ;; \
        esac \
     && mkdir -p /usr/local/lib/docker/cli-plugins \
-    && curl -fsSL "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-${COMPOSE_ARCH}" \
+    && curl -fsSL "https://github.com/docker/compose/releases/download/v5.1.4/docker-compose-linux-${COMPOSE_ARCH}" \
          -o /usr/local/lib/docker/cli-plugins/docker-compose \
     && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose \
     && apt-get purge -y curl && apt-get autoremove -y \

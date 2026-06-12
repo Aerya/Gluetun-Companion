@@ -205,6 +205,47 @@ def create_app():
 
     app.jinja_env.filters['bw_label'] = _bw_label
 
+    def _rel_time(value) -> str:
+        """Human relative time: 'il y a 2 h' / '2 h ago', or 'dans 3 h 12' for future.
+
+        Accepts a UTC datetime string (SQLite CURRENT_TIMESTAMP) or a datetime
+        object (tz-aware or naive local).  Empty string on bad input.
+        """
+        if not value:
+            return ''
+        try:
+            if isinstance(value, datetime):
+                if value.tzinfo is not None:
+                    now = datetime.now(tz=value.tzinfo)
+                else:
+                    now = datetime.now()
+                delta = (value - now).total_seconds()
+            else:
+                utc_dt = datetime.strptime(str(value)[:19], '%Y-%m-%d %H:%M:%S')
+                ts = calendar.timegm(utc_dt.timetuple())
+                delta = ts - datetime.now().timestamp()
+        except (ValueError, TypeError):
+            return ''
+
+        fr = session.get('lang', 'fr') == 'fr'
+        future = delta > 0
+        secs = abs(int(delta))
+        if secs < 60:
+            txt = "moins d'1 min" if fr else 'less than 1 min'
+        elif secs < 3600:
+            txt = f'{secs // 60} min'
+        elif secs < 86400:
+            h, m = secs // 3600, (secs % 3600) // 60
+            txt = f'{h} h {m:02d}' if m else f'{h} h'
+        else:
+            d = secs // 86400
+            txt = f'{d} j' if fr else f'{d} d'
+        if future:
+            return f'dans {txt}' if fr else f'in {txt}'
+        return f'il y a {txt}' if fr else f'{txt} ago'
+
+    app.jinja_env.filters['reltime'] = _rel_time
+
     from .csrf import generate_csrf, validate_csrf
     app.jinja_env.globals['csrf_token'] = generate_csrf
 

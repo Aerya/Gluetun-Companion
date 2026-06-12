@@ -2946,6 +2946,47 @@ def api_catalogue_refresh():
     return jsonify(result), (200 if result.get('ok') else 500)
 
 
+@bp.route('/api/server-detail')
+@login_required
+def api_server_detail():
+    """All data for the server detail drawer on /servers, in one call."""
+    name = request.args.get('name', '').strip()
+    if not name:
+        return jsonify({'ok': False, 'error': 'missing name'}), 400
+    with get_db() as db:
+        srv = db.execute(
+            'SELECT id, name, filter_type, enabled, consecutive_failures '
+            'FROM servers WHERE name = ?', (name,),
+        ).fetchone()
+        if not srv:
+            return jsonify({'ok': False, 'error': 'unknown server'}), 404
+        tests = db.execute(
+            'SELECT tested_at, download_mbps, upload_mbps, latency_ms, '
+            '       jitter_ms, packet_loss_pct, success, test_trigger '
+            'FROM speed_tests WHERE server_name = ? '
+            'ORDER BY tested_at DESC LIMIT 30', (name,),
+        ).fetchall()
+        agg = db.execute(
+            'SELECT COUNT(*) AS n, AVG(download_mbps) AS avg_dl, '
+            '       AVG(upload_mbps) AS avg_ul, AVG(latency_ms) AS avg_lat, '
+            '       MAX(download_mbps) AS max_dl '
+            'FROM speed_tests WHERE server_name = ? AND success = 1', (name,),
+        ).fetchone()
+        sw = db.execute(
+            'SELECT switched_at, from_server, to_server, success '
+            'FROM switches '
+            "WHERE to_server LIKE '%' || ? OR from_server LIKE '%' || ? "
+            'ORDER BY switched_at DESC LIMIT 5', (name, name),
+        ).fetchall()
+    return jsonify({
+        'ok': True,
+        'server': dict(srv),
+        'aggregate': dict(agg) if agg else {},
+        'tests': [dict(r) for r in tests],
+        'switches': [dict(r) for r in sw],
+    })
+
+
 @bp.route('/api/catalogue/providers')
 @login_required
 def api_catalogue_providers():

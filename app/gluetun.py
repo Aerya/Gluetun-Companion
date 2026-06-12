@@ -11,6 +11,7 @@ Network architecture (no shared Docker network required)
                    via host.docker.internal (see docker-compose.yml extra_hosts).
 """
 
+import json
 import os
 import subprocess
 import threading
@@ -329,6 +330,16 @@ def _compose_recreate(
 
     last_err = ''
     for work_dir, project in candidates:
+        # The candidate's compose dir may not be mounted inside the Companion
+        # container (cross-stack dependent) — skip to the next candidate
+        # instead of letting subprocess raise and abort the whole loop.
+        if work_dir and not os.path.isdir(work_dir):
+            last_err = f'compose dir not accessible from Companion: {work_dir}'
+            logger.warning(
+                'Compose recreate attempt skipped for %s: %s — trying next candidate',
+                container_name, last_err,
+            )
+            continue
         cmd = ['docker', 'compose']
         if project:
             cmd += ['-p', project]
@@ -337,13 +348,28 @@ def _compose_recreate(
             'Recreating %s via compose: %s (cwd=%s)',
             container_name, ' '.join(cmd), work_dir,
         )
-        result = subprocess.run(
-            cmd,
-            cwd=work_dir,
-            capture_output=True,
-            text=True,
-            timeout=90,
-        )
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=work_dir,
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+        except subprocess.TimeoutExpired:
+            last_err = 'docker compose timed out after 90s'
+            logger.warning(
+                'Compose recreate attempt failed for %s (cwd=%s): %s — trying next candidate',
+                container_name, work_dir, last_err,
+            )
+            continue
+        except OSError as exc:   # missing docker binary, bad cwd race, etc.
+            last_err = str(exc)
+            logger.warning(
+                'Compose recreate attempt failed for %s (cwd=%s): %s — trying next candidate',
+                container_name, work_dir, last_err,
+            )
+            continue
         if result.returncode == 0:
             return   # success
         last_err = (result.stderr or result.stdout or 'unknown error').strip()
@@ -616,6 +642,44 @@ def pull_image(container_name: str) -> tuple[bool, bool, str]:
         return False, False, str(exc)
 
 
+def record_gluetun_id(container_id: str) -> None:
+    """Remember a Gluetun container ID in the persistent history.
+
+    The history is what lets ``list_orphaned_network_dependents`` distinguish
+    "dependent of a *former Gluetun*" from "dependent of some unrelated dead
+    container" (e.g. a second VPN stack the user runs) — Companion must never
+    adopt and recreate containers outside its own scope.
+
+    Capped at the 25 most recent IDs.  No-op if the ID is already recorded.
+    """
+    if not container_id:
+        return
+    try:
+        from .database import get_setting, set_setting
+        history = json.loads(get_setting('gluetun_id_history', '[]') or '[]')
+        if not isinstance(history, list):
+            history = []
+        if container_id in history:
+            return
+        history.append(container_id)
+        set_setting('gluetun_id_history', json.dumps(history[-25:]))
+    except Exception as exc:
+        logger.debug('record_gluetun_id: %s', exc)
+
+
+def _known_gluetun_ids() -> set[str]:
+    """Return the recorded Gluetun IDs, both full and short (12-char) forms."""
+    try:
+        from .database import get_setting
+        history = json.loads(get_setting('gluetun_id_history', '[]') or '[]')
+        if not isinstance(history, list):
+            return set()
+        ids = {str(i) for i in history if i}
+        return ids | {i[:12] for i in ids}
+    except Exception:
+        return set()
+
+
 def list_network_dependents(container_name: str) -> list[str]:
     """
     Return the sorted names of all containers that use
@@ -628,6 +692,7 @@ def list_network_dependents(container_name: str) -> list[str]:
         try:
             gluetun    = client.containers.get(container_name)
             gluetun_id = gluetun.id
+            record_gluetun_id(gluetun_id)   # keep the ID history fresh
         except Exception:
             gluetun_id = ''
         name_target = f'container:{container_name}'
@@ -681,10 +746,19 @@ def list_orphaned_network_dependents() -> list[str]:
     references a container ID that no longer exists — meaning the network
     namespace it was sharing has been destroyed.
 
+    Only containers whose stale reference matches a **recorded former Gluetun
+    ID** are adopted — a dead reference to some unrelated container (e.g. a
+    second VPN stack the user runs) is not Companion's to fix.  Exception:
+    the first scan after upgrading to this version adopts all dead-ref
+    orphans once (the ID history did not exist before, so pre-existing broken
+    dependents would otherwise never be repaired).
+
     Returns the sorted list of container names that need to be recreated.
     """
     result: list[str] = []
     try:
+        from .database import get_setting, set_setting
+
         client = docker.from_env()
         # Build the set of all currently-known container IDs and names
         all_containers  = client.containers.list(all=True)
@@ -693,18 +767,41 @@ def list_orphaned_network_dependents() -> list[str]:
         known_short_ids = {c.id[:12] for c in all_containers}
         known_names     = {c.name for c in all_containers}
 
+        gluetun_ids = _known_gluetun_ids()
+        # One-time legacy pass: before this version no ID history existed, so
+        # orphans created earlier reference IDs we never recorded.
+        legacy_pass = get_setting('orphan_legacy_adoption_done', '0') != '1'
+
         for c in all_containers:
             mode = c.attrs['HostConfig'].get('NetworkMode', '')
             if not mode.startswith('container:'):
                 continue
             ref = mode[len('container:'):]
-            # If the referenced container no longer exists → orphaned namespace
-            if ref not in known_ids and ref not in known_short_ids and ref not in known_names:
+            # Reference still resolves → not orphaned
+            if ref in known_ids or ref in known_short_ids or ref in known_names:
+                continue
+            # Dead reference — only adopt if it was one of *our* Gluetun IDs
+            if ref in gluetun_ids or ref[:12] in gluetun_ids:
                 logger.debug(
-                    'list_orphaned_network_dependents: %s has stale NetworkMode %r',
-                    c.name, mode,
+                    'list_orphaned_network_dependents: %s has stale NetworkMode %r '
+                    '(former Gluetun ID)', c.name, mode,
                 )
                 result.append(c.name)
+            elif legacy_pass:
+                logger.info(
+                    'list_orphaned_network_dependents: %s has stale NetworkMode %r — '
+                    'adopting once (legacy pass, no ID history yet)', c.name, mode,
+                )
+                result.append(c.name)
+            else:
+                logger.debug(
+                    'list_orphaned_network_dependents: %s references dead container %r '
+                    'which was never a Gluetun managed by Companion — skipping',
+                    c.name, ref,
+                )
+
+        if legacy_pass:
+            set_setting('orphan_legacy_adoption_done', '1')
     except Exception as exc:
         logger.warning('list_orphaned_network_dependents: %s', exc)
     return sorted(result)

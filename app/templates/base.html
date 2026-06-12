@@ -538,6 +538,30 @@ function stopBenchmark() {
     });
 }
 </script>
+{# ── Global toast container + helper ─────────────────────────────────────── #}
+<div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:1090"></div>
+<script>
+/**
+ * showToast(message, type) — type: 'success' | 'danger' | 'warning' | 'info'
+ * Replaces native alert() for JS-driven feedback; auto-dismisses after 5 s.
+ */
+function showToast(message, type) {
+  const colors = { success: 'text-bg-success', danger: 'text-bg-danger',
+                   warning: 'text-bg-warning', info: 'text-bg-info' };
+  const el = document.createElement('div');
+  el.className = 'toast align-items-center border-0 ' + (colors[type] || 'text-bg-secondary');
+  el.setAttribute('role', 'alert');
+  el.innerHTML = '<div class="d-flex">' +
+    '<div class="toast-body"></div>' +
+    '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>' +
+    '</div>';
+  el.querySelector('.toast-body').textContent = message;
+  document.getElementById('toast-container').appendChild(el);
+  const t = new bootstrap.Toast(el, { delay: 5000 });
+  el.addEventListener('hidden.bs.toast', () => el.remove());
+  t.show();
+}
+</script>
 {% block scripts %}{% endblock %}
 {% block footer %}{% endblock %}
 </body>

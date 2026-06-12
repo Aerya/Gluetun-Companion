@@ -87,6 +87,46 @@
 
 
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
+{# ── Onboarding checklist — shown until install is complete ─────────────── #}
+{% set _ob_wg = _g_has_wg_profiles %}
+{% set _ob_srv = server_count and server_count > 0 %}
+{% set _ob_test = tested_servers and tested_servers > 0 %}
+{% if not (_ob_wg and _ob_srv and _ob_test) %}
+<div class="card p-3 mb-3 border-primary border-opacity-50">
+  <div class="fw-semibold mb-2" style="font-size:.95rem">
+    <i class="bi bi-rocket-takeoff text-primary me-1"></i> {{ t.onboard_title }}
+  </div>
+  <div class="d-flex flex-column gap-2" style="font-size:.88rem">
+    <div class="d-flex align-items-center gap-2">
+      {% if _ob_wg %}<i class="bi bi-check-circle-fill text-success"></i>
+        <span class="text-muted text-decoration-line-through">{{ t.onboard_step_wg }}</span>
+      {% else %}<i class="bi bi-circle text-muted"></i>
+        <a href="{{ url_for('main.settings') }}#wireguard" class="text-decoration-none">{{ t.onboard_step_wg }} →</a>
+      {% endif %}
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      {% if _ob_srv %}<i class="bi bi-check-circle-fill text-success"></i>
+        <span class="text-muted text-decoration-line-through">{{ t.onboard_step_servers }}</span>
+      {% else %}<i class="bi bi-circle text-muted"></i>
+        <a href="{{ url_for('main.servers') }}" class="text-decoration-none">{{ t.onboard_step_servers }} →</a>
+      {% endif %}
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      {% if _ob_test %}<i class="bi bi-check-circle-fill text-success"></i>
+        <span class="text-muted text-decoration-line-through">{{ t.onboard_step_bench }}</span>
+      {% else %}<i class="bi bi-circle text-muted"></i>
+        <span>{{ t.onboard_step_bench }}</span>
+        {% if _ob_srv and vpn_status == 'running' %}
+        <button class="btn btn-sm btn-success py-0 px-2 ms-1" onclick="triggerBenchmark()">
+          <i class="bi bi-play-fill"></i> {{ t.dash_run_now }}
+        </button>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {# ROW 1 — VPN status + Active server + Benchmark controls ───────────────── #}
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
 <div class="row g-3 mb-3">
@@ -187,7 +227,10 @@
         <i class="bi bi-clock-history"></i> {{ t.dash_next_test }}
       </div>
       {% if next_run %}
-      <div class="fw-semibold mb-1">{{ next_run.strftime('%d/%m %H:%M') }}</div>
+      <div class="fw-semibold mb-1" title="{{ next_run.strftime('%d/%m/%Y %H:%M') }}">
+        {{ next_run | reltime }}
+        <span class="text-muted fw-normal" style="font-size:.78rem">({{ next_run.strftime('%d/%m %H:%M') }})</span>
+      </div>
       {% else %}
       <div class="text-muted mb-1">—</div>
       {% endif %}

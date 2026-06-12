@@ -2569,6 +2569,15 @@ def _docker_event_loop(app, container_name: str) -> None:
                 if event.get('Action') != 'start':
                     continue
 
+                # Record every Gluetun container ID (Companion-triggered or
+                # not) — this history is what lets the orphan scan recognise
+                # dependents of former Gluetun instances.
+                try:
+                    from .gluetun import record_gluetun_id
+                    record_gluetun_id(event.get('id', ''))
+                except Exception:
+                    pass
+
                 # Ignore restarts triggered by Companion itself (server switch)
                 if is_companion_restart():
                     logger.info(
