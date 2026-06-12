@@ -1,0 +1,112 @@
+name: "Bug report (EN)"
+description: "Report a reproducible Gluetun Companion problem"
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting this problem. Remove private keys, tokens, passwords, and other secrets before submitting.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Preliminary checks
+      options:
+        - label: I am using a recent version of Gluetun Companion.
+          required: true
+        - label: I searched for an existing issue describing the same problem.
+          required: true
+        - label: I removed all sensitive data from the information provided.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Gluetun Companion version
+      description: Provide the Docker image tag, release version, or commit in use.
+      placeholder: "Example: latest, v1.2.3, or abc1234"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Operating mode
+      options:
+        - Sidecar
+        - Proxy only
+        - Other / Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: gluetun_version
+    attributes:
+      label: Gluetun version
+      placeholder: "Example: qmcgaw/gluetun:v3.40.0"
+
+  - type: input
+    id: provider
+    attributes:
+      label: VPN provider
+      placeholder: "Example: AirVPN, Mullvad, Proton VPN"
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem description
+      description: Clearly describe what happened and its impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open...
+        2. Configure...
+        3. Click...
+        4. Observe...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: compose
+    attributes:
+      label: Relevant Docker configuration
+      description: Include only relevant services and variables, without secrets.
+      render: yaml
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Add Gluetun Companion, sidecar, or Gluetun logs around the problem.
+      render: shell
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        - Operating system:
+        - Architecture: amd64 / arm64
+        - Browser:
+        - Docker / Docker Compose:
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Screenshots, frequency, or any other useful information.
+

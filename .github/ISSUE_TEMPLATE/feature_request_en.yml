@@ -1,0 +1,57 @@
+name: "Feature request (EN)"
+description: "Suggest an improvement or a new feature"
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for your suggestion. Focus on the need first; the technical solution can be discussed afterward.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Preliminary checks
+      options:
+        - label: I searched for an existing request covering the same need.
+          required: true
+        - label: This request concerns Gluetun Companion rather than Gluetun itself.
+          required: true
+
+  - type: textarea
+    id: need
+    attributes:
+      label: Need or problem
+      description: What is currently difficult or impossible to achieve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed feature
+      description: Describe the desired behavior from the user's perspective.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case
+      description: Provide a concrete example of how this feature would be used.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Current workarounds or other possible solutions.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Mockups, screenshots, links, or constraints to consider.
+
