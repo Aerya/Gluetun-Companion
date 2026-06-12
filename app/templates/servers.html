@@ -1248,9 +1248,7 @@ document.getElementById('airvpnModal').addEventListener('hidden.bs.modal', () =>
 });
 
 function _flag(code) {
-  if (!code || code.length !== 2) return '';
-  const o = 0x1F1E6;
-  return String.fromCodePoint(code.toUpperCase().charCodeAt(0)-65+o, code.toUpperCase().charCodeAt(1)-65+o);
+  return countryFlag(code);
 }
 function _loadBar(pct, bw_max) {
   const cls = pct < 40 ? 'bg-success' : pct < 70 ? 'bg-warning' : 'bg-danger';
@@ -1716,9 +1714,7 @@ function _renderCatalogueTable(entries) {
     tr.dataset.filterType = filterFt;
     if (exists || !canAdd) tr.classList.add('opacity-50');
 
-    const flag = e.country_code
-      ? String.fromCodePoint(...[...e.country_code.toUpperCase()].map(c => 0x1F1E6 - 65 + c.charCodeAt(0)))
-      : '';
+    const flag = countryFlag(e.country_code, e.country || '');
 
     // Checkbox: only interactive when the user can actually add this entry
     const checkCell = exists
@@ -1916,12 +1912,14 @@ function _catPopulateCountries(entries) {
     if (c) seen.set(c.toLowerCase(), { label: c, code: (e.country_code || '').toUpperCase() });
   });
   [...seen.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label)).forEach(([key, v]) => {
+    const flagName = countryName(v.code, v.label);
     const flag = v.code.length === 2
       ? String.fromCodePoint(...[...v.code].map(ch => 0x1F1E6 - 65 + ch.charCodeAt(0)))
       : '';
     const opt = document.createElement('option');
     opt.value = key;
     opt.textContent = (flag ? flag + ' ' : '') + v.label;
+    if (flagName) opt.title = flagName;
     sel.appendChild(opt);
   });
   // Restore previous selection if still valid

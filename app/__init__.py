@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 
 from flask import Flask, session
+from markupsafe import Markup
 from .database import init_db
 from .i18n import get_translations
 
@@ -361,13 +362,27 @@ def create_app():
         _flags = _server_lookup_cache['flags']
         _providers = _server_lookup_cache['providers']
 
-        def server_flag(label: str | None) -> str:
-            """Return the flag emoji for a server label, or empty string if unknown."""
+        def server_flag_emoji(label: str | None) -> str:
+            """Return the raw flag emoji for text-only contexts such as charts."""
             if not label or label in ('-', '—'):
                 return ''
             # Strip filter-var prefix: "SERVER_NAMES=Chamukuy" → "Chamukuy"
             name = label.split('=', 1)[-1].strip() if '=' in label else label.strip()
             return _flag_emoji(_flags.get(name, ''))
+
+        def server_flag(label: str | None) -> Markup | str:
+            """Return an accessible flag with a browser-localised country tooltip."""
+            if not label or label in ('-', '—'):
+                return ''
+            name = label.split('=', 1)[-1].strip() if '=' in label else label.strip()
+            code = _flags.get(name, '')
+            emoji = _flag_emoji(code)
+            if not emoji:
+                return ''
+            return Markup(
+                f'<span class="country-flag" data-country-code="{code}" '
+                f'role="img">{emoji}</span>'
+            )
 
         def server_provider_icon(label: str | None, size: int = 16) -> str:
             """Return an <img> for the provider icon of a server.
@@ -401,7 +416,11 @@ def create_app():
                 f'width="{s}" height="{s}" style="{style}" title="{provider}">'
             )
 
-        return {'server_flag': server_flag, 'server_provider_icon': server_provider_icon}
+        return {
+            'server_flag': server_flag,
+            'server_flag_emoji': server_flag_emoji,
+            'server_provider_icon': server_provider_icon,
+        }
 
     from .routes import bp
     app.register_blueprint(bp)

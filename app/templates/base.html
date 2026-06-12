@@ -541,6 +541,58 @@ function stopBenchmark() {
 {# ── Global toast container + helper ─────────────────────────────────────── #}
 <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:1090"></div>
 <script>
+const _countryDisplayNames = (() => {
+  try {
+    return new Intl.DisplayNames(['{{ session.get("lang", "fr") }}'], { type: 'region' });
+  } catch (_) {
+    return null;
+  }
+})();
+
+function countryName(code, fallback = '') {
+  const normalized = String(code || '').trim().toUpperCase();
+  if (normalized.length !== 2) return fallback || normalized;
+  try {
+    return (_countryDisplayNames && _countryDisplayNames.of(normalized)) || fallback || normalized;
+  } catch (_) {
+    return fallback || normalized;
+  }
+}
+
+function countryFlag(code, fallback = '') {
+  const normalized = String(code || '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(normalized)) return '';
+  const emoji = String.fromCodePoint(
+    ...[...normalized].map(char => 0x1F1E6 - 65 + char.charCodeAt(0))
+  );
+  const name = countryName(normalized, fallback);
+  const escapedName = String(name).replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[char]);
+  return `<span class="country-flag" data-country-code="${normalized}" role="img" ` +
+         `title="${escapedName}" aria-label="${escapedName}">${emoji}</span>`;
+}
+
+function localizeCountryFlags(root = document) {
+  root.querySelectorAll?.('.country-flag[data-country-code]').forEach(flag => {
+    const name = countryName(flag.dataset.countryCode, flag.dataset.countryName || '');
+    if (name) {
+      flag.title = name;
+      flag.setAttribute('aria-label', name);
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => localizeCountryFlags());
+new MutationObserver(mutations => {
+  for (const mutation of mutations) {
+    for (const node of mutation.addedNodes) {
+      if (node.nodeType !== Node.ELEMENT_NODE) continue;
+      localizeCountryFlags(node.matches?.('.country-flag') ? node.parentNode : node);
+    }
+  }
+}).observe(document.documentElement, { childList: true, subtree: true });
+
 /**
  * showToast(message, type) — type: 'success' | 'danger' | 'warning' | 'info'
  * Replaces native alert() for JS-driven feedback; auto-dismisses after 5 s.
