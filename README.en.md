@@ -451,7 +451,7 @@ In **Settings → Port Forwarding**, Companion manages incoming ports required b
 
 - **Disabled** — rules remain stored but are not applied.
 - **Manual active** — rules can be declared, checked and synchronized on demand.
-- **Automatic active** — when Gluetun switches to another VPN provider (manual switch, benchmark **or pool rotation**), Companion automatically applies the new provider's rules. After a Docker-detected Gluetun reconnection, Companion also rereads the native port and propagates it when needed. Finally, a **periodic check (every 5 min)** compares the native `/v1/portforward` port to the last applied port: if Gluetun renewed the port **without a container restart** (e.g. NAT-PMP renewal), the rules are re-applied automatically.
+- **Automatic active** *(default once port forwarding is enabled; can be turned off)* — when Gluetun switches to another VPN provider (manual switch, benchmark **or pool rotation**), Companion automatically applies the new provider's rules. After a Docker-detected Gluetun reconnection, Companion also rereads the native port and propagates it when needed. Finally, a **periodic check (every 5 min)** compares the native `/v1/portforward` port to the last applied port: if Gluetun renewed the port **without a container restart** (e.g. NAT-PMP renewal), the rules are re-applied automatically.
 
 Each entry contains:
 
@@ -472,6 +472,8 @@ For each declared port, the UI shows:
 - qBittorrent listen port when the entry is linked to a qBittorrent client.
 
 The **Sync** button updates the linked client's listen port: qBittorrent through the Web API (`/api/v2/app/setPreferences` + read-back verification), or **rTorrent via XML-RPC** (`network.port_range.set` + read-back — *beta support, implemented against the XML-RPC spec but not yet validated on a live rTorrent instance; the `on_port_change` hook remains available as a fallback*). In **Gluetun native** mode, Companion first reads the Gluetun Control Server (`GET /v1/portforward`) and then pushes the returned port to the client.
+
+**Testing reachability from the Internet**: each rule's **Test from Internet** button performs a **real TCP connection** from Companion to `VPN_public_IP:port`. Since Companion egresses through your ISP connection (not the VPN tunnel), this exercises the actual inbound path: Internet → VPN provider → Gluetun → client. **TCP only** — UDP has no handshake and cannot be verified this way. The configuration indicators (firewall, Docker publishing, listen port) remain local checks; this button is the only one proving real reachability. For a manual external double-check: [canyouseeme.org](https://canyouseeme.org/) or [yougetsignal.com](https://www.yougetsignal.com/tools/open-ports/) (VPN public IP and port must be typed by hand — these sites cannot be pre-filled).
 
 To enable Gluetun native support, configure Gluetun with [`VPN_PORT_FORWARDING=on`](https://github.com/qdm12/gluetun-wiki/blob/main/setup/options/port-forwarding.md) and expose its [Control Server](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md). In Companion, set the URL, for example `http://host.docker.internal:8967` when Docker publishes `8967:8000`. If Gluetun uses `apikey` authentication, also enter the `X-API-Key` value. Companion uses `/v1/portforward` as the primary source; the historical Gluetun status file is not used as the preferred source because Gluetun documents it as eventually deprecated.
 
