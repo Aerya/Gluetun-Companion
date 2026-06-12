@@ -462,6 +462,17 @@
   </div>
   {% endmacro %}
 
+  {# ── Settings search ── #}
+  <div class="mb-2" style="max-width:360px">
+    <div class="input-group input-group-sm">
+      <span class="input-group-text"><i class="bi bi-search"></i></span>
+      <input type="text" class="form-control" id="settings-search"
+             placeholder="{{ t.set_search_placeholder }}" autocomplete="off">
+      <button class="btn btn-outline-secondary d-none" id="settings-search-clear" type="button"
+              aria-label="{{ t.set_search_clear }}">✕</button>
+    </div>
+  </div>
+
   <ul class="nav nav-tabs settings-tabs" id="settings-tabs" role="tablist">
     <li class="nav-item" role="presentation">
       <button class="nav-link active" id="tab-measure" data-bs-toggle="tab" data-bs-target="#settings-measure" type="button" role="tab">
@@ -2861,6 +2872,80 @@ if (document.readyState === 'loading') {
 } else {
   arrangeSettingsTabs();
 }
+
+// ── Settings search ───────────────────────────────────────────────────────
+// Filters cards across ALL tabs; tabs with matches get a count badge; if the
+// active tab has no match, switches to the first tab that does.
+(function () {
+  const input = document.getElementById('settings-search');
+  const clearBtn = document.getElementById('settings-search-clear');
+  if (!input) return;
+
+  function tabButtons() {
+    return Array.from(document.querySelectorAll('#settings-tabs [data-bs-toggle="tab"]'));
+  }
+  function panes() {
+    return Array.from(document.querySelectorAll('.tab-pane'));
+  }
+  function badgeFor(btn) {
+    let b = btn.querySelector('.search-badge');
+    if (!b) {
+      b = document.createElement('span');
+      b.className = 'search-badge badge bg-info text-dark ms-1';
+      b.style.fontSize = '.65rem';
+      btn.appendChild(b);
+    }
+    return b;
+  }
+  function resetSearch() {
+    panes().forEach(p => p.querySelectorAll('.card').forEach(c => c.classList.remove('d-none')));
+    tabButtons().forEach(btn => { const b = btn.querySelector('.search-badge'); if (b) b.remove(); });
+  }
+
+  let _deb = null;
+  input.addEventListener('input', function () {
+    clearTimeout(_deb);
+    _deb = setTimeout(() => {
+      const q = input.value.trim().toLowerCase();
+      clearBtn.classList.toggle('d-none', !q);
+      if (!q) { resetSearch(); return; }
+
+      const counts = {};   // pane id → match count
+      panes().forEach(pane => {
+        let n = 0;
+        // Only top-level cards inside the main grid (not aside helper cards)
+        pane.querySelectorAll('.settings-pane-main .card, .settings-pane-main > .card').forEach(card => {
+          const match = card.textContent.toLowerCase().includes(q);
+          card.classList.toggle('d-none', !match);
+          if (match) n++;
+        });
+        counts[pane.id] = n;
+      });
+
+      let firstWithMatch = null;
+      let activeHasMatch = false;
+      tabButtons().forEach(btn => {
+        const paneId = (btn.dataset.bsTarget || '').slice(1);
+        const n = counts[paneId] || 0;
+        const b = badgeFor(btn);
+        if (n > 0) { b.textContent = n; b.classList.remove('d-none'); }
+        else { b.classList.add('d-none'); }
+        if (n > 0 && !firstWithMatch) firstWithMatch = btn;
+        if (n > 0 && btn.classList.contains('active')) activeHasMatch = true;
+      });
+      if (!activeHasMatch && firstWithMatch) {
+        bootstrap.Tab.getOrCreateInstance(firstWithMatch).show();
+      }
+    }, 150);
+  });
+
+  clearBtn.addEventListener('click', function () {
+    input.value = '';
+    clearBtn.classList.add('d-none');
+    resetSearch();
+    input.focus();
+  });
+})();
 </script>
 
 </div>{# end settings-board #}

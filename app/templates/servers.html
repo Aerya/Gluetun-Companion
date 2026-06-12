@@ -339,9 +339,21 @@
     </select>
   </div>
   <div class="col-auto">
-    <button type="submit" class="btn btn-sm btn-outline-secondary">
+    <button type="submit" class="btn btn-sm btn-outline-secondary" aria-label="{{ t.srv_filter_apply }}">
       <i class="bi bi-funnel-fill"></i>
     </button>
+  </div>
+  <div class="col-auto">
+    <div class="dropdown">
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown"
+              data-bs-auto-close="outside" title="{{ t.srv_columns_btn }}" aria-label="{{ t.srv_columns_btn }}">
+        <i class="bi bi-layout-three-columns"></i>
+      </button>
+      <div class="dropdown-menu p-2" id="col-picker-menu" style="min-width:230px;max-height:340px;overflow-y:auto;font-size:.84rem">
+        <div class="fw-semibold mb-1 px-1">{{ t.srv_columns_title }}</div>
+        {# checkboxes injected by JS from thead #}
+      </div>
+    </div>
   </div>
   {% if q or type_filter or from_date or to_date or conf_filter or top_n or airvpn_bw_min or sort not in ('avg_dl', 'avg_dl_desc') %}
   <div class="col-auto">
@@ -464,7 +476,10 @@
           <tr class="{{ '' if s.enabled else 'opacity-50' }}" data-srv="{{ s.name }}"
               {% if is_active %}style="border-left:3px solid var(--bs-success)"{% endif %}>
             <td>
-              {{ server_flag(s.name) }}{{ server_provider_icon(s.name) | safe }} <code>{{ s.name }}</code>
+              {{ server_flag(s.name) }}{{ server_provider_icon(s.name) | safe }}
+              <a href="#" class="text-decoration-none"
+                 onclick="openServerDrawer({{ s.name | tojson }}, {{ s.id }}, {{ 1 if s.enabled else 0 }}); return false;"
+                 title="{{ t.drawer_open_hint }}"><code>{{ s.name }}</code></a>
               {% if is_active %}
               <span class="badge bg-success ms-1" style="font-size:.7rem">{{ t.srv_active_badge }}</span>
               {% endif %}
@@ -600,6 +615,7 @@
                 {%- if _conf.cv_pct is not none -%}{%- set _tip_parts = _tip_parts + [t.conf_instability ~ ' ' ~ _conf.cv_pct|string ~ '%'] -%}{%- endif -%}
                 {%- if _conf.consec > 0 -%}{%- set _tip_parts = _tip_parts + [_conf.consec|string ~ ' ' ~ t.conf_failures] -%}{%- endif -%}
                 <i class="bi bi-circle-fill {{ _conf_cls }}" style="font-size:.65rem;cursor:help"
+                   role="img" aria-label="{{ _tip_parts | join(' · ') }}"
                    data-bs-toggle="tooltip" data-bs-placement="top" title="{{ _tip_parts | join(' · ') }}"></i>
               {%- endif -%}
             </td>
@@ -619,6 +635,7 @@
                 {%- if _stab.avg_loss is not none -%}{%- set _stab_tip = _stab_tip + [t.stab_loss ~ ' ' ~ _stab.avg_loss|string ~ '%'] -%}{%- endif -%}
                 {%- if _stab.avg_dns is not none -%}{%- set _stab_tip = _stab_tip + [t.stab_dns ~ ' ' ~ _stab.avg_dns|string ~ ' ms'] -%}{%- endif -%}
                 <i class="bi bi-circle-fill {{ _stab_cls }}" style="font-size:.65rem;cursor:help"
+                   role="img" aria-label="{{ _stab_tip | join(' · ') }}"
                    data-bs-toggle="tooltip" data-bs-placement="top" title="{{ _stab_tip | join(' · ') }}"></i>
               {%- endif -%}
             </td>
@@ -660,21 +677,21 @@
             <td class="srv-last-tested-cell">
               <small class="text-muted srv-last-tested"
                      title="{{ (s.last_tested | localtime) if s.last_tested else t.cmn_never }}">
-                {{ (s.last_tested | localtime | truncate(16, True, '')) if s.last_tested else t.cmn_never }}
+                {{ (s.last_tested | reltime) if s.last_tested else t.cmn_never }}
               </small>
             </td>
             <td class="text-end" style="white-space:nowrap">
               <form method="post" action="{{ url_for('main.test_server_now', server_id=s.id) }}" class="d-inline"
                     onsubmit="return confirm('{{ t.srv_confirm_test_a }} {{ s.name }} {{ t.srv_confirm_test_b }}')">
                 <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                <button class="btn btn-outline-info btn-sm py-1 px-2" title="{{ t.srv_test_now }}">
+                <button class="btn btn-outline-info btn-sm py-1 px-2" title="{{ t.srv_test_now }}" aria-label="{{ t.srv_test_now }}">
                   <i class="bi bi-speedometer2 fs-6"></i>
                 </button>
               </form>
               <form method="post" action="{{ url_for('main.manual_switch', server_id=s.id) }}" class="d-inline"
-                    onsubmit="return confirm('{{ t.srv_confirm_switch_a }} {{ s.name }} {{ t.srv_confirm_switch_b }}')">
+                    onsubmit="return confirm('{{ t.srv_confirm_switch_a }} {{ s.name }} {{ t.srv_confirm_switch_b }}\n{% if s.avg_dl %}{{ t.srv_confirm_stats.replace('{dl}', '%.1f'|format(s.avg_dl)).replace('{when}', (s.last_tested | reltime) if s.last_tested else '') }}{% else %}{{ t.srv_confirm_untested }}{% endif %}')">
                 <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                <button class="btn btn-success btn-sm py-1 px-2" title="{{ t.srv_switch_now }}">
+                <button class="btn btn-success btn-sm py-1 px-2" title="{{ t.srv_switch_now }}" aria-label="{{ t.srv_switch_now }}">
                   <i class="bi bi-arrow-right-circle-fill fs-6"></i>
                 </button>
               </form>
@@ -688,7 +705,7 @@
               <form method="post" action="{{ url_for('main.delete_server', server_id=s.id) }}" class="d-inline"
                     onsubmit="return confirm('{{ t.srv_confirm_delete_a }} {{ s.name }} {{ t.srv_confirm_delete_b }}')">
                 <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-                <button class="btn btn-outline-danger btn-sm py-1 px-2" title="{{ t.srv_delete }}">
+                <button class="btn btn-outline-danger btn-sm py-1 px-2" title="{{ t.srv_delete }}" aria-label="{{ t.srv_delete }}">
                   <i class="bi bi-trash3 fs-6"></i>
                 </button>
               </form>
@@ -807,6 +824,10 @@
             <option value="city">{{ t.srv_catalogue_filter_city }}</option>
             <option value="region">{{ t.srv_catalogue_filter_region }}</option>
             <option value="hostname">{{ t.srv_catalogue_filter_hostname }}</option>
+          </select>
+          <select class="form-select form-select-sm" style="max-width:190px"
+                  id="cat-country-select" onchange="filterCatalogueTable()">
+            <option value="">{{ t.cat_filter_country_all }}</option>
           </select>
           <input type="text" class="form-control form-control-sm" style="max-width:220px"
                  id="cat-search" placeholder="{{ t.srv_catalogue_search }}"
@@ -1027,6 +1048,54 @@
         {% endif %}
       </div>
     </div>
+  </div>
+</div>
+
+{# ── Server detail drawer ─────────────────────────────────────────────────── #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="serverDrawer" style="width:440px;max-width:95vw">
+  <div class="offcanvas-header pb-2">
+    <h5 class="offcanvas-title d-flex align-items-center gap-2" id="drawer-title">
+      <span id="drawer-flag"></span><code id="drawer-name"></code>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body pt-1">
+    <div id="drawer-loading" class="text-muted small">
+      <span class="spinner-border spinner-border-sm me-1"></span>{{ t.drawer_loading }}
+    </div>
+    <div id="drawer-content" class="d-none">
+      {# Stats grid #}
+      <div class="row g-2 mb-3" id="drawer-stats" style="font-size:.85rem"></div>
+      {# Sparkline #}
+      <div class="mb-1 small text-muted">{{ t.drawer_sparkline_title }}</div>
+      <div id="drawer-sparkline" class="mb-3"></div>
+      {# Recent tests #}
+      <div class="mb-1 small text-muted">{{ t.drawer_tests_title }}</div>
+      <div style="max-height:220px;overflow-y:auto" class="mb-3">
+        <table class="table table-sm mb-0" style="font-size:.78rem">
+          <thead><tr>
+            <th>{{ t.drawer_col_when }}</th><th class="text-end">↓ Mbps</th>
+            <th class="text-end">↑ Mbps</th><th class="text-end">ms</th><th></th>
+          </tr></thead>
+          <tbody id="drawer-tests"></tbody>
+        </table>
+      </div>
+      {# Actions #}
+      <div class="d-flex gap-2 flex-wrap">
+        <form method="post" id="drawer-test-form" class="d-inline">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-outline-info"><i class="bi bi-speedometer2"></i> {{ t.srv_test_now }}</button>
+        </form>
+        <form method="post" id="drawer-switch-form" class="d-inline">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-success"><i class="bi bi-arrow-right-circle-fill"></i> {{ t.srv_switch_now }}</button>
+        </form>
+        <a id="drawer-history-link" href="#" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-clock-history"></i> {{ t.drawer_full_history }}
+        </a>
+      </div>
+    </div>
+    <div id="drawer-error" class="alert alert-warning d-none py-2 small"></div>
   </div>
 </div>
 {% endblock %}
@@ -1634,6 +1703,7 @@ function _renderCatalogueTable(entries) {
   const selAll = document.getElementById('cat-select-all');
   if (selAll) { selAll.checked = false; selAll.indeterminate = false; }
   _catUpdateBulkBar();
+  _catPopulateCountries(entries);
 
   entries.forEach(e => {
     const exists  = _catExisting.has(e.value);
@@ -1690,6 +1760,7 @@ function _renderCatalogueTable(entries) {
     tbody.appendChild(tr);
   });
   document.getElementById('cat-count').textContent = entries.length + ' entries';
+  filterCatalogueTable();   // re-apply current search + country filter
 }
 
 // Toggle all VISIBLE unchecked rows
@@ -1760,10 +1831,10 @@ async function catalogueRefresh() {
         })
         .catch(() => loadCatalogue());
     } else {
-      alert('Erreur : ' + (data.error || 'Échec du rafraîchissement'));
+      showToast({{ t.cmn_error | tojson }} + ' : ' + (data.error || {{ t.srv_catalogue_refresh_failed | tojson }}), 'danger');
     }
   } catch (e) {
-    alert('Erreur réseau : ' + e);
+    showToast({{ t.cmn_network_error | tojson }} + ' : ' + e, 'danger');
   } finally {
     btn.disabled = false;
     spinner.classList.add('d-none');
@@ -1823,12 +1894,38 @@ async function catalogueBulkAdd() {
 }
 
 function filterCatalogueTable() {
-  const q = document.getElementById('cat-search').value.toLowerCase();
+  const q       = document.getElementById('cat-search').value.toLowerCase();
+  const country = (document.getElementById('cat-country-select') || {}).value || '';
   document.querySelectorAll('#cat-tbody tr').forEach(tr => {
-    const match = !q || tr.dataset.value.includes(q) || tr.dataset.country.includes(q);
-    tr.classList.toggle('d-none', !match);
+    const textOk    = !q || tr.dataset.value.includes(q) || tr.dataset.country.includes(q);
+    const countryOk = !country || tr.dataset.country === country;
+    tr.classList.toggle('d-none', !(textOk && countryOk));
   });
   _catUpdateBulkBar();  // recount visible selections after filtering
+}
+
+// Populate the country dropdown from the currently loaded entries
+function _catPopulateCountries(entries) {
+  const sel = document.getElementById('cat-country-select');
+  if (!sel) return;
+  const prev = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  const seen = new Map();   // lowercase → {label, code}
+  entries.forEach(e => {
+    const c = (e.country || '').trim();
+    if (c) seen.set(c.toLowerCase(), { label: c, code: (e.country_code || '').toUpperCase() });
+  });
+  [...seen.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label)).forEach(([key, v]) => {
+    const flag = v.code.length === 2
+      ? String.fromCodePoint(...[...v.code].map(ch => 0x1F1E6 - 65 + ch.charCodeAt(0)))
+      : '';
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = (flag ? flag + ' ' : '') + v.label;
+    sel.appendChild(opt);
+  });
+  // Restore previous selection if still valid
+  sel.value = seen.has(prev) ? prev : '';
 }
 
 function catalogueAdd(value, filterType) {
@@ -1949,5 +2046,155 @@ function _srvSort(col, defaultDir) {
     }
   }
 })();
+
+// ── Column picker ─────────────────────────────────────────────────────────
+// Hide/show table columns; hidden column indexes persisted in localStorage.
+// First (server) and last (actions) columns are not hideable.
+(function () {
+  const LS_KEY = 'srv_hidden_cols_v1';
+  const table  = document.querySelector('#view-table table');
+  const menu   = document.getElementById('col-picker-menu');
+  if (!table || !menu) return;
+
+  const ths = Array.from(table.querySelectorAll('thead th'));
+  let hidden = new Set();
+  try { hidden = new Set(JSON.parse(localStorage.getItem(LS_KEY) || '[]')); } catch (e) {}
+
+  function applyHidden() {
+    const rows = table.querySelectorAll('tr');
+    rows.forEach(tr => {
+      // Skip colspan rows (empty state)
+      if (tr.querySelector('[colspan]')) return;
+      Array.from(tr.children).forEach((cell, idx) => {
+        cell.style.display = hidden.has(idx) ? 'none' : '';
+      });
+    });
+  }
+
+  ths.forEach((th, idx) => {
+    if (idx === 0 || idx === ths.length - 1) return;   // server + actions locked
+    const label = th.textContent.replace(/[▲▼⇅]/g, '').trim() || ('#' + idx);
+    const id = 'colpick-' + idx;
+    const div = document.createElement('div');
+    div.className = 'form-check';
+    div.innerHTML = `<input class="form-check-input" type="checkbox" id="${id}" ${hidden.has(idx) ? '' : 'checked'}>
+      <label class="form-check-label" for="${id}"></label>`;
+    div.querySelector('label').textContent = label;
+    div.querySelector('input').addEventListener('change', function () {
+      if (this.checked) hidden.delete(idx); else hidden.add(idx);
+      try { localStorage.setItem(LS_KEY, JSON.stringify([...hidden])); } catch (e) {}
+      applyHidden();
+    });
+    menu.appendChild(div);
+  });
+
+  if (hidden.size) applyHidden();
+})();
+
+// ── Server detail drawer ──────────────────────────────────────────────────
+const _DRAWER_URLS = {
+  detail:  {{ url_for('main.api_server_detail') | tojson }},
+  test:    {{ url_for('main.test_server_now', server_id=123456789) | tojson }},
+  switch:  {{ url_for('main.manual_switch',   server_id=123456789) | tojson }},
+  history: {{ url_for('main.history') | tojson }},
+};
+const _DRAWER_T = {
+  avgDl:    {{ t.drawer_avg_dl | tojson }},
+  avgUl:    {{ t.drawer_avg_ul | tojson }},
+  avgLat:   {{ t.drawer_avg_lat | tojson }},
+  maxDl:    {{ t.drawer_max_dl | tojson }},
+  tests:    {{ t.drawer_n_tests | tojson }},
+  failures: {{ t.drawer_failures | tojson }},
+  noTests:  {{ t.drawer_no_tests | tojson }},
+};
+
+function openServerDrawer(name, id, enabled) {
+  const oc = bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('serverDrawer'));
+  document.getElementById('drawer-name').textContent = name;
+  document.getElementById('drawer-loading').classList.remove('d-none');
+  document.getElementById('drawer-content').classList.add('d-none');
+  document.getElementById('drawer-error').classList.add('d-none');
+  // Wire action forms to this server
+  document.getElementById('drawer-test-form').action   = _DRAWER_URLS.test.replace('123456789', id);
+  document.getElementById('drawer-switch-form').action = _DRAWER_URLS.switch.replace('123456789', id);
+  document.getElementById('drawer-history-link').href  = _DRAWER_URLS.history + '?server=' + encodeURIComponent(name);
+  oc.show();
+
+  fetch(_DRAWER_URLS.detail + '?name=' + encodeURIComponent(name))
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('drawer-loading').classList.add('d-none');
+      if (!d.ok) {
+        const err = document.getElementById('drawer-error');
+        err.textContent = d.error || 'error';
+        err.classList.remove('d-none');
+        return;
+      }
+      // Stats grid
+      const a = d.aggregate || {};
+      const stat = (label, val) =>
+        `<div class="col-6"><div class="p-2 rounded" style="background:var(--bs-tertiary-bg)">
+           <div class="text-muted" style="font-size:.72rem">${label}</div>
+           <strong>${val}</strong></div></div>`;
+      const fmt = (v, suffix) => (v === null || v === undefined) ? '—' : (Math.round(v * 10) / 10) + suffix;
+      document.getElementById('drawer-stats').innerHTML =
+        stat(_DRAWER_T.avgDl,  fmt(a.avg_dl, ' Mbps')) +
+        stat(_DRAWER_T.avgUl,  fmt(a.avg_ul, ' Mbps')) +
+        stat(_DRAWER_T.avgLat, fmt(a.avg_lat, ' ms')) +
+        stat(_DRAWER_T.maxDl,  fmt(a.max_dl, ' Mbps')) +
+        stat(_DRAWER_T.tests,  a.n || 0) +
+        stat(_DRAWER_T.failures, d.server.consecutive_failures || 0);
+
+      // Sparkline (chronological download series)
+      const series = (d.tests || []).filter(t => t.success && t.download_mbps != null)
+                                    .map(t => t.download_mbps).reverse();
+      const spark = document.getElementById('drawer-sparkline');
+      if (series.length >= 2) {
+        const W = 400, H = 60, max = Math.max(...series), min = Math.min(...series);
+        const pts = series.map((v, i) => {
+          const x = (i / (series.length - 1)) * W;
+          const y = H - 4 - ((v - min) / (max - min || 1)) * (H - 8);
+          return x.toFixed(1) + ',' + y.toFixed(1);
+        }).join(' ');
+        spark.innerHTML =
+          `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:60px">
+             <polyline points="${pts}" fill="none" stroke="var(--bs-info)" stroke-width="2"/>
+           </svg>
+           <div class="d-flex justify-content-between text-muted" style="font-size:.7rem">
+             <span>${Math.round(min)} Mbps</span><span>${Math.round(max)} Mbps</span>
+           </div>`;
+      } else {
+        spark.innerHTML = '<span class="text-muted small">' + _DRAWER_T.noTests + '</span>';
+      }
+
+      // Recent tests table
+      const tbody = document.getElementById('drawer-tests');
+      tbody.innerHTML = '';
+      (d.tests || []).slice(0, 15).forEach(t => {
+        const tr = document.createElement('tr');
+        const ok = t.success
+          ? '<i class="bi bi-check-circle-fill text-success"></i>'
+          : '<i class="bi bi-x-circle-fill text-danger"></i>';
+        tr.innerHTML =
+          `<td><small class="text-muted">${_esc((t.tested_at || '').slice(5, 16))}</small></td>
+           <td class="text-end">${t.download_mbps != null ? t.download_mbps.toFixed(1) : '—'}</td>
+           <td class="text-end">${t.upload_mbps != null ? t.upload_mbps.toFixed(1) : '—'}</td>
+           <td class="text-end">${t.latency_ms != null ? Math.round(t.latency_ms) : '—'}</td>
+           <td>${ok}</td>`;
+        tbody.appendChild(tr);
+      });
+      if (!tbody.children.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center">' + _DRAWER_T.noTests + '</td></tr>';
+      }
+
+      document.getElementById('drawer-content').classList.remove('d-none');
+    })
+    .catch(e => {
+      document.getElementById('drawer-loading').classList.add('d-none');
+      const err = document.getElementById('drawer-error');
+      err.textContent = String(e);
+      err.classList.remove('d-none');
+    });
+}
 </script>
 {% endblock %}
