@@ -211,15 +211,17 @@
         <span id="bench-mode-label" class="badge bg-light text-dark me-1" style="font-size:.75rem"></span>
         <span id="live-testing-wrap">{{ t.dash_testing_server }} <strong><span id="live-testing"></span></strong></span>
       </span>
-      <span id="bench-progress-text" class="text-white-50 ms-1" style="font-size:.78rem;white-space:nowrap"></span>
-      <button class="btn btn-sm btn-outline-light ms-auto flex-shrink-0" id="btn-stop-bench"
+      <span id="bench-progress-text" class="ms-1" style="font-size:.78rem;white-space:nowrap;opacity:.8"
+            title="{{ t.dash_eta_hint }}"></span>
+      <button class="btn btn-sm btn-outline-secondary ms-auto flex-shrink-0" id="btn-stop-bench"
               onclick="stopBenchmark()" style="font-size:.8rem;padding:.15rem .55rem">
         <i class="bi bi-stop-fill"></i> {{ t.dash_stop_bench }}
       </button>
     </div>
     <div id="bench-progress-bar-wrap" class="d-none mt-1">
-      <div class="progress" style="height:4px;background:rgba(255,255,255,.2)">
-        <div id="bench-progress-bar" class="progress-bar bg-white" style="width:0%;transition:width .4s ease"></div>
+      <div class="progress" style="height:4px;background:rgba(128,128,128,.25)">
+        <div id="bench-progress-bar"
+             style="width:0%;transition:width .4s ease;background:var(--bs-success-text-emphasis);border-radius:2px"></div>
       </div>
     </div>
   </div>
@@ -231,8 +233,9 @@
    Shown when no WireGuard profile exists yet (fresh install or DB reset).
    Dismissable via localStorage key; re-appears after each DB reset until
    at least one profile is configured.
+   Not shown on /settings — the user is already where the link points to.
    ────────────────────────────────────────────────────────────────────────── #}
-{% if not _g_has_wg_profiles %}
+{% if not _g_has_wg_profiles and request.endpoint != 'main.settings' %}
 <div class="modal fade" id="noticeWgSetupModal" tabindex="-1"
      aria-labelledby="noticeWgSetupLabel" aria-modal="true" role="dialog">
   <div class="modal-dialog modal-dialog-centered">

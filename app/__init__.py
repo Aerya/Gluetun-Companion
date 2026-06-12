@@ -5,6 +5,7 @@ import logging
 import os
 import signal
 import threading
+import time
 from datetime import datetime
 
 from flask import Flask, session
@@ -12,6 +13,11 @@ from .database import init_db
 from .i18n import get_translations
 
 _cleanup_hooks_registered = False
+
+# Process-wide cache for server→flag and server→provider lookups used by the
+# template helpers (server_flag / server_provider_icon).  Rebuilt at most every
+# 5 minutes — new catalogue imports appear after the TTL expires.
+_server_lookup_cache: dict = {'flags': {}, 'providers': {}, 'ts': 0.0}
 
 
 def _utc_to_local(dt_str: str | None) -> str:
@@ -258,6 +264,10 @@ def create_app():
 
         Accepts both raw names ("Chamukuy") and formatted labels ("SERVER_NAMES=Chamukuy").
         Data is sourced from gluetun_catalogue and airvpn_snapshot.
+
+        Lookups are cached process-wide with a 5-minute TTL — rebuilding
+        them on every render is too costly with large catalogues (NordVPN
+        alone is ~18k rows).
         """
         from .database import get_db
 
@@ -269,17 +279,46 @@ def create_app():
                 return ''
             return chr(0x1F1E6 + ord(c[0]) - 65) + chr(0x1F1E6 + ord(c[1]) - 65)
 
-        try:
-            with get_db() as _db:
-                _rows = _db.execute(
-                    'SELECT name, country_code FROM gluetun_catalogue '
-                    'WHERE country_code != "" '
-                    'UNION SELECT name, country_code FROM airvpn_snapshot '
-                    'WHERE country_code != ""'
-                ).fetchall()
-            _flags: dict[str, str] = {r['name']: r['country_code'].upper() for r in _rows}
-        except Exception:
-            _flags = {}
+        now = time.time()
+        if now - _server_lookup_cache['ts'] > 300:
+            try:
+                with get_db() as _db:
+                    _rows = _db.execute(
+                        'SELECT name, country_code FROM gluetun_catalogue '
+                        'WHERE country_code != "" '
+                        'UNION SELECT name, country_code FROM airvpn_snapshot '
+                        'WHERE country_code != ""'
+                    ).fetchall()
+                    _flags = {r['name']: r['country_code'].upper() for r in _rows}
+
+                    # Server→provider lookup, three sources by priority
+                    _prov_rows = _db.execute(
+                        'SELECT name, provider FROM gluetun_catalogue WHERE provider != ""'
+                    ).fetchall()
+                    _providers = {r['name']: r['provider'].lower() for r in _prov_rows}
+                    try:
+                        for r in _db.execute('SELECT name FROM airvpn_snapshot').fetchall():
+                            _providers.setdefault(r['name'], 'airvpn')
+                    except Exception:
+                        pass
+                    try:
+                        for r in _db.execute(
+                            'SELECT s.name, vp.provider FROM servers s '
+                            'JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id '
+                            'WHERE vp.provider != ""'
+                        ).fetchall():
+                            _providers.setdefault(r['name'], r['provider'].lower())
+                    except Exception:
+                        pass
+                _server_lookup_cache['flags'] = _flags
+                _server_lookup_cache['providers'] = _providers
+                _server_lookup_cache['ts'] = now
+            except Exception:
+                # Keep stale cache on error; empty dicts if never built
+                _server_lookup_cache['ts'] = now
+
+        _flags = _server_lookup_cache['flags']
+        _providers = _server_lookup_cache['providers']
 
         def server_flag(label: str | None) -> str:
             """Return the flag emoji for a server label, or empty string if unknown."""
@@ -289,64 +328,13 @@ def create_app():
             name = label.split('=', 1)[-1].strip() if '=' in label else label.strip()
             return _flag_emoji(_flags.get(name, ''))
 
-        # Build server→provider lookup from multiple sources
-        try:
-            from .database import get_db as _get_db2
-            with _get_db2() as _db2:
-                # 1. Gluetun catalogue (all providers)
-                _prov_rows = _db2.execute(
-                    'SELECT name, provider FROM gluetun_catalogue WHERE provider != ""'
-                ).fetchall()
-                _providers: dict[str, str] = {r['name']: r['provider'].lower() for r in _prov_rows}
-                # 2. AirVPN snapshot (individual AirVPN servers not always in catalogue)
-                try:
-                    _av_rows = _db2.execute('SELECT name FROM airvpn_snapshot').fetchall()
-                    for r in _av_rows:
-                        _providers.setdefault(r['name'], 'airvpn')
-                except Exception:
-                    pass
-                # 3. Servers with assigned VPN profile → use profile provider
-                try:
-                    _sp_rows = _db2.execute(
-                        'SELECT s.name, vp.provider FROM servers s '
-                        'JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id '
-                        'WHERE vp.provider != ""'
-                    ).fetchall()
-                    for r in _sp_rows:
-                        _providers.setdefault(r['name'], r['provider'].lower())
-                except Exception:
-                    pass
-        except Exception:
-            _providers = {}
-
-        # Providers with a bundled SVG in /static/providers/
-        _PROVIDER_SVG: set[str] = {
-            'airvpn', 'cyberghost', 'expressvpn', 'fastestvpn', 'ivpn',
-            'mullvad', 'nordvpn', 'private internet access', 'protonvpn',
-            'purevpn', 'surfshark', 'torguard', 'windscribe', 'wireguard',
-        }
-
-        # Provider → official domain for favicon fallback
-        _PROVIDER_DOMAIN: dict[str, str] = {
-            'giganews':              'giganews.com',
-            'hidemyass':             'hidemyass.com',
-            'ipvanish':              'ipvanish.com',
-            'ovpn':                  'ovpn.com',
-            'perfect privacy':       'perfect-privacy.com',
-            'privado':               'privado.com',
-            'privatevpn':            'privatevpn.com',
-            'slickvpn':              'slickvpn.com',
-            'vpn unlimited':         'vpnunlimited.com',
-            'vpnsecure':             'vpnsecure.me',
-            'vyprvpn':               'vyprvpn.com',
-        }
-
         def server_provider_icon(label: str | None, size: int = 16) -> str:
             """Return an <img> for the provider icon of a server.
 
             Priority:
-            1. Bundled SVG in /static/providers/ (highest quality)
-            2. Favicon from Google's favicon service (real icon, any provider)
+            1. Bundled SVG in /static/providers/ (best quality, offline)
+            2. /provider-icon/<provider> — favicon cached server-side
+               (no browser request ever leaves for a third party)
             """
             if not label or label in ('-', '—'):
                 return ''
@@ -356,22 +344,19 @@ def create_app():
                 return ''
             s = str(size)
             style = 'vertical-align:middle;object-fit:contain;border-radius:2px'
-            if provider in _PROVIDER_SVG:
-                from flask import url_for
-                try:
+            from flask import url_for
+            from .routes import PROVIDER_SVG_FILES, PROVIDER_FAVICON_DOMAINS
+            try:
+                if provider in PROVIDER_SVG_FILES:
                     url = url_for('static', filename=f'providers/{provider}.svg')
-                    return (
-                        f'<img src="{url}" alt="{provider}" '
-                        f'width="{s}" height="{s}" style="{style}" title="{provider}">'
-                    )
-                except Exception:
-                    pass
-            domain = _PROVIDER_DOMAIN.get(provider, '')
-            if not domain:
+                elif provider in PROVIDER_FAVICON_DOMAINS:
+                    url = url_for('main.provider_icon', provider=provider)
+                else:
+                    return ''
+            except Exception:
                 return ''
-            favicon_url = f'https://www.google.com/s2/favicons?domain={domain}&sz=64'
             return (
-                f'<img src="{favicon_url}" alt="{provider}" '
+                f'<img src="{url}" alt="{provider}" '
                 f'width="{s}" height="{s}" style="{style}" title="{provider}">'
             )
 

@@ -2816,6 +2816,15 @@ def start_scheduler(app):
     from .database import get_setting, get_db
 
     with app.app_context():
+        # No benchmark can be running right after boot — clear any flags left
+        # over from a crash or restart mid-cycle, otherwise the UI banner
+        # stays stuck (running and/or "stop requested" shown forever).
+        from .database import set_setting as _set
+        _set('benchmark_running', '0')
+        _set('benchmark_stop_requested', '0')
+        _set('benchmark_current_server', '')
+        _set('benchmark_next_server', '')
+
         hours   = float(get_setting('test_interval_hours', '6'))
         enabled = get_setting('auto_benchmark', '1') == '1'
 

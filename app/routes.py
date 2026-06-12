@@ -55,6 +55,87 @@ from .port_forwarding import (
 
 bp = Blueprint('main', __name__)
 
+# ── Provider icons ──────────────────────────────────────────────────────────
+# Providers with a bundled SVG in /static/providers/ (best quality, offline).
+PROVIDER_SVG_FILES: set[str] = {
+    'airvpn', 'cyberghost', 'expressvpn', 'fastestvpn',
+    'mullvad', 'nordvpn', 'private internet access', 'protonvpn',
+    'surfshark', 'torguard', 'windscribe', 'wireguard',
+}
+
+# Providers without a redistributable SVG → official-site favicon, fetched
+# once server-side and cached on disk (the browser never contacts a third
+# party).  ivpn/purevpn are here on purpose: their wordmark SVGs are
+# illegible at 16 px while their favicons are clean square logos.
+PROVIDER_FAVICON_DOMAINS: dict[str, str] = {
+    'giganews':        'giganews.com',
+    'hidemyass':       'hidemyass.com',
+    'ipvanish':        'ipvanish.com',
+    'ivpn':            'ivpn.net',
+    'ovpn':            'ovpn.com',
+    'perfect privacy': 'perfect-privacy.com',
+    'privado':         'privado.com',
+    'privatevpn':      'privatevpn.com',
+    'purevpn':         'purevpn.com',
+    'slickvpn':        'slickvpn.com',
+    'vpn unlimited':   'vpnunlimited.com',
+    'vpnsecure':       'vpnsecure.me',
+    'vyprvpn':         'vyprvpn.com',
+}
+
+# Negative cache: provider → unix ts of last failed fetch (retry after 1 h)
+_favicon_fetch_failures: dict[str, float] = {}
+
+_FAVICON_PLACEHOLDER_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
+    '<circle cx="8" cy="8" r="7" fill="none" stroke="#8b949e" stroke-width="1.2"/>'
+    '<path d="M1 8h14M8 1c2.5 2 2.5 12 0 14M8 1c-2.5 2-2.5 12 0 14" '
+    'fill="none" stroke="#8b949e" stroke-width="1"/></svg>'
+)
+
+
+@bp.route('/provider-icon/<path:provider>')
+def provider_icon(provider: str):
+    """Serve a provider favicon, fetched once and cached next to the DB.
+
+    Keeps third-party requests server-side: the browser only ever talks to
+    Companion.  On fetch failure a neutral globe placeholder is returned and
+    the fetch is retried at most hourly.
+    """
+    import os as _os
+    import requests as _requests
+    from . import database as _database
+
+    provider = provider.lower().strip()
+    domain = PROVIDER_FAVICON_DOMAINS.get(provider)
+    if not domain:
+        return Response(_FAVICON_PLACEHOLDER_SVG, mimetype='image/svg+xml')
+
+    cache_dir = _os.path.join(_os.path.dirname(_database._db_path or '/data/db'), 'provider_icons')
+    cache_file = _os.path.join(cache_dir, f'{domain}.png')
+
+    if not _os.path.exists(cache_file):
+        last_fail = _favicon_fetch_failures.get(provider, 0)
+        if time.time() - last_fail < 3600:
+            return Response(_FAVICON_PLACEHOLDER_SVG, mimetype='image/svg+xml')
+        try:
+            resp = _requests.get(
+                f'https://www.google.com/s2/favicons?domain={domain}&sz=64',
+                timeout=5,
+            )
+            resp.raise_for_status()
+            if not resp.content:
+                raise ValueError('empty favicon response')
+            _os.makedirs(cache_dir, exist_ok=True)
+            with open(cache_file, 'wb') as fh:
+                fh.write(resp.content)
+        except Exception as exc:
+            logger.debug('provider_icon: favicon fetch failed for %s: %s', domain, exc)
+            _favicon_fetch_failures[provider] = time.time()
+            return Response(_FAVICON_PLACEHOLDER_SVG, mimetype='image/svg+xml')
+
+    return send_file(cache_file, mimetype='image/png', max_age=86400)
+
 
 def _active_auto_pool_count() -> int:
     with get_db() as db:
@@ -3135,6 +3216,7 @@ def api_pool_rotate(pool_id: int):
     except Exception as exc:
         logger.error('Pool rotation [%d]: unexpected error: %s', pool_id, exc)
         set_setting('benchmark_running', '0')
+        set_setting('benchmark_stop_requested', '0')
         set_setting('benchmark_current_server', '')
         return jsonify({'ok': False, 'error': str(exc)}), 500
     finally:

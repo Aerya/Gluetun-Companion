@@ -7,33 +7,35 @@
   #catalogueModal .dropdown-menu { z-index: 1055; }
   #catalogueModal #cat-table-wrap thead.sticky-top { z-index: 5; }
 
-  /* ── Sticky first (SERVEUR) + last (ACTIONS) columns ───────────────────── */
+  /* ── Sticky first (SERVEUR) + last (ACTIONS) columns ─────────────────────
+     Background matches the .card the table lives in (--bs-secondary-bg) so
+     no band shows while scrolling; [colspan] cells (empty state) excluded. */
   #view-table table th:first-child,
-  #view-table table td:first-child {
+  #view-table table td:first-child:not([colspan]) {
     position: sticky;
     left: 0;
     z-index: 3;
-    background-color: var(--bs-body-bg);
+    background-color: var(--bs-secondary-bg);
     box-shadow: 3px 0 5px rgba(0,0,0,.1);
   }
   #view-table table th:last-child,
-  #view-table table td:last-child {
+  #view-table table td:last-child:not([colspan]) {
     position: sticky;
     right: 0;
     z-index: 4;
-    background: var(--bs-body-bg) !important;
+    background: var(--bs-secondary-bg) !important;
     background-clip: padding-box;
     box-shadow: -3px 0 5px rgba(0,0,0,.1);
   }
-  #view-table table td:last-child {
+  #view-table table td:last-child:not([colspan]) {
     isolation: isolate;
   }
-  #view-table table td:last-child::before {
+  #view-table table td:last-child:not([colspan])::before {
     content: "";
     position: absolute;
     inset: 0;
     z-index: -1;
-    background: var(--bs-body-bg);
+    background: var(--bs-secondary-bg);
   }
   #view-table table thead th:first-child,
   #view-table table thead th:last-child {
@@ -783,7 +785,7 @@
               <span id="cat-provider-label" class="text-truncate flex-grow-1">{{ t.srv_catalogue_provider_all }}</span>
               <i class="bi bi-chevron-down ms-auto flex-shrink-0" style="font-size:.7rem"></i>
             </button>
-            <ul class="dropdown-menu dropdown-menu-dark py-1 overflow-auto"
+            <ul class="dropdown-menu py-1 overflow-auto"
                 id="cat-provider-menu"
                 style="max-height:320px;min-width:220px;font-size:.85rem">
               <li>
@@ -1501,39 +1503,33 @@ function _catCanAdd(provider) {
   return _catAllowedProviders.has((provider || '').toLowerCase());
 }
 
-// Provider icon helper: <img> for known SVGs, colored badge for the rest
+// Provider icon helper: bundled SVG, else server-side cached favicon route.
+// Keep in sync with PROVIDER_SVG_FILES / PROVIDER_FAVICON_DOMAINS in routes.py.
 const _STATIC_PROVIDERS = '/static/providers/';
-const _KNOWN_PROVIDERS  = new Set([
-  'airvpn','cyberghost','expressvpn','fastestvpn','ivpn',
+const _SVG_PROVIDERS = new Set([
+  'airvpn','cyberghost','expressvpn','fastestvpn',
   'mullvad','nordvpn','private internet access','protonvpn',
-  'purevpn','surfshark','torguard','windscribe','wireguard',
+  'surfshark','torguard','windscribe','wireguard',
 ]);
-const _PROVIDER_DOMAINS = {
-  'giganews':        'giganews.com',
-  'hidemyass':       'hidemyass.com',
-  'ipvanish':        'ipvanish.com',
-  'ovpn':            'ovpn.com',
-  'perfect privacy': 'perfect-privacy.com',
-  'privado':         'privado.com',
-  'privatevpn':      'privatevpn.com',
-  'slickvpn':        'slickvpn.com',
-  'vpn unlimited':   'vpnunlimited.com',
-  'vpnsecure':       'vpnsecure.me',
-  'vyprvpn':         'vyprvpn.com',
-};
+const _FAVICON_PROVIDERS = new Set([
+  'giganews','hidemyass','ipvanish','ivpn','ovpn','perfect privacy',
+  'privado','privatevpn','purevpn','slickvpn','vpn unlimited',
+  'vpnsecure','vyprvpn',
+]);
 function _providerIcon(provider, size) {
   const p = (provider || '').toLowerCase().trim();
   if (!p) return '';
   const s = size || 16;
   const style = `width:${s}px;height:${s}px;vertical-align:middle;object-fit:contain;border-radius:2px;margin-right:3px`;
-  if (_KNOWN_PROVIDERS.has(p)) {
-    const enc = encodeURIComponent(p);
-    return `<img src="${_STATIC_PROVIDERS}${enc}.svg" alt="${_esc(p)}" style="${style}" title="${_esc(p)}">`;
+  let src = '';
+  if (_SVG_PROVIDERS.has(p)) {
+    src = _STATIC_PROVIDERS + encodeURIComponent(p) + '.svg';
+  } else if (_FAVICON_PROVIDERS.has(p)) {
+    src = '/provider-icon/' + encodeURIComponent(p);
+  } else {
+    return '';
   }
-  const domain = _PROVIDER_DOMAINS[p];
-  if (!domain) return '';
-  const favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
-  return `<img src="${favicon}" alt="${_esc(p)}" style="${style}" title="${_esc(p)}">`;
+  return `<img src="${src}" alt="${_esc(p)}" style="${style}" title="${_esc(p)}">`;
 }
 
 let _catEntries = [];

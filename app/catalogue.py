@@ -587,13 +587,15 @@ def catalogue_stats() -> dict:
         # Count distinct importable values: prefer name, fall back to hostname.
         # This avoids double-counting providers whose servers have duplicate
         # technical entries (e.g. AirVPN: 1530 rows but 255 distinct names).
+        _distinct = (
+            "COALESCE(NULLIF(name,''), NULLIF(hostname,''), "
+            "NULLIF(city,''), NULLIF(region,''), country)"
+        )
         total = db.execute(
-            "SELECT COUNT(DISTINCT COALESCE(NULLIF(name,''), NULLIF(hostname,''), country)) "
-            "FROM gluetun_catalogue"
+            f"SELECT COUNT(DISTINCT {_distinct}) FROM gluetun_catalogue"
         ).fetchone()[0]
         providers = db.execute(
-            "SELECT provider, "
-            "COUNT(DISTINCT COALESCE(NULLIF(name,''), NULLIF(hostname,''), country)) as n "
+            f"SELECT provider, COUNT(DISTINCT {_distinct}) as n "
             "FROM gluetun_catalogue "
             "GROUP BY provider ORDER BY provider"
         ).fetchall()
