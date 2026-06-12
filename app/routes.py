@@ -2914,8 +2914,20 @@ def api_port_forward_check_reachability(port_forward_id: int):
     cfg = current_app.config
     px_user = get_setting('proxy_username') or None
     px_pass = get_setting('proxy_password') or None
+    logger.info('Port forward reachability test started: rule_id=%d', port_forward_id)
     public_ip = get_public_ip(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass)
     result = check_port_reachability(port_forward_id, public_ip or '')
+    if result.get('ok'):
+        logger.info(
+            'Port forward reachability test finished: rule_id=%d target=%s:%s open=%s elapsed_ms=%s error=%s',
+            port_forward_id, result.get('ip') or '?', result.get('port') or '?',
+            result.get('open'), result.get('elapsed_ms'), result.get('error') or '',
+        )
+    else:
+        logger.warning(
+            'Port forward reachability test failed: rule_id=%d public_ip=%s error=%s',
+            port_forward_id, public_ip or '?', result.get('error') or 'unknown error',
+        )
     return jsonify(result), (200 if result.get('ok') else 400)
 
 

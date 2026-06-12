@@ -2349,6 +2349,7 @@
                     title="{{ 'Connexion TCP réelle depuis Companion (sortie box, hors VPN) vers IP_publique_VPN:port. UDP non vérifiable.' if session.get('lang','fr') == 'fr' else 'Real TCP connect from Companion (ISP egress, outside the VPN) to VPN_public_IP:port. UDP not verifiable.' }}">
               <i class="bi bi-broadcast"></i> {{ 'Tester depuis Internet' if session.get('lang','fr') == 'fr' else 'Test from Internet' }}
             </button>
+            <div id="port-forward-result-{{ pf.id }}" class="small w-100 mt-1" role="status" aria-live="polite"></div>
           </div>
         </form>
         <form method="post" class="mt-2" onsubmit="return confirm('{{ 'Supprimer ce port forward ?' if session.get('lang','fr') == 'fr' else 'Delete this forwarded port?' }}')">
@@ -3833,10 +3834,21 @@ function trackerToggle(id, enabled) {
 
 function portForwardCheckReach(id, btn) {
   const oldHtml = btn ? btn.innerHTML : '';
+  const resultEl = document.getElementById(`port-forward-result-${id}`);
+  const showResult = (text, cls) => {
+    if (resultEl) {
+      resultEl.textContent = text || '';
+      resultEl.className = `small w-100 mt-1 ${cls || 'text-muted'}`;
+    }
+  };
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Test...';
   }
+  showResult(
+    '{{ "Test TCP en cours… Cela peut prendre quelques secondes." if session.get("lang","fr") == "fr" else "TCP test running… This may take a few seconds." }}',
+    'text-info'
+  );
   fetch(`{{ url_for("main.api_port_forward_check_reachability", port_forward_id=0) }}`.replace('/0/', `/${id}/`), {
     method: 'POST',
     headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _trackerCsrf},
@@ -3846,20 +3858,26 @@ function portForwardCheckReach(id, btn) {
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.ok) throw new Error(data.error || 'test failed');
       if (data.open) {
-        _trackerMsg(
-          `{{ 'Port ouvert depuis Internet :' if session.get('lang','fr') == 'fr' else 'Port open from the Internet:' }} ` +
-          `${data.ip}:${data.port} (TCP, ${data.elapsed_ms} ms)`, 'text-success');
+        const message = `{{ 'Port ouvert depuis Internet :' if session.get('lang','fr') == 'fr' else 'Port open from the Internet:' }} ` +
+          `${data.ip}:${data.port} (TCP, ${data.elapsed_ms} ms)`;
+        showResult(message, 'text-success fw-semibold');
+        if (btn) btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>{{ "Port ouvert" if session.get("lang","fr") == "fr" else "Port open" }}';
       } else {
-        _trackerMsg(
-          `{{ 'Port fermé ou filtré :' if session.get('lang','fr') == 'fr' else 'Port closed or filtered:' }} ` +
-          `${data.ip}:${data.port} — ${data.error}`, 'text-danger');
+        const message = `{{ 'Port fermé ou filtré :' if session.get('lang','fr') == 'fr' else 'Port closed or filtered:' }} ` +
+          `${data.ip}:${data.port} — ${data.error}`;
+        showResult(message, 'text-danger fw-semibold');
+        if (btn) btn.innerHTML = '<i class="bi bi-x-circle me-1"></i>{{ "Port fermé" if session.get("lang","fr") == "fr" else "Port closed" }}';
       }
     })
-    .catch(err => _trackerMsg(err.message || 'Test failed', 'text-danger'))
+    .catch(err => {
+      const message = err.message || '{{ "Échec du test" if session.get("lang","fr") == "fr" else "Test failed" }}';
+      showResult(message, 'text-danger fw-semibold');
+      if (btn) btn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>{{ "Erreur" if session.get("lang","fr") == "fr" else "Error" }}';
+    })
     .finally(() => {
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = oldHtml;
+        window.setTimeout(() => { btn.innerHTML = oldHtml; }, 6000);
       }
     });
 }
