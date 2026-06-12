@@ -361,7 +361,7 @@ def init_db(db_path: str):
                 ('tracker_check_timeout_secs', '3'),
                 ('tracker_check_concurrency',  '12'),
                 ('port_forward_enabled',       '0'),
-                ('port_forward_auto_sync',     '0'),
+                ('port_forward_auto_sync',     '1'),
                 ('port_forward_gluetun_api_url', 'http://host.docker.internal:8000'),
                 ('port_forward_gluetun_api_key', ''),
                 ('port_forward_hook_timeout_secs', '20'),
@@ -466,6 +466,20 @@ def init_db(db_path: str):
                 db.execute(stmt)
             except Exception:
                 pass
+
+        # ── One-time settings migrations ─────────────────────────────────────
+        # Provider auto-sync becomes opt-out: port-forward rules configured per
+        # provider are meant to follow provider changes without a second toggle.
+        # Existing installs are flipped once; users can still disable it.
+        _row = db.execute(
+            "SELECT value FROM settings WHERE key='pf_auto_sync_default_migrated'"
+        ).fetchone()
+        if not _row:
+            db.execute("UPDATE settings SET value='1' WHERE key='port_forward_auto_sync'")
+            db.execute(
+                "INSERT OR REPLACE INTO settings (key, value) "
+                "VALUES ('pf_auto_sync_default_migrated', '1')"
+            )
 
 
 @contextmanager

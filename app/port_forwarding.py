@@ -312,6 +312,54 @@ def sync_qbit_listen_port(port_forward_id: int, timeout: float = 6.0, port_overr
         return {'ok': False, 'error': str(exc)}
 
 
+def resolve_effective_port(pf: dict) -> tuple[int | None, str]:
+    """Resolve the port a rule currently applies: manual value or live native port."""
+    native_ports: list[int] = []
+    if (pf.get('mode') or 'manual') == 'native':
+        native = read_gluetun_native_ports()
+        native_ports = native.get('ports') or []
+        if not native_ports:
+            return None, native.get('error') or 'Port natif Gluetun indisponible.'
+    return _effective_port(pf, native_ports)
+
+
+def check_port_reachability(port_forward_id: int, public_ip: str, timeout: float = 6.0) -> dict:
+    """Real TCP reachability test of a forwarded port from the Internet side.
+
+    Companion dials ``public_ip:port`` through its **own** network egress (the
+    host's ISP connection, not the VPN tunnel), which exercises the actual
+    inbound path: Internet → VPN provider → Gluetun → client.
+
+    TCP only — UDP has no handshake, so an open/closed verdict is not possible
+    this way.  A successful connect proves the port is reachable; a refused or
+    timed-out connect means closed/filtered (or the provider blocks hairpin
+    connections from the same public IP, which is rare).
+    """
+    import socket
+
+    pf = get_port_forward(port_forward_id)
+    if not pf:
+        return {'ok': False, 'error': 'Port forward introuvable.'}
+    if not public_ip:
+        return {'ok': False, 'error': 'IP publique VPN inconnue — Gluetun est-il connecté ?'}
+    port, port_error = resolve_effective_port(pf)
+    if not port:
+        return {'ok': False, 'error': port_error}
+    started = time.monotonic()
+    try:
+        with socket.create_connection((public_ip, int(port)), timeout=timeout):
+            pass
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        return {'ok': True, 'open': True, 'ip': public_ip, 'port': int(port),
+                'elapsed_ms': elapsed_ms, 'tcp_only': True, 'error': ''}
+    except (TimeoutError, socket.timeout):
+        return {'ok': True, 'open': False, 'ip': public_ip, 'port': int(port),
+                'tcp_only': True, 'error': 'timeout — port fermé ou filtré'}
+    except OSError as exc:
+        return {'ok': True, 'open': False, 'ip': public_ip, 'port': int(port),
+                'tcp_only': True, 'error': str(exc)}
+
+
 def sync_rtorrent_listen_port(port_forward_id: int, timeout: float = 8.0, port_override: int | None = None) -> dict:
     """Set rTorrent's listen port via XML-RPC (network.port_range.set).
 

@@ -2905,6 +2905,20 @@ def api_port_forward_sync_qbittorrent(port_forward_id: int):
     return jsonify(result), (200 if result.get('ok') else 400)
 
 
+@bp.route('/api/port-forwards/<int:port_forward_id>/check-reachability', methods=['POST'])
+@login_required
+def api_port_forward_check_reachability(port_forward_id: int):
+    """Real inbound TCP test: Companion dials <VPN public IP>:<port> via its
+    own (non-VPN) egress.  TCP only — UDP is not verifiable this way."""
+    from .port_forwarding import check_port_reachability
+    cfg = current_app.config
+    px_user = get_setting('proxy_username') or None
+    px_pass = get_setting('proxy_password') or None
+    public_ip = get_public_ip(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass)
+    result = check_port_reachability(port_forward_id, public_ip or '')
+    return jsonify(result), (200 if result.get('ok') else 400)
+
+
 # ---------------------------------------------------------------------------
 # Grafana dashboard download
 # ---------------------------------------------------------------------------

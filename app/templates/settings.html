@@ -2140,7 +2140,15 @@
           {{ 'Ports forwardés VPN' if session.get('lang','fr') == 'fr' else 'VPN forwarded ports' }}
         </h6>
         <p class="text-muted small mb-0">
-          {{ 'Déclarer les règles par fournisseur. Si l’automatisme est activé, Companion applique les règles quand Gluetun change de fournisseur VPN et après reconnexion native.' if session.get('lang','fr') == 'fr' else 'Declare rules per provider. When automation is enabled, Companion applies rules when Gluetun changes VPN provider and after native reconnection.' }}
+          {{ 'Déclarer les règles par fournisseur. Si l’automatisme est activé (par défaut), Companion applique les règles quand Gluetun change de fournisseur VPN, après reconnexion native et lors d’un renouvellement de port.' if session.get('lang','fr') == 'fr' else 'Declare rules per provider. When automation is enabled (default), Companion applies rules when Gluetun changes VPN provider, after native reconnection and on port renewal.' }}
+        </p>
+        <p class="text-muted small mb-0 mt-1">
+          {{ 'Vérification externe manuelle :' if session.get('lang','fr') == 'fr' else 'Manual external check:' }}
+          <a href="https://canyouseeme.org/" target="_blank" rel="noopener">canyouseeme.org</a> ·
+          <a href="https://www.yougetsignal.com/tools/open-ports/" target="_blank" rel="noopener">yougetsignal.com</a>
+          <span data-bs-toggle="tooltip" data-bs-title="{{ 'Saisir l’IP publique VPN et le port manuellement — ces sites ne sont pas pré-remplissables. Le bouton « Tester depuis Internet » de chaque règle fait le même test TCP automatiquement.' if session.get('lang','fr') == 'fr' else 'Enter the VPN public IP and port manually — these sites cannot be pre-filled. The per-rule “Test from Internet” button runs the same TCP test automatically.' }}">
+            <i class="bi bi-question-circle"></i>
+          </span>
         </p>
       </div>
       <span class="badge bg-secondary">{{ port_forwards | length }}</span>
@@ -2329,13 +2337,18 @@
                    placeholder="{{ 'Commande optionnelle on_port_change : rtorrent, script custom, serveur WireGuard perso' if session.get('lang','fr') == 'fr' else 'Optional on_port_change command: rtorrent, custom script, personal WireGuard server' }}">
             <div class="form-text">{port} {provider} {name} {protocols} {client}</div>
           </div>
-          <div class="col-md-3 d-flex gap-2">
+          <div class="col-md-3 d-flex gap-2 flex-wrap">
             <button class="btn btn-sm btn-primary"><i class="bi bi-save"></i> {{ t.cmn_save }}</button>
-            {% if pf.client_type == 'qbittorrent' %}
+            {% if pf.client_type in ('qbittorrent', 'rtorrent') %}
             <button type="button" class="btn btn-sm btn-outline-info" onclick="portForwardSyncQbit({{ pf.id }}, this)">
-              <i class="bi bi-arrow-repeat"></i> {{ 'Synchroniser qBittorrent' if session.get('lang','fr') == 'fr' else 'Sync qBittorrent' }}
+              <i class="bi bi-arrow-repeat"></i>
+              {{ ('Synchroniser ' ~ ('qBittorrent' if pf.client_type == 'qbittorrent' else 'rTorrent')) if session.get('lang','fr') == 'fr' else ('Sync ' ~ ('qBittorrent' if pf.client_type == 'qbittorrent' else 'rTorrent')) }}
             </button>
             {% endif %}
+            <button type="button" class="btn btn-sm btn-outline-success" onclick="portForwardCheckReach({{ pf.id }}, this)"
+                    title="{{ 'Connexion TCP réelle depuis Companion (sortie box, hors VPN) vers IP_publique_VPN:port. UDP non vérifiable.' if session.get('lang','fr') == 'fr' else 'Real TCP connect from Companion (ISP egress, outside the VPN) to VPN_public_IP:port. UDP not verifiable.' }}">
+              <i class="bi bi-broadcast"></i> {{ 'Tester depuis Internet' if session.get('lang','fr') == 'fr' else 'Test from Internet' }}
+            </button>
           </div>
         </form>
         <form method="post" class="mt-2" onsubmit="return confirm('{{ 'Supprimer ce port forward ?' if session.get('lang','fr') == 'fr' else 'Delete this forwarded port?' }}')">
@@ -3816,6 +3829,39 @@ function trackerToggle(id, enabled) {
     _updateTrackerSummary(data.tracker_summary);
     _trackerMsg(enabled ? 'Tracker enabled' : 'Tracker ignored', 'text-muted');
   }).catch(() => _trackerMsg('Toggle failed', 'text-danger'));
+}
+
+function portForwardCheckReach(id, btn) {
+  const oldHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Test...';
+  }
+  fetch(`{{ url_for("main.api_port_forward_check_reachability", port_forward_id=0) }}`.replace('/0/', `/${id}/`), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _trackerCsrf},
+    body: JSON.stringify({}),
+  })
+    .then(async response => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.ok) throw new Error(data.error || 'test failed');
+      if (data.open) {
+        _trackerMsg(
+          `{{ 'Port ouvert depuis Internet :' if session.get('lang','fr') == 'fr' else 'Port open from the Internet:' }} ` +
+          `${data.ip}:${data.port} (TCP, ${data.elapsed_ms} ms)`, 'text-success');
+      } else {
+        _trackerMsg(
+          `{{ 'Port fermé ou filtré :' if session.get('lang','fr') == 'fr' else 'Port closed or filtered:' }} ` +
+          `${data.ip}:${data.port} — ${data.error}`, 'text-danger');
+      }
+    })
+    .catch(err => _trackerMsg(err.message || 'Test failed', 'text-danger'))
+    .finally(() => {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = oldHtml;
+      }
+    });
 }
 
 function portForwardSyncQbit(id, btn) {
