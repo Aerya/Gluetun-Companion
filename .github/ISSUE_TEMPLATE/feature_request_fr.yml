@@ -1,0 +1,57 @@
+name: "Demande de fonctionnalité (FR)"
+description: "Proposer une amélioration ou une nouvelle fonctionnalité"
+title: "[Fonctionnalité] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci pour votre proposition. Décrivez surtout le besoin à résoudre ; une solution technique peut ensuite être discutée.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Vérifications préalables
+      options:
+        - label: J'ai recherché une demande existante portant sur le même besoin.
+          required: true
+        - label: Cette demande concerne Gluetun Companion et non Gluetun lui-même.
+          required: true
+
+  - type: textarea
+    id: need
+    attributes:
+      label: Besoin ou problème
+      description: Quel usage est actuellement difficile ou impossible ?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Fonctionnalité proposée
+      description: Décrivez le comportement souhaité du point de vue utilisateur.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Cas d'utilisation
+      description: Donnez un exemple concret montrant comment cette fonctionnalité serait utilisée.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives envisagées
+      description: Contournements actuels ou autres solutions possibles.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Informations complémentaires
+      description: Maquettes, captures, liens ou contraintes à prendre en compte.
+
