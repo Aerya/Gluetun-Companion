@@ -2274,6 +2274,52 @@ def _apply_port_forwards_after_provider_change(
     return result
 
 
+def _check_port_forward_renewal(app) -> None:
+    """Periodic watchdog: detect a native forwarded-port renewal without restart.
+
+    Gluetun can renew the forwarded port mid-session (e.g. NAT-PMP renewal)
+    without the container restarting — so no Docker event fires.  Every run,
+    compare the current /v1/portforward value to the last applied port of the
+    active native rules; on mismatch, re-apply the provider rules.
+    """
+    from .database import get_setting
+    if get_setting('port_forward_enabled', '0') != '1':
+        return
+    if get_setting('port_forward_auto_sync', '0') != '1':
+        return
+    if get_setting('benchmark_running', '0') == '1':
+        return   # clients may be paused; the post-benchmark switch re-applies anyway
+
+    from .port_forwarding import (
+        get_gluetun_provider, list_active_provider_forwards, read_gluetun_native_ports,
+    )
+    container = app.config['GLUETUN_CONTAINER']
+    provider = get_gluetun_provider(container)
+    if not provider:
+        return
+    native_rules = [
+        pf for pf in list_active_provider_forwards(provider)
+        if (pf.get('mode') or 'manual') == 'native'
+    ]
+    if not native_rules:
+        return
+    native = read_gluetun_native_ports()
+    ports = native.get('ports') or []
+    if not native.get('ok') or not ports:
+        logger.debug('PF renewal check: native port unavailable (%s)', native.get('error'))
+        return
+    current = int(ports[0])
+    stale = [pf for pf in native_rules if int(pf.get('last_applied_port') or 0) != current]
+    if not stale:
+        return
+    logger.info(
+        'PF renewal check: native port is now %d but %d rule(s) last applied a different '
+        'port — re-applying provider %s', current, len(stale), provider,
+    )
+    from .port_forwarding import apply_provider_port_forwards
+    apply_provider_port_forwards(provider, reason='port_renewal')
+
+
 def _apply_port_forwards_for_current_provider(container: str, reason: str) -> dict:
     from .database import get_setting
     if get_setting('port_forward_enabled', '0') != '1':
@@ -2887,6 +2933,14 @@ def start_scheduler(app):
         trigger=IntervalTrigger(minutes=5),
         args=[app],
         id='pool_rotation_check',
+        replace_existing=True,
+        misfire_grace_time=120,
+    )
+    _scheduler.add_job(
+        _check_port_forward_renewal,
+        trigger=IntervalTrigger(minutes=5),
+        args=[app],
+        id='pf_renewal_check',
         replace_existing=True,
         misfire_grace_time=120,
     )
