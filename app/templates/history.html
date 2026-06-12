@@ -120,8 +120,8 @@
       type:      {{ ('manual' if sw.reason and sw.reason.endswith(':manual') else 'auto') | tojson }},
       from_s:    {{ (sw.from_server or '—') | tojson }},
       to_s:      {{ (sw.to_server   or '—') | tojson }},
-      flag_from: {{ server_flag(sw.from_server) | tojson }},
-      flag_to:   {{ server_flag(sw.to_server)   | tojson }},
+      flag_from: {{ server_flag(sw.from_server) | string | tojson }},
+      flag_to:   {{ server_flag(sw.to_server)   | string | tojson }},
       icon_from: {{ server_provider_icon(sw.from_server) | tojson }},
       icon_to:   {{ server_provider_icon(sw.to_server)   | tojson }},
       from_prof: {{ (sw.from_profile_name or '') | tojson }},
@@ -794,7 +794,7 @@ new Chart(document.getElementById('chartTimeline'), {
   var _PS = [
     {% for s in per_server %}
     { name: {{ s.server_name | tojson }},
-      flag: {{ server_flag(s.server_name) | tojson }},
+      flag: {{ server_flag_emoji(s.server_name) | tojson }},
       prov: {{ (s.vp_name or '') | tojson }},
       bw:   {{ (s.airvpn_bw_max | bw_label) | tojson }},
       avg_dl:  {{ s.avg_dl  or 0 }},

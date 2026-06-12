@@ -1012,9 +1012,7 @@ document.getElementById('airvpnModal').addEventListener('hidden.bs.modal', () =>
 });
 
 function _flag(code) {
-  if (!code || code.length !== 2) return '';
-  const o = 0x1F1E6;
-  return String.fromCodePoint(code.toUpperCase().charCodeAt(0)-65+o, code.toUpperCase().charCodeAt(1)-65+o);
+  return countryFlag(code);
 }
 function _loadBar(pct) {
   const cls = pct < 40 ? 'bg-success' : pct < 70 ? 'bg-warning' : 'bg-danger';
