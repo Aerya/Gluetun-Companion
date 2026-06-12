@@ -312,6 +312,69 @@ def sync_qbit_listen_port(port_forward_id: int, timeout: float = 6.0, port_overr
         return {'ok': False, 'error': str(exc)}
 
 
+def sync_rtorrent_listen_port(port_forward_id: int, timeout: float = 8.0, port_override: int | None = None) -> dict:
+    """Set rTorrent's listen port via XML-RPC (network.port_range.set).
+
+    ⚠ Beta: implemented against the rTorrent XML-RPC spec and the transport
+    already used for tracker discovery, but not yet validated against a live
+    rTorrent instance.  The custom on_port_change hook remains available as
+    a fallback.
+    """
+    pf = get_port_forward(port_forward_id)
+    if not pf:
+        return {'ok': False, 'error': 'Port forward introuvable.'}
+    if port_override is None and (pf.get('mode') or 'manual') == 'native':
+        native = read_gluetun_native_ports()
+        ports = native.get('ports') or []
+        if not ports:
+            return {'ok': False, 'error': native.get('error') or 'Port natif Gluetun indisponible.'}
+        port_override = int(ports[0])
+    client_id = int(pf.get('torrent_client_id') or 0)
+    client = get_torrent_client(client_id) if client_id else None
+    if not client:
+        return {'ok': False, 'error': 'Aucun client BitTorrent lié.'}
+    if client.get('client_type') != 'rtorrent':
+        return {'ok': False, 'error': 'Cette synchronisation est réservée à rTorrent.'}
+    port = int(port_override or pf.get('port') or 0)
+    if not (1 <= port <= 65535):
+        return {'ok': False, 'error': 'Port invalide.'}
+    try:
+        from .torrent_trackers import rtorrent_proxy
+        proxy = rtorrent_proxy(client, timeout=timeout)
+        rng = f'{port}-{port}'
+        proxy.network.port_range.set('', rng)
+        # Read back for verification; getter signature varies across versions
+        try:
+            current = proxy.network.port_range('')
+        except Exception:
+            try:
+                current = proxy.network.port_range()
+            except Exception:
+                current = None
+        if current is not None and str(port) not in str(current):
+            return {'ok': False, 'listen_port': str(current),
+                    'error': f'rTorrent a renvoyé "{current}" au lieu de "{rng}".'}
+        _set_last_applied_port(int(pf['id']), port)
+        return {'ok': True, 'listen_port': port, 'error': ''}
+    except Exception as exc:
+        return {'ok': False, 'error': str(exc)}
+
+
+def sync_client_listen_port(port_forward_id: int, timeout: float = 8.0, port_override: int | None = None) -> dict:
+    """Dispatch port sync to the right adapter based on the linked client type."""
+    pf = get_port_forward(port_forward_id)
+    if not pf:
+        return {'ok': False, 'error': 'Port forward introuvable.'}
+    client_id = int(pf.get('torrent_client_id') or 0)
+    client = get_torrent_client(client_id) if client_id else None
+    ctype = (client or {}).get('client_type') or ''
+    if ctype == 'qbittorrent':
+        return sync_qbit_listen_port(port_forward_id, timeout=timeout, port_override=port_override)
+    if ctype == 'rtorrent':
+        return sync_rtorrent_listen_port(port_forward_id, timeout=timeout, port_override=port_override)
+    return {'ok': False, 'error': 'Aucun client synchronisable lié (qBittorrent ou rTorrent).'}
+
+
 def apply_provider_port_forwards(
     provider: str,
     *,
@@ -384,7 +447,7 @@ def apply_provider_port_forwards(
                     result['skipped'] += 1
             result['details'].append(detail)
             continue
-        if pf.get('client_type') != 'qbittorrent':
+        if pf.get('client_type') not in ('qbittorrent', 'rtorrent'):
             if hook.get('skipped'):
                 detail.update({'skipped': True, 'error': 'Client non synchronisable automatiquement.'})
                 result['skipped'] += 1
@@ -398,14 +461,14 @@ def apply_provider_port_forwards(
 
         last = {'ok': False, 'error': ''}
         for attempt in range(max(1, retries)):
-            last = sync_qbit_listen_port(int(pf['id']), port_override=effective_port)
+            last = sync_client_listen_port(int(pf['id']), port_override=effective_port)
             if last.get('ok'):
                 break
             if attempt < retries - 1:
                 time.sleep(max(0.0, retry_delay))
-        qbit_ok = bool(last.get('ok'))
+        sync_ok = bool(last.get('ok'))
         hook_ok = bool(hook.get('ok'))
-        detail['ok'] = qbit_ok and hook_ok
+        detail['ok'] = sync_ok and hook_ok
         detail['listen_port'] = last.get('listen_port')
         detail['error'] = last.get('error') or (hook.get('error') or '')
         if detail['ok']:

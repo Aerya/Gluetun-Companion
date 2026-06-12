@@ -253,17 +253,29 @@ def _qbit_trackers(client: dict, timeout: float = 8.0) -> list[TrackerHit]:
     return hits
 
 
-def _rtorrent_trackers(client: dict, timeout: float = 8.0) -> list[TrackerHit]:
+def rtorrent_proxy(client: dict, timeout: float = 8.0) -> 'xmlrpc.client.ServerProxy':
+    """Build an XML-RPC proxy for an rTorrent/ruTorrent client config.
+
+    Applies HTTP basic-auth from the stored credentials and defaults the
+    path to /RPC2 when the base URL has none.  Shared by tracker discovery
+    and port-forward synchronisation.
+    """
     url = client['base_url'].rstrip('/')
-    transport = None
+    parts = urlsplit(url)
+    netloc = parts.netloc
     if client.get('username') or client.get('password'):
         from urllib.parse import quote
-        parts = urlsplit(url)
-        userinfo = f"{quote(client.get('username', ''), safe='')}:{quote(client.get('password', ''), safe='')}@"
-        netloc = userinfo + parts.netloc
-        url = urlunsplit((parts.scheme, netloc, parts.path or '/RPC2', parts.query, parts.fragment))
+        netloc = (
+            f"{quote(client.get('username', ''), safe='')}:"
+            f"{quote(client.get('password', ''), safe='')}@" + parts.netloc
+        )
+    url = urlunsplit((parts.scheme, netloc, parts.path or '/RPC2', parts.query, parts.fragment))
     transport = _TimeoutSafeTransport(timeout) if url.startswith('https://') else _TimeoutTransport(timeout)
-    proxy = xmlrpc.client.ServerProxy(url, allow_none=True, use_builtin_types=True, transport=transport)
+    return xmlrpc.client.ServerProxy(url, allow_none=True, use_builtin_types=True, transport=transport)
+
+
+def _rtorrent_trackers(client: dict, timeout: float = 8.0) -> list[TrackerHit]:
+    proxy = rtorrent_proxy(client, timeout=timeout)
     rows = proxy.d.multicall2('', 'main', 'd.hash=', 'd.name=')
     hits: list[TrackerHit] = []
     for row in rows or []:

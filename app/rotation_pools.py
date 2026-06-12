@@ -405,6 +405,11 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     from_server   = list(_cur_filters.values())[0].split(',')[0].strip() if _cur_filters else None
     pre_deps      = list_network_dependents_for_recreate(container)
 
+    # Capture the outgoing VPN provider so port-forward rules can follow a
+    # provider change (multi-provider pools rotate across WireGuard profiles)
+    from .port_forwarding import get_gluetun_provider as _pf_provider
+    old_provider = _pf_provider(container)
+
     # Capture current public IP before the switch
     try:
         from_ipv4, from_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
@@ -469,6 +474,22 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
             'recreated %d network dependent(s) anyway: %s',
             pool_id, wait_secs, len(restarted), ', '.join(restarted) or 'none',
         )
+
+    # ── Port forwards: follow a provider change across the rotation ─────────
+    try:
+        from .port_forwarding import apply_after_provider_change
+        new_provider = _pf_provider(container)
+        pf_result = apply_after_provider_change(
+            old_provider, new_provider, reason='pool_rotation',
+        )
+        if pf_result.get('provider_changed') and not pf_result.get('skipped_reason'):
+            logger.info(
+                'Pool rotation [%d]: port forwards %s -> %s: applied %s/%s, ok=%s',
+                pool_id, old_provider or '?', new_provider or '?',
+                pf_result.get('applied', 0), pf_result.get('rules', 0), pf_result.get('ok'),
+            )
+    except Exception as _pf_exc:
+        logger.warning('Pool rotation [%d]: port forward apply failed: %s', pool_id, _pf_exc)
 
     # Record switch — IPs/to_mbps added via UPDATE once the bench completes
     switch_id: int | None = None

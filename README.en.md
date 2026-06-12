@@ -198,7 +198,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Per-URL control** — each tracker can be enabled or ignored individually for future checks
 - **VPN compatibility score** — enabled trackers are checked through the VPN path; by default, 80% success is enough to consider the server compatible, avoiding false negatives when a single tracker is down
 - **Optional switch criterion** — when enabled, a benchmarked server below the tracker threshold is excluded from the auto-switch pick; pools ignore servers already known as tracker-incompatible
-- **Per-provider port forwarding** — declare AirVPN/manual, Gluetun-native or custom rules in **Settings → Port Forwarding**; when automation is enabled, Companion applies the new provider's rules after a Gluetun switch and resynchronizes qBittorrent or configured hooks
+- **Per-provider port forwarding** — declare AirVPN/manual, Gluetun-native (`/v1/portforward`) or custom rules in **Settings → Port Forwarding**; when automation is enabled, Companion applies the new provider's rules after every switch (manual, benchmark, pool rotation), resynchronizes qBittorrent or rTorrent *(beta)* and runs the configured `on_port_change` hooks; a periodic check also catches port renewals that happen without a container restart
 
 ### AirVPN
 - **Built-in AirVPN server picker** — *+ Add AirVPN servers* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), four tabs — full searchable list, geographic distribution by country, **Recommended** tab (load < 70 %, bandwidth ≥ 5 Gbit/s) and **Changes** tab (newly detected servers, disappeared servers, load shifts, top 5 healthiest countries); multi-select, one-click add
@@ -451,7 +451,7 @@ In **Settings → Port Forwarding**, Companion manages incoming ports required b
 
 - **Disabled** — rules remain stored but are not applied.
 - **Manual active** — rules can be declared, checked and synchronized on demand.
-- **Automatic active** — when Gluetun switches to another VPN provider, Companion automatically applies the new provider's rules. After a Docker-detected Gluetun reconnection, Companion also rereads the native port and propagates it when needed.
+- **Automatic active** — when Gluetun switches to another VPN provider (manual switch, benchmark **or pool rotation**), Companion automatically applies the new provider's rules. After a Docker-detected Gluetun reconnection, Companion also rereads the native port and propagates it when needed. Finally, a **periodic check (every 5 min)** compares the native `/v1/portforward` port to the last applied port: if Gluetun renewed the port **without a container restart** (e.g. NAT-PMP renewal), the rules are re-applied automatically.
 
 Each entry contains:
 
@@ -471,7 +471,7 @@ For each declared port, the UI shows:
 - whether the port is published on the Gluetun Docker container, per protocol;
 - qBittorrent listen port when the entry is linked to a qBittorrent client.
 
-The **Sync qBittorrent** button updates qBittorrent's `listen_port` through the Web API (`/api/v2/app/setPreferences`) with the applicable port. In **Gluetun native** mode, Companion first reads the Gluetun Control Server (`GET /v1/portforward`) and then pushes the returned port to qBittorrent.
+The **Sync** button updates the linked client's listen port: qBittorrent through the Web API (`/api/v2/app/setPreferences` + read-back verification), or **rTorrent via XML-RPC** (`network.port_range.set` + read-back — *beta support, implemented against the XML-RPC spec but not yet validated on a live rTorrent instance; the `on_port_change` hook remains available as a fallback*). In **Gluetun native** mode, Companion first reads the Gluetun Control Server (`GET /v1/portforward`) and then pushes the returned port to the client.
 
 To enable Gluetun native support, configure Gluetun with [`VPN_PORT_FORWARDING=on`](https://github.com/qdm12/gluetun-wiki/blob/main/setup/options/port-forwarding.md) and expose its [Control Server](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md). In Companion, set the URL, for example `http://host.docker.internal:8967` when Docker publishes `8967:8000`. If Gluetun uses `apikey` authentication, also enter the `X-API-Key` value. Companion uses `/v1/portforward` as the primary source; the historical Gluetun status file is not used as the preferred source because Gluetun documents it as eventually deprecated.
 
@@ -484,7 +484,7 @@ For AirVPN, Companion does not create the port in the AirVPN panel. The expected
 5. link the port to the relevant qBittorrent client or add an `on_port_change` command;
 6. enable automatic application if rules should follow VPN provider changes.
 
-For rTorrent/ruTorrent and personal WireGuard servers, Companion does not arbitrarily edit configuration files. Use `on_port_change` to call a controlled script or command instead. Available variables are `{port}`, `{provider}`, `{name}`, `{protocols}` and `{client}`. Example:
+For rTorrent/ruTorrent, simply link an rTorrent-type client to the rule: XML-RPC synchronisation applies automatically *(beta — see above)*. For other clients, personal WireGuard servers or any specific need, use `on_port_change` to call a controlled script or command. Available variables are `{port}`, `{provider}`, `{name}`, `{protocols}` and `{client}`. Example:
 
 ```bash
 /compose/hooks/update-rtorrent-port.sh {port}

@@ -2898,7 +2898,10 @@ def api_tracker_enabled(tracker_id: int):
 @bp.route('/api/port-forwards/<int:port_forward_id>/sync-qbittorrent', methods=['POST'])
 @login_required
 def api_port_forward_sync_qbittorrent(port_forward_id: int):
-    result = sync_qbit_listen_port(port_forward_id)
+    # Dispatches on the linked client type (qBittorrent or rTorrent);
+    # historical route name kept for UI compatibility.
+    from .port_forwarding import sync_client_listen_port
+    result = sync_client_listen_port(port_forward_id)
     return jsonify(result), (200 if result.get('ok') else 400)
 
 
