@@ -8,6 +8,10 @@ Automatically manage your WireGuard VPN servers in [Gluetun](https://github.com/
 
 > 🇫🇷 [Version française](README.md)
 
+> **Status: beta.** Gluetun Companion is still in testing. It is developed and battle-tested primarily with **AirVPN**; other providers have barely been tested in real conditions, even though the mechanics (catalogue, benchmark, switching, container management) are strictly identical for all of them. Your feedback is invaluable.
+>
+> **Issues and pull requests are welcome**, with proper form: for an [issue](https://github.com/Aerya/Gluetun-Companion/issues), please include the version, VPN provider, relevant logs and reproduction steps; for a PR, a clear description of the problem solved and the expected behaviour.
+
 <p align="center">
 <a href="https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml"><img src="https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml/badge.svg?branch=main" alt="Build"></a>
 <a href="https://github.com/Aerya/Gluetun-Companion/blob/main/.github/workflows/trivy-scan.yml"><img src="https://img.shields.io/badge/Trivy-enabled-1904DA?logo=aquasecurity&logoColor=white" alt="Trivy CVE scan"></a>
@@ -50,6 +54,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - [Features](#features)
   - [Speed testing](#speed-testing)
   - [Server selection & automatic switching](#server-selection--automatic-switching)
+  - [Rotation pools](#rotation-pools)
   - [Multi-provider WireGuard](#multi-provider-wireguard)
   - [Gluetun server catalogue](#gluetun-server-catalogue)
   - [Docker container management](#docker-container-management)
@@ -63,6 +68,10 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - [How it works](#how-it-works)
   - [Sidecar mode (default)](#sidecar-mode-default)
   - [HTTP proxy mode (optional)](#http-proxy-mode-optional)
+  - [Containers to restart after switch](#containers-to-restart-after-switch)
+  - [Containers to pause during benchmark](#containers-to-pause-during-benchmark)
+  - ["Test running" banner and Stop button](#test-running-banner-and-stop-button)
+  - [AirVPN server picker](#airvpn-server-picker)
   - [Quick check before benchmark](#quick-check-before-benchmark-option)
   - [Time optimization](#time-optimization-option)
   - [Smart benchmark selection](#smart-benchmark-selection-recommended-for-large-catalogues)
@@ -75,7 +84,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [Usage profiles](#usage-profiles)
   - [WireGuard VPN profiles](#wireguard-vpn-profiles)
     - [Custom WireGuard: personal single server](#custom-wireguard-personal-single-server)
-  - [Rotation pools](#rotation-pools)
+  - [Rotation pools (how it works)](#rotation-pools-1)
   - [Selection score — stability components](#selection-score--stability-components)
   - [Per-server confidence score](#per-server-confidence-score)
   - [Jitter & Packet Loss](#jitter--packet-loss)
@@ -85,9 +94,11 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [REST API](#rest-api)
   - [Prometheus /metrics endpoint](#prometheus-metrics-endpoint)
   - [Automatic cycle vs manual trigger](#automatic-cycle-vs-manual-trigger)
+- [Grafana dashboard](#grafana-dashboard)
 - [Notes](#notes)
 - [Security](#security)
 - [Credits](#credits)
+- [License](#license)
 
 ---
 
@@ -175,7 +186,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 **Prerequisites** — the catalogue sidecar only needs outbound HTTPS access (Docker bridge network, enabled by default). **No `docker-compose.yml` changes required.**
 
 ### Docker container management
-- **Gluetun network containers (auto-managed)** — all containers using `network_mode: service:gluetun` are detected and recreated automatically after each switch, regardless of their state: containers still functional **or already stuck in a dead namespace** (left over from a previously failed switch). Containers in a **different Compose stack** from Gluetun are also handled if their directory is accessible from Companion or if their `com.docker.compose` labels are present
+- **Gluetun network containers (auto-managed)** — all containers using `network_mode: service:gluetun` are detected and recreated automatically after each switch, regardless of their state: containers still functional **or already stuck in a dead namespace** (left over from a previously failed switch). Containers in a **different Compose stack** from Gluetun are also handled if their directory is accessible from Companion or if their `com.docker.compose` labels are present. Orphan detection is limited to containers referencing a **known former Gluetun** (ID history kept in the database) — Companion never touches dependents of another VPN or an unrelated stack
 - **Containers to restart after switch** — only for containers routing through Gluetun's HTTP/SOCKS5 proxy; ordered list (drag & drop)
 - **Pause during benchmark** — list of containers (torrent, Usenet…) stopped before the benchmark starts and automatically restarted when it ends, even on error
 - **Automatic Docker image updates** *(option)* — at switch time, Companion can update images before restarting containers: Gluetun itself, auto-managed network containers, post-switch containers and benchmark-paused containers; togglable per container from Settings
@@ -204,6 +215,12 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 
 ### UI & notifications
 - **Web UI** dark/light/auto, FR/EN — auth, dashboard with sparkline, paginated history, charts, switches page with Mbps gain and connection time
+- **Server detail panel** — click a server name in `/servers`: aggregate stats (average speeds, latency, peak, test count), sparkline of the last 30 tests, recent results and actions (test, switch, full history) in a side panel
+- **Getting-started checklist** — dashboard card guiding the install (WireGuard profile → server import → first benchmark), disappears once setup is complete
+- **Column picker** — hide unneeded columns on `/servers` (preference kept per browser)
+- **Settings search** — search field filtering cards across all tabs with a per-tab match counter
+- **VPN provider logos** — shown next to server names throughout the UI and in the catalogue (bundled SVGs + server-side cached favicons — the browser never contacts a third-party service)
+- **Global test banner** — visible on every page during a test: test type, current server, progress %, estimated time remaining and a Stop button (state persists across page reloads)
 - **Contextual notifications** — 10 independently-configurable alert types (auto/manual switch, auto-exclude, benchmark with no results, benchmark complete, quick check result, pool rotation, new AirVPN servers, catalogue changes, optimal window change) via Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…); severity levels 🔴/🟡/🔵; global Discord mention with configurable severity threshold
 - **Automatic purge** of SQLite history with configurable retention (in days)
 
@@ -477,11 +494,15 @@ A `Custom WireGuard` rule can therefore cover a personal WireGuard server: the p
 
 ### "Test running" banner and Stop button
 
-While any test is active (full benchmark, continuous observation, quick proxy test, sidecar, pool rotation), a green banner appears at the top of every page showing the **test type** and the **server under test**. A **Stop** button is available for all modes:
+While any test is active (full benchmark, continuous observation, quick proxy test, sidecar, pool rotation), a green banner appears at the top of every page showing the **test type**, the **server under test**, the **progress in %** (bar + percentage) and an **estimated time remaining** based on the average duration of servers already tested this cycle.
+
+A **Stop** button is available for all modes:
 
 - **Benchmark / Observation / Sidecar** — stops after the current server (≤ 2 seconds).
 - **Quick test (proxy)** — stops after the current sample (≤ one sample duration, typically 8 s).
 - **Pool rotation** — stop signal sent; the rotation completes cleanly.
+
+The stop request is **persisted server-side**: reloading or leaving the page does not reset it — the banner stays on "Stop requested…" until the test actually stops.
 
 ### AirVPN server picker
 

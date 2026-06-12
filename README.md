@@ -8,6 +8,10 @@ Gérez automatiquement vos serveurs VPN WireGuard dans [Gluetun](https://github.
 
 > 🇬🇧 [English version](README.en.md)
 
+> **Statut : bêta.** Gluetun Companion est encore en phase de test. Il est développé et éprouvé principalement avec **AirVPN** ; les autres fournisseurs ne sont quasiment pas testés en conditions réelles, même si la mécanique (catalogue, benchmark, bascule, gestion des containers) est strictement identique pour tous. Vos retours sont précieux.
+>
+> **Issues et pull requests bienvenues**, en respectant les formes : pour une [issue](https://github.com/Aerya/Gluetun-Companion/issues), merci d'indiquer la version, le fournisseur VPN, les logs pertinents et les étapes de reproduction ; pour une PR, une description claire du problème résolu et du comportement attendu.
+
 <p align="center">
 <a href="https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml"><img src="https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml/badge.svg?branch=main" alt="Build"></a>
 <a href="https://github.com/Aerya/Gluetun-Companion/blob/main/.github/workflows/trivy-scan.yml"><img src="https://img.shields.io/badge/Trivy-enabled-1904DA?logo=aquasecurity&logoColor=white" alt="Trivy CVE scan"></a>
@@ -50,6 +54,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - [Fonctionnalités](#fonctionnalités)
   - [Mesure de performances](#mesure-de-performances)
   - [Sélection & bascule automatique](#sélection--bascule-automatique)
+  - [Pools de rotation](#pools-de-rotation)
   - [Multi-provider WireGuard](#multi-provider-wireguard)
   - [Catalogue de serveurs Gluetun](#catalogue-de-serveurs-gluetun)
   - [Gestion des containers Docker](#gestion-des-containers-docker)
@@ -63,6 +68,10 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - [Fonctionnement](#fonctionnement)
   - [Mode Sidecar (défaut)](#mode-sidecar-défaut)
   - [Mode Proxy HTTP (optionnel)](#mode-proxy-http-optionnel)
+  - [Containers à redémarrer après bascule](#containers-à-redémarrer-après-bascule)
+  - [Containers à stopper pendant le benchmark](#containers-à-stopper-pendant-le-benchmark)
+  - [Bandeau « Test en cours » et bouton Arrêter](#bandeau--test-en-cours--et-bouton-arrêter)
+  - [Sélecteur de serveurs AirVPN](#sélecteur-de-serveurs-airvpn)
   - [Vérification rapide avant benchmark](#vérification-rapide-avant-benchmark-option)
   - [Optimisation horaire](#optimisation-horaire-option)
   - [Sélection intelligente du benchmark](#sélection-intelligente-du-benchmark-recommandée-pour-les-gros-catalogues)
@@ -75,7 +84,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
   - [Profils d'usage](#profils-dusage)
   - [Profils VPN WireGuard](#profils-vpn-wireguard)
     - [Custom WireGuard : serveur personnel unique](#custom-wireguard--serveur-personnel-unique)
-  - [Pools de rotation](#pools-de-rotation)
+  - [Pools de rotation (fonctionnement)](#pools-de-rotation-1)
   - [Score de sélection — composantes de stabilité](#score-de-sélection--composantes-de-stabilité)
   - [Score de confiance par serveur](#score-de-confiance-par-serveur)
   - [Jitter & Packet Loss](#jitter--packet-loss)
@@ -85,6 +94,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
   - [REST API](#rest-api)
   - [Endpoint /metrics Prometheus](#endpoint-prometheus-metrics)
   - [Cycle automatique vs manuel](#cycle-automatique-vs-déclenchement-manuel)
+- [Dashboard Grafana](#dashboard-grafana)
 - [Notes](#notes)
 - [Sécurité](#sécurité)
 - [Crédits](#crédits)
@@ -176,7 +186,7 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 **Prérequis** — le sidecar catalogue a uniquement besoin d'un accès HTTPS sortant (réseau bridge Docker, activé par défaut). **Aucune modification de `docker-compose.yml` requise.**
 
 ### Gestion des containers Docker
-- **Containers réseau Gluetun (auto-gérés)** — tous les containers en `network_mode: service:gluetun` sont détectés et recréés automatiquement après chaque bascule, quel que soit leur état : containers encore fonctionnels **ou déjà dans un namespace mort** (suite à une bascule précédente ratée). Les containers dans une **stack Compose différente** de Gluetun sont également gérés si leur répertoire est accessible depuis Companion ou si leurs labels `com.docker.compose` sont présents
+- **Containers réseau Gluetun (auto-gérés)** — tous les containers en `network_mode: service:gluetun` sont détectés et recréés automatiquement après chaque bascule, quel que soit leur état : containers encore fonctionnels **ou déjà dans un namespace mort** (suite à une bascule précédente ratée). Les containers dans une **stack Compose différente** de Gluetun sont également gérés si leur répertoire est accessible depuis Companion ou si leurs labels `com.docker.compose` sont présents. La détection d'orphelins est limitée aux containers référençant un **ancien Gluetun connu** (historique d'IDs en base) — Companion ne touche jamais aux dépendants d'un autre VPN ou d'une stack étrangère
 - **Containers à redémarrer après bascule** — uniquement pour les containers utilisant le proxy HTTP/SOCKS5 de Gluetun ; liste ordonnée (glisser-déposer)
 - **Pause pendant le benchmark** — liste de containers (torrents, Usenet…) stoppés avant le début du benchmark et relancés automatiquement à la fin, même en cas d'erreur
 - **Mise à jour automatique des images Docker** *(option)* — au moment de la bascule, Companion peut mettre à jour les images avant de relancer les containers : Gluetun lui-même, les containers réseau auto-gérés, les containers à redémarrer après bascule et les containers en pause pendant le benchmark ; activable individuellement par container depuis les Paramètres
@@ -205,6 +215,12 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 
 ### Interface & notifications
 - **Web UI** dark/light/auto, FR/EN — auth, dashboard avec sparkline, historique paginé, graphiques, page bascules avec gain Mbps et temps de connexion
+- **Panneau de détail serveur** — clic sur un nom de serveur dans `/servers` : statistiques agrégées (débits moyens, latence, pic, nombre de tests), sparkline des 30 derniers tests, derniers résultats et actions (tester, basculer, historique complet) dans un panneau latéral
+- **Checklist premiers pas** — carte sur le dashboard guidant l'installation (profil WireGuard → import de serveurs → premier benchmark), disparaît une fois la configuration terminée
+- **Sélecteur de colonnes** — masquez les colonnes inutiles de `/servers` (préférence conservée par navigateur)
+- **Recherche dans les paramètres** — champ de recherche filtrant les cartes de tous les onglets avec compteur de résultats par onglet
+- **Logos des fournisseurs VPN** — affichés à côté des noms de serveurs partout dans l'UI et dans le catalogue (SVG embarqués + favicons mis en cache côté serveur — le navigateur ne contacte jamais de service tiers)
+- **Bandeau de test global** — visible sur toutes les pages pendant un test : type de test, serveur en cours, progression en %, estimation du temps restant et bouton Arrêter (état persistant au rechargement de page)
 - **Notifications contextuelles** — 10 types d'alertes configurables indépendamment (bascule auto/manuelle, auto-exclusion, benchmark sans résultat, fin de benchmark, résultat quick check, rotation de pool, nouveaux serveurs AirVPN, changements catalogue, changement fenêtre optimale) via webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…) ; sévérité 🔴/🟡/🔵 ; mention Discord globale avec seuil de sévérité configurable
 - **Purge automatique** de l'historique SQLite configurable (rétention en jours)
 
@@ -478,11 +494,15 @@ Une règle `Custom WireGuard` peut ainsi servir à un serveur WireGuard personne
 
 ### Bandeau « Test en cours » et bouton Arrêter
 
-Pendant tout test actif (benchmark complet, observation continue, test rapide proxy, sidecar, rotation de pool), un bandeau vert s'affiche en haut de chaque page avec le **type de test en cours** et le **serveur testé**. Le bouton **Arrêter** est disponible pour tous les modes :
+Pendant tout test actif (benchmark complet, observation continue, test rapide proxy, sidecar, rotation de pool), un bandeau vert s'affiche en haut de chaque page avec le **type de test en cours**, le **serveur testé**, la **progression en %** (barre + pourcentage) et une **estimation du temps restant** calculée sur la durée moyenne des serveurs déjà testés ce cycle.
+
+Le bouton **Arrêter** est disponible pour tous les modes :
 
 - **Benchmark / Observation / Sidecar** — arrêt après le serveur en cours (≤ 2 secondes).
 - **Test rapide (proxy)** — arrêt après l'échantillon en cours (≤ durée d'un échantillon, typiquement 8 s).
 - **Rotation de pool** — signal d'arrêt envoyé ; la rotation se termine proprement.
+
+La demande d'arrêt est **persistée côté serveur** : recharger ou quitter la page ne la réinitialise pas, le bandeau reste sur « Arrêt demandé… » jusqu'à l'arrêt effectif.
 
 ### Sélecteur de serveurs AirVPN
 
