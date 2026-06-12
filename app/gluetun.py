@@ -213,8 +213,20 @@ def switch_server(
             profile_vars = dict(wg_profile.get('vars') or {})
         else:
             profile_vars = dict(wg_profile.get('extra_env') or {})
-            compose_provider = compose_provider or profile_vars.pop('VPN_SERVICE_PROVIDER', '')
-            profile_vars.pop('VPN_TYPE', None)
+        compose_provider = compose_provider or profile_vars.get('VPN_SERVICE_PROVIDER', '')
+
+        # These values are generated explicitly below. Profiles imported from
+        # older code paths can still contain them, which would otherwise emit
+        # duplicate YAML mapping keys and make Docker Compose reject the file.
+        managed_vars = {
+            'VPN_SERVICE_PROVIDER',
+            'VPN_TYPE',
+            *FILTER_VARS.values(),
+        }
+        profile_vars = {
+            key: value for key, value in profile_vars.items()
+            if key not in managed_vars
+        }
 
     uses_server_filter = compose_provider != 'custom'
 
