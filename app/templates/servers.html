@@ -3,11 +3,24 @@
 
 {% block content %}
 <style>
-  /* ── Wide layout for /servers ─────────────────────────────────────────────
-     The server table has many columns; widen the page container (nav + content)
-     to use the full viewport so fewer columns are pushed off-screen. Overrides
-     the global 1800px cap from base.html via the shared --content-max-width var. */
-  :root { --content-max-width: 100%; }
+  /* ── Layout for the wide /servers table ───────────────────────────────────
+     The table has many indicator columns. Two things make all of them fit at a
+     reasonable, centered width instead of overflowing:
+       1. a slightly larger centered page cap than the global 1800px;
+       2. a compact density (smaller font + tighter cell padding) scoped to
+          this table only, which reclaims a lot of horizontal space over 20
+          columns without touching the catalogue / AirVPN tables.
+     When the viewport is still too narrow, .table-responsive scrolls and the
+     sticky first (Server) + last (Actions) columns stay in view. */
+  :root { --content-max-width: 2040px; }
+
+  #view-table table.table { font-size: .82rem; }
+  #view-table table.table > :not(caption) > * > * { padding: .34rem .5rem; }
+
+  /* The public-IP cell can hold a long IPv6 address that would otherwise
+     stretch the whole column; cap its width and wrap the value instead. */
+  #view-table td.srv-col-ip { max-width: 12rem; }
+  #view-table td.srv-col-ip small { white-space: normal; word-break: break-all; }
 
   /* ── Catalogue modal: dropdown above sticky thead ────────────────────── */
   #catalogueModal .dropdown-menu { z-index: 1055; }
@@ -390,7 +403,7 @@
             {{ srv_th(t.srv_col_value,   'name',    'asc') }}
             <th>{{ t.srv_col_provider }}</th>
             {{ srv_th(t.srv_col_type,    'type',    'asc') }}
-            <th data-col-optional style="cursor:pointer;user-select:none;white-space:nowrap;min-width:130px"
+            <th style="cursor:pointer;user-select:none;white-space:nowrap;min-width:130px"
                 onclick="_srvSort('load','desc')">
               {{ t.srv_airvpn_col_load }}
               <i class="bi bi-info-circle text-muted ms-1" style="font-size:.75rem"
@@ -399,7 +412,7 @@
                  onclick="event.stopPropagation()"></i>
               <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('load_asc','load_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='load_asc' else ('▼' if sort=='load_desc' else '⇅') }}</span>
             </th>
-            <th data-col-optional style="cursor:pointer;user-select:none;white-space:nowrap"
+            <th style="cursor:pointer;user-select:none;white-space:nowrap"
                 onclick="_srvSort('users','desc')">
               {{ t.srv_airvpn_col_users }}
               <i class="bi bi-info-circle text-muted ms-1" style="font-size:.75rem"
@@ -408,7 +421,7 @@
                  onclick="event.stopPropagation()"></i>
               <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('users_asc','users_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='users_asc' else ('▼' if sort=='users_desc' else '⇅') }}</span>
             </th>
-            <th data-col-optional style="cursor:pointer;user-select:none;white-space:nowrap"
+            <th style="cursor:pointer;user-select:none;white-space:nowrap"
                 onclick="_srvSort('bw','desc')">
               {{ t.srv_airvpn_col_bw }}
               <i class="bi bi-info-circle text-muted ms-1" style="font-size:.75rem"
@@ -443,12 +456,12 @@
                  data-bs-toggle="tooltip" data-bs-placement="bottom"
                  title="{{ t.stab_col_tooltip }}"></i>
             </th>
-            <th data-col-optional class="text-center" style="cursor:pointer;user-select:none;white-space:nowrap"
+            <th class="text-center" style="cursor:pointer;user-select:none;white-space:nowrap"
                 onclick="_srvSort('trackers','desc')">
               {{ 'Trackers' }}
               <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('trackers_asc','trackers_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='trackers_asc' else ('▼' if sort=='trackers_desc' else '⇅') }}</span>
             </th>
-            <th data-col-optional style="cursor:pointer;user-select:none;white-space:nowrap"
+            <th style="cursor:pointer;user-select:none;white-space:nowrap"
                 onclick="_srvSort('jitter','asc')">
               {{ t.hist_col_jitter }}
               <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('jitter_asc','jitter_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='jitter_asc' else ('▼' if sort=='jitter_desc' else '⇅') }}</span>
@@ -456,7 +469,7 @@
                  data-bs-toggle="tooltip" title="{{ t.hist_col_jitter_tooltip }}"
                  onclick="event.stopPropagation()"></i>
             </th>
-            <th data-col-optional style="cursor:pointer;user-select:none;white-space:nowrap"
+            <th style="cursor:pointer;user-select:none;white-space:nowrap"
                 onclick="_srvSort('loss','asc')">
               {{ t.hist_col_loss }}
               <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('loss_asc','loss_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='loss_asc' else ('▼' if sort=='loss_desc' else '⇅') }}</span>
@@ -464,7 +477,7 @@
                  data-bs-toggle="tooltip" title="{{ t.hist_col_loss_tooltip }}"
                  onclick="event.stopPropagation()"></i>
             </th>
-            <th data-col-optional style="cursor:pointer;user-select:none;white-space:nowrap"
+            <th style="cursor:pointer;user-select:none;white-space:nowrap"
                 onclick="_srvSort('dns','asc')">
               {{ t.hist_col_dns }}
               <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('dns_asc','dns_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='dns_asc' else ('▼' if sort=='dns_desc' else '⇅') }}</span>
@@ -581,7 +594,7 @@
             <td><span class="text-muted">—</span></td>
             <td><span class="text-muted">—</span></td>
             {% endif %}
-            <td>
+            <td class="srv-col-ip">
               <small class="text-muted font-monospace">{{ s.last_ipv4 or '—' }}
               {% if s.last_ipv6 %}<br><span style="font-size:.7rem">{{ s.last_ipv6 }}</span>{% endif %}
               </small>
@@ -2061,23 +2074,8 @@ function _srvSort(col, defaultDir) {
   if (!table || !menu) return;
 
   const ths = Array.from(table.querySelectorAll('thead th'));
-
-  // Columns marked data-col-optional (AirVPN load/users/bw, trackers, jitter,
-  // loss, dns) are hidden by default so the table fits without horizontal
-  // scrolling. The user can re-enable any of them from the column picker; their
-  // choice is then persisted and these defaults no longer apply.
-  const defaultHidden = ths.reduce((acc, th, idx) => {
-    if (th.hasAttribute('data-col-optional')) acc.push(idx);
-    return acc;
-  }, []);
-
-  let hidden;
-  const stored = localStorage.getItem(LS_KEY);
-  if (stored === null) {
-    hidden = new Set(defaultHidden);   // first visit: apply curated defaults
-  } else {
-    try { hidden = new Set(JSON.parse(stored)); } catch (e) { hidden = new Set(); }
-  }
+  let hidden = new Set();
+  try { hidden = new Set(JSON.parse(localStorage.getItem(LS_KEY) || '[]')); } catch (e) {}
 
   function applyHidden() {
     const rows = table.querySelectorAll('tr');
