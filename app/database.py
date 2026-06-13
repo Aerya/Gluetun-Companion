@@ -71,13 +71,14 @@ def init_db(db_path: str):
                 value TEXT
             );
 
-            -- ── WireGuard provider profiles ────────────────────────────────
+            -- ── VPN provider profiles (WireGuard / OpenVPN) ────────────────
             -- One row per configured VPN account (provider + credentials).
             -- Credentials are stored encrypted in vpn_profile_vars.
             CREATE TABLE IF NOT EXISTS vpn_profiles (
                 id               INTEGER PRIMARY KEY AUTOINCREMENT,
                 name             TEXT    NOT NULL,           -- user-given name, e.g. "AirVPN Principal"
                 provider         TEXT    NOT NULL,           -- wg_providers.py key, e.g. "airvpn"
+                vpn_type         TEXT    NOT NULL DEFAULT 'wireguard',  -- 'wireguard' | 'openvpn'
                 enabled          INTEGER NOT NULL DEFAULT 1,
                 rotation_allowed INTEGER NOT NULL DEFAULT 0, -- may this profile be used in rotation?
                 rotation_priority INTEGER NOT NULL DEFAULT 0, -- lower = higher priority
@@ -461,6 +462,8 @@ def init_db(db_path: str):
             "ALTER TABLE port_forwards ADD COLUMN last_applied_port INTEGER",
             "ALTER TABLE port_forwards ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE port_forwards ADD COLUMN notes TEXT NOT NULL DEFAULT ''",
+            # Multi-type VPN profiles: 'wireguard' (legacy default) or 'openvpn'
+            "ALTER TABLE vpn_profiles ADD COLUMN vpn_type TEXT NOT NULL DEFAULT 'wireguard'",
         ]:
             try:
                 db.execute(stmt)
@@ -927,7 +930,7 @@ def purge_old_new_airvpn_servers():
 
 
 # ---------------------------------------------------------------------------
-# WireGuard VPN profile CRUD
+# VPN profile CRUD (WireGuard / OpenVPN)
 # ---------------------------------------------------------------------------
 
 def get_vpn_profiles(enabled_only: bool = False) -> list[dict]:
@@ -939,7 +942,7 @@ def get_vpn_profiles(enabled_only: bool = False) -> list[dict]:
     where = 'WHERE enabled = 1' if enabled_only else ''
     with get_db() as db:
         profiles = db.execute(
-            f'SELECT id, name, provider, enabled, rotation_allowed, '
+            f'SELECT id, name, provider, vpn_type, enabled, rotation_allowed, '
             f'rotation_priority, created_at, updated_at, '
             f'sidecar_private_key, sidecar_addresses, sidecar_preshared_key, sidecar_reuse_profile '
             f'FROM vpn_profiles {where} ORDER BY rotation_priority, id'
@@ -955,6 +958,7 @@ def get_vpn_profiles(enabled_only: bool = False) -> list[dict]:
                 'id':                   p['id'],
                 'name':                 p['name'],
                 'provider':             p['provider'],
+                'vpn_type':             p['vpn_type'] or 'wireguard',
                 'enabled':              bool(p['enabled']),
                 'rotation_allowed':     bool(p['rotation_allowed']),
                 'rotation_priority':    p['rotation_priority'],
@@ -973,7 +977,7 @@ def get_vpn_profile(profile_id: int) -> dict | None:
     """Return one VPN profile by id, or None if not found."""
     with get_db() as db:
         p = db.execute(
-            'SELECT id, name, provider, enabled, rotation_allowed, '
+            'SELECT id, name, provider, vpn_type, enabled, rotation_allowed, '
             'rotation_priority, created_at, updated_at, '
             'sidecar_private_key, sidecar_addresses, sidecar_preshared_key, sidecar_reuse_profile '
             'FROM vpn_profiles WHERE id = ?',
@@ -989,6 +993,7 @@ def get_vpn_profile(profile_id: int) -> dict | None:
         'id':                    p['id'],
         'name':                  p['name'],
         'provider':              p['provider'],
+        'vpn_type':              p['vpn_type'] or 'wireguard',
         'enabled':               bool(p['enabled']),
         'rotation_allowed':      bool(p['rotation_allowed']),
         'rotation_priority':     p['rotation_priority'],
@@ -1013,6 +1018,7 @@ def create_vpn_profile(
     sidecar_addresses: str = '',
     sidecar_preshared_key: str = '',
     sidecar_reuse_profile: bool = False,
+    vpn_type: str = 'wireguard',
 ) -> int:
     """Insert a new VPN profile and its vars.  Returns the new profile id.
 
@@ -1022,10 +1028,10 @@ def create_vpn_profile(
     with get_db() as db:
         cur = db.execute(
             'INSERT INTO vpn_profiles '
-            '(name, provider, enabled, rotation_allowed, rotation_priority, '
+            '(name, provider, vpn_type, enabled, rotation_allowed, rotation_priority, '
             ' sidecar_private_key, sidecar_addresses, sidecar_preshared_key, sidecar_reuse_profile) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            (name, provider, int(enabled), int(rotation_allowed), rotation_priority,
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            (name, provider, vpn_type, int(enabled), int(rotation_allowed), rotation_priority,
              sidecar_private_key, sidecar_addresses, sidecar_preshared_key,
              int(sidecar_reuse_profile)),
         )
@@ -1051,12 +1057,18 @@ def update_vpn_profile(
     sidecar_addresses: str | None = None,
     sidecar_preshared_key: str | None = None,
     sidecar_reuse_profile: bool | None = None,
+    vpn_type: str | None = None,
+    allowed_var_keys: 'set[str] | None' = None,
 ) -> bool:
     """Update an existing VPN profile.  Returns False if the profile doesn't exist.
 
     Only non-None arguments are updated.  For *vars*, each key-value pair is
     upserted individually (pass only the vars you want to change).
     Secret values must already be encrypted by the caller.
+
+    When *allowed_var_keys* is provided, stored vars whose key is NOT in the
+    set are deleted — used when the provider or VPN type changes so stale
+    credentials of the previous type are not injected later.
     """
     with get_db() as db:
         p = db.execute('SELECT id FROM vpn_profiles WHERE id = ?', (profile_id,)).fetchone()
@@ -1069,6 +1081,8 @@ def update_vpn_profile(
             fields.append('name = ?');          params.append(name)
         if provider is not None:
             fields.append('provider = ?');      params.append(provider)
+        if vpn_type is not None:
+            fields.append('vpn_type = ?');      params.append(vpn_type)
         if enabled is not None:
             fields.append('enabled = ?');       params.append(int(enabled))
         if rotation_allowed is not None:
@@ -1097,6 +1111,18 @@ def update_vpn_profile(
                     'INSERT OR REPLACE INTO vpn_profile_vars (profile_id, var_key, var_value) '
                     'VALUES (?, ?, ?)',
                     (profile_id, var_key, var_value),
+                )
+
+        if allowed_var_keys is not None:
+            rows = db.execute(
+                'SELECT var_key FROM vpn_profile_vars WHERE profile_id = ?',
+                (profile_id,),
+            ).fetchall()
+            stale = [r['var_key'] for r in rows if r['var_key'] not in allowed_var_keys]
+            for var_key in stale:
+                db.execute(
+                    'DELETE FROM vpn_profile_vars WHERE profile_id = ? AND var_key = ?',
+                    (profile_id, var_key),
                 )
     return True
 

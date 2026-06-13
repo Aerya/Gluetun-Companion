@@ -425,7 +425,9 @@
       (readme_url ~ ('#score-de-sélection--composantes-de-stabilité' if session.get('lang','fr') == 'fr' else '#selection-score--stability-components'), t.set_stability_weight_label)
     ],
     'wireguard': [
-      (readme_url ~ ('#profils-vpn-wireguard' if session.get('lang','fr') == 'fr' else '#wireguard-vpn-profiles'), t.set_tab_wireguard),
+      (readme_url ~ ('#profils-vpn-wireguard--openvpn' if session.get('lang','fr') == 'fr' else '#vpn-profiles-wireguard--openvpn'), t.set_tab_wireguard),
+      (readme_url ~ ('#profils-openvpn' if session.get('lang','fr') == 'fr' else '#openvpn-profiles'), 'Profils OpenVPN' if session.get('lang','fr') == 'fr' else 'OpenVPN profiles'),
+      (readme_url ~ ('#multi-provider-wireguard--openvpn' if session.get('lang','fr') == 'fr' else '#multi-provider-wireguard--openvpn'), 'Fournisseurs intégrés' if session.get('lang','fr') == 'fr' else 'Integrated providers'),
       (readme_url ~ ('#-clé-wireguard-sidecar-par-profil-recommandée' if session.get('lang','fr') == 'fr' else '#-per-profile-wireguard-sidecar-key-recommended'), t.set_wg_profile_sidecar_title)
     ],
     'notifications': [
@@ -1096,6 +1098,9 @@
                 <span class="badge bg-secondary ms-1" style="font-size:.7rem">
                   {% for k, p in wg_providers %}{% if k == profile.provider %}{{ p.label }}{% endif %}{% endfor %}
                 </span>
+                <span class="badge {{ 'bg-warning bg-opacity-25 text-warning border border-warning border-opacity-25' if profile.vpn_type == 'openvpn' else 'bg-primary bg-opacity-25 text-primary border border-primary border-opacity-25' }} ms-1" style="font-size:.7rem">
+                  {{ 'OpenVPN' if profile.vpn_type == 'openvpn' else 'WireGuard' }}
+                </span>
                 {% if not profile.enabled %}
                 <span class="badge bg-secondary ms-1" style="font-size:.7rem">inactif</span>
                 {% endif %}
@@ -1159,7 +1164,7 @@
         <div class="mb-2">
           <label class="form-label small" for="wg_provider">{{ t.set_wg_provider_label }}</label>
           <select class="form-select form-select-sm" name="wg_provider" id="wg_provider"
-                  onchange="_wgShowFields(this.value)">
+                  onchange="_wgProviderChanged(this.value)">
             <option value="">{{ t.set_wg_select_provider }}</option>
             {% for key, prov in wg_providers %}
             <option value="{{ key }}">{{ prov.label }}</option>
@@ -1167,11 +1172,17 @@
           </select>
         </div>
 
+        {# Type de VPN (WireGuard / OpenVPN) — affiché quand le provider gère les deux #}
+        <div class="mb-2" id="wg_vpn_type_row" style="display:none">
+          <label class="form-label small d-block">{{ t.set_wg_vpn_type_label }}</label>
+          <div id="wg_vpn_type_options" class="d-flex gap-3"></div>
+        </div>
+
         {# Hint du provider — affiché dynamiquement par JS #}
         <div id="wg_provider_hint" class="form-text mb-2" style="font-size:.75rem;display:none"></div>
         <div id="wg_provider_help" class="mb-2" style="display:none;font-size:.75rem"></div>
 
-        {# Champs WireGuard — injectés par JS selon le provider sélectionné #}
+        {# Champs d'identifiants — injectés par JS selon provider + type #}
         <div id="wg_fields_container"></div>
 
         <div class="mb-2">
@@ -1192,8 +1203,9 @@
           <div class="form-text" style="font-size:.72rem">{{ t.set_wg_rotation_priority_hint }}</div>
         </div>
 
-        {# ── Clé sidecar par profil (optionnel) ─────────────────────────── #}
-        <div class="p-3 mb-3 rounded" style="background:var(--bs-tertiary-bg);border:1px solid var(--bs-border-color)">
+        {# ── Clé sidecar par profil (optionnel — WireGuard uniquement) ──── #}
+        <div class="p-3 mb-3 rounded" id="wg_sidecar_block"
+             style="background:var(--bs-tertiary-bg);border:1px solid var(--bs-border-color)">
           <div class="fw-semibold mb-1" style="font-size:.82rem">
             <i class="bi bi-key text-secondary me-1"></i>{{ t.set_wg_profile_sidecar_title }}
           </div>
@@ -3450,23 +3462,71 @@ function _benchTypesSelectAll(checked) {
 // send their value; the server treats empty list as "all included".
 function _updateBenchTypeAll() { /* reserved for future indeterminate state */ }
 
-// ── WireGuard profile helpers ──────────────────────────────────────────────
+// ── VPN profile helpers (WireGuard / OpenVPN) ──────────────────────────────
 const _wgProviders = {{ wg_providers_json | safe }};
 const _lang = '{{ lang }}';
+let _wgEditVars = null;   // masked vars of the profile being edited (or null)
 
-function _wgShowFields(providerKey, existingVars) {
+function _wgSelectedVpnType() {
+  const checked = document.querySelector('input[name="wg_vpn_type"]:checked');
+  return checked ? checked.value : '';
+}
+
+// Provider changed: rebuild the VPN-type radios, then render the fields for
+// the default (or given) type.
+function _wgProviderChanged(providerKey, vpnType) {
+  const typeRow  = document.getElementById('wg_vpn_type_row');
+  const typeOpts = document.getElementById('wg_vpn_type_options');
+  typeOpts.innerHTML = '';
+
+  const p = providerKey ? _wgProviders[providerKey] : null;
+  if (!p) {
+    typeRow.style.display = 'none';
+    _wgShowFields(providerKey, '', null);
+    return;
+  }
+
+  const selType = (vpnType && p.vpn_types.includes(vpnType)) ? vpnType : p.vpn_types[0];
+  p.vpn_types.forEach(vt => {
+    const id = `wg_vpn_type_${vt}`;
+    const label = vt === 'openvpn' ? 'OpenVPN' : 'WireGuard';
+    const div = document.createElement('div');
+    div.className = 'form-check form-check-inline mb-0';
+    div.innerHTML = `
+      <input class="form-check-input" type="radio" name="wg_vpn_type"
+             id="${id}" value="${vt}" ${vt === selType ? 'checked' : ''}
+             onchange="_wgShowFields(document.getElementById('wg_provider').value, this.value, _wgEditVars)">
+      <label class="form-check-label small" for="${id}">${label}</label>`;
+    typeOpts.appendChild(div);
+  });
+  typeRow.style.display = p.vpn_types.length > 1 ? '' : 'none';
+
+  _wgShowFields(providerKey, selType, _wgEditVars);
+}
+
+function _wgShowFields(providerKey, vpnType, existingVars) {
   const container = document.getElementById('wg_fields_container');
   const hintEl    = document.getElementById('wg_provider_hint');
   const helpEl    = document.getElementById('wg_provider_help');
+  const sidecarEl = document.getElementById('wg_sidecar_block');
   container.innerHTML = '';
   hintEl.style.display = 'none';
   helpEl.style.display = 'none';
 
-  if (!providerKey || !_wgProviders[providerKey]) return;
+  if (!providerKey || !_wgProviders[providerKey]) {
+    if (sidecarEl) sidecarEl.style.display = '';
+    return;
+  }
   const p = _wgProviders[providerKey];
+  if (!vpnType || !p.vpn_types.includes(vpnType)) vpnType = p.vpn_types[0];
 
-  // Provider hint
-  const hint = _lang === 'fr' ? p.hint_fr : p.hint_en;
+  // The dedicated sidecar key only makes sense for WireGuard profiles;
+  // OpenVPN profiles reuse their own credentials in the test container.
+  if (sidecarEl) sidecarEl.style.display = (vpnType === 'openvpn') ? 'none' : '';
+
+  // Provider hint (per VPN type)
+  const hints = (p.hints || {})[vpnType] || {};
+  const hint = _lang === 'fr' ? hints.fr : hints.en;
   if (hint) {
     hintEl.textContent = hint;
     hintEl.style.display = '';
@@ -3489,8 +3549,8 @@ function _wgShowFields(providerKey, existingVars) {
     helpEl.style.display = '';
   }
 
-  // WireGuard credential fields
-  p.fields.forEach(f => {
+  // Credential fields for the selected VPN type
+  (p.fields[vpnType] || []).forEach(f => {
     const existingVal = existingVars ? (existingVars[f.key] || '') : '';
     const isSet = f.secret && existingVal === '••••';
     const inputType = f.secret ? 'password' : 'text';
@@ -3520,7 +3580,8 @@ function _wgEditProfile(profile) {
 
   const providerSel = document.getElementById('wg_provider');
   providerSel.value = profile.provider;
-  _wgShowFields(profile.provider, profile.vars_display || {});
+  _wgEditVars = profile.vars_display || {};
+  _wgProviderChanged(profile.provider, profile.vpn_type || '');
 
   // Show priority row if rotation allowed
   document.getElementById('wg_priority_row').style.display =
@@ -3555,6 +3616,11 @@ function _wgCancelEdit() {
   document.getElementById('wg_provider_hint').style.display = 'none';
   document.getElementById('wg_provider_help').style.display = 'none';
   document.getElementById('wg_priority_row').style.display = 'none';
+  _wgEditVars = null;
+  document.getElementById('wg_vpn_type_row').style.display = 'none';
+  document.getElementById('wg_vpn_type_options').innerHTML = '';
+  const sidecarBlock = document.getElementById('wg_sidecar_block');
+  if (sidecarBlock) sidecarBlock.style.display = '';
   // Reset sidecar fields
   const pkBadge  = document.getElementById('wg_sidecar_pk_profile_badge');
   const pskBadge = document.getElementById('wg_sidecar_psk_profile_badge');

@@ -182,12 +182,17 @@ def switch_server(
 
     If *wg_profile* is provided, it must be a dict with:
         compose_provider : str   — value of VPN_SERVICE_PROVIDER (e.g. "airvpn")
-        vars             : dict  — WireGuard env vars, secrets already decrypted
+        vpn_type         : str   — 'wireguard' (default) or 'openvpn'
+        vars             : dict  — credential env vars, secrets already decrypted
                                    e.g. {"WIREGUARD_PRIVATE_KEY": "...", ...}
+                                   or   {"OPENVPN_USER": "...", ...}
 
-    When *wg_profile* is provided, VPN_SERVICE_PROVIDER, VPN_TYPE=wireguard and
-    all profile vars are also written to the override so that Gluetun switches
-    both the server filter AND the WireGuard credentials in a single restart.
+    When *wg_profile* is provided, VPN_SERVICE_PROVIDER, VPN_TYPE and all
+    profile vars are also written to the override so that Gluetun switches
+    both the server filter AND the credentials in a single restart.  Every
+    known credential var NOT set by the profile is blanked out so that values
+    from the base compose file (e.g. another provider's preshared key) cannot
+    leak into the new session.
     For VPN_SERVICE_PROVIDER=custom, Gluetun has no SERVER_* selector; all
     SERVER_* vars are cleared and the server name is only used as a stats label.
 
@@ -206,6 +211,7 @@ def switch_server(
         return raw.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '').replace('\r', '')
 
     compose_provider = ''
+    vpn_type = 'wireguard'
     profile_vars: dict[str, str] = {}
     if wg_profile:
         compose_provider = wg_profile.get('compose_provider', '')
@@ -214,6 +220,11 @@ def switch_server(
         else:
             profile_vars = dict(wg_profile.get('extra_env') or {})
         compose_provider = compose_provider or profile_vars.get('VPN_SERVICE_PROVIDER', '')
+        vpn_type = (
+            wg_profile.get('vpn_type')
+            or profile_vars.get('VPN_TYPE')
+            or 'wireguard'
+        )
 
         # These values are generated explicitly below. Profiles imported from
         # older code paths can still contain them, which would otherwise emit
@@ -236,13 +247,19 @@ def switch_server(
         raw = filter_value if uses_server_filter and var == env_var else ''
         env_lines += f'      {var}: "{_safe(raw)}"\n'
 
-    # WireGuard profile vars (provider + credentials)
+    # VPN profile vars (provider + type + credentials)
     if wg_profile:
         if compose_provider:
             env_lines += f'      VPN_SERVICE_PROVIDER: "{_safe(compose_provider)}"\n'
-        env_lines += '      VPN_TYPE: "wireguard"\n'
+        env_lines += f'      VPN_TYPE: "{_safe(vpn_type)}"\n'
         for k, v in profile_vars.items():
             env_lines += f'      {k}: "{_safe(v)}"\n'
+        # Blank every known credential var the profile does not set, so values
+        # inherited from the base compose file (another provider/type) cannot
+        # leak into the new session (e.g. AirVPN preshared key on Mullvad).
+        from .wg_providers import all_credential_keys
+        for k in sorted(all_credential_keys() - set(profile_vars)):
+            env_lines += f'      {k}: ""\n'
 
     # Use the Compose service name (not the container name) as the YAML key so
     # that the override is applied to the correct service even when service name
@@ -1013,8 +1030,15 @@ def create_test_gluetun(
         if not is_custom_provider:
             env[FILTER_VARS.get(filter_type, 'SERVER_NAMES')] = filter_value
 
-        # Apply WireGuard profile vars (provider, credentials) if provided
+        # Apply VPN profile vars (provider, type, credentials) if provided.
+        # When the test targets a specific profile, first clear every known
+        # credential var inherited from the real container so credentials of
+        # another provider/type cannot leak into the test session.
         if extra_env:
+            if extra_env.get('VPN_SERVICE_PROVIDER'):
+                from .wg_providers import all_credential_keys
+                for k in all_credential_keys():
+                    env.pop(k, None)
             env.update(extra_env)
 
         image    = attrs['Config']['Image']
