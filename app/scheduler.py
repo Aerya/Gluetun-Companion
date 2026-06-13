@@ -1401,9 +1401,10 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             _prov_key = _p['provider']
             _prov_def = _WGP.get(_prov_key, {})
             _compose_prov = _prov_def.get('compose_provider', _prov_key)
+            _vpn_type = _p.get('vpn_type', 'wireguard') or 'wireguard'
             _extra: dict[str, str] = {
                 'VPN_SERVICE_PROVIDER': _compose_prov,
-                'VPN_TYPE': 'wireguard',
+                'VPN_TYPE': _vpn_type,
             }
             for _vk, _vv in _p['vars'].items():
                 try:
@@ -1435,17 +1436,22 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                     )
                 except ValueError as _exc:
                     logger.error('Cannot decrypt sidecar_preshared_key for profile %d: %s', _pid, _exc)
-            if not _sidecar_ovr and not _sidecar_reuse and sidecar_mode:
+            # OpenVPN profiles have no per-profile sidecar identity: the test
+            # container reuses the same OpenVPN credentials (most providers
+            # allow several simultaneous connections per account).
+            if (_vpn_type == 'wireguard' and not _sidecar_ovr
+                    and not _sidecar_reuse and sidecar_mode):
                 logger.warning(
                     'Profile #%d (%s/%s): no dedicated sidecar WireGuard key configured '
                     'and main-profile reuse is disabled — '
                     'servers in this profile will be skipped in sidecar mode '
-                    '(configure a sidecar key or enable reuse in Settings → WireGuard profiles).',
+                    '(configure a sidecar key or enable reuse in Settings → VPN profiles).',
                     _pid, _compose_prov, _p.get('name', '?'),
                 )
 
             _profile_env_cache[_pid] = {
                 'compose_provider': _compose_prov,
+                'vpn_type':         _vpn_type,
                 'extra_env':        _extra,
                 'sidecar_override': _sidecar_ovr,
                 'sidecar_reuse_profile': _sidecar_reuse,
@@ -1475,15 +1481,18 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             set_setting('benchmark_next_server', next_server)
             _progress_log(f'Test {idx}/{len(servers)} : {row["name"]}')
 
-            # Resolve WireGuard extra_env for this server's profile (None if no profile)
+            # Resolve VPN profile extra_env for this server (None if no profile)
             _pid = row['vpn_profile_id']
             _penv = _profile_env_cache.get(_pid) if _pid is not None else None
             _extra_env = _penv['extra_env'] if _penv else None
 
             # Sidecar uses either a dedicated per-profile identity or, when the
             # profile explicitly allows it, the same WireGuard identity as Gluetun.
+            # OpenVPN profiles always reuse their own credentials in the sidecar.
             _effective_sidecar = _penv.get('sidecar_override', {}) if _penv else {}
             _sidecar_reuse = bool(_penv.get('sidecar_reuse_profile')) if _penv else False
+            if _penv and _penv.get('vpn_type') == 'openvpn':
+                _sidecar_reuse = True
 
             if sidecar_mode:
                 if not _effective_sidecar and not _sidecar_reuse:
@@ -1785,6 +1794,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                     _best_penv = _profile_env_cache[_best_pid]
                     _best_wg = {
                         'compose_provider': _best_penv['compose_provider'],
+                        'vpn_type':         _best_penv.get('vpn_type', 'wireguard'),
                         'vars': {
                             k: v for k, v in _best_penv['extra_env'].items()
                             if k not in ('VPN_SERVICE_PROVIDER', 'VPN_TYPE')
@@ -2053,14 +2063,22 @@ def _do_single_server(app, server_name: str, filter_type: str):
                 _ss_prov_key = _ss_p['provider']
                 _ss_prov_def = _WGP_SS.get(_ss_prov_key, {})
                 _ss_compose_prov = _ss_prov_def.get('compose_provider', _ss_prov_key)
+                _ss_vpn_type = _ss_p.get('vpn_type', 'wireguard') or 'wireguard'
                 _ss_vars: dict[str, str] = {}
                 _ss_sidecar_reuse = bool(_ss_p.get('sidecar_reuse_profile', False))
+                # OpenVPN profiles always reuse their own credentials in the sidecar
+                if _ss_vpn_type == 'openvpn':
+                    _ss_sidecar_reuse = True
                 for _k, _v in _ss_p['vars'].items():
                     try:
                         _ss_vars[_k] = _dec_ss(_v) if _is_enc_ss(_v) else _v
                     except ValueError:
                         _ss_vars[_k] = ''
-                _ss_wg_profile = {'compose_provider': _ss_compose_prov, 'vars': _ss_vars}
+                _ss_wg_profile = {
+                    'compose_provider': _ss_compose_prov,
+                    'vpn_type':         _ss_vpn_type,
+                    'vars':             _ss_vars,
+                }
                 # Per-profile sidecar key
                 _sc_pk = _ss_p.get('sidecar_private_key', '')
                 _sc_ad = _ss_p.get('sidecar_addresses', '')
@@ -2092,7 +2110,7 @@ def _do_single_server(app, server_name: str, filter_type: str):
             _ss_sidecar_allowed = bool(_ss_sidecar_override) or _ss_sidecar_reuse
             if _ss_wg_profile and _ss_sidecar_allowed:
                 _ss_sidecar_env.update({'VPN_SERVICE_PROVIDER': _ss_wg_profile['compose_provider'],
-                                         'VPN_TYPE': 'wireguard'})
+                                         'VPN_TYPE': _ss_wg_profile.get('vpn_type', 'wireguard')})
                 _ss_sidecar_env.update(_ss_wg_profile['vars'])
             if _ss_sidecar_override:
                 _ss_sidecar_env.update(_ss_sidecar_override)

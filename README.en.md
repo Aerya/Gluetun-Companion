@@ -55,7 +55,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [Speed testing](#speed-testing)
   - [Server selection & automatic switching](#server-selection--automatic-switching)
   - [Rotation pools](#rotation-pools)
-  - [Multi-provider WireGuard](#multi-provider-wireguard)
+  - [Multi-provider (WireGuard & OpenVPN)](#multi-provider-wireguard--openvpn)
   - [Gluetun server catalogue](#gluetun-server-catalogue)
   - [Docker container management](#docker-container-management)
   - [BitTorrent tracker checks](#bittorrent-tracker-checks)
@@ -82,7 +82,8 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [BitTorrent clients and tracker discovery](#bittorrent-clients-and-tracker-discovery)
   - [VPN forwarded port inventory](#vpn-forwarded-port-inventory)
   - [Usage profiles](#usage-profiles)
-  - [WireGuard VPN profiles](#wireguard-vpn-profiles)
+  - [VPN profiles (WireGuard & OpenVPN)](#vpn-profiles-wireguard--openvpn)
+    - [OpenVPN profiles](#openvpn-profiles)
     - [Custom WireGuard: personal single server](#custom-wireguard-personal-single-server)
   - [Rotation pools (how it works)](#rotation-pools-1)
   - [Selection score — stability components](#selection-score--stability-components)
@@ -138,34 +139,52 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **Optional post-switch measurement** — after each switch, a fast proxy test measures the new server's speed and records it in the history (method `proxy_qc`). This measurement does not choose the server; it audits the completed rotation.
 - **Notifications** — Discord/Apprise alert on each rotation (manual or automatic), including previous server, new server, and speed if post-switch measurement is enabled
 
-### Multi-provider WireGuard
+### Multi-provider (WireGuard & OpenVPN)
 
-- **WireGuard VPN profiles** — create multiple sets of WireGuard credentials from **Settings → WireGuard**; each profile is linked to a provider (AirVPN, Mullvad, ProtonVPN, NordVPN, IVPN, Surfshark, Windscribe, or Custom WireGuard for any other compatible provider)
-- **Secret encryption** — private keys and other sensitive fields are encrypted at rest (Fernet/AES-128, key derived from `SECRET_KEY` via PBKDF2HMAC-SHA256 with 480 000 iterations); changing `SECRET_KEY` makes existing profiles unreadable (documented behavior)
+- **VPN profiles** — create multiple sets of credentials from **Settings → VPN profiles**; each profile is linked to a provider **and a connection type** (WireGuard or OpenVPN, depending on what Gluetun supports natively for that provider); **all 24 providers from the Gluetun wiki are integrated**
+- **Secret encryption** — private keys, OpenVPN passwords and other sensitive fields are encrypted at rest (Fernet/AES-128, key derived from `SECRET_KEY` via PBKDF2HMAC-SHA256 with 480 000 iterations); changing `SECRET_KEY` makes existing profiles unreadable (documented behavior)
 - **Server ↔ profile assignment** — on the **Servers** page, assign a VPN profile to each server via a dropdown; a *Provider* column shows the linked profile; the `?profile=` filter limits the view to a single profile or to unassigned servers
-- **Orphan server alert** — a badge warns when servers have no assigned profile while at least one WireGuard profile is configured; those servers continue to work normally but cannot be selected by the multi-profile benchmark
-- **Multi-profile benchmark** — in sidecar mode, each server is tested with its profile's WireGuard credentials injected into the temporary container; on the final switch, Companion automatically writes `VPN_SERVICE_PROVIDER`, `VPN_TYPE=wireguard` and all `WIREGUARD_*` variables to `docker-compose.override.yml`
-- **Rotation policy** — three modes configurable in **Settings → WireGuard → Rotation policy**:
+- **Orphan server alert** — a badge warns when servers have no assigned profile while at least one VPN profile is configured; those servers continue to work normally but cannot be selected by the multi-profile benchmark
+- **Multi-profile benchmark** — in sidecar mode, each server is tested with its profile's credentials injected into the temporary container; on the final switch, Companion automatically writes `VPN_SERVICE_PROVIDER`, `VPN_TYPE` and all credential variables (`WIREGUARD_*` or `OPENVPN_*`) to `docker-compose.override.yml`, blanking credentials inherited from the base compose file so nothing leaks between providers
+- **Sidecar and OpenVPN** — OpenVPN profiles are tested with the same credentials as the main tunnel (most providers allow several simultaneous connections); the dedicated sidecar key only applies to WireGuard profiles
+- **Rotation policy** — three modes configurable in **Settings → VPN profiles → Rotation policy**:
   - `none` — Companion always stays in the currently active profile; servers from other profiles are never selected
   - `free` — picks the best server across all profiles (default behavior without profiles)
   - `conditional` — switches to another profile only if its best server outperforms the best server in the current profile by more than N % (configurable threshold, default 10 %)
-- **Provider column in `/history`** — each history row shows the WireGuard profile associated with the tested server (only visible when at least one profile is configured)
+- **Provider column in `/history`** — each history row shows the VPN profile associated with the tested server (only visible when at least one profile is configured)
 
-**Supported providers:**
+**Integrated providers** (from the [Gluetun wiki](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers)):
 
-| Provider | Type | Gluetun variables |
-|---|---|---|
-| AirVPN | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_PRESHARED_KEY`, `WIREGUARD_ADDRESSES` |
-| FastestVPN | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
-| IVPN | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
-| Mullvad | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
-| NordVPN | Native | `WIREGUARD_PRIVATE_KEY` |
-| ProtonVPN | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
-| Surfshark | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_ADDRESSES` |
-| Windscribe | Native | `WIREGUARD_PRIVATE_KEY`, `WIREGUARD_PRESHARED_KEY`, `WIREGUARD_ADDRESSES` |
-| Custom WireGuard | Via `custom` | Endpoint IP/port, public key, private key, addresses, pre-shared key (optional) |
+| Provider | WireGuard | OpenVPN | OpenVPN credentials |
+|---|---|---|---|
+| AirVPN | Native | Native | Client certificate + key (`OPENVPN_CERT`, `OPENVPN_KEY`) |
+| CyberGhost | Via `custom` | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` + client certificate + key |
+| ExpressVPN | — | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` |
+| FastestVPN | Native | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` |
+| Giganews (VyprVPN) | — | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` |
+| HideMyAss | — | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` |
+| IPVanish | — | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` |
+| IVPN | Native | Native | `OPENVPN_USER` (password optional with the account ID) |
+| Mullvad | Native | — | OpenVPN removed by Mullvad in January 2026 |
+| NordVPN | Native | Native | Service credentials (`OPENVPN_USER`/`OPENVPN_PASSWORD`) |
+| Perfect Privacy | — | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` |
+| Privado | — | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` |
+| Private Internet Access | Via `custom` | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` |
+| PrivateVPN | Via `custom` | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` |
+| ProtonVPN | Native | Native | Dedicated OpenVPN credentials (`+pmp` for port forwarding) |
+| PureVPN | Via `custom` | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` |
+| SlickVPN | — | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` + certificate + encrypted key |
+| Surfshark | Native | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` |
+| TorGuard | Via `custom` | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` |
+| VPN Secure | — | Native | Certificate + encrypted key + passphrase (`OPENVPN_KEY_PASSPHRASE`) |
+| VPN Unlimited | Via `custom` | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` + client certificate + key |
+| VyprVPN | Via `custom` | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` |
+| Windscribe | Native | Native | `OPENVPN_USER`/`OPENVPN_PASSWORD` (from a generated config file) |
+| Custom | Native | Native | `.conf` file mounted into Gluetun + optional credentials |
 
-> Custom WireGuard covers any provider not listed above (CyberGhost, PrivateVPN, PureVPN, TorGuard, VPN Unlimited, VyprVPN…) as long as they provide a standard WireGuard configuration file.
+> Client certificates and keys (CyberGhost, VPN Unlimited, AirVPN OpenVPN, SlickVPN, VPN Secure) go straight into the form: paste the base64 body as a single line (without the `BEGIN`/`END` markers) — no file mount needed.
+>
+> **Custom WireGuard** remains available for any provider without native WireGuard support in Gluetun (CyberGhost, PIA, PrivateVPN, PureVPN, TorGuard, VPN Unlimited, VyprVPN…) as long as it provides a standard WireGuard configuration file.
 
 ---
 
@@ -703,20 +722,33 @@ Important: a usage profile is only reliable when enough history exists. At first
 
 **Outlier detection**: enable in **Settings → Decide → Filter outlier values**. When active, isolated measurements that are clearly out of range are excluded from averages and scoring — they remain visible in the history. Concrete example: if a server normally delivers 80–100 Mbps but one exceptional test returns 5 or 200 Mbps (transient spike, momentary saturation, failed test), that value is excluded from calculations. The IQR method automatically determines the normal range per server and per metric (speed, latency, jitter…) with no threshold to configure. Requires at least 4 measurements per server to take effect.
 
-### WireGuard VPN profiles
+### VPN profiles (WireGuard & OpenVPN)
 
-WireGuard profiles let you manage multiple VPN providers or identities in a single Companion instance, with automatic optimised switching between them.
+VPN profiles let you manage multiple VPN providers or identities — over WireGuard as well as OpenVPN — in a single Companion instance, with automatic optimised switching between them. All 24 providers from the [Gluetun wiki](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers) are integrated (see the [provider table](#multi-provider-wireguard--openvpn)).
 
 #### Creating a profile
 
-In **Settings → WireGuard**:
+In **Settings → VPN profiles**:
 
 1. Choose a provider from the dropdown → credential fields appear dynamically based on what Gluetun requires for that provider
-2. Fill in the fields (private key, IP addresses, etc.) — fields marked 🔒 are encrypted before storage
-3. Name the profile (e.g. "Mullvad — Sweden", "ProtonVPN — Gaming")
-4. The *Active* and *Rotation allowed* toggles include or exclude the profile from automatic cycles
+2. If the provider supports both, choose the **connection type** (WireGuard or OpenVPN) — the fields adapt to the selected type
+3. Fill in the fields (private key, OpenVPN credentials, etc.) — fields marked 🔒 are encrypted before storage
+4. Name the profile (e.g. "Mullvad — Sweden", "PIA — OpenVPN US")
+5. The *Active* and *Rotation allowed* toggles include or exclude the profile from automatic cycles
 
-> **Key security**: encrypted values are stored with the prefix `enc:` in the database. They are only decrypted at the moment the Compose override is written or a sidecar container is launched — never exposed in logs or configuration exports.
+> **Secret security**: encrypted values are stored with the prefix `enc:` in the database. They are only decrypted at the moment the Compose override is written or a sidecar container is launched — never exposed in logs or configuration exports.
+
+#### OpenVPN profiles
+
+Depending on the provider, an OpenVPN profile carries:
+
+- **Credentials** — `OPENVPN_USER` / `OPENVPN_PASSWORD` (most providers: ExpressVPN, IPVanish, NordVPN, PIA, Surfshark, TorGuard, VyprVPN…); note that several providers use *service* credentials distinct from the website login (NordVPN, ProtonVPN, Surfshark, Windscribe)
+- **Client certificate and key** — CyberGhost, VPN Unlimited and AirVPN (OpenVPN) additionally (or instead) require a client certificate and key: paste the base64 body **as a single line**, without the `BEGIN`/`END` markers, into the `OPENVPN_CERT` / `OPENVPN_KEY` fields — no file mount needed
+- **Encrypted key + passphrase** — SlickVPN and VPN Secure use an encrypted client key (`OPENVPN_ENCRYPTED_KEY`) with its passphrase (`OPENVPN_KEY_PASSPHRASE`)
+
+On switch, Companion writes `VPN_TYPE=openvpn` and the `OPENVPN_*` variables to the Compose override, blanking credentials from other providers/types to prevent any leak. In sidecar mode, OpenVPN profiles are tested with their own credentials (no dedicated sidecar key — most providers allow several simultaneous connections per account).
+
+The **Custom OpenVPN** mode (`VPN_SERVICE_PROVIDER=custom` + `VPN_TYPE=openvpn`) covers any provider missing from the Gluetun catalogue: mount your `.conf` file into the Gluetun container (volume), then set its in-container path in the profile's `OPENVPN_CUSTOM_CONFIG` field (e.g. `/gluetun/custom.conf`), with optional credentials depending on the file.
 
 #### Custom WireGuard: personal single server
 
@@ -735,7 +767,7 @@ The row added in **Servers** becomes only a statistics label, for example `Perso
 
 Recommended setup:
 
-1. Create a **Custom WireGuard** profile in **Settings → WireGuard**.
+1. Create a **Custom WireGuard** profile in **Settings → VPN profiles**.
 2. Copy the values from your WireGuard `.conf` file into the profile fields.
 3. Add one entry in **Servers** with any clear label.
 4. Assign that entry to the Custom WireGuard profile.
@@ -746,12 +778,14 @@ On switch, Companion writes `VPN_SERVICE_PROVIDER=custom`, `VPN_TYPE=wireguard` 
 #### ⚠️ Per-profile WireGuard sidecar key (recommended)
 
 > **If you use sidecar mode for WireGuard benchmarks, the most reliable setup is to give each WireGuard profile its own dedicated sidecar identity. Companion can also, as an advanced option, reuse the main profile WireGuard configuration.**
+>
+> This section only applies to **WireGuard** profiles: OpenVPN profiles are tested directly with their own credentials (the *Dedicated sidecar key* section is hidden for them).
 
 **Why this is recommended:** sidecar test containers clone the environment of your main Gluetun container, including its `WIREGUARD_PRIVATE_KEY`. When a test container initiates a new WireGuard handshake using the same key from a different IP address, some VPN providers update the peer routing… and your main Gluetun tunnel may drop.
 
 **Why there is no global key:** an AirVPN key cannot authenticate against Mullvad or Proton, and vice-versa. A shared sidecar key across multiple providers is inherently invalid — each profile must carry its own configuration.
 
-**Solution:** in **Settings → WireGuard**, edit each profile and fill in the *Dedicated sidecar key* section:
+**Solution:** in **Settings → VPN profiles**, edit each profile and fill in the *Dedicated sidecar key* section:
 - **Sidecar private key** — a new private key generated from the same provider as the profile (e.g. `wg genkey` for providers that support it, or from your client account)
 - **Sidecar IP address** — the IP address assigned to this key by your provider (CIDR format, e.g. `10.x.x.x/32`)
 - **Sidecar pre-shared key** — only if your provider requires one
@@ -766,7 +800,7 @@ If a profile has neither a dedicated sidecar key nor the reuse option enabled, i
 
 On the **Servers** page:
 
-- The *Provider* column shows the WireGuard profile assigned to each server
+- The *Provider* column shows the VPN profile assigned to each server
 - If no profile is assigned, a dropdown lets you assign one directly from the table
 - The `?profile=<id>` filter (dropdown in the filter bar) limits the display to servers from a given profile or to unassigned servers (`__none__`)
 - Servers without a profile when at least one profile is configured are flagged as *(orphan servers)*
@@ -774,18 +808,20 @@ On the **Servers** page:
 #### Multi-profile benchmark — execution flow
 
 ```
-Benchmark cycle with WireGuard profiles
-  ├─ Load and decrypt WireGuard vars
+Benchmark cycle with VPN profiles
+  ├─ Load and decrypt credentials (WireGuard or OpenVPN)
   │    for each distinct profile_id in the server list
-  │    → in-memory cache for the duration of the cycle (decrypted keys, not persisted)
+  │    → in-memory cache for the duration of the cycle (decrypted secrets, not persisted)
   └─ For each enabled server:
        1. Retrieve extra_env from the associated profile
-          (VPN_SERVICE_PROVIDER, VPN_TYPE=wireguard, WIREGUARD_*)
+          (VPN_SERVICE_PROVIDER, VPN_TYPE, WIREGUARD_* or OPENVPN_*)
        2. Sidecar mode:
-          ├─ profile has a dedicated sidecar key → sidecar container launched with sidecar key
+          ├─ OpenVPN profile → sidecar container launched with the profile credentials
+          │   (most providers allow several simultaneous connections)
+          ├─ WireGuard profile with a dedicated sidecar key → sidecar launched with sidecar key
           │   (prevents peer conflict with the main Gluetun tunnel)
-          ├─ profile allows reuse → sidecar container launched with main profile vars
-          └─ profile has no sidecar key and no reuse option → server SKIPPED for this cycle
+          ├─ WireGuard profile allowing reuse → sidecar launched with main profile vars
+          └─ WireGuard profile with no sidecar key and no reuse → server SKIPPED for this cycle
              (if proxy fallback enabled → tested in proxy mode instead)
        3. Proxy mode: test via Gluetun HTTP proxy (no sidecar container)
   └─ Select the best server according to the rotation policy:
@@ -793,7 +829,8 @@ Benchmark cycle with WireGuard profiles
        ├─ conditional → cross-profile switch if gain > threshold (default 10 %)
        └─ free        → global best across all profiles
   └─ Gluetun switch:
-       → writes VPN_SERVICE_PROVIDER + VPN_TYPE + WIREGUARD_* to the Compose override
+       → writes VPN_SERVICE_PROVIDER + VPN_TYPE + credentials to the Compose override
+         (credentials from other providers/types are blanked)
        → docker compose up -d (single Gluetun restart)
 ```
 

@@ -398,7 +398,11 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
                     logger.error('Pool rotation: cannot decrypt %s for profile %d: %s',
                                  _vk, server['vpn_profile_id'], exc)
                     _decrypted[_vk] = ''
-            wg_profile = {'compose_provider': _compose_prov, 'vars': _decrypted}
+            wg_profile = {
+                'compose_provider': _compose_prov,
+                'vpn_type':         _p.get('vpn_type', 'wireguard') or 'wireguard',
+                'vars':             _decrypted,
+            }
 
     # ── Snapshot current server + IPs + speed before switching ──────────────
     _cur_filters  = get_current_filters(container)

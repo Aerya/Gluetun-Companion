@@ -1084,7 +1084,11 @@ def manual_switch(server_id):
                     _mp_vars[_k] = _dec_manual(_v) if _is_enc_manual(_v) else _v
                 except ValueError:
                     _mp_vars[_k] = ''
-            _manual_wg_profile = {'compose_provider': _mp_compose_prov, 'vars': _mp_vars}
+            _manual_wg_profile = {
+                'compose_provider': _mp_compose_prov,
+                'vpn_type':         _mp.get('vpn_type', 'wireguard') or 'wireguard',
+                'vars':             _mp_vars,
+            }
     to_provider = (
         (_manual_wg_profile or {}).get('compose_provider')
         or row['vp_provider']
@@ -1881,6 +1885,7 @@ def settings():
             _provider = request.form.get('wg_provider', '').strip()
             _name     = request.form.get('wg_profile_name', '').strip()
             _pid_raw  = request.form.get('wg_profile_id', '').strip()
+            _vpn_type = request.form.get('wg_vpn_type', '').strip()
             _enabled  = bool(request.form.get('wg_enabled'))
             _rotation = bool(request.form.get('wg_rotation_allowed'))
             try:
@@ -1891,8 +1896,11 @@ def settings():
             if _provider not in WG_PROVIDERS or not _name:
                 flash('Fournisseur ou nom de profil invalide.', 'danger')
             else:
-                _secret_keys = get_secret_field_keys(_provider)
-                _all_fields  = get_fields(_provider)
+                from .wg_providers import get_vpn_types, default_vpn_type
+                if _vpn_type not in get_vpn_types(_provider):
+                    _vpn_type = default_vpn_type(_provider)
+                _secret_keys = get_secret_field_keys(_provider, _vpn_type)
+                _all_fields  = get_fields(_provider, _vpn_type)
                 _vars: dict[str, str] = {}
                 for _f in _all_fields:
                     _fkey = _f['key']
@@ -1924,6 +1932,7 @@ def settings():
                         _pid,
                         name=_name,
                         provider=_provider,
+                        vpn_type=_vpn_type,
                         vars=_vars if _vars else None,
                         enabled=_enabled,
                         rotation_allowed=_rotation,
@@ -1932,6 +1941,9 @@ def settings():
                         sidecar_addresses=_sc_addr_val,
                         sidecar_preshared_key=_sc_psk,
                         sidecar_reuse_profile=_sc_reuse,
+                        # Drop stored vars from a previous provider/type so stale
+                        # credentials are not injected into future switches.
+                        allowed_var_keys={f['key'] for f in _all_fields},
                     ):
                         flash_t('flash_settings_saved', 'success')
                     else:
@@ -1941,6 +1953,7 @@ def settings():
                     create_vpn_profile(
                         name=_name,
                         provider=_provider,
+                        vpn_type=_vpn_type,
                         vars=_vars,
                         enabled=_enabled,
                         rotation_allowed=_rotation,
@@ -2262,22 +2275,23 @@ def settings():
         wg_providers=get_all_providers(),
         wg_providers_json=json.dumps({
             k: {
-                'label':      p['label'],
-                'native_wg':  p['native_wg'],
-                'via_custom': p['via_custom'],
-                'hint_fr':    p.get('hint_fr', ''),
-                'hint_en':    p.get('hint_en', ''),
-                'help_url':   p.get('help_url', ''),
-                'fields': [
-                    {
-                        'key':       f['key'],
-                        'label_fr':  f['label_fr'],
-                        'label_en':  f['label_en'],
-                        'required':  f['required'],
-                        'secret':    f['secret'],
-                    }
-                    for f in p['fields']
-                ],
+                'label':     p['label'],
+                'vpn_types': list(p['vpn_types']),
+                'hints':     p.get('hints', {}),
+                'help_url':  p.get('help_url', ''),
+                'fields': {
+                    vt: [
+                        {
+                            'key':       f['key'],
+                            'label_fr':  f['label_fr'],
+                            'label_en':  f['label_en'],
+                            'required':  f['required'],
+                            'secret':    f['secret'],
+                        }
+                        for f in fields
+                    ]
+                    for vt, fields in p['fields'].items()
+                },
             }
             for k, p in WG_PROVIDERS.items()
         }),
