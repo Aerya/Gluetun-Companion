@@ -568,10 +568,20 @@ def apply_after_provider_change(old_provider: str, new_provider: str, *, reason:
     return result
 
 
-def inspect_port_forward(pf: dict, gluetun_container: str) -> dict:
+def inspect_port_forward(
+    pf: dict,
+    gluetun_container: str,
+    native_status: dict | None = None,
+) -> dict:
     item = dict(pf)
     protocols = _clean_protocols(item.get('protocols')).split(',')
-    port = int(item.get('port') or 0)
+    native_mode = (item.get('mode') or 'manual') == 'native'
+    if native_mode:
+        native_status = native_status or read_gluetun_native_ports()
+        native_ports = native_status.get('ports') or []
+        port = int(native_ports[0]) if native_ports else 0
+    else:
+        port = int(item.get('port') or 0)
 
     env = {}
     env_error = ''
@@ -582,7 +592,10 @@ def inspect_port_forward(pf: dict, gluetun_container: str) -> dict:
 
     fw_vpn_ports = _parse_port_list(env.get('FIREWALL_VPN_INPUT_PORTS', '')) if env else set()
     fw_input_ports = _parse_port_list(env.get('FIREWALL_INPUT_PORTS', '')) if env else set()
-    docker_ports = _docker_published_ports(gluetun_container, port, protocols)
+    docker_ports = (
+        {proto: None for proto in protocols}
+        if native_mode else _docker_published_ports(gluetun_container, port, protocols)
+    )
 
     client_status = {'state': 'unknown', 'label': 'non lié'}
     client_listen_port = None
@@ -596,9 +609,21 @@ def inspect_port_forward(pf: dict, gluetun_container: str) -> dict:
             client_status = {'state': 'unknown', 'label': 'lecture non supportée'}
 
     item['protocol_list'] = protocols
-    item['gluetun_vpn_input'] = _status(port in fw_vpn_ports if env else None)
-    item['gluetun_input'] = _status(port in fw_input_ports if env else None)
-    item['docker_ports'] = {proto: _status(docker_ports.get(proto), proto.upper(), proto.upper()) for proto in protocols}
+    item['effective_port'] = port or None
+    if native_mode:
+        native_ok = bool(native_status and native_status.get('ok') and port)
+        item['gluetun_vpn_input'] = _status(native_ok, 'Natif OK', 'indisponible')
+        item['gluetun_input'] = {'state': 'ok', 'label': 'géré par Gluetun'}
+        item['docker_ports'] = {
+            proto: {'state': 'ok', 'label': 'non requis'} for proto in protocols
+        }
+    else:
+        item['gluetun_vpn_input'] = _status(port in fw_vpn_ports if env else None)
+        item['gluetun_input'] = _status(port in fw_input_ports if env else None)
+        item['docker_ports'] = {
+            proto: _status(docker_ports.get(proto), proto.upper(), proto.upper())
+            for proto in protocols
+        }
     item['client_status'] = client_status
     item['client_listen_port'] = client_listen_port
     item['client_error'] = client_error
@@ -624,4 +649,10 @@ def inspect_port_forward(pf: dict, gluetun_container: str) -> dict:
 
 
 def inspect_port_forwards(gluetun_container: str) -> list[dict]:
-    return [inspect_port_forward(pf, gluetun_container) for pf in list_port_forwards()]
+    forwards = list_port_forwards()
+    native_status = (
+        read_gluetun_native_ports()
+        if any((pf.get('mode') or 'manual') == 'native' for pf in forwards)
+        else None
+    )
+    return [inspect_port_forward(pf, gluetun_container, native_status) for pf in forwards]

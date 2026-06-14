@@ -514,6 +514,18 @@ Le bouton **Synchroniser** met à jour le port d'écoute du client lié : qBitto
 
 Pour activer le support natif Gluetun, configurez Gluetun avec [`VPN_PORT_FORWARDING=on`](https://github.com/qdm12/gluetun-wiki/blob/main/setup/options/port-forwarding.md) et exposez son [Control Server](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md). Dans Companion, renseignez l'URL, par exemple `http://host.docker.internal:8967` si le port Docker `8967:8000` est publié. Si Gluetun utilise une auth `apikey`, renseignez aussi la valeur `X-API-Key`. Companion utilise `/v1/portforward` comme source principale ; le fichier de statut Gluetun historique n'est pas utilisé comme source prioritaire, car il est annoncé comme déprécié à terme par Gluetun.
 
+#### ProtonVPN et qBittorrent
+
+ProtonVPN attribue un port NAT-PMP aléatoire, susceptible de changer à chaque connexion ou renouvellement. Il ne faut donc ni saisir un port fixe, ni publier ce port dans le Compose Docker. Configurez une règle avec le fournisseur `ProtonVPN`, le mode **Natif Gluetun** et le client qBittorrent concerné. Companion :
+
+1. lit le port courant dans `GET /v1/portforward` ;
+2. l'envoie à qBittorrent via `/api/v2/app/setPreferences` ;
+3. relit les préférences qBittorrent pour confirmer l'application ;
+4. vérifie toutes les 5 minutes si Gluetun a renouvelé le port et le réinjecte si nécessaire ;
+5. recommence après une reconnexion Gluetun ou une bascule vers ProtonVPN.
+
+Côté Gluetun, ajoutez `VPN_PORT_FORWARDING=on`. Avec ProtonVPN en **OpenVPN**, le nom d'utilisateur OpenVPN doit aussi porter le suffixe `+pmp`. Avec ProtonVPN en **WireGuard**, ce suffixe n'est pas utilisé. Les intégrations natives de Gluetun ouvrent elles-mêmes le port dynamique côté VPN : `FIREWALL_VPN_INPUT_PORTS`, `FIREWALL_INPUT_PORTS` et un mapping Docker statique ne sont pas requis pour ce port.
+
 Pour AirVPN, Companion ne crée pas le port sur le panel AirVPN. Le flux attendu est :
 
 1. réserver le port dans le panel AirVPN ;
