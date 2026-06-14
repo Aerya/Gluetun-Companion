@@ -10,6 +10,15 @@ Gérez automatiquement vos serveurs VPN WireGuard dans [Gluetun](https://github.
 
 > **Statut : bêta.** Gluetun Companion est encore en phase de test. Il est développé et éprouvé principalement avec **AirVPN** ; les autres fournisseurs ne sont quasiment pas testés en conditions réelles, même si la mécanique (catalogue, benchmark, bascule, gestion des containers) est strictement identique pour tous. Vos retours sont précieux.
 >
+> **État actuel des validations :**
+> - **100 % fonctionnel avec AirVPN en WireGuard** ;
+> - fonctionnement testé en WireGuard avec quelques autres fournisseurs ;
+> - retours recherchés concernant les fournisseurs **OpenVPN** ;
+> - retours recherchés sur la gestion du **port forwarding ProtonVPN**, notamment la détection du port NAT-PMP dynamique et sa synchronisation avec qBittorrent ;
+> - retours recherchés pour les serveurs **Custom WireGuard** et **Custom OpenVPN**.
+>
+> **Développement assisté par IA :** environ **70 % du code a été réalisé avec l’aide de Claude Code et Codex**, sous direction et validation humaines. Une attention particulière est portée à la sécurité : [chiffrement et protection des secrets](#sécurité), [analyse des images Docker et des dépendances](#sécurité-des-images-docker), limitation de l’accès au socket Docker via [`docker-socket-proxy`](#démarrage-rapide), tests automatisés et revue des modifications. Cette transparence ne remplace pas les retours en conditions réelles, particulièrement importants pendant la bêta.
+>
 > **Issues et pull requests bienvenues**, en respectant les formes : pour une [issue](https://github.com/Aerya/Gluetun-Companion/issues), merci d'indiquer la version, le fournisseur VPN, les logs pertinents et les étapes de reproduction ; pour une PR, une description claire du problème résolu et du comportement attendu.
 
 <p align="center">
