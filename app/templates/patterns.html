@@ -86,6 +86,11 @@
        data-bs-toggle="tooltip" data-bs-placement="right"
        title="{{ t.pat_chart_tooltip }}"></i>
   </div>
+  {% if dns_path.short %}
+  <div class="small text-muted mb-3" title="{{ dns_path.detail }}" data-bs-toggle="tooltip">
+    <i class="bi bi-signpost-split me-1"></i>{{ t.dns_path_current }} : {{ dns_path.short }}
+  </div>
+  {% endif %}
   <div style="position:relative;height:300px">
     <canvas id="chartPatterns"></canvas>
   </div>

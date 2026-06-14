@@ -53,6 +53,7 @@ def status():
     """Current VPN status, active server, benchmark state, next scheduled run."""
     from .gluetun import get_current_filters, format_filters, get_vpn_status
     from .scheduler import get_next_run
+    from .dns_path import get_dns_path
 
     filters     = get_current_filters(current_app.config['GLUETUN_CONTAINER'])
     px_user     = get_setting('proxy_username') or None
@@ -64,6 +65,10 @@ def status():
         px_pass,
     )
     next_run    = get_next_run()
+    dns_path    = get_dns_path(
+        current_app.config['GLUETUN_CONTAINER'],
+        get_setting('ui_lang', 'fr'),
+    )
 
     active_server = None
     if filters:
@@ -91,6 +96,11 @@ def status():
         'active_filter':        format_filters(filters) if filters else None,
         'vpn_connected':        vpn_status == 'running',
         'next_benchmark_at':    next_run.isoformat() if next_run else None,
+        'dns_path': {
+            'summary': dns_path.get('short'),
+            'detail': dns_path.get('detail'),
+            'nodes': dns_path.get('nodes', []),
+        },
     })
 
 

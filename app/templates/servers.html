@@ -482,7 +482,7 @@
               {{ t.hist_col_dns }}
               <span style="font-size:.7rem;color:{{ 'var(--bs-primary)' if sort in ('dns_asc','dns_desc') else 'var(--bs-secondary-color)' }}">{{ '▲' if sort=='dns_asc' else ('▼' if sort=='dns_desc' else '⇅') }}</span>
               <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
-                 data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}"
+                 data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}{% if dns_path.detail %} · {{ t.dns_path_current }} : {{ dns_path.detail }}{% endif %}"
                  onclick="event.stopPropagation()"></i>
             </th>
             <th>{{ t.srv_col_last_test }}</th>
@@ -653,6 +653,7 @@
                 {%- set _stab_tip = [_stab_lbl, t.stab_jitter ~ ' ' ~ _stab.avg_jitter|string ~ ' ms'] -%}
                 {%- if _stab.avg_loss is not none -%}{%- set _stab_tip = _stab_tip + [t.stab_loss ~ ' ' ~ _stab.avg_loss|string ~ '%'] -%}{%- endif -%}
                 {%- if _stab.avg_dns is not none -%}{%- set _stab_tip = _stab_tip + [t.stab_dns ~ ' ' ~ _stab.avg_dns|string ~ ' ms'] -%}{%- endif -%}
+                {%- if _stab.avg_dns is not none and dns_path.detail -%}{%- set _stab_tip = _stab_tip + [t.dns_path_current ~ ' : ' ~ dns_path.detail] -%}{%- endif -%}
                 <i class="bi bi-circle-fill {{ _stab_cls }}" style="font-size:.65rem;cursor:help"
                    role="img" aria-label="{{ _stab_tip | join(' · ') }}"
                    data-bs-toggle="tooltip" data-bs-placement="top" title="{{ _stab_tip | join(' · ') }}"></i>
@@ -691,6 +692,7 @@
               {%- if _stab.n and _stab.avg_dns is not none -%}
                 {%- set _dcls = 'text-success' if _stab.avg_dns < 50 else ('text-warning' if _stab.avg_dns < 150 else 'text-danger') -%}
                 <small class="{{ _dcls }}">{{ '%.0f'|format(_stab.avg_dns) }} ms</small>
+                {% include '_dns_path.html' %}
               {%- else -%}<span class="text-muted">—</span>{%- endif -%}
             </td>
             <td class="srv-last-tested-cell">
