@@ -17,7 +17,7 @@ Automatically manage your WireGuard and OpenVPN servers in [Gluetun](https://git
 > - feedback needed for **ProtonVPN port forwarding**, especially dynamic NAT-PMP port detection and qBittorrent synchronization;
 > - feedback needed for **Custom WireGuard** and **Custom OpenVPN** servers.
 >
-> **AI-assisted development:** approximately **70% of the code was produced with the assistance of Claude Code and Codex**, under human direction and validation. Particular attention is paid to security: [secret encryption and protection](#security), [Docker image and dependency scanning](#docker-image-security), restricted Docker socket access through [`docker-socket-proxy`](#quick-start), automated tests, and change review. This transparency does not replace real-world feedback, which remains especially important during beta testing.
+> **AI-assisted development:** approximately **70% of the code was produced with the assistance of Claude Code and Codex**, under human direction and validation. Particular attention is paid to security: [secret encryption and protection](#security), [automated workflows, Dependabot and Trivy](#automated-workflows), restricted Docker socket access through [`docker-socket-proxy`](#quick-start), automated tests, and change review. This transparency does not replace real-world feedback, which remains especially important during beta testing.
 >
 > **Issues and pull requests are welcome**, with proper form: for an [issue](https://github.com/Aerya/Gluetun-Companion/issues), please include the version, VPN provider, relevant logs and reproduction steps; for a PR, a clear description of the problem solved and the expected behaviour.
 
@@ -36,6 +36,8 @@ Automatically manage your WireGuard and OpenVPN servers in [Gluetun](https://git
 </p>
 
 > **Using it? Liking it? [⭐ Drop a star!](https://github.com/Aerya/Gluetun-Companion/stargazers)** — takes two seconds.
+
+> **Want the shortest path?** Check [compatibility](#compatibility), go directly to the [quick start](#quick-start), then return to [features](#features) and [detailed operation](#how-it-works) as needed. Project maintenance is covered under [automated workflows](#automated-workflows) and [security](#security).
 
 ---
 
@@ -60,6 +62,7 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 ## Table of contents
 
 - [Compatibility](#compatibility)
+- [Quick start](#quick-start)
 - [Features](#features)
   - [Speed testing](#speed-testing)
   - [Server selection & automatic switching](#server-selection--automatic-switching)
@@ -72,7 +75,6 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [Analysis & history](#analysis--history)
   - [UI & notifications](#ui--notifications)
   - [Integration & infrastructure](#integration--infrastructure)
-- [Quick start](#quick-start)
 - [Environment variables](#environment-variables)
 - [How it works](#how-it-works)
   - [Sidecar mode (default)](#sidecar-mode-default)
@@ -105,10 +107,108 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
   - [Prometheus /metrics endpoint](#prometheus-metrics-endpoint)
   - [Automatic cycle vs manual trigger](#automatic-cycle-vs-manual-trigger)
 - [Grafana dashboard](#grafana-dashboard)
+- [Automated workflows](#automated-workflows)
 - [Notes](#notes)
 - [Security](#security)
 - [Credits](#credits)
 - [License](#license)
+
+---
+
+## Quick start
+
+### 1. Expose Gluetun's HTTP proxy on the host
+
+```yaml
+# in your existing Gluetun docker-compose.yml
+ports:
+  - 8887:8888   # or whichever port you have configured
+
+environment:
+  HTTPPROXY: "on"
+  HTTPPROXY_LOG: "off"
+  # HTTPPROXY_USER: ""       # optional — set in the UI Settings if needed
+  # HTTPPROXY_PASSWORD: ""
+```
+
+### 2. Mount the Gluetun compose directory
+
+The companion needs write access to the directory containing your Gluetun `docker-compose.yml` so it can write a `docker-compose.override.yml` and restart the service.
+
+### 3. Run the companion
+
+```yaml
+services:
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: socket-proxy
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      POST: 1
+      DELETE: 1
+    networks:
+      - companion-net
+
+  gluetun-companion:
+    image: ghcr.io/aerya/gluetun-companion:latest
+    container_name: gluetun-companion
+    restart: always
+    ports:
+      - 8765:8765
+    volumes:
+      - /path/to/data:/data
+      - /path/to/gluetun/stack:/compose   # ← adapt this path
+      - /path/to/gluetun/openvpn:/openvpn
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - TZ=Europe/Paris
+      - SECRET_KEY=replace-with-a-random-string   # openssl rand -hex 32
+      - DATA_DIR=/data
+      - GLUETUN_HOST=host.docker.internal
+      - GLUETUN_PROXY_PORT=8887
+      - GLUETUN_CONTAINER=gluetun-airvpn   # exact name of your Gluetun container (Compose service name is auto-detected)
+      - COMPOSE_DIR=/compose
+      - OPENVPN_CONFIG_DIR=/openvpn
+      - OPENVPN_CONTAINER_DIR=/gluetun/openvpn
+      - DOCKER_HOST=tcp://socket-proxy:2375
+      # Optional: protect /metrics with a Bearer token.
+      # Leave unset (or empty) for open access — standard for internal Prometheus scrapes.
+      # - METRICS_TOKEN=your-secret-token
+    networks:
+      - companion-net
+    depends_on:
+      - socket-proxy
+
+networks:
+  companion-net:
+```
+
+```bash
+docker compose up -d
+```
+
+> **Why `socket-proxy`?**
+> The Docker socket gives near-total access to the host. The [Tecnativa proxy](https://github.com/Tecnativa/docker-socket-proxy) sits between Companion and the socket, restricting access to the required operations: reading containers/images/networks/volumes, plus POST/DELETE needed to create and remove temporary sidecar containers. It blocks direct daemon access (exec, info, swarm…). Fully transparent for the user, reduced attack surface.
+
+Open **http://localhost:8765** — first login: enter the credentials you want (account created automatically).
+
+> **Companion in the same stack as Gluetun?**
+> Remove `extra_hosts` and use the service name: `GLUETUN_HOST: gluetun`.
+> On a switch, the companion only targets the Gluetun service (`docker compose up -d <service>`) — it never restarts itself.
+
+### 4. Import servers
+
+**Servers → Import from Gluetun**: the companion reads `SERVER_NAMES`, `SERVER_COUNTRIES`, etc. directly from the running container and imports each value with its filter type. Manual addition is also available on the same screen.
+
+> ⚠️ **Companion benchmarks each server individually, by name.** Setting `SERVER_COUNTRIES`, `SERVER_REGIONS` or `SERVER_CITIES` adds a single entry (e.g. "France") — Companion does **not** automatically discover individual servers in that country. Add each server by its name (`SERVER_NAMES`) for benchmarking to work. **Minimum 2 named servers required.**
 
 ---
 
@@ -271,103 +371,6 @@ The **VPN Status** card displays the intermediary and observed operators. In tab
 - **REST API `/api/v1/`** protected by Bearer token — VPN status, server list, history, switches, trigger full or quick benchmark; designed for Home Assistant, n8n, bash scripts
 - **Structured JSON logs** optional via `LOG_JSON=1` (Loki/Grafana compatible)
 - **SQLite database** (WAL) — no external dependencies
-
----
-
-## Quick start
-
-### 1. Expose Gluetun's HTTP proxy on the host
-
-```yaml
-# in your existing Gluetun docker-compose.yml
-ports:
-  - 8887:8888   # or whichever port you have configured
-
-environment:
-  HTTPPROXY: "on"
-  HTTPPROXY_LOG: "off"
-  # HTTPPROXY_USER: ""       # optional — set in the UI Settings if needed
-  # HTTPPROXY_PASSWORD: ""
-```
-
-### 2. Mount the Gluetun compose directory
-
-The companion needs write access to the directory containing your Gluetun `docker-compose.yml` so it can write a `docker-compose.override.yml` and restart the service.
-
-### 3. Run the companion
-
-```yaml
-services:
-
-  socket-proxy:
-    image: tecnativa/docker-socket-proxy
-    container_name: socket-proxy
-    restart: always
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      CONTAINERS: 1
-      IMAGES: 1
-      NETWORKS: 1
-      VOLUMES: 1
-      POST: 1
-      DELETE: 1
-    networks:
-      - companion-net
-
-  gluetun-companion:
-    image: ghcr.io/aerya/gluetun-companion:latest
-    container_name: gluetun-companion
-    restart: always
-    ports:
-      - 8765:8765
-    volumes:
-      - /path/to/data:/data
-      - /path/to/gluetun/stack:/compose   # ← adapt this path
-      - /path/to/gluetun/openvpn:/openvpn
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      - TZ=Europe/Paris
-      - SECRET_KEY=replace-with-a-random-string   # openssl rand -hex 32
-      - DATA_DIR=/data
-      - GLUETUN_HOST=host.docker.internal
-      - GLUETUN_PROXY_PORT=8887
-      - GLUETUN_CONTAINER=gluetun-airvpn   # exact name of your Gluetun container (Compose service name is auto-detected)
-      - COMPOSE_DIR=/compose
-      - OPENVPN_CONFIG_DIR=/openvpn
-      - OPENVPN_CONTAINER_DIR=/gluetun/openvpn
-      - DOCKER_HOST=tcp://socket-proxy:2375
-      # Optional: protect /metrics with a Bearer token.
-      # Leave unset (or empty) for open access — standard for internal Prometheus scrapes.
-      # - METRICS_TOKEN=your-secret-token
-    networks:
-      - companion-net
-    depends_on:
-      - socket-proxy
-
-networks:
-  companion-net:
-```
-
-```bash
-docker compose up -d
-```
-
-> **Why `socket-proxy`?**
-> The Docker socket gives near-total access to the host. The [Tecnativa proxy](https://github.com/Tecnativa/docker-socket-proxy) sits between Companion and the socket, restricting access to the required operations: reading containers/images/networks/volumes, plus POST/DELETE needed to create and remove temporary sidecar containers. It blocks direct daemon access (exec, info, swarm…). Fully transparent for the user, reduced attack surface.
-
-Open **http://localhost:8765** — first login: enter the credentials you want (account created automatically).
-
-> **Companion in the same stack as Gluetun?**
-> Remove `extra_hosts` and use the service name: `GLUETUN_HOST: gluetun`.
-> On a switch, the companion only targets the Gluetun service (`docker compose up -d <service>`) — it never restarts itself.
-
-### 4. Import servers
-
-**Servers → Import from Gluetun**: the companion reads `SERVER_NAMES`, `SERVER_COUNTRIES`, etc. directly from the running container and imports each value with its filter type. Manual addition is also available on the same screen.
-
-> ⚠️ **Companion benchmarks each server individually, by name.** Setting `SERVER_COUNTRIES`, `SERVER_REGIONS` or `SERVER_CITIES` adds a single entry (e.g. "France") — Companion does **not** automatically discover individual servers in that country. Add each server by its name (`SERVER_NAMES`) for benchmarking to work. **Minimum 2 named servers required.**
 
 ---
 
@@ -1215,6 +1218,21 @@ In addition to the base metrics (`avg_dl`, `avg_ul`, `avg_latency`, `test_count`
 
 ---
 
+## Automated workflows
+
+The badges at the top of the README provide a quick status view. The repository currently configures the following automations:
+
+| Automation | Trigger | Purpose |
+|---|---|---|
+| [Docker build and publication](.github/workflows/docker-publish.yml) | Every PR, every push to `main`, and every `v*` tag | Builds the Companion and Sidecar images for `amd64`/`arm64`. On `main` and tags, publishes them to GHCR. On PRs, also runs an `amd64` HTTP smoke test. |
+| [Dependabot](.github/dependabot.yml) | Every Monday at 06:00 UTC | Monitors Python dependencies for Companion and Sidecar, GitHub Actions, and Docker base images, then opens update PRs. |
+| [Dependabot auto-merge](.github/workflows/dependabot-automerge.yml) | When a Dependabot PR is opened or updated | Requests auto-merge for `patch` updates after checks pass. GitHub's **Allow auto-merge** repository setting must be enabled; otherwise the PR remains for manual merging. Minor updates remain subject to review, while major updates are generally ignored by the Dependabot configuration. |
+| [Trivy scan](.github/workflows/trivy-scan.yml) | Every Monday at 07:00 UTC, or manually | Builds and scans both images for `HIGH`/`CRITICAL` CVEs, uploads SARIF results to the Security tab, and opens either a fix PR or an issue when manual action is required. |
+
+A successful Docker workflow means the images build and start in the smoke test. To technically prevent merging a failing PR, the relevant checks must also be configured as **required status checks** in the `main` branch protection rules.
+
+---
+
 ## Notes
 
 - **Sidecar mode (default):** your main Gluetun is never restarted during testing — dependent services are not interrupted. **Proxy mode (optional):** the benchmark briefly interrupts those services on each server test. Schedule during off-peak hours.
@@ -1243,7 +1261,7 @@ In addition to the base metrics (`avg_dl`, `avg_ul`, `avg_latency`, `test_count`
 Both images (`gluetun-companion` and `gluetun-companion-sidecar`) bundle **third-party Go binaries** (Docker CLI, Docker Compose, librespeed-cli, ookla speedtest) with their own dependency chains, invisible to Python package managers. A two-layer pipeline keeps these images up to date:
 
 **Dependabot** (already in place, runs every Monday 06:00 UTC):
-- Updates **pip** dependencies for both Companion and Sidecar (auto-PR; patch = auto-merge, minor = manual review)
+- Updates **pip** dependencies for both Companion and Sidecar (automatic PRs; patch updates request auto-merge when that GitHub feature is enabled, minor updates remain under manual review)
 - Tracks **Docker base images** (`python:3.12-slim`) — Python runtime security rebuilds
 - Tracks **GitHub Actions** versions in CI workflows
 
@@ -1256,7 +1274,7 @@ Both images (`gluetun-companion` and `gluetun-companion-sidecar`) bundle **third
 **Smoke test** (`.github/workflows/docker-publish.yml`, on every PR):
 - Builds both images for amd64
 - Starts each container with a minimal configuration and checks it responds over HTTP within 20 seconds
-- Blocks the merge if an image fails to start — ensures security updates do not break functionality
+- Fails if an image no longer starts; it blocks merging when configured as a required check in the `main` branch protection rules
 
 ---
 
