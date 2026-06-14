@@ -270,7 +270,7 @@
           <th>
             {{ t.hist_col_dns }}
             <i class="bi bi-info-circle text-muted ms-1" style="font-size:.7rem;cursor:help"
-               data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}"></i>
+               data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}{% if dns_path.detail %} · {{ t.dns_path_current }} : {{ dns_path.detail }}{% endif %}"></i>
           </th>
           <th>{{ t.hist_col_method }}</th>
           <th>{{ t.cmn_status }}</th>
@@ -349,6 +349,7 @@
             {% if r.dns_latency_ms is not none %}
               {% set dcls = 'text-success' if r.dns_latency_ms < 50 else ('text-warning' if r.dns_latency_ms < 150 else 'text-danger') %}
               <span class="{{ dcls }}">{{ '%.0f'|format(r.dns_latency_ms) }} ms</span>
+              {% include '_dns_path.html' %}
             {% elif r.test_method == 'proxy_qc' %}
               <span class="text-muted" style="cursor:help"
                     data-bs-toggle="tooltip" title="{{ t.hist_qc_no_stability }}">—</span>

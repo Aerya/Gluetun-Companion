@@ -1782,6 +1782,22 @@ def settings():
             set_setting('proxy_password', request.form.get('proxy_password', ''))
             flash_t('flash_proxy_saved', 'success')
 
+        elif action == 'dns_path_settings':
+            set_setting('dns_local_label', request.form.get('dns_local_label', '').strip())
+            set_setting('dns_local_address', request.form.get('dns_local_address', '').strip())
+            set_setting('dns_manual_upstreams', request.form.get('dns_manual_upstreams', '').strip())
+            set_setting('dns_adguard_enabled', '1' if request.form.get('dns_adguard_enabled') else '0')
+            set_setting('dns_adguard_url', request.form.get('dns_adguard_url', '').strip().rstrip('/'))
+            set_setting('dns_adguard_username', request.form.get('dns_adguard_username', '').strip())
+            password = request.form.get('dns_adguard_password', '')
+            if request.form.get('dns_adguard_password_clear'):
+                set_setting('dns_adguard_password', '')
+            elif password:
+                set_setting('dns_adguard_password', crypto_encrypt(password))
+            from .dns_path import clear_dns_path_cache
+            clear_dns_path_cache()
+            flash_t('flash_dns_path_saved', 'success')
+
         elif action == 'sidecar':
             set_setting('sidecar_mode',             '1' if request.form.get('sidecar_mode') else '0')
             set_setting('sidecar_image',            request.form.get('sidecar_image', '').strip()
@@ -2108,6 +2124,13 @@ def settings():
         'port_forward_gluetun_api_key_set': '1' if get_setting('port_forward_gluetun_api_key', '') else '0',
         'port_forward_hook_timeout_secs': get_setting('port_forward_hook_timeout_secs', '20'),
         'port_forward_last_auto_result':  get_setting('port_forward_last_auto_result', ''),
+        'dns_local_label':                get_setting('dns_local_label', 'AdGuard Home'),
+        'dns_local_address':              get_setting('dns_local_address', ''),
+        'dns_manual_upstreams':           get_setting('dns_manual_upstreams', ''),
+        'dns_adguard_enabled':            get_setting('dns_adguard_enabled', '0'),
+        'dns_adguard_url':                get_setting('dns_adguard_url', ''),
+        'dns_adguard_username':           get_setting('dns_adguard_username', ''),
+        'dns_adguard_password_set':       '1' if get_setting('dns_adguard_password', '') else '0',
     }
     # WireGuard profiles — loaded separately (with masked secrets for display)
     _raw_profiles = get_vpn_profiles()

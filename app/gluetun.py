@@ -103,6 +103,11 @@ def _container_env(container_name: str) -> dict[str, str]:
     return env
 
 
+def get_container_env(container_name: str) -> dict[str, str]:
+    """Public, read-only access to a container's environment variables."""
+    return _container_env(container_name)
+
+
 def _detect_compose_project(container_name: str) -> str:
     """
     Read the compose project name from the container's Docker labels.

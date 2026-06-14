@@ -295,9 +295,15 @@ def create_app():
         except Exception:
             _has_wg = False
             _has_airvpn = False
+        try:
+            from .dns_path import get_dns_path
+            _dns_path = get_dns_path(app.config['GLUETUN_CONTAINER'], session.get('lang', 'fr'))
+        except Exception:
+            _dns_path = {'nodes': [], 'short': '', 'detail': '', 'errors': [], 'ok': False}
         return {
             '_g_has_wg_profiles':    _has_wg,
             '_g_has_airvpn_profile': _has_airvpn,
+            'dns_path':               _dns_path,
         }
 
     @app.context_processor
