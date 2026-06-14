@@ -4,7 +4,7 @@
 
 # Gluetun Companion
 
-Automatically manage your WireGuard VPN servers in [Gluetun](https://github.com/qdm12/gluetun): speed benchmarking, pool-based scheduled rotation, stability metrics (jitter, loss, DNS) and full Web UI.
+Automatically manage your WireGuard and OpenVPN servers in [Gluetun](https://github.com/qdm12/gluetun): speed benchmarking, pool-based scheduled rotation, stability metrics (jitter, loss, DNS) and full Web UI.
 
 > 🇫🇷 [Version française](README.md)
 
@@ -41,7 +41,7 @@ Automatically manage your WireGuard VPN servers in [Gluetun](https://github.com/
 
 ## Compatibility
 
-Gluetun Companion works with **any Gluetun-compatible WireGuard VPN provider** as long as at least one of these filter variables is present in your configuration:
+Gluetun Companion supports **WireGuard and OpenVPN** with Gluetun-compatible providers. VPN profiles manage the credentials required by each protocol and provider, while the following variables select which servers should be tested or used:
 
 | Gluetun variable | Filter |
 |---|---|
@@ -51,7 +51,7 @@ Gluetun Companion works with **any Gluetun-compatible WireGuard VPN provider** a
 | `SERVER_CITIES` | City |
 | `SERVER_HOSTNAMES` | Hostname |
 
-Designed for the **WireGuard** protocol — sidecar mode (default) requires WireGuard keys. Proxy-only mode can work with other protocols, without the advanced features.
+Both **WireGuard and OpenVPN** profiles support benchmarking, metrics and automatic switching. In sidecar mode, WireGuard profiles can use a dedicated identity to avoid disrupting the main tunnel; OpenVPN profiles are tested with their own credentials.
 
 Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483746)** *(affiliate link)* — [AirVPN filter variables](https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/airvpn.md#optional-environment-variables).
 
@@ -153,7 +153,7 @@ The **VPN Status** card displays the intermediary and observed operators. In tab
 ### Rotation pools
 
 - **Rotation without benchmarking** — switch to a server from a predefined group without triggering a full measurement cycle; ideal for periodic rotation or quick one-off changes
-- **Readable candidate rules** — each pool starts from simple rules: specific server, Gluetun filter type (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`), WireGuard VPN profile, top metric, or all active servers. Rules can either add their results or keep only servers matching every rule.
+- **Readable candidate rules** — each pool starts from simple rules: specific server, Gluetun filter type (`SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`), VPN profile, top metric, or all active servers. Rules can either add their results or keep only servers matching every rule.
 - **Per-pool exclusions** — exclude specific servers from one pool without disabling them in Companion; they remain available elsewhere, but this pool will never pick them.
 - **3 selection modes**: 🎲 random, 🔄 round-robin (persistent cursor across rotations), 🏆 best historical download
 - **Final limit** — after rules and exclusions, restrict the pool to the N best historical download speeds (if unset, all remaining candidates are eligible)
@@ -257,7 +257,7 @@ The **VPN Status** card displays the intermediary and observed operators. In tab
 ### UI & notifications
 - **Web UI** dark/light/auto, FR/EN — auth, dashboard with sparkline, paginated history, charts, switches page with Mbps gain and connection time
 - **Server detail panel** — click a server name in `/servers`: aggregate stats (average speeds, latency, peak, test count), sparkline of the last 30 tests, recent results and actions (test, switch, full history) in a side panel
-- **Getting-started checklist** — dashboard card guiding the install (WireGuard profile → server import → first benchmark), disappears once setup is complete
+- **Getting-started checklist** — dashboard card guiding the install (VPN profile → server import → first benchmark), disappears once setup is complete
 - **Column picker** — hide unneeded columns on `/servers` (preference kept per browser)
 - **Settings search** — search field filtering cards across all tabs with a per-tab match counter
 - **VPN provider logos** — shown next to server names throughout the UI and in the catalogue (bundled SVGs + server-side cached favicons — the browser never contacts a third-party service)
@@ -429,7 +429,7 @@ Benchmark cycle (every X hours)
 - HTTP proxy fallback if sidecar fails entirely (disabled by default)
 
 > ⚠ **Simultaneous connection**: sidecar mode uses one extra VPN connection slot for the entire benchmark duration. Check your provider's limits (AirVPN: 3–5 depending on plan).
-> Companion runs sidecar tests one at a time and waits 180 s by default after container cleanup (`sidecar_disconnect_wait_seconds`) so the provider can close the WireGuard session before the next server starts.
+> Companion runs sidecar tests one at a time and waits 180 s by default after container cleanup (`sidecar_disconnect_wait_seconds`) so the provider can close the VPN session before the next server starts.
 
 ### HTTP proxy mode (optional)
 
@@ -925,7 +925,7 @@ In **Rotation → New pool**:
    - `All active servers` — includes every enabled server in Companion
    - `Specific server` — type the exact name; autocomplete suggests existing servers
    - `Gluetun filter type` — choose the variable (`SERVER_COUNTRIES`, `SERVER_NAMES`, etc.) and optionally a value (empty = all servers of that type)
-   - `WireGuard VPN profile` — all servers assigned to a specific WireGuard profile
+   - `VPN profile` — all servers assigned to a specific WireGuard or OpenVPN profile
    - `Top N by metric` — adds or restricts using the best historical download, jitter, packet loss or DNS metrics
    - `Minimum AirVPN bandwidth` — adds AirVPN servers whose advertised capacity (`bw_max`) is at least the chosen value
 4. Choose how rules are combined:
@@ -949,7 +949,7 @@ Rotation triggered (manual or automatic):
      └─ final limit by historical download speed (if set)
   2. Pick target server (random / round-robin / best historical download)
   3. switch_server() → write docker-compose.override.yml + docker compose up -d
-     └─ If WireGuard profile attached: inject VPN_SERVICE_PROVIDER + WIREGUARD_* into override
+     └─ If a VPN profile is attached: inject VPN_SERVICE_PROVIDER, VPN_TYPE and WIREGUARD_* or OPENVPN_* into the override
   4. Wait for VPN reconnection + recreate `network_mode: service:gluetun` containers
   5. If post-switch measurement is enabled:
      ├─ Wait for VPN reconnection (connection_wait_seconds)
