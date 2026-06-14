@@ -2023,6 +2023,11 @@
         </h6>
         <p class="text-muted mb-0 settings-wide-hint">
           {{ 'Gluetun bloque les domaines malveillants par défaut. Ce filtrage peut parfois bloquer l’URL d’annonce d’un tracker BitTorrent.' if session.get('lang','fr') == 'fr' else 'Gluetun blocks malicious domains by default. This filtering can occasionally block a BitTorrent tracker announce URL.' }}
+          <a href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/options/dns.md"
+             target="_blank" rel="noreferrer noopener" class="ms-1">
+            {{ 'Documentation DNS de Gluetun' if session.get('lang','fr') == 'fr' else 'Gluetun DNS documentation' }}
+            <i class="bi bi-box-arrow-up-right small"></i>
+          </a>
         </p>
       </div>
       <span id="dns-filtering-badge" class="badge {{ 'bg-success' if cfg.dns_block_malicious == '1' else 'bg-warning text-dark' }}">
