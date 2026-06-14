@@ -121,32 +121,18 @@ Conçu et testé en priorité pour **[AirVPN](https://airvpn.org/?referred_by=48
 - **Latence DNS** *(sidecar)* — mesure du temps de résolution DNS depuis l'intérieur du tunnel VPN via `dig` (4 domaines en parallèle, médiane retournée) ; détecte les résolveurs lents, surchargés ou qui interceptent les requêtes ; colonne dans l'historique, tooltip sur l'indicateur Stabilité, données dans les patterns horaires
 - **Écoute Docker events** — thread daemon qui surveille les événements `start` du container Gluetun ; si Gluetun redémarre de lui-même (crash, mise à jour, watchdog), déclenche automatiquement un quick check après N secondes (délai de reconnexion VPN) ; si la dérive de débit dépasse le seuil configuré et que la bascule automatique est activée, lance immédiatement un benchmark complet ; les redémarrages déclenchés par Companion lui-même sont ignorés ; cooldown de 5 min entre deux déclenchements
 
-### Chemin de résolution DNS
+### Résolveurs DNS observés
 
-En complément de la latence, Companion affiche le chemin DNS actuellement configuré. Il lit les variables du conteneur Gluetun et reconnaît les principaux résolveurs publics : Cloudflare, Quad9, Google Public DNS, AdGuard DNS, Mullvad DNS, OpenDNS, NextDNS et Control D.
+Companion distingue deux informations :
 
-Exemples de rendu :
+- l'**intermédiaire DNS** lu dans la configuration Gluetun, par exemple `DNS local (192.168.0.64)` ;
+- les **résolveurs réellement observés sur Internet**, par exemple `Cloudflare, Quad9`.
 
-- `DNS Gluetun → Cloudflare`
-- `DNS Gluetun → AdGuard Home → Quad9`
-- `DNS Gluetun → DNS local → DNS amont`
-- `DNS Gluetun → DNS hérité / fournisseur VPN`
+Lorsqu'une adresse privée du tunnel semble appartenir au fournisseur VPN, l'interface reste prudente : `Intermédiaire probable : DNS du fournisseur VPN AirVPN (10.x.x.x)`. Aucun logiciel local comme AdGuard Home ou Pi-hole n'est supposé ou requis.
 
-Les adresses sont visibles dans les infobulles, par exemple `AdGuard Home (192.168.0.64) → Cloudflare (1.1.1.1)`. Le chemin apparaît à côté des statistiques DNS sur l'accueil, les serveurs, l'historique et les patterns horaires.
+La détection universelle utilise le service gratuit [bash.ws](https://bash.ws/dnsleak) : Companion demande un identifiant, provoque dix résolutions uniques depuis le conteneur Gluetun, puis récupère les IP, ASN et pays des résolveurs observés. Le résultat est conservé six heures pour limiter les requêtes. Cette opération communique au service tiers l'IP VPN et les requêtes DNS de test, mais aucun identifiant Companion ni domaine consulté par l'utilisateur.
 
-Pour un serveur local comme AdGuard Home, ouvrez **Paramètres → WireGuard / OpenVPN → Chemin de résolution DNS** :
-
-1. donnez un nom à l'adresse locale, par exemple `AdGuard Home` ;
-2. indiquez son adresse, par exemple `192.168.0.64`, afin de la distinguer d'un DNS privé fourni par le VPN ;
-3. activez l'intégration AdGuard Home et renseignez son URL d'administration ;
-4. ajoutez les identifiants si son API est protégée ;
-5. ou indiquez manuellement les upstreams si l'API n'est pas accessible depuis Companion.
-
-Companion utilise l'API locale `GET /control/dns_info` d'AdGuard Home. Il ne réalise pas de test de fuite DNS et n'envoie pas la configuration à un service externe. Le chemin affiché correspond à la configuration actuelle ; il ne reconstitue pas rétroactivement la configuration utilisée par chaque ancien benchmark.
-
-Le mot de passe AdGuard Home est chiffré dans la base avec la même clé que les identifiants VPN.
-
-Le même état est disponible dans `GET /api/v1/status`, sous la clé `dns_path` (`summary`, `detail` et `nodes`).
+L'encart **Statut VPN** affiche l'intermédiaire et les opérateurs observés. Dans les tableaux, seule la latence DNS reste visible ; le détail est disponible en infobulle. L'état est aussi exposé par `GET /api/v1/status` sous la clé `dns_path` (`intermediary`, `resolvers`, `observed_summary`, `tested_at`).
 
 ### Sélection & bascule automatique
 - **Bascule automatique** vers le meilleur serveur (`docker compose up -d`), basée sur un score pondéré intégrant débit actuel, historique exponentiel, jitter, perte paquets et reconnexions involontaires (via Docker events) ; curseur *Priorité débit vs stabilité* configurable ; **6 profils d'usage** sélectionnables (Équilibré, Jeu en ligne, BitTorrent, DDL, Téléchargement, Streaming) — chaque profil pondère différemment les métriques pour trouver le serveur le mieux adapté à l'usage réel ; les services dépendants (`network_mode: service:gluetun`) sont recréés automatiquement

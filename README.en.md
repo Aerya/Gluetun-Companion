@@ -121,32 +121,18 @@ Primarily designed and tested for **[AirVPN](https://airvpn.org/?referred_by=483
 - **DNS latency** *(sidecar)* — DNS resolution time measured from inside the VPN tunnel via `dig` (4 domains in parallel, median returned); detects slow, overloaded, or hijacking resolvers; column in History, DNS shown in the Stability tooltip, data in hourly patterns
 - **Docker events listener** — daemon thread watching for Gluetun container `start` events; if Gluetun restarts on its own (crash, update, watchdog), automatically triggers a quick check after N seconds (VPN reconnect delay); if speed drift exceeds the configured threshold and auto-switch is enabled, immediately runs a full benchmark; restarts triggered by Companion itself are ignored; 5-minute cooldown between triggers
 
-### DNS resolution path
+### Observed DNS resolvers
 
-In addition to latency, Companion displays the currently configured DNS path. It reads the Gluetun container environment and recognizes common public resolvers: Cloudflare, Quad9, Google Public DNS, AdGuard DNS, Mullvad DNS, OpenDNS, NextDNS and Control D.
+Companion separates two pieces of information:
 
-Example outputs:
+- the **DNS intermediary** read from the Gluetun configuration, for example `Local DNS (192.168.0.64)`;
+- the **resolvers actually observed on the Internet**, for example `Cloudflare, Quad9`.
 
-- `Gluetun DNS → Cloudflare`
-- `Gluetun DNS → AdGuard Home → Quad9`
-- `Gluetun DNS → Local DNS → Upstream DNS`
-- `Gluetun DNS → Inherited / VPN provider DNS`
+When a private tunnel address appears to belong to the VPN provider, the UI remains cautious: `Probable intermediary: AirVPN VPN provider DNS (10.x.x.x)`. No local software such as AdGuard Home or Pi-hole is assumed or required.
 
-Addresses are available in tooltips, for example `AdGuard Home (192.168.0.64) → Cloudflare (1.1.1.1)`. The path is shown next to DNS statistics on the dashboard, servers, history and hourly patterns pages.
+Universal detection uses the free [bash.ws](https://bash.ws/dnsleak) service: Companion requests an identifier, triggers ten unique resolutions from inside the Gluetun container, then retrieves the observed resolver IPs, ASNs and countries. Results are cached for six hours to limit requests. This operation discloses the VPN IP and test DNS queries to the third-party service, but no Companion identifier or user-browsed domain.
 
-For a local server such as AdGuard Home, open **Settings → WireGuard / OpenVPN → DNS resolution path**:
-
-1. give the local address a name, for example `AdGuard Home`;
-2. enter its address, for example `192.168.0.64`, so it can be distinguished from a private DNS server supplied by the VPN;
-3. enable the AdGuard Home integration and enter its administration URL;
-4. add credentials if its API is protected;
-5. or enter upstream resolvers manually when the API is not reachable from Companion.
-
-Companion uses AdGuard Home's local `GET /control/dns_info` API. It does not perform DNS leak tests and does not send the configuration to an external service. The displayed path reflects the current configuration; it does not retroactively reconstruct the configuration used by each older benchmark.
-
-The AdGuard Home password is encrypted in the database using the same key as VPN credentials.
-
-The same state is available from `GET /api/v1/status` under the `dns_path` key (`summary`, `detail` and `nodes`).
+The **VPN Status** card displays the intermediary and observed operators. In tables, only DNS latency remains visible; details are provided in a tooltip. The state is also exposed by `GET /api/v1/status` under `dns_path` (`intermediary`, `resolvers`, `observed_summary`, `tested_at`).
 
 ### Server selection & automatic switching
 - **Automatic switching** to the fastest server (`docker compose up -d`), based on a weighted score combining current speed, exponential history, jitter, packet loss and involuntary reconnects (via Docker events); configurable *Speed vs stability* slider; **6 usage profiles** (Balanced, Gaming, BitTorrent, DDL, Download, Streaming) — each profile weights metrics differently to find the server best suited to your actual use case; dependent services (`network_mode: service:gluetun`) are recreated automatically

@@ -97,9 +97,10 @@ def status():
         'vpn_connected':        vpn_status == 'running',
         'next_benchmark_at':    next_run.isoformat() if next_run else None,
         'dns_path': {
-            'summary': dns_path.get('short'),
-            'detail': dns_path.get('detail'),
-            'nodes': dns_path.get('nodes', []),
+            'intermediary': dns_path.get('intermediary', {}),
+            'resolvers': dns_path.get('resolvers', []),
+            'observed_summary': dns_path.get('observed_summary'),
+            'tested_at': dns_path.get('tested_at'),
         },
     })
 
