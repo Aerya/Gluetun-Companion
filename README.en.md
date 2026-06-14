@@ -315,6 +315,7 @@ services:
     volumes:
       - /path/to/data:/data
       - /path/to/gluetun/stack:/compose   # ← adapt this path
+      - /path/to/gluetun/openvpn:/openvpn
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -325,6 +326,8 @@ services:
       - GLUETUN_PROXY_PORT=8887
       - GLUETUN_CONTAINER=gluetun-airvpn   # exact name of your Gluetun container (Compose service name is auto-detected)
       - COMPOSE_DIR=/compose
+      - OPENVPN_CONFIG_DIR=/openvpn
+      - OPENVPN_CONTAINER_DIR=/gluetun/openvpn
       - DOCKER_HOST=tcp://socket-proxy:2375
       # Optional: protect /metrics with a Bearer token.
       # Leave unset (or empty) for open access — standard for internal Prometheus scrapes.
@@ -369,6 +372,8 @@ Open **http://localhost:8765** — first login: enter the credentials you want (
 | `GLUETUN_CONTAINER` | `gluetun-airvpn` | Gluetun container name |
 | `COMPOSE_DIR` | `/compose` | Path (inside the container) to the Gluetun compose directory |
 | `DATA_DIR` | `/data` | SQLite database directory |
+| `OPENVPN_CONFIG_DIR` | `/openvpn` | Directory writable by Companion for Custom OpenVPN files |
+| `OPENVPN_CONTAINER_DIR` | `/gluetun/openvpn` | Equivalent path as seen from the Gluetun container |
 | `DOCKER_HOST` | *(local socket)* | Set to `tcp://socket-proxy:2375` when using the Tecnativa socket proxy |
 | `METRICS_TOKEN` | *(empty)* | If set, the `/metrics` endpoint requires `Authorization: Bearer <token>`; leave empty for open access (standard for internal networks) |
 
@@ -761,7 +766,30 @@ Depending on the provider, an OpenVPN profile carries:
 
 On switch, Companion writes `VPN_TYPE=openvpn` and the `OPENVPN_*` variables to the Compose override, blanking credentials from other providers/types to prevent any leak. In sidecar mode, OpenVPN profiles are tested with their own credentials (no dedicated sidecar key — most providers allow several simultaneous connections per account).
 
-The **Custom OpenVPN** mode (`VPN_SERVICE_PROVIDER=custom` + `VPN_TYPE=openvpn`) covers any provider missing from the Gluetun catalogue: mount your `.conf` file into the Gluetun container (volume), then set its in-container path in the profile's `OPENVPN_CUSTOM_CONFIG` field (e.g. `/gluetun/custom.conf`), with optional credentials depending on the file.
+The **Custom OpenVPN** mode (`VPN_SERVICE_PROVIDER=custom` + `VPN_TYPE=openvpn`) covers any provider missing from the Gluetun catalogue. Under **Settings → VPN profiles → Custom OpenVPN configurations**, Companion can upload a `.ovpn` or `.conf` file, detect files already mounted in Gluetun, list them, and automatically create the matching profile.
+
+The same host directory must be mounted in both containers:
+
+```yaml
+# Gluetun Compose
+services:
+  gluetun-airvpn:
+    volumes:
+      - /home/aerya/docker/gluetun/openvpn:/gluetun/openvpn:ro
+
+# Companion Compose
+services:
+  gluetun-companion:
+    volumes:
+      - /home/aerya/docker/gluetun/openvpn:/openvpn
+    environment:
+      - OPENVPN_CONFIG_DIR=/openvpn
+      - OPENVPN_CONTAINER_DIR=/gluetun/openvpn
+```
+
+Uploaded files therefore appear in Gluetun as `/gluetun/openvpn/profile-name.ovpn`. Detection can also inventory other `.ovpn` or `.conf` files already available below `/gluetun`, without `docker exec`.
+
+As documented by Gluetun, any companion files referenced by the configuration (`ca.crt`, key, script, etc.) must also be mounted below `/gluetun` and referenced with absolute paths. If the `remote` directive contains a hostname, replace it with an IP address so Gluetun's startup firewall does not require an initial DNS resolution.
 
 #### Custom WireGuard: personal single server
 

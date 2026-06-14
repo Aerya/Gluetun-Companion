@@ -95,6 +95,9 @@ def create_app():
     app.config['GLUETUN_CONTAINER'] = os.environ.get('GLUETUN_CONTAINER', 'gluetun-airvpn')
     app.config['COMPOSE_DIR']      = os.environ.get('COMPOSE_DIR', '/compose')
     app.config['COMPOSE_PROJECT']  = os.environ.get('COMPOSE_PROJECT', '')
+    app.config['OPENVPN_CONFIG_DIR'] = os.environ.get('OPENVPN_CONFIG_DIR', '/openvpn')
+    app.config['OPENVPN_CONTAINER_DIR'] = os.environ.get('OPENVPN_CONTAINER_DIR', '/gluetun/openvpn')
+    app.config['MAX_CONTENT_LENGTH'] = 3 * 1024 * 1024
     # Optional Bearer token for /metrics — leave empty to allow open access (standard Prometheus)
     app.config['METRICS_TOKEN']    = os.environ.get('METRICS_TOKEN', '')
 

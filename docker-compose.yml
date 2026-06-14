@@ -25,6 +25,7 @@ services:
     volumes:
       - /home/aerya/docker/gluetun-companion:/data
       - /home/aerya/docker/dockge-enhanced/stacks/airvpn:/compose   # <-- adapter
+      - /home/aerya/docker/gluetun/openvpn:/openvpn
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -35,6 +36,8 @@ services:
       - GLUETUN_PROXY_PORT=8887          # port du proxy HTTP Gluetun exposé sur l'hôte
       - GLUETUN_CONTAINER=gluetun-airvpn   # nom exact du container Gluetun (le service Compose est détecté automatiquement)
       - COMPOSE_DIR=/compose
+      - OPENVPN_CONFIG_DIR=/openvpn
+      - OPENVPN_CONTAINER_DIR=/gluetun/openvpn
       - DOCKER_HOST=tcp://socket-proxy:2375
       # Optionnel : protéger /metrics par un Bearer token.
       # Laisser vide (ou non défini) pour un accès libre — standard pour les scrapes Prometheus internes.

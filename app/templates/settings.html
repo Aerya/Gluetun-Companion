@@ -1145,6 +1145,70 @@
         <p class="text-muted small mb-3">{{ t.set_wg_no_profiles }}</p>
       {% endif %}
 
+      <div class="rounded border p-3 mb-3" id="openvpn-config-manager">
+        <div class="fw-semibold mb-1">
+          <i class="bi bi-file-earmark-lock2 text-warning me-1"></i>{{ t.set_ovpn_manager_title }}
+        </div>
+        <p class="text-muted small mb-2">{{ t.set_ovpn_manager_hint }}</p>
+        <div class="alert alert-info py-2 px-3 small mb-3">
+          <i class="bi bi-info-circle me-1"></i>{{ t.set_ovpn_mount_hint }}
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap align-items-end mb-3">
+          <form method="post" enctype="multipart/form-data" class="d-flex gap-2 flex-wrap align-items-end">
+            <input type="hidden" name="action" value="openvpn_upload">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <div>
+              <label class="form-label small mb-1" for="openvpn_file">{{ t.set_ovpn_upload }}</label>
+              <input class="form-control form-control-sm" type="file" id="openvpn_file"
+                     name="openvpn_file" accept=".ovpn,.conf" required>
+            </div>
+            <button class="btn btn-sm btn-warning fw-semibold text-dark" type="submit">
+              <i class="bi bi-upload"></i> {{ t.cmn_upload }}
+            </button>
+          </form>
+          <form method="post">
+            <input type="hidden" name="action" value="openvpn_scan">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-info" type="submit">
+              <i class="bi bi-search"></i> {{ t.set_ovpn_scan }}
+            </button>
+          </form>
+        </div>
+
+        <div class="fw-semibold small mb-2">{{ t.set_ovpn_available }}</div>
+        {% if openvpn_configs %}
+          {% for config in openvpn_configs %}
+          <form method="post" class="border rounded p-2 mb-2">
+            <input type="hidden" name="action" value="openvpn_import">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="openvpn_config_path" value="{{ config.path }}">
+            <div class="d-flex justify-content-between gap-2 flex-wrap align-items-center">
+              <div style="min-width:0">
+                <div class="fw-semibold text-break">{{ config.name }}</div>
+                <code class="small text-break">{{ config.path }}</code>
+                <span class="badge bg-{{ 'success' if config.uploaded else 'secondary' }} ms-1">
+                  {{ t.set_ovpn_uploaded if config.uploaded else t.set_ovpn_detected }}
+                </span>
+              </div>
+              <div class="d-flex gap-2 flex-wrap align-items-end">
+                <div>
+                  <label class="form-label small mb-1">{{ t.set_ovpn_profile_name }}</label>
+                  <input class="form-control form-control-sm" name="openvpn_profile_name"
+                         placeholder="OpenVPN - {{ config.name }}">
+                </div>
+                <button class="btn btn-sm btn-outline-warning" type="submit">
+                  <i class="bi bi-box-arrow-in-down"></i> {{ t.set_ovpn_import }}
+                </button>
+              </div>
+            </div>
+          </form>
+          {% endfor %}
+        {% else %}
+          <div class="text-muted small">{{ t.set_ovpn_none }}</div>
+        {% endif %}
+      </div>
+
       {# ── Formulaire ajouter / modifier un profil ───────────────────────── #}
       <hr class="my-2">
       <div class="fw-semibold mb-2" style="font-size:.85rem" id="wg-form-title">
@@ -3060,7 +3124,7 @@ if (document.readyState === 'loading') {
 
     const actionInput = form.querySelector('input[name="action"]');
     const action = actionInput ? actionInput.value : '';
-    if (!action || action === 'wg_profile_delete') return;
+    if (!action || action === 'wg_profile_delete' || action.startsWith('openvpn_')) return;
     if (action === 'port_forward_save' || action === 'port_forward_delete') return;
 
     event.preventDefault();

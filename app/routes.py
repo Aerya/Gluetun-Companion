@@ -52,6 +52,10 @@ from .port_forwarding import (
     inspect_port_forwards, read_gluetun_native_ports, save_port_forward,
     sync_qbit_listen_port,
 )
+from .openvpn_configs import (
+    list_openvpn_configs, save_uploaded_config, scan_gluetun_configs,
+    validate_import_path,
+)
 
 bp = Blueprint('main', __name__)
 
@@ -2009,6 +2013,52 @@ def settings():
             else:
                 flash('Profil introuvable.', 'danger')
 
+        elif action == 'openvpn_upload':
+            try:
+                uploaded = request.files.get('openvpn_file')
+                if not uploaded:
+                    raise ValueError('Sélectionnez un fichier .ovpn ou .conf.')
+                name = save_uploaded_config(uploaded, current_app.config['OPENVPN_CONFIG_DIR'])
+                flash(f'Configuration OpenVPN téléversée : {name}', 'success')
+            except (OSError, ValueError) as exc:
+                flash(str(exc), 'danger')
+
+        elif action == 'openvpn_scan':
+            try:
+                found = scan_gluetun_configs(current_app.config['GLUETUN_CONTAINER'])
+                flash(f'{len(found)} configuration(s) OpenVPN détectée(s) dans Gluetun.', 'success')
+            except Exception as exc:
+                logger.warning('OpenVPN configuration scan failed: %s', exc)
+                flash(f'Détection OpenVPN impossible : {exc}', 'danger')
+
+        elif action == 'openvpn_import':
+            try:
+                configs = list_openvpn_configs(
+                    current_app.config['OPENVPN_CONFIG_DIR'],
+                    current_app.config['OPENVPN_CONTAINER_DIR'],
+                )
+                config_path = validate_import_path(
+                    request.form.get('openvpn_config_path', '').strip(), configs,
+                )
+                if any(
+                    profile.get('vpn_type') == 'openvpn'
+                    and profile.get('vars', {}).get('OPENVPN_CUSTOM_CONFIG') == config_path
+                    for profile in get_vpn_profiles()
+                ):
+                    raise ValueError('Cette configuration OpenVPN est déjà importée.')
+                profile_name = request.form.get('openvpn_profile_name', '').strip()
+                if not profile_name:
+                    profile_name = f'OpenVPN - {config_path.rsplit("/", 1)[-1]}'
+                create_vpn_profile(
+                    name=profile_name,
+                    provider='custom',
+                    vpn_type='openvpn',
+                    vars={'OPENVPN_CUSTOM_CONFIG': config_path},
+                )
+                flash(f'Profil OpenVPN importé : {profile_name}', 'success')
+            except ValueError as exc:
+                flash(str(exc), 'danger')
+
         elif action == 'save_wg_rotation':
             _mode = request.form.get('wg_rotation_mode', 'none')
             if _mode in ('none', 'free', 'conditional'):
@@ -2336,6 +2386,10 @@ def settings():
         trackers=list_trackers(),
         trackers_summary=tracker_summary(),
         port_forwards=inspect_port_forwards(current_app.config['GLUETUN_CONTAINER']),
+        openvpn_configs=list_openvpn_configs(
+            current_app.config['OPENVPN_CONFIG_DIR'],
+            current_app.config['OPENVPN_CONTAINER_DIR'],
+        ),
         port_forward_providers=[('manual', {'label': 'Manual'})] + get_all_providers(),
         gluetun_native_portforward=read_gluetun_native_ports(
             get_setting('port_forward_gluetun_api_url', 'http://host.docker.internal:8000'),
