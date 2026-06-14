@@ -2306,6 +2306,11 @@
       </div>
     </form>
 
+    <div class="alert alert-info py-2 px-3 mb-3 small">
+      <strong>ProtonVPN :</strong>
+      {{ 'utilisez une règle ProtonVPN en mode Natif Gluetun, sans port statique. Gluetun obtient le port NAT-PMP aléatoire ; Companion le lit via /v1/portforward, l’injecte dans qBittorrent et surveille ses renouvellements toutes les 5 minutes. Activez VPN_PORT_FORWARDING=on dans Gluetun. En OpenVPN, ajoutez aussi +pmp à l’identifiant Proton ; en WireGuard, +pmp n’est pas utilisé.' if session.get('lang','fr') == 'fr' else 'use a ProtonVPN rule in Gluetun native mode, without a static port. Gluetun obtains the random NAT-PMP port; Companion reads it from /v1/portforward, injects it into qBittorrent, and monitors renewals every 5 minutes. Enable VPN_PORT_FORWARDING=on in Gluetun. With OpenVPN, also append +pmp to the Proton username; WireGuard does not use +pmp.' }}
+    </div>
+
     {% if port_forwards %}
     <div class="d-flex flex-column gap-2 mb-3">
       {% for pf in port_forwards %}
@@ -2313,7 +2318,7 @@
         <summary class="d-flex flex-wrap align-items-center gap-2" style="cursor:pointer">
           <span class="badge {{ 'bg-success' if pf.enabled else 'bg-secondary' }}">{{ 'ON' if pf.enabled else 'OFF' }}</span>
           <strong>{{ pf.name }}</strong>
-          <code>{{ pf.port }}/{{ pf.protocols }}</code>
+          <code>{{ (pf.effective_port or '—') if pf.mode == 'native' else pf.port }}/{{ pf.protocols }}</code>
           <span class="badge {{ 'bg-success' if pf.overall_state == 'ok' else ('bg-danger' if pf.overall_state == 'bad' else 'bg-secondary') }}">{{ pf.overall_label }}</span>
           <span class="text-muted small">{{ pf.provider }} · {{ 'Natif Gluetun' if pf.mode == 'native' and session.get('lang','fr') == 'fr' else ('Gluetun native' if pf.mode == 'native' else ('Manuel' if session.get('lang','fr') == 'fr' else 'Manual')) }}</span>
           {% if pf.client_name %}
