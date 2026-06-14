@@ -22,6 +22,8 @@ from urllib.parse import quote
 import docker
 import requests
 
+from .database import get_setting
+
 logger = logging.getLogger(__name__)
 
 _PROBE_URL = 'https://www.cloudflare.com/cdn-cgi/trace'
@@ -252,6 +254,25 @@ def switch_server(
         raw = filter_value if uses_server_filter and var == env_var else ''
         env_lines += f'      {var}: "{_safe(raw)}"\n'
 
+    # DNS filtering is managed by Companion as well, so the user's choice
+    # survives every regenerated override and provider/server switch.
+    try:
+        dns_block_malicious = get_setting('dns_block_malicious', '1')
+        dns_unblock_hostnames = get_setting('dns_unblock_hostnames', '')
+    except Exception:
+        # Keep standalone uses and early-startup recovery aligned with
+        # Gluetun's own secure default if the settings DB is unavailable.
+        dns_block_malicious = '1'
+        dns_unblock_hostnames = ''
+    env_lines += (
+        '      BLOCK_MALICIOUS: "'
+        + ('on' if dns_block_malicious == '1' else 'off')
+        + '"\n'
+    )
+    env_lines += (
+        f'      DNS_UNBLOCK_HOSTNAMES: "{_safe(dns_unblock_hostnames)}"\n'
+    )
+
     # VPN profile vars (provider + type + credentials)
     if wg_profile:
         if compose_provider:
@@ -308,6 +329,101 @@ def switch_server(
             err = (result.stderr or result.stdout or 'unknown error').strip()
             logger.error('docker compose failed: %s', err)
             return False, err
+        return True, None
+    except subprocess.TimeoutExpired:
+        return False, 'docker compose timed out after 90s'
+    except FileNotFoundError:
+        return False, 'docker binary not found in PATH'
+
+
+def apply_dns_filtering(
+    container_name: str,
+    compose_dir: str,
+    block_malicious: bool,
+    unblock_hostnames: str = '',
+    compose_project: str = '',
+) -> tuple[bool, str | None]:
+    """Persist DNS filtering values in Companion's override and recreate Gluetun."""
+    service = _detect_compose_service(container_name)
+    project = compose_project or _detect_compose_project(container_name)
+    override_path = os.path.join(compose_dir, 'docker-compose.override.yml')
+
+    def _safe(raw: str) -> str:
+        return raw.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '').replace('\r', '')
+
+    values = {
+        'BLOCK_MALICIOUS': 'on' if block_malicious else 'off',
+        'DNS_UNBLOCK_HOSTNAMES': unblock_hostnames,
+    }
+
+    try:
+        network_dependents = list_network_dependents_for_recreate(container_name)
+    except Exception as exc:
+        logger.warning('Unable to list network dependents before DNS update: %s', exc)
+        network_dependents = []
+
+    try:
+        if os.path.exists(override_path):
+            with open(override_path, encoding='utf-8') as fh:
+                lines = fh.readlines()
+        else:
+            lines = ['services:\n', f'  {service}:\n', '    environment:\n']
+
+        environment_idx = next(
+            (i for i, line in enumerate(lines) if line.rstrip() == '    environment:'),
+            None,
+        )
+        if environment_idx is None:
+            service_idx = next(
+                (i for i, line in enumerate(lines) if line.rstrip() == f'  {service}:'),
+                None,
+            )
+            if service_idx is None:
+                if lines and not lines[-1].endswith('\n'):
+                    lines[-1] += '\n'
+                lines.extend([f'  {service}:\n', '    environment:\n'])
+                environment_idx = len(lines) - 1
+            else:
+                lines.insert(service_idx + 1, '    environment:\n')
+                environment_idx = service_idx + 1
+
+        for key, value in values.items():
+            replacement = f'      {key}: "{_safe(value)}"\n'
+            existing_idx = next(
+                (i for i, line in enumerate(lines) if line.lstrip().startswith(f'{key}:')),
+                None,
+            )
+            if existing_idx is None:
+                environment_idx += 1
+                lines.insert(environment_idx, replacement)
+            else:
+                lines[existing_idx] = replacement
+
+        tmp_path = override_path + '.tmp'
+        with open(tmp_path, 'w', encoding='utf-8', newline='\n') as fh:
+            fh.writelines(lines)
+        os.replace(tmp_path, override_path)
+    except OSError as exc:
+        return False, f'Cannot write override file: {exc}'
+
+    cmd = ['docker', 'compose']
+    if project:
+        cmd += ['-p', project]
+    cmd += ['up', '-d', service]
+    mark_companion_restart()
+    try:
+        result = subprocess.run(
+            cmd, cwd=compose_dir, capture_output=True, text=True, timeout=90,
+        )
+        if result.returncode != 0:
+            return False, (result.stderr or result.stdout or 'unknown error').strip()
+        if network_dependents:
+            restart_network_dependents(
+                container_name,
+                compose_dir,
+                project,
+                explicit_list=network_dependents,
+            )
         return True, None
     except subprocess.TimeoutExpired:
         return False, 'docker compose timed out after 90s'

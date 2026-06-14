@@ -2014,6 +2014,59 @@
    ═════════════════════════════════════════════════════════════════════════════ #}
 <section class="settings-section">
 
+  <div class="card p-4 mb-4" id="card-dns-filtering">
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+      <div>
+        <h6 class="fw-bold mb-1 text-warning">
+          <i class="bi bi-shield-check"></i>
+          {{ 'Filtrage DNS Gluetun' if session.get('lang','fr') == 'fr' else 'Gluetun DNS filtering' }}
+        </h6>
+        <p class="text-muted mb-0 settings-wide-hint">
+          {{ 'Gluetun bloque les domaines malveillants par défaut. Ce filtrage peut parfois bloquer l’URL d’annonce d’un tracker BitTorrent.' if session.get('lang','fr') == 'fr' else 'Gluetun blocks malicious domains by default. This filtering can occasionally block a BitTorrent tracker announce URL.' }}
+        </p>
+      </div>
+      <span id="dns-filtering-badge" class="badge {{ 'bg-success' if cfg.dns_block_malicious == '1' else 'bg-warning text-dark' }}">
+        {{ 'ON' if cfg.dns_block_malicious == '1' else 'OFF' }}
+      </span>
+    </div>
+
+    <form method="post" class="row g-3">
+      <input type="hidden" name="action" value="dns_filtering">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="col-12">
+        <div class="form-check form-switch">
+          <input type="checkbox" name="dns_block_malicious" class="form-check-input"
+                 id="dns_block_malicious" {{ 'checked' if cfg.dns_block_malicious == '1' }}>
+          <label class="form-check-label fw-semibold" for="dns_block_malicious">
+            {{ 'Bloquer les domaines malveillants (recommandé)' if session.get('lang','fr') == 'fr' else 'Block malicious domains (recommended)' }}
+          </label>
+          <div class="form-text">
+            {{ 'Pilote BLOCK_MALICIOUS. La désactivation réduit la protection DNS de tous les containers utilisant le réseau de Gluetun.' if session.get('lang','fr') == 'fr' else 'Controls BLOCK_MALICIOUS. Disabling it reduces DNS protection for every container using Gluetun’s network.' }}
+          </div>
+        </div>
+      </div>
+      <div class="col-12">
+        <label class="form-label small mb-1" for="dns_unblock_hostnames">
+          {{ 'Domaines à autoriser malgré le filtrage' if session.get('lang','fr') == 'fr' else 'Domains to allow through filtering' }}
+        </label>
+        <input type="text" name="dns_unblock_hostnames" id="dns_unblock_hostnames"
+               class="form-control form-control-sm font-monospace"
+               value="{{ cfg.dns_unblock_hostnames }}" placeholder="tracker.example.org,announce.example.net">
+        <div class="form-text">
+          {{ 'Correspond à DNS_UNBLOCK_HOSTNAMES. Séparez les domaines par des virgules. Préférez cette exception ciblée à la désactivation complète.' if session.get('lang','fr') == 'fr' else 'Maps to DNS_UNBLOCK_HOSTNAMES. Separate domains with commas. Prefer this targeted exception over disabling all protection.' }}
+        </div>
+      </div>
+      <div class="col-12">
+        <button type="submit" class="btn btn-sm btn-warning fw-semibold">
+          <i class="bi bi-save"></i> {{ t.cmn_save }}
+        </button>
+        <span class="small text-muted ms-2">
+          {{ 'Gluetun sera recréé immédiatement.' if session.get('lang','fr') == 'fr' else 'Gluetun will be recreated immediately.' }}
+        </span>
+      </div>
+    </form>
+  </div>
+
   <div class="card p-4 mb-4" id="card-tracker-settings">
     <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
       <div>
@@ -2945,6 +2998,7 @@ function arrangeSettingsTabs() {
   ].forEach(el => move(pane('settings-notifications-grid'), el));
 
   [
+    byId('card-dns-filtering'),
     byId('card-tracker-settings'),
     byId('card-torrent-clients'),
     byId('card-tracker-list'),
@@ -3162,6 +3216,17 @@ if (document.readyState === 'loading') {
         submitter.innerHTML = oldHtml;
       }
     }
+  });
+})();
+
+// Keep the DNS filtering status badge aligned with the switch before saving.
+(function () {
+  const toggle = document.getElementById('dns_block_malicious');
+  const badge = document.getElementById('dns-filtering-badge');
+  if (!toggle || !badge) return;
+  toggle.addEventListener('change', () => {
+    badge.textContent = toggle.checked ? 'ON' : 'OFF';
+    badge.className = `badge ${toggle.checked ? 'bg-success' : 'bg-warning text-dark'}`;
   });
 })();
 
