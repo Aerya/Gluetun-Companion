@@ -460,6 +460,8 @@ In **Settings → Measure → Containers to pause during benchmark**: list of co
 
 In **Settings → Trackers**, Companion can verify whether the trackers actually used by your torrents are reachable from the VPN server being tested or selected. The goal is not to perform a full real announce for every torrent, but to verify useful connectivity with four levels:
 
+Gluetun enables `BLOCK_MALICIOUS=on` by default. Some announce URLs may therefore be blocked by its DNS lists even when the tracker is available. Under **Settings → Trackers → Gluetun DNS filtering**, Companion can keep this protection enabled while allowing specific domains through `DNS_UNBLOCK_HOSTNAMES`, or disable `BLOCK_MALICIOUS` entirely as a last resort. The setting is written to `docker-compose.override.yml`, applied immediately by recreating Gluetun, and preserved across subsequent switches. Disabling it globally reduces DNS protection for every container sharing Gluetun's network; a targeted exception is recommended.
+
 1. **DNS** — the tracker domain can be resolved.
 2. **Port** — the TCP/UDP tracker port responds.
 3. **Tracker endpoint** — the `/announce` URL or UDP tracker handshake responds. HTTP `400`, `401`, `403` or `invalid request` responses can still count as reachable: the tracker rejected the test request, but the endpoint is accessible.

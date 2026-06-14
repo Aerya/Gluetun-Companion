@@ -33,6 +33,7 @@ from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
     get_current_filters, format_filters,
     get_public_ip, get_public_ips, get_vpn_status, switch_server,
+    apply_dns_filtering,
     wait_for_vpn, restart_network_dependents,
     list_docker_containers,
 )
@@ -1848,6 +1849,29 @@ def settings():
                 save_tracker_settings(80, 3, 12)
             flash_t('flash_settings_saved', 'success')
 
+        elif action == 'dns_filtering':
+            block_malicious = bool(request.form.get('dns_block_malicious'))
+            raw_hostnames = request.form.get('dns_unblock_hostnames', '')
+            hostnames = ','.join(
+                item.strip() for item in raw_hostnames.split(',') if item.strip()
+            )
+            if any(char in hostnames for char in ('\n', '\r', '"', '\\')):
+                flash_t('flash_dns_filter_invalid', 'danger')
+            else:
+                set_setting('dns_block_malicious', '1' if block_malicious else '0')
+                set_setting('dns_unblock_hostnames', hostnames)
+                ok, error = apply_dns_filtering(
+                    current_app.config['GLUETUN_CONTAINER'],
+                    current_app.config['COMPOSE_DIR'],
+                    block_malicious,
+                    hostnames,
+                )
+                if ok:
+                    flash_t('flash_dns_filter_saved', 'success')
+                else:
+                    logger.error('Applying Gluetun DNS filtering failed: %s', error)
+                    flash_t('flash_dns_filter_restart_failed', 'danger', err=error)
+
         elif action == 'port_forward_settings':
             set_setting('port_forward_enabled', '1' if request.form.get('port_forward_enabled') else '0')
             set_setting('port_forward_auto_sync', '1' if request.form.get('port_forward_auto_sync') else '0')
@@ -2163,6 +2187,8 @@ def settings():
         'tracker_check_threshold_pct':    get_setting('tracker_check_threshold_pct', '80'),
         'tracker_check_timeout_secs':     get_setting('tracker_check_timeout_secs', '3'),
         'tracker_check_concurrency':      get_setting('tracker_check_concurrency', '12'),
+        'dns_block_malicious':            get_setting('dns_block_malicious', '1'),
+        'dns_unblock_hostnames':          get_setting('dns_unblock_hostnames', ''),
         'port_forward_enabled':           get_setting('port_forward_enabled', '0'),
         'port_forward_auto_sync':         get_setting('port_forward_auto_sync', '0'),
         'port_forward_gluetun_api_url':   get_setting('port_forward_gluetun_api_url', 'http://host.docker.internal:8000'),

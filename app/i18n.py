@@ -579,6 +579,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'flash_catalogue_saved':    'Configuration du catalogue enregistrée.',
         'flash_post_switch_saved':  'Containers post-bascule enregistrés.',
         'flash_pause_bench_saved':  'Containers en pause pendant le benchmark enregistrés.',
+        'flash_dns_filter_saved':   'Filtrage DNS appliqué à Gluetun.',
+        'flash_dns_filter_invalid': 'La liste des domaines contient des caractères invalides.',
+        'flash_dns_filter_restart_failed': 'Réglage enregistré, mais Gluetun n’a pas pu être recréé : {err}',
 
         # ── Sidecar ──
         'set_sidecar_title':              'Mode Sidecar (défaut)',
@@ -1582,6 +1585,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'flash_catalogue_saved':    'Catalogue configuration saved.',
         'flash_post_switch_saved':  'Post-switch containers saved.',
         'flash_pause_bench_saved':  'Containers to pause during benchmark saved.',
+        'flash_dns_filter_saved':   'DNS filtering applied to Gluetun.',
+        'flash_dns_filter_invalid': 'The domain list contains invalid characters.',
+        'flash_dns_filter_restart_failed': 'Setting saved, but Gluetun could not be recreated: {err}',
 
         # ── Sidecar ──
         'set_sidecar_title':              'Sidecar Mode (default)',
