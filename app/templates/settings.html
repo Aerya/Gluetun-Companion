@@ -1693,74 +1693,6 @@
       </div>
     </form>
 
-    <form method="post">
-      <input type="hidden" name="action" value="dns_path_settings">
-      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <div class="card p-4 mb-4" id="card-dns-path">
-        <h6 class="fw-bold mb-2 text-info">
-          <i class="bi bi-signpost-split"></i> {{ t.set_dns_path_title }}
-        </h6>
-        <p class="text-muted small mb-3">{{ t.set_dns_path_hint }}</p>
-
-        <div class="rounded border p-2 mb-3 small">
-          <span class="text-muted">{{ t.dns_path_current }} :</span>
-          <strong class="ms-1">{{ dns_path.short or t.dns_path_unavailable }}</strong>
-          {% if dns_path.detail %}
-          <div class="font-monospace text-muted mt-1" style="font-size:.75rem">{{ dns_path.detail }}</div>
-          {% endif %}
-        </div>
-
-        <div class="row g-2 mb-3">
-          <div class="col-md-4">
-            <label class="form-label small">{{ t.set_dns_local_label }}</label>
-            <input class="form-control" name="dns_local_label" value="{{ cfg.dns_local_label }}" placeholder="AdGuard Home">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label small">{{ t.set_dns_local_address }}</label>
-            <input class="form-control font-monospace" name="dns_local_address" value="{{ cfg.dns_local_address }}" placeholder="192.168.0.64">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label small">{{ t.set_dns_manual_upstreams }}</label>
-            <input class="form-control font-monospace" name="dns_manual_upstreams" value="{{ cfg.dns_manual_upstreams }}" placeholder="cloudflare, quad9">
-            <div class="form-text">{{ t.set_dns_manual_hint }}</div>
-          </div>
-        </div>
-
-        <div class="form-check form-switch mb-3">
-          <input class="form-check-input" type="checkbox" name="dns_adguard_enabled" id="dns_adguard_enabled"
-                 {{ 'checked' if cfg.dns_adguard_enabled == '1' }}>
-          <label class="form-check-label fw-semibold" for="dns_adguard_enabled">{{ t.set_dns_adguard_enable }}</label>
-        </div>
-
-        <div class="row g-2">
-          <div class="col-md-5">
-            <label class="form-label small">{{ t.set_dns_adguard_url }}</label>
-            <input class="form-control font-monospace" type="url" name="dns_adguard_url"
-                   value="{{ cfg.dns_adguard_url }}" placeholder="http://192.168.0.64:3000">
-          </div>
-          <div class="col-md-3">
-            <label class="form-label small">{{ t.set_dns_adguard_user }}</label>
-            <input class="form-control" name="dns_adguard_username" value="{{ cfg.dns_adguard_username }}" autocomplete="username">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label small">{{ t.set_dns_adguard_password }}</label>
-            <input class="form-control" type="password" name="dns_adguard_password"
-                   placeholder="{{ t.set_dns_password_set if cfg.dns_adguard_password_set == '1' else '' }}" autocomplete="new-password">
-            {% if cfg.dns_adguard_password_set == '1' %}
-            <div class="form-check mt-1">
-              <input class="form-check-input" type="checkbox" name="dns_adguard_password_clear" id="dns_adguard_password_clear">
-              <label class="form-check-label small" for="dns_adguard_password_clear">{{ t.set_dns_password_clear }}</label>
-            </div>
-            {% endif %}
-          </div>
-        </div>
-
-        <button type="submit" class="btn btn-sm btn-info fw-semibold text-dark mt-3">
-          <i class="bi bi-save"></i> {{ t.cmn_save }}
-        </button>
-      </div>
-    </form>
-
   </div>{# end right col #}
 </div>{# end row #}
 </section>
@@ -2937,7 +2869,6 @@ function arrangeSettingsTabs() {
   [
     source.querySelector('#card-wg-profiles'),
     form('proxy_credentials'),
-    form('dns_path_settings'),
   ].forEach(el => move(pane('settings-wireguard-grid'), el));
 
   [

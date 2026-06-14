@@ -1,217 +1,265 @@
-"""Resolve the currently configured DNS path used by Gluetun."""
+"""Detect the DNS intermediary and the recursive resolvers observed on the Internet."""
 
 from __future__ import annotations
 
 import ipaddress
+import json
+import logging
 import re
 import threading
 import time
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
+import docker
 import requests
 
-from .database import get_setting
+from .database import get_setting, set_setting
 from .gluetun import get_container_env
-from .crypto import decrypt
 
+
+logger = logging.getLogger(__name__)
 
 _CACHE: dict[str, object] = {'ts': 0.0, 'container': '', 'lang': '', 'result': None}
 _CACHE_LOCK = threading.Lock()
+_REFRESH_LOCK = threading.Lock()
 _CACHE_TTL = 60.0
+_OBSERVATION_TTL = 6 * 3600
+_BASH_WS_ID_URL = 'https://bash.ws/id'
+_BASH_WS_RESULT_URL = 'https://bash.ws/dnsleak/test/{test_id}?json'
 
-_PROVIDERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+_PUBLIC_DNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ('Cloudflare', ('1.1.1.1', '1.0.0.1', '2606:4700:4700::1111',
-                    '2606:4700:4700::1001', 'cloudflare', 'cloudflare-dns.com', 'one.one.one.one')),
-    ('Quad9', ('9.9.9.9', '149.112.112.112', '2620:fe::fe', '2620:fe::9', 'quad9', 'quad9.net')),
+                    '2606:4700:4700::1001', 'cloudflare', 'cloudflare-dns.com')),
+    ('Quad9', ('9.9.9.9', '149.112.112.112', '2620:fe::fe', '2620:fe::9', 'quad9')),
     ('Google Public DNS', ('8.8.8.8', '8.8.4.4', '2001:4860:4860::8888',
-                           '2001:4860:4860::8844', 'google', 'dns.google')),
-    ('AdGuard DNS', ('94.140.14.14', '94.140.15.15', '2a10:50c0::ad1:ff',
-                     '2a10:50c0::ad2:ff', 'adguard', 'dns.adguard-dns.com', 'dns-family.adguard.com')),
-    ('Mullvad DNS', ('194.242.2.2', '193.19.108.2', 'mullvad', 'dns.mullvad.net')),
-    ('OpenDNS', ('208.67.222.222', '208.67.220.220', 'opendns', 'dns.opendns.com')),
-    ('NextDNS', ('45.90.28.', '45.90.30.', 'dns.nextdns.io')),
-    ('Control D', ('76.76.2.', '76.76.10.', 'controld.com')),
+                           '2001:4860:4860::8844', 'google')),
+    ('AdGuard DNS', ('94.140.14.14', '94.140.15.15', 'adguard')),
+    ('Mullvad DNS', ('194.242.2.2', '193.19.108.2', 'mullvad')),
+    ('OpenDNS', ('208.67.222.222', '208.67.220.220', 'opendns')),
+    ('NextDNS', ('45.90.28.', '45.90.30.', 'nextdns')),
+    ('Control D', ('76.76.2.', '76.76.10.', 'control d', 'controld')),
 )
-
-
-def _strip_endpoint(value: str) -> str:
-    value = value.strip()
-    if not value or value.startswith('#'):
-        return ''
-    if value.startswith('[/') and ']' in value:
-        value = value.split(']', 1)[1]
-    parsed = urlparse(value if '://' in value else f'//{value}')
-    host = parsed.hostname
-    if host:
-        return host
-    return value.strip('[]').split('#', 1)[0].strip()
-
-
-def _provider_for(value: str) -> str:
-    host = _strip_endpoint(value).lower().rstrip('.')
-    for label, needles in _PROVIDERS:
-        if any(host == needle or host.endswith('.' + needle) or host.startswith(needle)
-               for needle in needles):
-            return label
-    return ''
-
-
-def _is_private(value: str) -> bool:
-    try:
-        return ipaddress.ip_address(_strip_endpoint(value)).is_private
-    except ValueError:
-        return False
-
-
-def _split_values(raw: str) -> list[str]:
-    return [item.strip() for item in re.split(r'[,\n]+', raw or '') if item.strip()]
-
-
-def _node(label: str, address: str = '', kind: str = '') -> dict[str, str]:
-    return {'label': label, 'address': address, 'kind': kind}
 
 
 def _labels(lang: str) -> dict[str, str]:
     if lang == 'en':
         return {
-            'gluetun': 'Gluetun DNS', 'local': 'Local DNS',
-            'private_vpn': 'Private / VPN provider DNS', 'upstream': 'Upstream DNS',
-            'configured': 'Configured resolver', 'inherited': 'Inherited / VPN provider DNS',
-            'public': 'Public DNS',
+            'local': 'Local DNS', 'vpn': 'VPN provider DNS', 'public': 'DNS server',
+            'unknown': 'DNS intermediary', 'intermediary': 'Intermediary',
+            'probable': 'Probable intermediary', 'observed': 'Observed resolvers',
+            'pending': 'Detection pending', 'unavailable': 'Unavailable',
         }
     return {
-        'gluetun': 'DNS Gluetun', 'local': 'DNS local',
-        'private_vpn': 'DNS privé / fournisseur VPN', 'upstream': 'DNS amont',
-        'configured': 'Résolveur configuré', 'inherited': 'DNS hérité / fournisseur VPN',
-        'public': 'DNS public',
+        'local': 'DNS local', 'vpn': 'DNS du fournisseur VPN', 'public': 'Serveur DNS',
+        'unknown': 'Intermédiaire DNS', 'intermediary': 'Intermédiaire',
+        'probable': 'Intermédiaire probable', 'observed': 'Résolveurs observés',
+        'pending': 'Détection en attente', 'unavailable': 'Indisponible',
     }
 
 
-def _read_adguard_upstreams() -> tuple[list[str], str]:
-    if get_setting('dns_adguard_enabled', '0') != '1':
-        return [], ''
-    base = get_setting('dns_adguard_url', '').strip().rstrip('/')
-    if not base:
-        return [], ''
-    auth = None
-    username = get_setting('dns_adguard_username', '').strip()
-    try:
-        password = decrypt(get_setting('dns_adguard_password', ''))
-    except ValueError as exc:
-        return [], str(exc)
-    if username:
-        auth = (username, password)
-    try:
-        response = requests.get(f'{base}/control/dns_info', auth=auth, timeout=3)
-        response.raise_for_status()
-        data = response.json()
-        upstreams = list(data.get('upstream_dns') or [])
-        if data.get('upstream_dns_file'):
-            upstreams.append(data['upstream_dns_file'])
-        return [str(item) for item in upstreams if str(item).strip()], ''
-    except Exception as exc:
-        return [], str(exc)
-
-
-def _configured_local_host() -> str:
-    configured = _strip_endpoint(get_setting('dns_local_address', ''))
-    if configured:
-        return configured
-    url = get_setting('dns_adguard_url', '').strip()
-    if not url:
+def _strip_endpoint(value: str) -> str:
+    value = (value or '').strip()
+    if not value:
         return ''
-    return urlparse(url).hostname or ''
+    parsed = urlparse(value if '://' in value else f'//{value}')
+    return (parsed.hostname or value.strip('[]')).strip()
 
 
-def _upstream_nodes(values: list[str], fallback_label: str) -> list[dict[str, str]]:
-    nodes: list[dict[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for value in values:
-        host = _strip_endpoint(value)
-        if not host:
-            continue
-        provider = _provider_for(value)
-        label = provider or fallback_label
-        key = (label, host)
-        if key not in seen:
-            nodes.append(_node(label, host, 'upstream'))
-            seen.add(key)
-    return nodes
+def _split_values(raw: str) -> list[str]:
+    return [value.strip() for value in re.split(r'[,\n]+', raw or '') if value.strip()]
 
 
-def _build_dns_path(container_name: str, lang: str = 'fr') -> dict:
+def _provider_name(*values: str) -> str:
+    text = ' '.join(values).lower()
+    host = _strip_endpoint(values[0]).lower() if values else ''
+    for label, needles in _PUBLIC_DNS:
+        if any(host == needle or host.startswith(needle) or needle in text for needle in needles):
+            return label
+    return ''
+
+
+def _provider_display(provider: str) -> str:
+    if not provider:
+        return ''
+    known = {
+        'airvpn': 'AirVPN', 'ivpn': 'IVPN', 'mullvad': 'Mullvad',
+        'nordvpn': 'NordVPN', 'protonvpn': 'ProtonVPN',
+        'surfshark': 'Surfshark', 'windscribe': 'Windscribe',
+    }
+    if provider.lower() in known:
+        return known[provider.lower()]
+    return provider.replace('_', ' ').replace('-', ' ').title()
+
+
+def _intermediary(env: dict[str, str], lang: str) -> dict:
+    labels = _labels(lang)
+    provider = _provider_display(env.get('VPN_SERVICE_PROVIDER', ''))
+    resolver_type = (env.get('DNS_UPSTREAM_RESOLVER_TYPE') or 'dot').lower()
+    values = _split_values(env.get('DNS_UPSTREAM_PLAIN_ADDRESSES', ''))
+    if not values:
+        values = _split_values(
+            env.get('DNS_UPSTREAM_RESOLVERS', '')
+            or env.get('DNS_UPSTREAM_RESOLVER', '')
+            or env.get('DOT_PROVIDERS', '')
+        )
+
+    address = _strip_endpoint(values[0]) if values else ''
+    if address:
+        public_name = _provider_name(values[0])
+        if public_name:
+            return {'label': public_name, 'address': address, 'probable': False}
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError:
+            return {'label': labels['public'], 'address': address, 'probable': False}
+        if ip.is_private:
+            if ip.version == 4 and (address.startswith('192.168.') or address.startswith('172.')):
+                return {'label': labels['local'], 'address': address, 'probable': False}
+            if provider and provider.lower() != 'custom':
+                return {
+                    'label': f"{labels['vpn']} {provider}",
+                    'address': address,
+                    'probable': True,
+                }
+            return {'label': labels['local'], 'address': address, 'probable': False}
+        return {'label': labels['public'], 'address': address, 'probable': False}
+
+    if env.get('DNS_KEEP_NAMESERVER', '').lower() in ('on', 'true', 'yes', '1'):
+        label = f"{labels['vpn']} {provider}" if provider else labels['vpn']
+        return {'label': label, 'address': '', 'probable': True}
+    if resolver_type == 'dot':
+        return {'label': 'Cloudflare', 'address': '', 'probable': False}
+    return {'label': labels['unknown'], 'address': env.get('DNS_ADDRESS', ''), 'probable': True}
+
+
+def _load_observation() -> dict:
+    try:
+        data = json.loads(get_setting('dns_observed_result', '{}') or '{}')
+        return data if isinstance(data, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def _observation_is_stale(observation: dict) -> bool:
+    ttl = _OBSERVATION_TTL if observation.get('resolvers') else 5 * 60
+    return time.time() - float(observation.get('timestamp') or 0) >= ttl
+
+
+def _trigger_dns_queries(container_name: str, test_id: str) -> None:
+    container = docker.from_env().containers.get(container_name)
+    for index in range(10):
+        hostname = f'{index}.{test_id}.bash.ws'
+        command = (
+            f'ping -c 1 -W 2 {hostname} >/dev/null 2>&1 || '
+            f'getent hosts {hostname} >/dev/null 2>&1 || '
+            f'wget -q -T 3 -O /dev/null http://{hostname} >/dev/null 2>&1'
+        )
+        result = container.exec_run(['sh', '-c', command])
+        if result.exit_code not in (0, 1):
+            logger.debug('DNS observation probe failed for %s: exit=%s', hostname, result.exit_code)
+
+
+def refresh_observed_resolvers(container_name: str) -> dict:
+    """Run a bash.ws observation from inside Gluetun and cache its result."""
+    if not _REFRESH_LOCK.acquire(blocking=False):
+        return _load_observation()
+    try:
+        test_id = requests.get(_BASH_WS_ID_URL, timeout=8).text.strip()
+        if not test_id or not re.fullmatch(r'[A-Za-z0-9_-]+', test_id):
+            raise RuntimeError('bash.ws returned an invalid test identifier')
+        _trigger_dns_queries(container_name, test_id)
+        response = requests.get(_BASH_WS_RESULT_URL.format(test_id=test_id), timeout=10)
+        response.raise_for_status()
+        payload = response.json()
+        resolvers: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for item in payload if isinstance(payload, list) else []:
+            if item.get('type') != 'dns':
+                continue
+            ip = str(item.get('ip') or '').strip()
+            if not ip or ip in seen:
+                continue
+            asn = str(item.get('asn') or '').strip()
+            provider = _provider_name(ip, asn) or asn or 'DNS'
+            resolvers.append({
+                'ip': ip,
+                'provider': provider,
+                'country': str(item.get('country_name') or '').strip(),
+            })
+            seen.add(ip)
+        now = time.time()
+        observation = {
+            'timestamp': now,
+            'tested_at': datetime.fromtimestamp(now, timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+            'resolvers': resolvers,
+            'error': '' if resolvers else 'No DNS resolver was returned by bash.ws',
+        }
+        set_setting('dns_observed_result', json.dumps(observation, ensure_ascii=False))
+        clear_dns_path_cache()
+        return observation
+    except Exception as exc:
+        logger.warning('DNS resolver observation failed: %s', exc)
+        previous = _load_observation()
+        if previous.get('resolvers'):
+            previous['refresh_error'] = str(exc)
+            return previous
+        observation = {'timestamp': time.time(), 'resolvers': [], 'error': str(exc)}
+        set_setting('dns_observed_result', json.dumps(observation, ensure_ascii=False))
+        clear_dns_path_cache()
+        return observation
+    finally:
+        _REFRESH_LOCK.release()
+
+
+def _refresh_in_background(container_name: str) -> None:
+    if _REFRESH_LOCK.locked():
+        return
+    threading.Thread(
+        target=refresh_observed_resolvers,
+        args=(container_name,),
+        daemon=True,
+        name='dns-resolver-observation',
+    ).start()
+
+
+def _build_dns_status(container_name: str, lang: str) -> dict:
     labels = _labels(lang)
     try:
         env = get_container_env(container_name)
-        docker_error = ''
     except Exception as exc:
-        env = {}
-        docker_error = str(exc)
-
-    if docker_error:
         return {
-            'nodes': [], 'short': '', 'detail': '', 'resolver_type': '',
-            'errors': [docker_error], 'ok': False,
+            'ok': False, 'intermediary': {}, 'resolvers': [], 'tooltip': '',
+            'observed_summary': labels['unavailable'], 'error': str(exc),
         }
-
-    resolver_type = (env.get('DNS_UPSTREAM_RESOLVER_TYPE')
-                     or env.get('DNS_UPSTREAM_TYPE') or 'dot').lower()
-    nodes = [_node(labels['gluetun'], env.get('DNS_ADDRESS', '127.0.0.1'), 'gluetun')]
-    errors: list[str] = []
-
-    plain_values = _split_values(env.get('DNS_UPSTREAM_PLAIN_ADDRESSES', ''))
-    resolver_values = _split_values(
-        env.get('DNS_UPSTREAM_RESOLVERS', '')
-        or env.get('DNS_UPSTREAM_RESOLVER', '')
-        or env.get('DOT_PROVIDERS', '')
-    )
-
-    if resolver_type == 'plain' and plain_values:
-        for address in plain_values:
-            host = _strip_endpoint(address)
-            if _is_private(address):
-                configured_local = _configured_local_host()
-                is_configured_local = bool(configured_local and host == configured_local)
-                if is_configured_local:
-                    local_label = get_setting('dns_local_label', '').strip() or labels['local']
-                else:
-                    local_label = labels['private_vpn']
-                nodes.append(_node(local_label, host, 'local'))
-                adguard_upstreams, adguard_error = (
-                    _read_adguard_upstreams() if is_configured_local else ([], '')
-                )
-                manual = _split_values(get_setting('dns_manual_upstreams', ''))
-                upstreams = adguard_upstreams or (manual if is_configured_local else [])
-                if adguard_error:
-                    errors.append(adguard_error)
-                nodes.extend(_upstream_nodes(upstreams, labels['upstream']))
-            else:
-                nodes.extend(_upstream_nodes([address], labels['public']))
-    elif resolver_values:
-        nodes.extend(_upstream_nodes(resolver_values, labels['configured']))
-    elif env.get('DNS_KEEP_NAMESERVER', '').lower() in ('on', 'true', 'yes', '1'):
-        nodes.append(_node(labels['inherited'], '', 'vpn'))
-    else:
-        # Gluetun uses Cloudflare by default when its internal encrypted resolver
-        # is enabled and no explicit upstream is configured.
-        nodes.append(_node('Cloudflare', '', 'upstream'))
-
-    labels: list[str] = []
-    details: list[str] = []
-    for node in nodes:
-        if node['label'] not in labels:
-            labels.append(node['label'])
-        details.append(
-            f"{node['label']} ({node['address']})" if node['address'] else node['label']
-        )
-
+    intermediary = _intermediary(env, lang)
+    observation = _load_observation()
+    if _observation_is_stale(observation):
+        _refresh_in_background(container_name)
+    resolvers = observation.get('resolvers') or []
+    observed_names: list[str] = []
+    for resolver in resolvers:
+        name = resolver.get('provider') or resolver.get('ip')
+        if name and name not in observed_names:
+            observed_names.append(name)
+    observed_summary = ', '.join(observed_names) or labels['pending']
+    intermediary_title = labels['probable'] if intermediary.get('probable') else labels['intermediary']
+    intermediary_value = intermediary.get('label', '')
+    if intermediary.get('address'):
+        intermediary_value += f" ({intermediary['address']})"
+    resolver_details = ', '.join(
+        f"{r.get('provider') or 'DNS'} ({r.get('ip')})" for r in resolvers
+    ) or labels['pending']
     return {
-        'nodes': nodes,
-        'short': ' → '.join(labels),
-        'detail': ' → '.join(details),
-        'resolver_type': resolver_type,
-        'errors': errors,
         'ok': True,
+        'intermediary': intermediary,
+        'intermediary_title': intermediary_title,
+        'intermediary_value': intermediary_value,
+        'resolvers': resolvers,
+        'observed_summary': observed_summary,
+        'tested_at': observation.get('tested_at', ''),
+        'tooltip': f"{intermediary_title} : {intermediary_value} · {labels['observed']} : {resolver_details}",
+        'error': observation.get('error', ''),
     }
 
 
@@ -223,7 +271,7 @@ def get_dns_path(container_name: str, lang: str = 'fr', force: bool = False) -> 
                 and _CACHE.get('lang') == lang
                 and now - float(_CACHE.get('ts') or 0) < _CACHE_TTL):
             return dict(cached)
-        result = _build_dns_path(container_name, lang=lang)
+        result = _build_dns_status(container_name, lang)
         _CACHE.update({'ts': now, 'container': container_name, 'lang': lang, 'result': result})
         return dict(result)
 
