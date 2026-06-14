@@ -130,7 +130,7 @@ Companion separates two pieces of information:
 
 When a private tunnel address appears to belong to the VPN provider, the UI remains cautious: `Probable intermediary: AirVPN VPN provider DNS (10.x.x.x)`. No local software such as AdGuard Home or Pi-hole is assumed or required.
 
-Universal detection uses the free [bash.ws](https://bash.ws/dnsleak) service: Companion requests an identifier, triggers ten unique resolutions from inside the Gluetun container, then retrieves the observed resolver IPs, ASNs and countries. Results are cached for six hours to limit requests. This operation discloses the VPN IP and test DNS queries to the third-party service, but no Companion identifier or user-browsed domain.
+Universal detection uses the free [bash.ws](https://bash.ws/dnsleak) service: a temporary sidecar sharing Gluetun's network requests an identifier, triggers ten unique resolutions, then retrieves the observed resolver IPs, ASNs and countries. No `docker exec` or additional Docker socket access is required. Results are cached for six hours to limit requests. This operation discloses the VPN IP and test DNS queries to the third-party service, but no Companion identifier or user-browsed domain.
 
 The **VPN Status** card displays the intermediary and observed operators. In tables, only DNS latency remains visible; details are provided in a tooltip. The state is also exposed by `GET /api/v1/status` under `dns_path` (`intermediary`, `resolvers`, `observed_summary`, `tested_at`).
 

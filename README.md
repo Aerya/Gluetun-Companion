@@ -130,7 +130,7 @@ Companion distingue deux informations :
 
 Lorsqu'une adresse privée du tunnel semble appartenir au fournisseur VPN, l'interface reste prudente : `Intermédiaire probable : DNS du fournisseur VPN AirVPN (10.x.x.x)`. Aucun logiciel local comme AdGuard Home ou Pi-hole n'est supposé ou requis.
 
-La détection universelle utilise le service gratuit [bash.ws](https://bash.ws/dnsleak) : Companion demande un identifiant, provoque dix résolutions uniques depuis le conteneur Gluetun, puis récupère les IP, ASN et pays des résolveurs observés. Le résultat est conservé six heures pour limiter les requêtes. Cette opération communique au service tiers l'IP VPN et les requêtes DNS de test, mais aucun identifiant Companion ni domaine consulté par l'utilisateur.
+La détection universelle utilise le service gratuit [bash.ws](https://bash.ws/dnsleak) : un sidecar temporaire partageant le réseau de Gluetun demande un identifiant, provoque dix résolutions uniques, puis récupère les IP, ASN et pays des résolveurs observés. Aucun `docker exec` ni accès supplémentaire au socket Docker n'est requis. Le résultat est conservé six heures pour limiter les requêtes. Cette opération communique au service tiers l'IP VPN et les requêtes DNS de test, mais aucun identifiant Companion ni domaine consulté par l'utilisateur.
 
 L'encart **Statut VPN** affiche l'intermédiaire et les opérateurs observés. Dans les tableaux, seule la latence DNS reste visible ; le détail est disponible en infobulle. L'état est aussi exposé par `GET /api/v1/status` sous la clé `dns_path` (`intermediary`, `resolvers`, `observed_summary`, `tested_at`).
 
