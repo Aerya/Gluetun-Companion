@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 import docker
-import requests
 
 from .database import get_setting, set_setting
 from .gluetun import get_container_env
@@ -25,8 +24,7 @@ _CACHE_LOCK = threading.Lock()
 _REFRESH_LOCK = threading.Lock()
 _CACHE_TTL = 60.0
 _OBSERVATION_TTL = 6 * 3600
-_BASH_WS_ID_URL = 'https://bash.ws/id'
-_BASH_WS_RESULT_URL = 'https://bash.ws/dnsleak/test/{test_id}?json'
+_DNS_OBSERVER_NAME = 'gluetun-companion-dns-observer'
 
 _PUBLIC_DNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ('Cloudflare', ('1.1.1.1', '1.0.0.1', '2606:4700:4700::1111',
@@ -146,18 +144,59 @@ def _observation_is_stale(observation: dict) -> bool:
     return time.time() - float(observation.get('timestamp') or 0) >= ttl
 
 
-def _trigger_dns_queries(container_name: str, test_id: str) -> None:
-    container = docker.from_env().containers.get(container_name)
-    for index in range(10):
-        hostname = f'{index}.{test_id}.bash.ws'
-        command = (
-            f'ping -c 1 -W 2 {hostname} >/dev/null 2>&1 || '
-            f'getent hosts {hostname} >/dev/null 2>&1 || '
-            f'wget -q -T 3 -O /dev/null http://{hostname} >/dev/null 2>&1'
+def _remove_observer(client) -> None:
+    try:
+        client.containers.get(_DNS_OBSERVER_NAME).remove(force=True)
+    except docker.errors.NotFound:
+        pass
+
+
+def _run_observation_sidecar(container_name: str) -> list[dict]:
+    """Run the complete bash.ws test through Gluetun without Docker exec."""
+    client = docker.from_env()
+    _remove_observer(client)
+    image = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
+    command = r'''
+set -eu
+test_id="$(curl -fsSL --max-time 10 https://bash.ws/id)"
+case "$test_id" in *[!A-Za-z0-9_-]*|'') exit 2 ;; esac
+for index in 0 1 2 3 4 5 6 7 8 9; do
+  dig +time=2 +tries=1 "${index}.${test_id}.bash.ws" >/dev/null 2>&1 || true
+done
+curl -fsSL --max-time 15 "https://bash.ws/dnsleak/test/${test_id}?json"
+'''.strip()
+    container = None
+    try:
+        container = client.containers.run(
+            image=image,
+            name=_DNS_OBSERVER_NAME,
+            network_mode=f'container:{container_name}',
+            command=['sh', '-c', command],
+            detach=True,
+            remove=False,
         )
-        result = container.exec_run(['sh', '-c', command])
-        if result.exit_code not in (0, 1):
-            logger.debug('DNS observation probe failed for %s: exit=%s', hostname, result.exit_code)
+        deadline = time.time() + 35
+        while time.time() < deadline:
+            container.reload()
+            if container.status in ('exited', 'dead'):
+                break
+            time.sleep(0.5)
+        else:
+            raise TimeoutError('DNS observation sidecar timed out')
+        exit_code = int(container.attrs.get('State', {}).get('ExitCode', 1))
+        output = container.logs(stdout=True, stderr=True).decode('utf-8', errors='replace').strip()
+        if exit_code != 0:
+            raise RuntimeError(f'DNS observation sidecar exited with code {exit_code}: {output}')
+        payload = json.loads(output)
+        if not isinstance(payload, list):
+            raise RuntimeError('bash.ws returned an invalid DNS observation payload')
+        return payload
+    finally:
+        if container is not None:
+            try:
+                container.remove(force=True)
+            except Exception as exc:
+                logger.debug('Could not remove DNS observation sidecar: %s', exc)
 
 
 def refresh_observed_resolvers(container_name: str) -> dict:
@@ -165,13 +204,7 @@ def refresh_observed_resolvers(container_name: str) -> dict:
     if not _REFRESH_LOCK.acquire(blocking=False):
         return _load_observation()
     try:
-        test_id = requests.get(_BASH_WS_ID_URL, timeout=8).text.strip()
-        if not test_id or not re.fullmatch(r'[A-Za-z0-9_-]+', test_id):
-            raise RuntimeError('bash.ws returned an invalid test identifier')
-        _trigger_dns_queries(container_name, test_id)
-        response = requests.get(_BASH_WS_RESULT_URL.format(test_id=test_id), timeout=10)
-        response.raise_for_status()
-        payload = response.json()
+        payload = _run_observation_sidecar(container_name)
         resolvers: list[dict[str, str]] = []
         seen: set[str] = set()
         for item in payload if isinstance(payload, list) else []:
