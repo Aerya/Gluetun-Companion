@@ -2,11 +2,23 @@
   <img src="assets/logo.png" alt="Gluetun Companion" width="200">
 </p>
 
-# Gluetun Companion
-
-Gérez automatiquement vos serveurs VPN WireGuard et OpenVPN dans [Gluetun](https://github.com/qdm12/gluetun) : benchmark de vitesse, rotation planifiée par pools, métriques de stabilité (jitter, perte, DNS) et Web UI complète.
 
 > 🇬🇧 [English version](README.en.md)
+
+
+# Gluetun Companion
+
+Gluetun Companion est une interface Web pour piloter automatiquement vos serveurs VPN WireGuard et OpenVPN dans [Gluetun](https://github.com/qdm12/gluetun) :
+ - Il benchmarke vos serveurs depuis le tunnel VPN lui-même, en mode sidecar sans redémarrer Gluetun, ou via le proxy HTTP intégré
+ - Chaque serveur est évalué sur le débit, la latence, le jitter, la perte de paquets, le DNS, l’historique et la stabilité réelle
+ - Le meilleur serveur peut être sélectionné automatiquement selon votre usage : équilibré, gaming, BitTorrent, DDL, téléchargement ou streaming
+ - Les pools de rotation permettent aussi de changer de serveur sans benchmark, en aléatoire, round-robin ou selon le meilleur débit historique
+ - Les profils VPN gèrent plusieurs fournisseurs, protocoles et configurations personnalisées, avec chiffrement des secrets et support WireGuard/OpenVPN
+ - Le catalogue Gluetun, l’import AirVPN, la détection de nouveaux serveurs et l’exclusion des serveurs surchargés facilitent la maintenance au quotidien
+ - Companion gère les containers Docker liés à Gluetun : recréation après bascule, pause pendant les tests et mise à jour optionnelle des images
+ - Il peut vérifier les trackers BitTorrent, gérer le port forwarding VPN et synchroniser les ports avec qBittorrent ou rTorrent
+ - Historique, patterns horaires, notifications Discord/Apprise, API REST, endpoint Prometheus et dashboard Grafana complètent l’outil pour un vrai pilotage homelab
+
 
 > **Statut : bêta.** Gluetun Companion est encore en phase de test. Il est développé et éprouvé principalement avec **AirVPN** ; les autres fournisseurs ne sont quasiment pas testés en conditions réelles, même si la mécanique (catalogue, benchmark, bascule, gestion des containers) est strictement identique pour tous. Vos retours sont précieux.
 >
@@ -16,10 +28,11 @@ Gérez automatiquement vos serveurs VPN WireGuard et OpenVPN dans [Gluetun](http
 > - retours recherchés concernant les fournisseurs **OpenVPN** ;
 > - retours recherchés sur la gestion du **port forwarding ProtonVPN**, notamment la détection du port NAT-PMP dynamique et sa synchronisation avec qBittorrent ;
 > - retours recherchés pour les serveurs **Custom WireGuard** et **Custom OpenVPN**.
->
-> **Développement assisté par IA :** environ **70 % du code a été réalisé avec l’aide de Claude Code et Codex**, sous direction et validation humaines. Une attention particulière est portée à la sécurité : [chiffrement et protection des secrets](#sécurité), [workflows automatisés, Dependabot et Trivy](#workflows-automatisés), limitation de l’accès au socket Docker via [`docker-socket-proxy`](#démarrage-rapide), tests automatisés et revue des modifications. Cette transparence ne remplace pas les retours en conditions réelles, particulièrement importants pendant la bêta.
->
-> **Issues et pull requests bienvenues**, en respectant les formes : pour une [issue](https://github.com/Aerya/Gluetun-Companion/issues), merci d'indiquer la version, le fournisseur VPN, les logs pertinents et les étapes de reproduction ; pour une PR, une description claire du problème résolu et du comportement attendu.
+
+**Développement assisté par IA :** environ **70 % du code a été réalisé avec l’aide de Claude Code et Codex**, sous direction et validation humaines. Une attention particulière est portée à la sécurité : [chiffrement et protection des secrets](#sécurité), [workflows automatisés, Dependabot et Trivy](#workflows-automatisés), limitation de l’accès au socket Docker via [`docker-socket-proxy`](#démarrage-rapide), tests automatisés et revue des modifications. Cette transparence ne remplace pas les retours en conditions réelles, particulièrement importants pendant la bêta.
+
+**Issues et pull requests bienvenues**, en respectant les formes : pour une [issue](https://github.com/Aerya/Gluetun-Companion/issues), merci d'indiquer la version, le fournisseur VPN, les logs pertinents et les étapes de reproduction ; pour une PR, une description claire du problème résolu et du comportement attendu.
+
 
 <p align="center">
 <a href="https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml"><img src="https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml/badge.svg?branch=main" alt="Build"></a>

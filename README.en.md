@@ -2,11 +2,24 @@
   <img src="assets/logo.png" alt="Gluetun Companion" width="200">
 </p>
 
-# Gluetun Companion
-
-Automatically manage your WireGuard and OpenVPN servers in [Gluetun](https://github.com/qdm12/gluetun): speed benchmarking, pool-based scheduled rotation, stability metrics (jitter, loss, DNS) and full Web UI.
 
 > 🇫🇷 [Version française](README.md)
+
+
+
+# Gluetun Companion
+
+Gluetun Companion is a Web UI for automatically managing WireGuard and OpenVPN servers inside [Gluetun](https://github.com/qdm12/gluetun):
+- It benchmarks your VPN servers from inside the tunnel itself, using sidecar mode without restarting your main Gluetun, or Gluetun’s HTTP proxy
+- Each server is evaluated using speed, latency, jitter, packet loss, DNS latency, history and real-world stability
+- The best server can be selected automatically according to your usage profile: balanced, gaming, BitTorrent, DDL, download or streaming
+- Rotation pools also let you switch servers without a full benchmark, using random, round-robin or best historical download selection
+- VPN profiles support multiple providers, protocols and custom configurations, with encrypted secrets and WireGuard/OpenVPN support
+- The Gluetun catalogue, AirVPN picker, new-server detection and overloaded-server filtering make daily maintenance easier
+- Companion manages Docker containers attached to Gluetun: recreation after switches, pause during benchmarks and optional image updates
+- It can check BitTorrent trackers, handle VPN port forwarding and synchronize ports with qBittorrent or rTorrent
+- History, hourly patterns, Discord/Apprise notifications, REST API, Prometheus metrics and Grafana support turn it into a full homelab VPN control panel
+
 
 > **Status: beta.** Gluetun Companion is still in testing. It is developed and battle-tested primarily with **AirVPN**; other providers have barely been tested in real conditions, even though the mechanics (catalogue, benchmark, switching, container management) are strictly identical for all of them. Your feedback is invaluable.
 >
@@ -16,10 +29,11 @@ Automatically manage your WireGuard and OpenVPN servers in [Gluetun](https://git
 > - feedback needed for **OpenVPN providers**;
 > - feedback needed for **ProtonVPN port forwarding**, especially dynamic NAT-PMP port detection and qBittorrent synchronization;
 > - feedback needed for **Custom WireGuard** and **Custom OpenVPN** servers.
->
-> **AI-assisted development:** approximately **70% of the code was produced with the assistance of Claude Code and Codex**, under human direction and validation. Particular attention is paid to security: [secret encryption and protection](#security), [automated workflows, Dependabot and Trivy](#automated-workflows), restricted Docker socket access through [`docker-socket-proxy`](#quick-start), automated tests, and change review. This transparency does not replace real-world feedback, which remains especially important during beta testing.
->
-> **Issues and pull requests are welcome**, with proper form: for an [issue](https://github.com/Aerya/Gluetun-Companion/issues), please include the version, VPN provider, relevant logs and reproduction steps; for a PR, a clear description of the problem solved and the expected behaviour.
+
+ **AI-assisted development:** approximately **70% of the code was produced with the assistance of Claude Code and Codex**, under human direction and validation. Particular attention is paid to security: [secret encryption and protection](#security), [automated workflows, Dependabot and Trivy](#automated-workflows), restricted Docker socket access through [`docker-socket-proxy`](#quick-start), automated tests, and change review. This transparency does not replace real-world feedback, which remains especially important during beta testing.
+
+ **Issues and pull requests are welcome**, with proper form: for an [issue](https://github.com/Aerya/Gluetun-Companion/issues), please include the version, VPN provider, relevant logs and reproduction steps; for a PR, a clear description of the problem solved and the expected behaviour.
+
 
 <p align="center">
 <a href="https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml"><img src="https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml/badge.svg?branch=main" alt="Build"></a>
