@@ -507,6 +507,7 @@ def dashboard():
         sparkline_ul: list[float | None] = []
         sparkline_server: str | None = None
         active_profile: dict | None = None
+        active_server_stats: dict | None = None
         if current_filters:
             sname = active_server_name
             sparkline_server = sname
@@ -518,9 +519,21 @@ def dashboard():
             ''', (sname,)).fetchall()
             # reverse to chronological order
             for r in reversed(spark_rows):
-                sparkline_labels.append(r['tested_at'][5:16])
+                sparkline_labels.append(r['tested_at'])
                 sparkline_dl.append(r['download_mbps'] or 0)
                 sparkline_ul.append(r['upload_mbps'])
+            _active_stats_row = db.execute('''
+                SELECT COUNT(*) AS total_tests,
+                       COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) AS ok_tests,
+                       ROUND(AVG(CASE
+                           WHEN success = 1 AND test_method != 'proxy_qc'
+                           THEN latency_ms
+                       END), 0) AS avg_latency
+                FROM speed_tests
+                WHERE server_name = ?
+            ''', (sname,)).fetchone()
+            if _active_stats_row:
+                active_server_stats = dict(_active_stats_row)
             # Provider of the active server
             _prof_row = db.execute(
                 'SELECT vp.name AS profile_name, vp.provider AS provider_key '
@@ -531,6 +544,9 @@ def dashboard():
             if _prof_row and _prof_row['profile_name']:
                 active_profile = dict(_prof_row)
         dashboard_map_points = _server_map_points(db, active_server_name)
+
+    dashboard_stability = get_stability_all()
+    dashboard_confidence = compute_confidence_all()
 
     try:
         _dash_include_types = json.loads(get_setting('bench_include_types', '[]') or '[]')
@@ -550,7 +566,14 @@ def dashboard():
         vpn_status=vpn_status,
         public_ip=public_ip,
         current_server=current_server,
+        active_server_name=active_server_name,
         active_profile=active_profile,
+        active_server_stats=active_server_stats,
+        active_stability=dashboard_stability.get(active_server_name, {}),
+        active_confidence=dashboard_confidence.get(
+            active_server_name,
+            {'level': 'LOW', 'nb': 0, 'cv_pct': None, 'consec': 0},
+        ),
         recent_tests=recent_tests,
         recent_limit=recent_limit,
         last_switch=last_switch,
@@ -579,8 +602,8 @@ def dashboard():
         sparkline_dl=sparkline_dl,
         sparkline_ul=sparkline_ul,
         adaptive_stats=get_hourly_benchmark_stats(),
-        stability=get_stability_all(),
-        confidence=compute_confidence_all(),
+        stability=dashboard_stability,
+        confidence=dashboard_confidence,
     )
 
 
