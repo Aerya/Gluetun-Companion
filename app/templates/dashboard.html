@@ -108,6 +108,11 @@
     stroke: var(--bs-body-color);
     stroke-width: 1.6;
   }
+  .dash-map-point-halo {
+    fill: var(--bs-warning);
+    opacity: .25;
+    stroke: none;
+  }
   /* obs-* styles moved to base.html */
   .pool-activity-scroll {
     max-height: 34rem;
@@ -500,11 +505,24 @@
       <div class="dash-world-map">
         <svg viewBox="0 0 1000 520" role="img" aria-label="{{ t.dash_map_title }}">
           <image class="dash-map-base" href="{{ url_for('static', filename='world-map.svg') }}" x="0" y="0" width="1000" height="520"/>
-          {% for p in dashboard_map_points %}
+          {# non-active servers first #}
+          {% for p in dashboard_map_points if not p.active %}
             {% set x = ((p.lon + 180) / 360 * 1000) %}
             {% set y = ((90 - p.lat) / 180 * 520) %}
             {% set radius = 4 + ([p.uses, 18] | min) * 0.45 %}
-            <circle class="{{ 'dash-map-point-active' if p.active else 'dash-map-point' }}"
+            <circle class="dash-map-point"
+                    cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}" r="{{ '%.1f'|format(radius) }}">
+              <title>{{ p.server }} · {{ p.country }} · {{ p.uses }} {{ t.set_side_map_uses }}</title>
+            </circle>
+          {% endfor %}
+          {# current server drawn last, with a halo, so it is never hidden by overlapping points #}
+          {% for p in dashboard_map_points if p.active %}
+            {% set x = ((p.lon + 180) / 360 * 1000) %}
+            {% set y = ((90 - p.lat) / 180 * 520) %}
+            {% set radius = [4 + ([p.uses, 18] | min) * 0.45, 6.5] | max %}
+            <circle class="dash-map-point-halo"
+                    cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}" r="{{ '%.1f'|format(radius + 3) }}"/>
+            <circle class="dash-map-point-active"
                     cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}" r="{{ '%.1f'|format(radius) }}">
               <title>{{ p.server }} · {{ p.country }} · {{ p.uses }} {{ t.set_side_map_uses }}</title>
             </circle>
