@@ -145,7 +145,7 @@
       </div>
       <div class="d-flex align-items-center gap-2 mb-2">
         <span class="dot dot-{{ vpn_status }}" style="width:12px;height:12px;flex-shrink:0"></span>
-        <span class="fw-semibold" style="font-size:1rem">{{ vpn_status | capitalize }}</span>
+        <span class="fw-semibold" style="font-size:1rem">{{ t.dash_status_running if vpn_status == 'running' else t.dash_status_stopped }}</span>
       </div>
       {% if public_ip %}
       <div class="d-flex align-items-center gap-2 mb-2">
