@@ -1468,6 +1468,13 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
 
         results: list[dict] = []
 
+        # Snapshot the real production server so we can restore it if a sidecar
+        # speed test falls back to the HTTP proxy.  The proxy test path switches
+        # the real Gluetun to the candidate (to route the test through it) and
+        # leaves it there — only meaningful in sidecar mode, since proxy mode is
+        # expected to move Gluetun on its own.
+        _orig_prod_filters = get_current_filters(container) if sidecar_mode else None
+
         for idx, row in enumerate(servers, start=1):
             if _stop_event.is_set():
                 logger.info(
@@ -1889,6 +1896,72 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                         mention=_mention,
                         mention_level=_mention_level,
                     )
+
+        # ── Restore production after a sidecar→proxy fallback ────────────────
+        # When a sidecar test fails and `sidecar_proxy_fallback` is on, the proxy
+        # test path switches the real Gluetun to the candidate and leaves it
+        # there.  In sidecar mode that drift is never intended.  If the
+        # auto-switch decision did not take ownership of the server this cycle
+        # (auto-switch off, or no eligible result), return Gluetun to the server
+        # it started on and record the round-trip in the switch history so the
+        # change is auditable instead of silent.
+        if (not (auto_sw and decision_results)
+                and sidecar_mode and _orig_prod_filters):
+            _cur_filters = get_current_filters(container)
+            if _cur_filters and _cur_filters != _orig_prod_filters:
+                _orig_ft = next(iter(_orig_prod_filters))
+                _orig_sv = _orig_prod_filters[_orig_ft].split(',')[0].strip()
+                _drift_label = format_filters(_cur_filters)
+                logger.info(
+                    'Proxy fallback moved Gluetun to %s this cycle — restoring %s',
+                    _drift_label, _orig_sv,
+                )
+                # Resolve the original server's WireGuard profile so the restore
+                # reconnects with the right credentials (multi-profile setups).
+                _orig_wg = None
+                _orig_pid = next(
+                    (row['vpn_profile_id'] for row in servers if row['name'] == _orig_sv),
+                    None,
+                )
+                if _orig_pid is not None and _orig_pid in _profile_env_cache:
+                    _orig_penv = _profile_env_cache[_orig_pid]
+                    _orig_wg = {
+                        'compose_provider': _orig_penv['compose_provider'],
+                        'vpn_type':         _orig_penv.get('vpn_type', 'wireguard'),
+                        'vars': {
+                            k: v for k, v in _orig_penv['extra_env'].items()
+                            if k not in ('VPN_SERVICE_PROVIDER', 'VPN_TYPE')
+                        },
+                    }
+                _pre_deps = list_network_dependents_for_recreate(container)
+                _ok_r, _err_r = switch_server(
+                    _orig_sv, _orig_ft, container, compose_dir, project,
+                    wg_profile=_orig_wg,
+                )
+                _r_connect = 0.0
+                if _ok_r:
+                    _r_conn, _r_connect = wait_for_vpn(
+                        proxy_host, proxy_port, timeout=wait_secs,
+                        proxy_user=proxy_user, proxy_password=proxy_pass,
+                    )
+                    _r_restarted, _ = restart_network_dependents(
+                        container, compose_dir, project, explicit_list=_pre_deps,
+                    )
+                    if _r_restarted:
+                        logger.info('Recreated network dependents: %s', ', '.join(_r_restarted))
+                    if _r_conn:
+                        logger.info('Gluetun restored to %s', _orig_sv)
+                    else:
+                        logger.warning('Restored to %s but VPN reconnect timed out', _orig_sv)
+                else:
+                    logger.error('Restore to %s failed: %s', _orig_sv, _err_r)
+                _record_switch(
+                    from_server=_drift_label,
+                    to_server=format_filters(_orig_prod_filters),
+                    reason='proxy_test_revert',
+                    success=_ok_r,
+                    connect_secs=_r_connect if _ok_r else None,
+                )
 
         duration_secs = round(time.time() - cycle_start, 1)
         logger.info('=== Benchmark cycle finished in %.0fs ===', duration_secs)

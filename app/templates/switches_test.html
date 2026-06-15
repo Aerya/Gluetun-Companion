@@ -168,6 +168,7 @@
         <option value="{{ reason }}" {{ 'selected' if reason_filter == reason }}>
           {% if reason == 'auto_best' %}{{ t.sw_reason_auto }}
           {% elif reason == 'manual' %}{{ t.sw_reason_manual }}
+          {% elif reason == 'proxy_test_revert' %}{{ t.sw_reason_proxy_revert }}
           {% else %}{{ reason }}{% endif %}
         </option>
         {% endfor %}
@@ -243,6 +244,8 @@
               <span class="reason-chip"><i class="bi bi-magic text-info"></i>{{ t.sw_reason_auto }}</span>
             {% elif s.reason == 'manual' %}
               <span class="reason-chip"><i class="bi bi-hand-index text-warning"></i>{{ t.sw_reason_manual }}</span>
+            {% elif s.reason == 'proxy_test_revert' %}
+              <span class="reason-chip"><i class="bi bi-arrow-counterclockwise text-secondary"></i>{{ t.sw_reason_proxy_revert }}</span>
             {% else %}
               <span class="reason-chip">{{ s.reason }}</span>
             {% endif %}
