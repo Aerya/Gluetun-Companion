@@ -179,8 +179,50 @@ _COUNTRY_COORDS = {
 }
 
 
+def _provider_icon_url(provider: str) -> str:
+    """Return the URL of a provider's icon, or '' when none is available.
+
+    Mirrors the priority used by the ``server_provider_icon`` template helper:
+    bundled SVG first, then the server-side cached favicon route.
+    """
+    if not provider:
+        return ''
+    try:
+        if provider in PROVIDER_SVG_FILES:
+            return url_for('static', filename=f'providers/{provider}.svg')
+        if provider in PROVIDER_FAVICON_DOMAINS:
+            return url_for('main.provider_icon', provider=provider)
+    except Exception:
+        return ''
+    return ''
+
+
+# Number of most-tested servers shown on the world map (plus the current one).
+_MAP_SERVER_LIMIT = 60
+
+
 def _server_map_points(db, active_server_name: str = '') -> list[dict]:
-    """Return map points for the 30 most tested servers plus the current server."""
+    """Return map points for the most tested servers plus the current server.
+
+    Each point carries the server's flag country, VPN provider (and its icon
+    URL) and the number of successful tests, for the hover tooltip.
+    """
+    # Provider per server: explicit VPN profile, else AirVPN when the server is
+    # present in the AirVPN snapshot.
+    prov_map: dict[str, str] = {}
+    try:
+        for r in db.execute(
+            'SELECT s.name, vp.provider FROM servers s '
+            'JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id '
+            "WHERE COALESCE(vp.provider, '') != ''"
+        ).fetchall():
+            prov_map[r['name']] = (r['provider'] or '').lower()
+    except Exception:
+        pass
+
+    def _provider_for(name: str, av_name) -> str:
+        return prov_map.get(name) or ('airvpn' if av_name else '')
+
     rows = db.execute(
         '''WITH catalogue_country AS (
                SELECT name,
@@ -192,14 +234,16 @@ def _server_map_points(db, active_server_name: str = '') -> list[dict]:
            SELECT st.server_name,
                   COUNT(DISTINCT st.id) AS uses,
                   COALESCE(NULLIF(av.country_code, ''), cc.country_code) AS country_code,
-                  COALESCE(NULLIF(av.country, ''), cc.country) AS country
+                  COALESCE(NULLIF(av.country, ''), cc.country) AS country,
+                  MAX(av.name) AS av_name
            FROM speed_tests st
            LEFT JOIN airvpn_snapshot av ON av.name = st.server_name
            LEFT JOIN catalogue_country cc ON cc.name = st.server_name
            WHERE st.success = 1
            GROUP BY st.server_name
            ORDER BY uses DESC, MAX(st.tested_at) DESC
-           LIMIT 30'''
+           LIMIT ?''',
+        (_MAP_SERVER_LIMIT,),
     ).fetchall()
     points = []
     names = set()
@@ -208,6 +252,7 @@ def _server_map_points(db, active_server_name: str = '') -> list[dict]:
         if cc not in _COUNTRY_COORDS:
             continue
         lat, lon = _COUNTRY_COORDS[cc]
+        provider = _provider_for(row['server_name'], row['av_name'])
         points.append({
             'server': row['server_name'],
             'uses': int(row['uses'] or 0),
@@ -215,6 +260,8 @@ def _server_map_points(db, active_server_name: str = '') -> list[dict]:
             'country_code': cc,
             'lat': lat,
             'lon': lon,
+            'provider': provider,
+            'provider_icon': _provider_icon_url(provider),
             'active': row['server_name'] == active_server_name,
         })
         names.add(row['server_name'])
@@ -230,7 +277,8 @@ def _server_map_points(db, active_server_name: str = '') -> list[dict]:
                )
                SELECT COALESCE(NULLIF(av.country_code, ''), cc.country_code) AS country_code,
                       COALESCE(NULLIF(av.country, ''), cc.country) AS country,
-                      COUNT(DISTINCT st.id) AS uses
+                      COUNT(DISTINCT st.id) AS uses,
+                      av.name AS av_name
                FROM (SELECT ? AS name) active
                LEFT JOIN airvpn_snapshot av ON av.name = active.name
                LEFT JOIN catalogue_country cc ON cc.name = active.name
@@ -241,6 +289,7 @@ def _server_map_points(db, active_server_name: str = '') -> list[dict]:
             cc = (row['country_code'] or '').lower()
             if cc in _COUNTRY_COORDS:
                 lat, lon = _COUNTRY_COORDS[cc]
+                provider = _provider_for(active_server_name, row['av_name'])
                 points.append({
                     'server': active_server_name,
                     'uses': int(row['uses'] or 0),
@@ -248,6 +297,8 @@ def _server_map_points(db, active_server_name: str = '') -> list[dict]:
                     'country_code': cc,
                     'lat': lat,
                     'lon': lon,
+                    'provider': provider,
+                    'provider_icon': _provider_icon_url(provider),
                     'active': True,
                 })
     return points
@@ -2249,26 +2300,6 @@ def settings():
         settings_sidebar['active_server'] = ''
         settings_sidebar['active_server_name'] = ''
     try:
-        _country_coords = {
-            'ad': (42.5, 1.6), 'ae': (24.4, 54.4), 'al': (41.3, 19.8), 'am': (40.2, 44.5),
-            'ar': (-34.6, -58.4), 'at': (48.2, 16.4), 'au': (-33.9, 151.2), 'az': (40.4, 49.9),
-            'ba': (43.9, 18.4), 'be': (50.8, 4.4), 'bg': (42.7, 23.3), 'br': (-23.5, -46.6),
-            'by': (53.9, 27.6), 'ca': (45.4, -75.7), 'ch': (47.4, 8.5), 'cl': (-33.4, -70.7),
-            'cn': (39.9, 116.4), 'co': (4.7, -74.1), 'cr': (9.9, -84.1), 'cy': (35.2, 33.4),
-            'cz': (50.1, 14.4), 'de': (52.5, 13.4), 'dk': (55.7, 12.6), 'ee': (59.4, 24.8),
-            'es': (40.4, -3.7), 'fi': (60.2, 24.9), 'fr': (48.9, 2.4), 'gb': (51.5, -0.1),
-            'ge': (41.7, 44.8), 'gr': (38.0, 23.7), 'hk': (22.3, 114.2), 'hr': (45.8, 16.0),
-            'hu': (47.5, 19.0), 'id': (-6.2, 106.8), 'ie': (53.3, -6.3), 'il': (32.1, 34.8),
-            'in': (28.6, 77.2), 'is': (64.1, -21.9), 'it': (41.9, 12.5), 'jp': (35.7, 139.7),
-            'kr': (37.6, 127.0), 'lt': (54.7, 25.3), 'lu': (49.6, 6.1), 'lv': (56.9, 24.1),
-            'md': (47.0, 28.8), 'mk': (42.0, 21.4), 'mt': (35.9, 14.5), 'mx': (19.4, -99.1),
-            'my': (3.1, 101.7), 'nl': (52.4, 4.9), 'no': (59.9, 10.8), 'nz': (-36.8, 174.8),
-            'pa': (9.0, -79.5), 'pe': (-12.0, -77.0), 'ph': (14.6, 121.0), 'pl': (52.2, 21.0),
-            'pt': (38.7, -9.1), 'ro': (44.4, 26.1), 'rs': (44.8, 20.5), 'ru': (55.8, 37.6),
-            'se': (59.3, 18.1), 'sg': (1.3, 103.8), 'si': (46.1, 14.5), 'sk': (48.1, 17.1),
-            'th': (13.8, 100.5), 'tr': (41.0, 29.0), 'tw': (25.0, 121.6), 'ua': (50.5, 30.5),
-            'us': (40.7, -74.0), 'uy': (-34.9, -56.2), 'vn': (10.8, 106.7), 'za': (-33.9, 18.4),
-        }
         counts = _server_history_counts()
         settings_sidebar['enabled_servers'] = counts['enabled']
         settings_sidebar['tested_servers'] = counts['tested']
@@ -2291,78 +2322,9 @@ def settings():
                    ORDER BY avg_dl DESC
                    LIMIT 5'''
             ).fetchall()
-            _map_rows = db.execute(
-                '''WITH catalogue_country AS (
-                       SELECT name,
-                              MAX(NULLIF(country_code, '')) AS country_code,
-                              MAX(NULLIF(country, '')) AS country
-                       FROM gluetun_catalogue
-                       GROUP BY name
-                   )
-                   SELECT st.server_name,
-                          COUNT(DISTINCT st.id) AS uses,
-                          COALESCE(NULLIF(av.country_code, ''), cc.country_code) AS country_code,
-                          COALESCE(NULLIF(av.country, ''), cc.country) AS country
-                   FROM speed_tests st
-                   LEFT JOIN airvpn_snapshot av ON av.name = st.server_name
-                   LEFT JOIN catalogue_country cc ON cc.name = st.server_name
-                   WHERE st.success = 1
-                   GROUP BY st.server_name
-                   ORDER BY uses DESC, MAX(st.tested_at) DESC
-                   LIMIT 30'''
-            ).fetchall()
-            _points = []
-            _point_names = set()
-            for r in _map_rows:
-                cc = (r['country_code'] or '').lower()
-                if cc not in _country_coords:
-                    continue
-                lat, lon = _country_coords[cc]
-                _points.append({
-                    'server': r['server_name'],
-                    'uses': int(r['uses'] or 0),
-                    'country': r['country'] or cc.upper(),
-                    'country_code': cc,
-                    'lat': lat,
-                    'lon': lon,
-                    'active': r['server_name'] == settings_sidebar['active_server_name'],
-                })
-                _point_names.add(r['server_name'])
-            if (
-                settings_sidebar['active_server_name']
-                and settings_sidebar['active_server_name'] not in _point_names
-            ):
-                _active_row = db.execute(
-                    '''WITH catalogue_country AS (
-                           SELECT name,
-                                  MAX(NULLIF(country_code, '')) AS country_code,
-                                  MAX(NULLIF(country, '')) AS country
-                           FROM gluetun_catalogue
-                           GROUP BY name
-                       )
-                       SELECT COALESCE(NULLIF(av.country_code, ''), cc.country_code) AS country_code,
-                              COALESCE(NULLIF(av.country, ''), cc.country) AS country,
-                              COUNT(DISTINCT st.id) AS uses
-                       FROM (SELECT ? AS name) active
-                       LEFT JOIN airvpn_snapshot av ON av.name = active.name
-                       LEFT JOIN catalogue_country cc ON cc.name = active.name
-                       LEFT JOIN speed_tests st ON st.server_name = active.name AND st.success = 1''',
-                    (settings_sidebar['active_server_name'],),
-                ).fetchone()
-                if _active_row:
-                    cc = (_active_row['country_code'] or '').lower()
-                    if cc in _country_coords:
-                        lat, lon = _country_coords[cc]
-                        _points.append({
-                            'server': settings_sidebar['active_server_name'],
-                            'uses': int(_active_row['uses'] or 0),
-                            'country': _active_row['country'] or cc.upper(),
-                            'country_code': cc,
-                            'lat': lat,
-                            'lon': lon,
-                            'active': True,
-                        })
-            settings_sidebar['map_points'] = _points
+            settings_sidebar['map_points'] = _server_map_points(
+                db, settings_sidebar['active_server_name']
+            )
     except Exception as exc:
         logger.debug('settings sidebar stats unavailable: %s', exc)
     return render_template(
