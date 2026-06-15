@@ -524,19 +524,14 @@
   {% if recent_pool_switches %}
   <div class="col-12 col-lg-8">
 <div class="card dash-fixed-card h-100 d-flex flex-column">
-  <div class="card-header py-2 d-flex align-items-center justify-content-between gap-2">
+  <div class="card-header py-2 d-flex align-items-center gap-2">
     <span class="fw-semibold" style="font-size:.9rem">
       <i class="bi bi-shuffle text-primary"></i> {{ t.dash_pool_activity }}
       <span class="badge bg-secondary ms-1" id="poolTotalBadge" style="font-size:.7rem">{{ recent_pool_switches | length }}</span>
     </span>
-    <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button"
-            data-bs-toggle="collapse" data-bs-target="#poolActivityBody"
-            aria-expanded="true" aria-controls="poolActivityBody">
-      <i class="bi bi-chevron-up" id="poolChevron"></i>
-    </button>
   </div>
 
-  <div class="collapse show flex-grow-1" id="poolActivityBody">
+  <div class="flex-grow-1">
     {# ── Filter bar ── #}
     <div class="px-3 pt-2 pb-2 border-bottom d-flex flex-wrap gap-2 align-items-end">
       <input type="text" id="poolSearch" class="form-control form-control-sm"
@@ -548,7 +543,8 @@
       <div class="d-flex align-items-center gap-1 ms-auto">
         <span class="text-muted" style="font-size:.82rem">{{ t.dash_pool_show }}</span>
         <select id="poolPerPage" class="form-select form-select-sm" style="width:auto">
-          <option value="10" selected>10</option>
+          <option value="7" selected>7</option>
+          <option value="10">10</option>
           <option value="20">20</option>
           <option value="50">50</option>
           <option value="0">{{ t.dash_pool_all }}</option>
@@ -583,7 +579,7 @@
     <div class="px-3 py-2 border-top" style="font-size:.78rem">
       <span class="text-muted" id="poolShowingInfo"></span>
     </div>
-  </div>{# /collapse #}
+  </div>{# /pool body #}
 </div>
 
 <script>
@@ -624,7 +620,7 @@
   };
 
   /* ── state ── */
-  var _col = 'ts', _dir = -1, _pp = 10, _q = '', _fd = '', _td = '';
+  var _col = 'ts', _dir = -1, _pp = 7, _q = '', _fd = '', _td = '';
 
   function _esc(s) {
     return String(s)
@@ -725,19 +721,6 @@
       _render();
     });
   });
-
-  /* ── collapse chevron ── */
-  var body = document.getElementById('poolActivityBody');
-  if (body) {
-    body.addEventListener('show.bs.collapse', function() {
-      var ic = document.getElementById('poolChevron');
-      if (ic) { ic.className = 'bi bi-chevron-up'; }
-    });
-    body.addEventListener('hide.bs.collapse', function() {
-      var ic = document.getElementById('poolChevron');
-      if (ic) { ic.className = 'bi bi-chevron-down'; }
-    });
-  }
 
   _render();
 })();
