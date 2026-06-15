@@ -346,7 +346,7 @@ L'encart **Statut VPN** affiche l'intermédiaire et les opérateurs observés. D
 - **Mise à jour automatique des images Docker** *(option)* — au moment de la bascule, Companion peut mettre à jour les images avant de relancer les containers : Gluetun lui-même, les containers réseau auto-gérés, les containers à redémarrer après bascule et les containers en pause pendant le benchmark ; activable individuellement par container depuis les Paramètres
 
 ### Contrôle trackers BitTorrent
-- **Clients multiples** — configurez un ou plusieurs clients qBittorrent ou rTorrent/ruTorrent dans **Paramètres → Trackers** ; chaque client peut servir de source de trackers, même s'il fait aussi partie des containers stoppés pendant le benchmark
+- **Clients multiples** — configurez un ou plusieurs clients qBittorrent ou rTorrent/ruTorrent dans **Paramètres → BitTorrent** ; chaque client peut servir de source de trackers, même s'il fait aussi partie des containers stoppés pendant le benchmark
 - **Découverte persistante** — Companion récupère les URLs de trackers depuis les torrents chargés, les déduplique, puis affiche la liste avec source, nombre de torrents, dernier test et taux de réussite
 - **Passkeys masquées** — les passkeys et tokens privés sont retirés des URLs détectées avant stockage/affichage, y compris quand ils sont dans la query string ou dans le chemin
 - **Contrôle par URL** — chaque tracker peut être activé ou ignoré individuellement pour les vérifications futures
@@ -474,9 +474,9 @@ Dans **Paramètres → Mesurer → Containers à stopper pendant le benchmark** 
 
 ### Contrôle des trackers BitTorrent via le VPN
 
-Dans **Paramètres → Trackers**, Companion peut vérifier si les trackers réellement utilisés par vos torrents sont accessibles depuis le serveur VPN testé ou sélectionné. L'objectif n'est pas de faire un vrai announce complet pour chaque torrent, mais de vérifier la connectivité utile avec quatre niveaux :
+Dans **Paramètres → BitTorrent**, Companion peut vérifier si les trackers réellement utilisés par vos torrents sont accessibles depuis le serveur VPN testé ou sélectionné. L'objectif n'est pas de faire un vrai announce complet pour chaque torrent, mais de vérifier la connectivité utile avec quatre niveaux :
 
-D’après la [documentation DNS officielle de Gluetun](https://github.com/qdm12/gluetun-wiki/blob/main/setup/options/dns.md), Gluetun active `BLOCK_MALICIOUS=on` par défaut. Certaines URL d'annonce peuvent donc être bloquées par ses listes DNS même si le tracker est disponible. Dans **Paramètres → Trackers → Filtrage DNS Gluetun**, Companion permet de conserver cette protection tout en autorisant des domaines précis via `DNS_UNBLOCK_HOSTNAMES`, ou de désactiver entièrement `BLOCK_MALICIOUS` en dernier recours. Le réglage est écrit dans `docker-compose.override.yml`, appliqué immédiatement en recréant Gluetun et conservé lors des bascules suivantes. La désactivation globale réduit la protection DNS de tous les containers partageant le réseau de Gluetun ; l'exception ciblée est recommandée.
+D’après la [documentation DNS officielle de Gluetun](https://github.com/qdm12/gluetun-wiki/blob/main/setup/options/dns.md), Gluetun active `BLOCK_MALICIOUS=on` par défaut. Certaines URL d'annonce peuvent donc être bloquées par ses listes DNS même si le tracker est disponible. Dans **Paramètres → BitTorrent → Filtrage DNS Gluetun**, Companion permet de conserver cette protection tout en autorisant des domaines précis via `DNS_UNBLOCK_HOSTNAMES`, ou de désactiver entièrement `BLOCK_MALICIOUS` en dernier recours. Le réglage est écrit dans `docker-compose.override.yml`, appliqué immédiatement en recréant Gluetun et conservé lors des bascules suivantes. La désactivation globale réduit la protection DNS de tous les containers partageant le réseau de Gluetun ; l'exception ciblée est recommandée.
 
 1. **DNS** — le domaine du tracker peut être résolu.
 2. **Port** — le port TCP/UDP du tracker répond.
@@ -485,7 +485,7 @@ D’après la [documentation DNS officielle de Gluetun](https://github.com/qdm12
 
 Ce seuil évite les faux négatifs : un tracker privé ou public peut être temporairement down, sans que le serveur VPN soit mauvais. Companion conserve l'historique par URL afin de distinguer progressivement un tracker globalement indisponible d'un tracker bloqué seulement sur certains chemins VPN.
 
-Deux usages sont séparés dans **Paramètres → Trackers** :
+Deux usages sont séparés dans **Paramètres → BitTorrent** :
 
 - **Activer le contrôle trackers pendant les vérifications VPN** lance la découverte avant benchmark, puis teste les URLs activées pour chaque serveur testé.
 - **Exiger un résultat trackers OK pour les bascules automatiques et les pools** transforme ce score en critère d'éligibilité : pendant un benchmark, les serveurs sous le seuil sont exclus du choix final ; dans une rotation de pool, les serveurs déjà connus sous le seuil sont ignorés, tandis que les serveurs jamais testés restent candidats.
