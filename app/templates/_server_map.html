@@ -25,8 +25,9 @@
         {% set x = ((p.lon + 180) / 360 * 1000) %}
         {% set y = ((90 - p.lat) / 180 * 520) %}
         {% set radius = 4 + ([p.uses, 18] | min) * 0.45 %}
-        <circle class="smap-pt smap-point"
-                cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}" r="{{ '%.1f'|format(radius) }}"
+        <circle class="smap-pt smap-point" vector-effect="non-scaling-stroke"
+                cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}"
+                r="{{ '%.1f'|format(radius) }}" data-r="{{ '%.1f'|format(radius) }}"
                 data-server="{{ p.server }}" data-country="{{ p.country }}" data-cc="{{ p.country_code }}"
                 data-uses="{{ p.uses }}" data-provider="{{ p.provider }}" data-picon="{{ p.provider_icon }}"></circle>
       {% endfor %}
@@ -36,9 +37,11 @@
         {% set y = ((90 - p.lat) / 180 * 520) %}
         {% set radius = [4 + ([p.uses, 18] | min) * 0.45, 6.5] | max %}
         <circle class="smap-point-halo"
-                cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}" r="{{ '%.1f'|format(radius + 3) }}"></circle>
-        <circle class="smap-pt smap-point-active"
-                cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}" r="{{ '%.1f'|format(radius) }}"
+                cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}"
+                r="{{ '%.1f'|format(radius + 3) }}" data-r="{{ '%.1f'|format(radius + 3) }}"></circle>
+        <circle class="smap-pt smap-point-active" vector-effect="non-scaling-stroke"
+                cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}"
+                r="{{ '%.1f'|format(radius) }}" data-r="{{ '%.1f'|format(radius) }}"
                 data-server="{{ p.server }}" data-country="{{ p.country }}" data-cc="{{ p.country_code }}"
                 data-uses="{{ p.uses }}" data-provider="{{ p.provider }}" data-picon="{{ p.provider_icon }}"></circle>
       {% endfor %}
@@ -192,8 +195,19 @@
     var vp  = map.querySelector('.smap-viewport');
     if (!svg || !vp) return;
     var label = map.getAttribute('data-uses-label') || '';
-    var s = 1, tx = 0, ty = 0;
+    var s = 1, tx = 0, ty = 0, sizedAt = 0;
+    // Circles whose radius must stay visually constant while the map scales.
+    var scalable = [].slice.call(map.querySelectorAll('[data-r]')).map(function (el) {
+      return { el: el, r: parseFloat(el.getAttribute('data-r')) || 0 };
+    });
 
+    function setSizes() {
+      // Counter-scale radii so points keep the same on-screen size at any zoom.
+      for (var i = 0; i < scalable.length; i++) {
+        scalable[i].el.setAttribute('r', (scalable[i].r / s).toFixed(2));
+      }
+      sizedAt = s;
+    }
     function clamp() {
       s = Math.min(MAX, Math.max(MIN, s));
       tx = Math.min(0, Math.max((1 - s) * VW, tx));
@@ -202,6 +216,7 @@
     function apply() {
       clamp();
       vp.setAttribute('transform', 'translate(' + tx.toFixed(2) + ' ' + ty.toFixed(2) + ') scale(' + s.toFixed(4) + ')');
+      if (s !== sizedAt) setSizes();
     }
     function toView(clientX, clientY) {
       var r = svg.getBoundingClientRect();
