@@ -642,6 +642,7 @@
       <div class="settings-pane-layout">
         <div id="settings-trackers-grid" class="settings-pane-main"></div>
         <aside class="settings-pane-aside">
+          {{ settings_world_map() }}
           <div class="settings-help-card">
             <h6><i class="bi bi-broadcast-pin me-1"></i>BitTorrent</h6>
             <div class="metric"><span>Clients</span><strong id="tracker-summary-clients">{{ trackers_summary.clients }}</strong></div>
@@ -660,6 +661,7 @@
       <div class="settings-pane-layout">
         <div id="settings-port-forwarding-grid" class="settings-pane-main"></div>
         <aside class="settings-pane-aside">
+          {{ settings_world_map() }}
           <div class="settings-help-card">
             <h6><i class="bi bi-diagram-3 me-1"></i>{{ 'Port forwarding' if session.get('lang','fr') == 'fr' else 'Port forwarding' }}</h6>
             <div class="metric"><span>{{ 'Règles' if session.get('lang','fr') == 'fr' else 'Rules' }}</span><strong>{{ port_forwards | length }}</strong></div>
