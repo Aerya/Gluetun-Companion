@@ -231,8 +231,8 @@
         <div class="active-server-metric">
           <div class="active-server-metric-label">{{ t.conf_col_header }}</div>
           <div class="active-server-metric-value">
-            {%- if _conf.nb < 4 -%}
-              <span class="text-muted" title="{{ _conf.nb }}/4 {{ t.conf_min_tests_hint }}" data-bs-toggle="tooltip">— ({{ _conf.nb }}/7)</span>
+            {%- if _conf.nb < 7 -%}
+              <span class="text-muted" title="{{ _conf.nb }}/7 {{ t.conf_min_tests_hint }}" data-bs-toggle="tooltip">— ({{ _conf.nb }}/7)</span>
             {%- elif _conf.level == 'HIGH' -%}
               <i class="bi bi-circle-fill text-success me-1" style="font-size:.55rem"></i>{{ t.conf_level_high }}
             {%- elif _conf.level == 'MEDIUM' -%}
@@ -576,7 +576,7 @@
   };
 
   /* ── state ── */
-  var _col = 'ts', _dir = -1, _pp = 7, _q = '', _fd = '', _td = '';
+  var _col = 'ts', _dir = -1, _pp = 4, _q = '', _fd = '', _td = '';
 
   function _esc(s) {
     return String(s)
