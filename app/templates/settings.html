@@ -1,4 +1,5 @@
 ﻿{% extends 'base.html' %}
+{% import '_server_map.html' as smap with context %}
 {% block title %}{{ t.set_title }} – Gluetun Companion{% endblock %}
 
 {% block content %}
@@ -123,48 +124,7 @@
     padding-left: .75rem;
     color: var(--bs-secondary-color);
   }
-  .settings-world-map {
-    width: 100%;
-    aspect-ratio: 1.9;
-    border: 1px solid var(--bs-border-color);
-    border-radius: .45rem;
-    background:
-      radial-gradient(circle at 18% 48%, rgba(88,166,255,.16), transparent 18%),
-      radial-gradient(circle at 52% 42%, rgba(88,166,255,.14), transparent 21%),
-      radial-gradient(circle at 75% 55%, rgba(88,166,255,.14), transparent 18%),
-      linear-gradient(180deg, rgba(88,166,255,.08), rgba(88,166,255,.02));
-    overflow: hidden;
-  }
-  .settings-world-map svg {
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
-  .settings-map-land {
-    fill: rgba(125, 133, 144, .28);
-    stroke: rgba(125, 133, 144, .35);
-    stroke-width: .7;
-  }
-  .settings-map-base {
-    opacity: .92;
-  }
-  .settings-map-point {
-    fill: var(--bs-info);
-    opacity: .82;
-    stroke: var(--bs-body-bg);
-    stroke-width: 1.2;
-  }
-  .settings-map-point-active {
-    fill: var(--bs-warning);
-    opacity: 1;
-    stroke: var(--bs-body-color);
-    stroke-width: 1.6;
-  }
-  .settings-map-point-halo {
-    fill: var(--bs-warning);
-    opacity: .25;
-    stroke: none;
-  }
+  /* server map styles: app/templates/_server_map.html */
   .settings-readme-card {
     max-height: 32rem;
     overflow: auto;
@@ -395,40 +355,7 @@
   {% macro settings_world_map() %}
   <div class="settings-help-card">
     <h6><i class="bi bi-globe-europe-africa me-1"></i>{{ t.set_side_world_map }}</h6>
-    <div class="settings-world-map">
-      <svg viewBox="0 0 1000 520" role="img" aria-label="{{ t.set_side_world_map }}">
-        <image class="settings-map-base" href="{{ url_for('static', filename='world-map.svg') }}" x="0" y="0" width="1000" height="520"/>
-        {# non-active servers first #}
-        {% for p in settings_sidebar.map_points if not p.active %}
-          {% set x = ((p.lon + 180) / 360 * 1000) %}
-          {% set y = ((90 - p.lat) / 180 * 520) %}
-          {% set radius = 4 + ([p.uses, 18] | min) * 0.45 %}
-          <circle class="settings-map-point"
-                  cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}" r="{{ '%.1f'|format(radius) }}">
-            <title>{{ p.server }} · {{ p.country }} · {{ p.uses }} {{ t.set_side_map_uses }}</title>
-          </circle>
-        {% endfor %}
-        {# current server drawn last, with a halo, so it is never hidden by overlapping points #}
-        {% for p in settings_sidebar.map_points if p.active %}
-          {% set x = ((p.lon + 180) / 360 * 1000) %}
-          {% set y = ((90 - p.lat) / 180 * 520) %}
-          {% set radius = [4 + ([p.uses, 18] | min) * 0.45, 6.5] | max %}
-          <circle class="settings-map-point-halo"
-                  cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}" r="{{ '%.1f'|format(radius + 3) }}"/>
-          <circle class="settings-map-point-active"
-                  cx="{{ '%.1f'|format(x) }}" cy="{{ '%.1f'|format(y) }}" r="{{ '%.1f'|format(radius) }}">
-            <title>{{ p.server }} · {{ p.country }} · {{ p.uses }} {{ t.set_side_map_uses }}</title>
-          </circle>
-        {% endfor %}
-      </svg>
-    </div>
-    <div class="small text-muted mt-2">
-      <span class="badge bg-info text-dark me-1">&nbsp;</span>{{ t.set_side_map_used }}
-      <span class="badge bg-warning text-dark ms-2 me-1">&nbsp;</span>{{ t.set_side_map_current }}
-    </div>
-    {% if not settings_sidebar.map_points %}
-      <div class="text-muted mt-2">{{ t.set_side_map_empty }}</div>
-    {% endif %}
+    {{ smap.server_map(settings_sidebar.map_points, t.set_side_map_uses) }}
   </div>
   {% endmacro %}
 
@@ -3142,6 +3069,7 @@ if (document.readyState === 'loading') {
 {% endblock %}
 
 {% block scripts %}
+{{ smap.server_map_assets() }}
 {% set _bench_method = 'sidecar' if cfg.sidecar_mode == '1' else 'proxy' %}
 <script>
 // ── Settings tabs + AJAX saves ───────────────────────────────────────────
