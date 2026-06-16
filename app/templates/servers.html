@@ -1593,7 +1593,8 @@ function _catCanAdd(provider) {
 
 // Provider icon helper: bundled SVG, else server-side cached favicon route.
 // Keep in sync with PROVIDER_SVG_FILES / PROVIDER_FAVICON_DOMAINS in routes.py.
-const _STATIC_PROVIDERS = '/static/providers/';
+// Path derived from Flask's static route so it follows static_url_path.
+const _STATIC_PROVIDERS = '{{ url_for("static", filename="providers/") }}';
 const _SVG_PROVIDERS = new Set([
   'airvpn','cyberghost','expressvpn','fastestvpn',
   'mullvad','nordvpn','private internet access','protonvpn',
