@@ -2029,10 +2029,34 @@ def get_translations(lang: str) -> dict[str, str]:
     return TRANSLATIONS.get(lang, TRANSLATIONS['fr'])
 
 
+def get_lang() -> str:
+    """Resolve the active UI language.
+
+    The persisted ``ui_lang`` setting is the source of truth (it is what
+    background tasks and notifications use).  An explicit per-session choice
+    takes precedence so a user can preview the other language without changing
+    the saved preference; when the session has no explicit choice (e.g. after
+    logout or cookie expiry) we fall back to ``ui_lang`` so the UI and the
+    notifications never disagree.  French is the final default.
+    """
+    try:
+        from flask import has_request_context, session
+        if has_request_context():
+            sl = session.get('lang')
+            if sl:
+                return sl
+    except Exception:
+        pass
+    try:
+        from .database import get_setting
+        return get_setting('ui_lang', 'fr')
+    except Exception:
+        return 'fr'
+
+
 def get_t() -> dict[str, str]:
-    """Return translations for the current request's language (reads Flask session)."""
-    from flask import session
-    return get_translations(session.get('lang', 'fr'))
+    """Return translations for the current request's active language."""
+    return get_translations(get_lang())
 
 
 def flash_t(key: str, category: str = 'info', **kwargs) -> None:

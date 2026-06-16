@@ -11,7 +11,7 @@ from datetime import datetime
 from flask import Flask, session
 from markupsafe import Markup
 from .database import init_db
-from .i18n import get_translations
+from .i18n import get_translations, get_lang
 
 _cleanup_hooks_registered = False
 
@@ -231,7 +231,7 @@ def create_app():
         except (ValueError, TypeError):
             return ''
 
-        fr = session.get('lang', 'fr') == 'fr'
+        fr = get_lang() == 'fr'
         future = delta > 0
         secs = abs(int(delta))
         if secs < 60:
@@ -284,7 +284,7 @@ def create_app():
 
     @app.context_processor
     def inject_i18n():
-        lang = session.get('lang', 'fr')
+        lang = get_lang()
         return {'t': get_translations(lang), 'lang': lang}
 
     @app.context_processor
@@ -300,7 +300,7 @@ def create_app():
             _has_airvpn = False
         try:
             from .dns_path import get_dns_path
-            _dns_path = get_dns_path(app.config['GLUETUN_CONTAINER'], session.get('lang', 'fr'))
+            _dns_path = get_dns_path(app.config['GLUETUN_CONTAINER'], get_lang())
         except Exception:
             _dns_path = {
                 'ok': False, 'intermediary': {}, 'intermediary_value': '',
