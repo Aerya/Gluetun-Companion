@@ -400,7 +400,7 @@ def create_app():
             """Return an <img> for the provider icon of a server.
 
             Priority:
-            1. Bundled SVG in /static/providers/ (best quality, offline)
+            1. Bundled SVG in /assets/providers/ (best quality, offline)
             2. /provider-icon/<provider> — favicon cached server-side
                (no browser request ever leaves for a third party)
             """
