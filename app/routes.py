@@ -667,9 +667,10 @@ def dashboard():
 @login_required
 def api_dns_status():
     from .dns_path import get_dns_path
+    from .i18n import get_lang
     return jsonify(get_dns_path(
         current_app.config['GLUETUN_CONTAINER'],
-        session.get('lang', 'fr'),
+        get_lang(),
         force=True,
     ))
 
