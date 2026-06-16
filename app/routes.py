@@ -61,7 +61,7 @@ from .openvpn_configs import (
 bp = Blueprint('main', __name__)
 
 # ── Provider icons ──────────────────────────────────────────────────────────
-# Providers with a bundled SVG in /static/providers/ (best quality, offline).
+# Providers with a bundled SVG in /assets/providers/ (best quality, offline).
 PROVIDER_SVG_FILES: set[str] = {
     'airvpn', 'cyberghost', 'expressvpn', 'fastestvpn',
     'mullvad', 'nordvpn', 'private internet access', 'protonvpn',
