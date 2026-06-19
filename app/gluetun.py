@@ -1191,10 +1191,48 @@ def create_test_gluetun(
         return False, str(exc)
 
 
-def create_speed_sidecar(sidecar_image: str, token: str = '') -> tuple[bool, str | None]:
+def pull_sidecar_image(sidecar_image: str) -> bool:
+    """Best-effort pull of the sidecar image (once per benchmark cycle).
+
+    Returns True if the image is available afterwards (freshly pulled OR already
+    cached).  A failed pull is non-fatal: as long as a cached copy exists the
+    cycle can keep testing, which makes benchmarks resilient to transient
+    registry/DNS failures instead of falling back to the proxy on every server.
     """
-    Pull the latest sidecar image, then create the container in the test Gluetun
-    network namespace. Pulling every time ensures we always run the latest version.
+    try:
+        client = docker.from_env()
+        try:
+            logger.info('Pulling sidecar image: %s', sidecar_image)
+            client.images.pull(sidecar_image)
+            logger.info('Sidecar image up to date: %s', sidecar_image)
+            return True
+        except Exception as exc:
+            # Pull failed (e.g. DNS/registry hiccup) — fall back to a cached copy.
+            try:
+                client.images.get(sidecar_image)
+                logger.warning(
+                    'Sidecar image pull failed (%s) — using cached image', exc,
+                )
+                return True
+            except Exception:
+                logger.error('Sidecar image pull failed and no cached copy: %s', exc)
+                return False
+    except Exception as exc:
+        logger.error('pull_sidecar_image %s: %s', sidecar_image, exc)
+        return False
+
+
+def create_speed_sidecar(
+    sidecar_image: str, token: str = '', pull: bool = True,
+) -> tuple[bool, str | None]:
+    """
+    Create the sidecar container in the test Gluetun network namespace.
+
+    *pull* controls registry access: with ``pull=False`` the locally cached
+    image is reused (pulled only if missing).  Per-server tests pass
+    ``pull=False`` so the image is fetched once per cycle via
+    ``pull_sidecar_image`` instead of before every server — this avoids
+    hammering the registry/DNS and keeps tests resilient to transient failures.
 
     *token* is passed as SIDECAR_SECRET env var so the sidecar requires it on
     every request.  Generate with secrets.token_hex(32) in the caller.
@@ -1202,9 +1240,17 @@ def create_speed_sidecar(sidecar_image: str, token: str = '') -> tuple[bool, str
     try:
         client = docker.from_env()
 
-        logger.info('Pulling sidecar image: %s', sidecar_image)
-        client.images.pull(sidecar_image)
-        logger.info('Sidecar image up to date: %s', sidecar_image)
+        if pull:
+            logger.info('Pulling sidecar image: %s', sidecar_image)
+            client.images.pull(sidecar_image)
+            logger.info('Sidecar image up to date: %s', sidecar_image)
+        else:
+            # Reuse the cached image; pull only if it is missing locally.
+            try:
+                client.images.get(sidecar_image)
+            except docker.errors.ImageNotFound:
+                logger.info('Sidecar image not cached — pulling: %s', sidecar_image)
+                client.images.pull(sidecar_image)
 
         _remove_container(client, _SIDECAR_NAME, kill_first=True)
 
@@ -1373,16 +1419,18 @@ def run_sidecar_ping_test(
 
 
 def cleanup_test_containers(sidecar_image: str | None = None) -> None:
-    """Stop and remove the test Gluetun and sidecar containers, then delete the sidecar image."""
+    """Stop and remove the test Gluetun and sidecar containers.
+
+    The sidecar image is intentionally kept cached between server tests and
+    cycles: it is pulled once per benchmark cycle (see ``pull_sidecar_image``),
+    not per server.  Deleting and re-pulling it for every server hammered the
+    registry/DNS and made each test fail on a transient DNS hiccup.  The
+    *sidecar_image* argument is kept for backward compatibility but no longer
+    triggers image removal.
+    """
     client = docker.from_env()
     for name in [_SIDECAR_NAME, _TEST_GLUETUN_NAME]:
         _remove_container(client, name, kill_first=True)
-    if sidecar_image:
-        try:
-            client.images.remove(sidecar_image, force=True)
-            logger.info('Sidecar image removed: %s', sidecar_image)
-        except Exception as exc:
-            logger.debug('Could not remove sidecar image: %s', exc)
     logger.info('Test containers cleaned up')
 
 
