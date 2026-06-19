@@ -415,18 +415,20 @@ Les paramètres de benchmark (flux, durée, warm-up, retry…) se configurent da
 ```
 Cycle de benchmark (toutes les X heures)
   ├─ Containers "pause bench" stoppés (torrents, Usenet…)
+  ├─ Pull ghcr.io/aerya/gluetun-companion-sidecar:latest
+  │   (une seule fois par cycle, image conservée en cache ; best-effort :
+  │    repli sur le cache si le registre/DNS est momentanément indisponible)
   └─ Pour chaque serveur activé :
-       1. Pull ghcr.io/aerya/gluetun-companion-sidecar:latest
-       2. Lancement de gluetun-companion-test
+       1. Lancement de gluetun-companion-test
           (copie de votre Gluetun, configuré sur le serveur cible)
-       3. Lancement de gluetun-companion-sidecar
+       2. Lancement de gluetun-companion-sidecar
           (network_mode: container:gluetun-companion-test)
-       4. Attente connexion VPN via /health polling (timeout configurable)
-       5. Test de débit dans le tunnel VPN (moteur configurable) :
+       3. Attente connexion VPN via /health polling (timeout configurable)
+       4. Test de débit dans le tunnel VPN (moteur configurable) :
           - Dual (défaut) : Ookla + librespeed en parallèle, iperf3 en fallback
           - Ookla seul, librespeed seul, ou iperf3 seul
           → DL, UL, latence enregistrés par source
-       6. Stop + suppression des containers et de l'image sidecar
+       5. Stop + suppression des containers de test (image sidecar conservée)
        → Retry automatique si échec, timeout global par serveur
        → Auto-désactivation si N échecs consécutifs
   └─ Score pondéré (65 % cycle actuel + 35 % historique exponentiel)
@@ -447,7 +449,8 @@ Cycle de benchmark (toutes les X heures)
 - Proxy HTTP en fallback si le sidecar échoue complètement (désactivé par défaut)
 
 > ⚠ **Connexion simultanée** : le mode sidecar consomme un slot VPN supplémentaire pendant toute la durée du benchmark. Vérifiez les limites de votre fournisseur (AirVPN : 3–5 selon l'abonnement).
-> Companion enchaîne les tests sidecar un par un et attend par défaut 180 s après le nettoyage des containers (`sidecar_disconnect_wait_seconds`) pour laisser le fournisseur fermer la session VPN avant le serveur suivant.
+> Companion enchaîne les tests sidecar un par un et attend par défaut 180 s après le nettoyage des containers (`sidecar_disconnect_wait_seconds`) pour laisser le fournisseur fermer la session VPN avant le serveur suivant. **C'est le principal facteur de durée d'un cycle** : avec N serveurs, le cycle dure au moins N × ce délai. Si votre abonnement autorise plusieurs connexions simultanées (AirVPN : 3–5), réduisez-le nettement (60 s, voire moins) dans **Paramètres → Mesurer** pour raccourcir les cycles ; augmentez-le si vous voyez des erreurs « too many connections ».
+> L'image sidecar n'est tirée qu'**une fois par cycle** puis réutilisée depuis le cache : moins de charge sur le registre/DNS, et un test n'échoue plus (ni ne bascule le serveur) sur un hoquet DNS passager.
 
 ### Mode Proxy HTTP (optionnel)
 
