@@ -361,8 +361,10 @@ def _test_one_server_sidecar(
         if not ok:
             raise RuntimeError(f'Test Gluetun creation failed: {err}')
 
-        # Step 2 — attach sidecar to test Gluetun's network namespace
-        ok, err = create_speed_sidecar(sidecar_image, token=token)
+        # Step 2 — attach sidecar to test Gluetun's network namespace.
+        # Use the cached image (pulled once per cycle by pull_sidecar_image),
+        # not a per-server pull, to avoid hammering the registry/DNS.
+        ok, err = create_speed_sidecar(sidecar_image, token=token, pull=False)
         if not ok:
             raise RuntimeError(f'Speed sidecar creation failed: {err}')
 
@@ -494,6 +496,8 @@ def _test_one_server_sidecar(
             settle = max(0, int(_sgs('sidecar_disconnect_wait_seconds', '180') or '180'))
         except ValueError:
             settle = 180
+        if _stop_event.is_set():
+            settle = 0   # user asked to stop — don't idle-wait after the last test
         if settle:
             logger.info(
                 '  %s: waiting %ds after sidecar cleanup so provider sessions can close',
@@ -1474,6 +1478,14 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
         # leaves it there — only meaningful in sidecar mode, since proxy mode is
         # expected to move Gluetun on its own.
         _orig_prod_filters = get_current_filters(container) if sidecar_mode else None
+
+        # Pull the sidecar image once for the whole cycle (best-effort).  Per-server
+        # tests then reuse the cached image instead of pulling (and deleting) it for
+        # every server, which hammered the registry/DNS and made each test fail on a
+        # transient DNS hiccup (→ proxy fallback → unwanted server switch).
+        if sidecar_mode and servers:
+            from .gluetun import pull_sidecar_image
+            pull_sidecar_image(sidecar_image)
 
         for idx, row in enumerate(servers, start=1):
             if _stop_event.is_set():
