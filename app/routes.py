@@ -1742,6 +1742,21 @@ def settings():
                     set_setting(_key, _default)
             observation_enabled = bool(request.form.get('continuous_observation'))
             set_setting('continuous_observation', '1' if observation_enabled else '0')
+            # If the user just disabled a mode whose cycle is currently running,
+            # abort it now so "disabled" halts the current activity instead of
+            # only preventing future cycles.  Stopping an observation cycle also
+            # restores the original server (proxy-fallback revert at cycle end).
+            if get_setting('benchmark_running', '0') == '1':
+                _run_mode = get_setting('benchmark_mode', '')
+                _eff_auto_bm = auto_bm and not active_auto_pools
+                if ((_run_mode == 'observation' and not observation_enabled)
+                        or (_run_mode == 'benchmark' and not _eff_auto_bm)):
+                    from .scheduler import request_stop
+                    request_stop()
+                    logger.info(
+                        'Settings: %s cycle running but mode disabled — requesting stop',
+                        _run_mode,
+                    )
             # Bench pre-filters
             _types_selected = request.form.getlist('bench_include_types')
             _valid_types = {'name', 'country', 'city', 'region', 'hostname'}
