@@ -100,6 +100,49 @@ class CataloguePortForwardingTest(unittest.TestCase):
                 rows = db.execute('SELECT name FROM servers ORDER BY name').fetchall()
             self.assertEqual([r['name'] for r in rows], ['FR#61'])
 
+    def test_refresh_reads_aggregate_gluetun_servers_json(self):
+        with TemporaryDirectory() as d:
+            self._fresh_db(d)
+            payload = {
+                'version': 1,
+                'protonvpn': {
+                    'servers': [
+                        {
+                            'server_name': 'NL#1',
+                            'country': 'Netherlands',
+                            'hostname': 'nl-01.protonvpn.net',
+                            'stream': True,
+                        },
+                        {
+                            'server_name': 'NL#2',
+                            'country': 'Netherlands',
+                            'hostname': 'nl-02.protonvpn.net',
+                            'port_forward': True,
+                        },
+                    ],
+                },
+                'airvpn': {'servers': []},
+            }
+            with open(os.path.join(d, 'servers.json'), 'w', encoding='utf-8') as fh:
+                json.dump(payload, fh)
+
+            result = refresh_catalogue(d)
+
+            self.assertTrue(result['ok'])
+            self.assertEqual(result['providers']['protonvpn'], 2)
+            stream = get_catalogue_entries(
+                provider='protonvpn',
+                filter_type='country',
+                server_type='stream',
+            )
+            p2p = get_catalogue_entries(
+                provider='protonvpn',
+                filter_type='country',
+                server_type='p2p',
+            )
+            self.assertEqual([e['value'] for e in stream], ['Netherlands'])
+            self.assertEqual([e['value'] for e in p2p], ['Netherlands'])
+
 
 if __name__ == '__main__':
     unittest.main()

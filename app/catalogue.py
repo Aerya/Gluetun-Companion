@@ -75,6 +75,44 @@ def server_types_from_raw(server: dict) -> str:
         ]
     )
 
+
+def _normalize_server_list(raw_servers: list[dict]) -> list[dict]:
+    normalized_by_name: dict[str, dict] = {}
+    normalized_extra: list[dict] = []
+    for s in raw_servers:
+        # hostname: some providers use 'hostname', others 'hostnames' (list)
+        hostnames = s.get('hostnames') or []
+        hostname = s.get('hostname') or (hostnames[0] if hostnames else '')
+
+        entry = {
+            'name':         s.get('name') or s.get('server_name') or '',
+            'country':      s.get('country') or '',
+            'country_code': (s.get('country_code') or s.get('countryCode') or '').lower(),
+            'region':       s.get('region') or '',
+            'city':         s.get('city') or '',
+            'hostname':     hostname or '',
+            'port_forward': bool(s.get('port_forward')),
+            'server_types':  server_types_from_raw(s),
+        }
+        # Skip fully empty entries
+        if any(v for k, v in entry.items() if k != 'port_forward'):
+            if entry['name']:
+                existing = normalized_by_name.get(entry['name'])
+                if existing:
+                    existing['port_forward'] = bool(existing.get('port_forward') or entry['port_forward'])
+                    existing['server_types'] = normalize_server_types(
+                        (existing.get('server_types') or '').split(',')
+                        + (entry.get('server_types') or '').split(',')
+                    )
+                    if not existing.get('hostname') and entry.get('hostname'):
+                        existing['hostname'] = entry['hostname']
+                else:
+                    normalized_by_name[entry['name']] = entry
+            else:
+                normalized_extra.append(entry)
+
+    return list(normalized_by_name.values()) + normalized_extra
+
 # Gluetun VPN_SERVICE_PROVIDER value → JSON filename mapping
 # (most match directly, a few differ)
 _PROVIDER_ALIASES: dict[str, str] = {
@@ -122,50 +160,31 @@ def read_catalogue_dir(servers_dir: str) -> dict[str, list[dict]]:
             logger.warning('catalogue: failed to read %s: %s', filepath, exc)
             continue
 
-        raw_servers = data.get('servers', [])
-        if not raw_servers:
+        provider_chunks: list[tuple[str, list[dict]]] = []
+        raw_servers = data.get('servers', []) if isinstance(data, dict) else []
+        if raw_servers:
+            provider_chunks.append((provider, raw_servers))
+        elif filename == 'servers.json' and isinstance(data, dict):
+            for provider_key, provider_data in data.items():
+                if provider_key == 'version' or provider_key in _EXCLUDED_PROVIDERS:
+                    continue
+                servers = provider_data.get('servers', []) if isinstance(provider_data, dict) else []
+                if servers:
+                    provider_chunks.append((provider_key.lower(), servers))
+
+        if not provider_chunks:
             logger.debug('catalogue: %s has no servers', filename)
             continue
 
-        normalized_by_name: dict[str, dict] = {}
-        normalized_extra: list[dict] = []
-        for s in raw_servers:
-            # hostname: some providers use 'hostname', others 'hostnames' (list)
-            hostnames = s.get('hostnames') or []
-            hostname = s.get('hostname') or (hostnames[0] if hostnames else '')
-
-            entry = {
-                'name':         s.get('name') or s.get('server_name') or '',
-                'country':      s.get('country') or '',
-                'country_code': (s.get('country_code') or s.get('countryCode') or '').lower(),
-                'region':       s.get('region') or '',
-                'city':         s.get('city') or '',
-                'hostname':     hostname or '',
-                'port_forward': bool(s.get('port_forward')),
-                'server_types':  server_types_from_raw(s),
-            }
-            # Skip fully empty entries
-            if any(v for k, v in entry.items() if k != 'port_forward'):
-                if entry['name']:
-                    existing = normalized_by_name.get(entry['name'])
-                    if existing:
-                        existing['port_forward'] = bool(existing.get('port_forward') or entry['port_forward'])
-                        existing['server_types'] = normalize_server_types(
-                            (existing.get('server_types') or '').split(',')
-                            + (entry.get('server_types') or '').split(',')
-                        )
-                        if not existing.get('hostname') and entry.get('hostname'):
-                            existing['hostname'] = entry['hostname']
-                    else:
-                        normalized_by_name[entry['name']] = entry
-                else:
-                    normalized_extra.append(entry)
-
-        normalized = list(normalized_by_name.values()) + normalized_extra
-
-        if normalized:
-            result[provider] = normalized
-            logger.info('catalogue: read %d servers from %s', len(normalized), filename)
+        for provider_key, servers in provider_chunks:
+            if provider_key in _EXCLUDED_PROVIDERS:
+                logger.info('catalogue: skipping excluded provider %s', provider_key)
+                continue
+            normalized = _normalize_server_list(servers)
+            if normalized:
+                result[provider_key] = normalized
+                logger.info('catalogue: read %d servers from %s/%s',
+                            len(normalized), filename, provider_key)
 
     return result
 
