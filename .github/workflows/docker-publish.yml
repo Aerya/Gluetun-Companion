@@ -6,10 +6,10 @@ on:
     tags: ['v*']
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAMESPACE: aerya
 
 jobs:
   companion:
@@ -21,6 +21,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set image namespace
+        run: echo "IMAGE_NAMESPACE=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
@@ -67,6 +70,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set image namespace
+        run: echo "IMAGE_NAMESPACE=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'

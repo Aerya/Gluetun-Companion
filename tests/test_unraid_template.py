@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -9,6 +10,7 @@ from unittest.mock import patch
 from app.unraid import find_template, update_template_env, write_template_env
 
 FIXTURE = Path(__file__).parent / 'fixtures' / 'my-gluetun.xml'
+UNRAID_TEMPLATE = Path(__file__).resolve().parents[1] / 'templates' / 'unraid' / 'gluetun-companion.xml'
 
 
 def _val(text, name):
@@ -94,6 +96,22 @@ class WriteTemplateEnvTest(unittest.TestCase):
             changed = write_template_env(path, [('VPN_SERVICE_PROVIDER', 'protonvpn')])
             self.assertEqual(changed, [])
             self.assertEqual([f for f in os.listdir(d) if '.bak-' in f], [])
+
+
+class DockerManTemplateFileTest(unittest.TestCase):
+    def test_upstream_template_is_parseable_and_not_fork_specific(self):
+        text = UNRAID_TEMPLATE.read_text(encoding='utf-8')
+        root = ET.fromstring(text)
+        self.assertEqual(root.findtext('Repository'), 'ghcr.io/aerya/gluetun-companion:latest')
+        self.assertNotIn('Hugs11', text)
+        self.assertNotIn('fork-test', text)
+        targets = {
+            node.attrib.get('Target')
+            for node in root.findall('Config')
+        }
+        self.assertIn('/gluetun', targets)
+        self.assertNotIn('PUID', targets)
+        self.assertNotIn('PGID', targets)
 
 
 if __name__ == '__main__':

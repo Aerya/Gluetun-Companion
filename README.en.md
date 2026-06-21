@@ -221,6 +221,8 @@ docker compose up -d
 
 Open **http://localhost:8765** — first login: enter the credentials you want (account created automatically).
 
+> **Unraid / DockerMan:** a temporary XML template is available in [`templates/unraid`](templates/unraid/README.md) for manual install or *Private Apps*, pending a possible Community Applications publication.
+
 > **Companion in the same stack as Gluetun?**
 > Remove `extra_hosts` and use the service name: `GLUETUN_HOST: gluetun`.
 > On a switch, the companion only targets the Gluetun service (`docker compose up -d <service>`) — it never restarts itself.
@@ -348,7 +350,7 @@ The **VPN Status** card displays the intermediary and observed operators. In tab
 **Prerequisites** — the catalogue sidecar only needs outbound HTTPS access (Docker bridge network, enabled by default). **No `docker-compose.yml` changes required.**
 
 ### Docker container management
-- **Gluetun network containers (auto-managed)** — all containers using `network_mode: service:gluetun` are detected and recreated automatically after each switch, regardless of their state: containers still functional **or already stuck in a dead namespace** (left over from a previously failed switch). Containers in a **different Compose stack** from Gluetun are also handled if their directory is accessible from Companion or if their `com.docker.compose` labels are present. Orphan detection is limited to containers referencing a **known former Gluetun** (ID history kept in the database) — Companion never touches dependents of another VPN or an unrelated stack
+- **Gluetun network containers (auto-managed)** — running containers using `network_mode: service:gluetun` are detected and recreated automatically after each switch, including those already stuck in a dead namespace (left over from a previously failed switch). Intentionally stopped containers stay stopped. Containers in a **different Compose stack** from Gluetun are also handled if their directory is accessible from Companion or if their `com.docker.compose` labels are present. Orphan detection is limited to containers referencing a **known former Gluetun** (ID history kept in the database) — Companion never touches dependents of another VPN or an unrelated stack
 - **Containers to restart after switch** — only for containers routing through Gluetun's HTTP/SOCKS5 proxy; ordered list (drag & drop)
 - **Pause during benchmark** — list of containers (torrent, Usenet…) stopped before the benchmark starts and automatically restarted when it ends, even on error
 - **Automatic Docker image updates** *(option)* — at switch time, Companion can update images before restarting containers: Gluetun itself, auto-managed network containers, post-switch containers and benchmark-paused containers; togglable per container from Settings
