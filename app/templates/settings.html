@@ -1207,6 +1207,20 @@
           </div>
         </div>
 
+        {# ── Port forwarding (NAT-PMP) — shown only for Gluetun native-PF providers (ProtonVPN, PIA…) #}
+        <div class="mb-3" id="wg_pf_block" style="display:none">
+          <div class="form-check form-switch mb-1">
+            <input class="form-check-input" type="checkbox" id="wg_port_forwarding" name="wg_port_forwarding"
+                   onchange="document.getElementById('wg_pf_p2p_row').style.display = this.checked ? '' : 'none';">
+            <label class="form-check-label small" for="wg_port_forwarding">{{ t.set_wg_pf_label }}</label>
+          </div>
+          <div class="form-check form-switch mb-1 ms-4" id="wg_pf_p2p_row" style="display:none">
+            <input class="form-check-input" type="checkbox" id="wg_port_forward_only" name="wg_port_forward_only" checked>
+            <label class="form-check-label small" for="wg_port_forward_only">{{ t.set_wg_pf_p2p_label }}</label>
+          </div>
+          <div class="form-text" style="font-size:.72rem">{{ t.set_wg_pf_hint }}</div>
+        </div>
+
         <div class="mb-3" id="wg_priority_row" style="display:none">
           <label class="form-label small" for="wg_rotation_priority">{{ t.set_wg_rotation_priority }}</label>
           <input type="number" class="form-control form-control-sm" name="wg_rotation_priority"
@@ -3600,6 +3614,12 @@ function _wgShowFields(providerKey, vpnType, existingVars) {
   hintEl.style.display = 'none';
   helpEl.style.display = 'none';
 
+  // Port forwarding block: Gluetun native-PF providers only.
+  // Keep in sync with wg_providers.NATIVE_PORT_FORWARDING_PROVIDERS.
+  const PF_PROVIDERS = ['protonvpn', 'private internet access', 'perfect privacy', 'privatevpn'];
+  const pfBlock = document.getElementById('wg_pf_block');
+  if (pfBlock) pfBlock.style.display = PF_PROVIDERS.includes(providerKey) ? '' : 'none';
+
   if (!providerKey || !_wgProviders[providerKey]) {
     if (sidecarEl) sidecarEl.style.display = '';
     return;
@@ -3674,6 +3694,14 @@ function _wgEditProfile(profile) {
   document.getElementById('wg_priority_row').style.display =
     profile.rotation_allowed ? '' : 'none';
 
+  // Port forwarding flags (block visibility already set by _wgProviderChanged)
+  const pfCb  = document.getElementById('wg_port_forwarding');
+  const pfoCb = document.getElementById('wg_port_forward_only');
+  if (pfCb)  pfCb.checked  = !!profile.port_forwarding;
+  if (pfoCb) pfoCb.checked = profile.port_forward_only !== false;
+  const pfP2pRow = document.getElementById('wg_pf_p2p_row');
+  if (pfP2pRow) pfP2pRow.style.display = profile.port_forwarding ? '' : 'none';
+
   document.getElementById('wg-form-title').innerHTML =
     '<i class="bi bi-pencil me-1"></i>{{ t.set_wg_edit_title }}';
   document.getElementById('wg_cancel_btn').style.display = '';
@@ -3708,6 +3736,15 @@ function _wgCancelEdit() {
   document.getElementById('wg_vpn_type_options').innerHTML = '';
   const sidecarBlock = document.getElementById('wg_sidecar_block');
   if (sidecarBlock) sidecarBlock.style.display = '';
+  // Reset port forwarding
+  const pfBlock = document.getElementById('wg_pf_block');
+  if (pfBlock) pfBlock.style.display = 'none';
+  const pfCb  = document.getElementById('wg_port_forwarding');
+  const pfoCb = document.getElementById('wg_port_forward_only');
+  if (pfCb)  pfCb.checked  = false;
+  if (pfoCb) pfoCb.checked = true;
+  const pfP2pRow = document.getElementById('wg_pf_p2p_row');
+  if (pfP2pRow) pfP2pRow.style.display = 'none';
   // Reset sidecar fields
   const pkBadge  = document.getElementById('wg_sidecar_pk_profile_badge');
   const pskBadge = document.getElementById('wg_sidecar_psk_profile_badge');
