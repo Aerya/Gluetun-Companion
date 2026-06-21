@@ -1459,6 +1459,8 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                 'extra_env':        _extra,
                 'sidecar_override': _sidecar_ovr,
                 'sidecar_reuse_profile': _sidecar_reuse,
+                'port_forwarding':  _p.get('port_forwarding', False),
+                'port_forward_only': _p.get('port_forward_only', True),
             }
         if _distinct_profile_ids:
             logger.info(

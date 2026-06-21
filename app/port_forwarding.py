@@ -195,23 +195,66 @@ def _extract_ports(payload) -> list[int]:
     return ports
 
 
-def read_gluetun_native_ports(api_url: str | None = None, timeout: float = 5.0) -> dict:
-    """Read Gluetun native port forwarding status from the Control Server."""
+def _fetch_portforward(base: str, path: str, headers: dict, timeout: float):
+    """GET one Gluetun port-forward endpoint. Returns (status, ports, payload, error)."""
+    resp = requests.get(base + path, headers=headers, timeout=timeout)
+    if resp.status_code >= 400:
+        return resp.status_code, [], None, f'Gluetun {path} HTTP {resp.status_code}'
+    try:
+        payload = resp.json()
+    except ValueError:
+        payload = resp.text
+    return resp.status_code, _extract_ports(payload), payload, ''
+
+
+def _diagnose_no_native_port(container_name: str, base_error: str) -> str:
+    """Turn a generic 'no port' result into a specific, actionable message."""
+    if not container_name:
+        return base_error or 'Aucun port retourné.'
+    try:
+        env = _container_env(container_name)
+    except Exception:
+        return base_error or 'Aucun port retourné.'
+    if (env.get('VPN_PORT_FORWARDING') or '').strip().lower() != 'on':
+        return 'Port forwarding désactivé côté Gluetun (VPN_PORT_FORWARDING absent ou ≠ on).'
+    provider = (env.get('VPN_SERVICE_PROVIDER') or '').strip().lower()
+    from .wg_providers import supports_native_port_forwarding
+    if provider and not supports_native_port_forwarding(provider):
+        return f'Le fournisseur « {provider} » ne fait pas de port forwarding natif Gluetun.'
+    return 'Aucun port encore attribué (serveur P2P / port forwarding requis, ou connexion en cours).'
+
+
+def read_gluetun_native_ports(
+    api_url: str | None = None, timeout: float = 5.0, container_name: str = '',
+) -> dict:
+    """Read Gluetun native port forwarding status from the Control Server.
+
+    Primary source is ``GET /v1/portforward``.  On recent Gluetun that route is
+    authenticated; when it answers 401/403/404 we fall back to the historical
+    ``GET /v1/openvpn/portforwarded`` (usually open), which returns the same
+    forwarded port for WireGuard and OpenVPN alike.  When no port is available
+    and *container_name* is given, the error is enriched with a diagnostic
+    (port forwarding off, provider without native PF, …).
+    """
     base = (api_url or get_setting('port_forward_gluetun_api_url', '') or '').strip().rstrip('/')
     if not base:
         return {'ok': False, 'ports': [], 'error': 'URL Control Server Gluetun absente.'}
     try:
         api_key = (get_setting('port_forward_gluetun_api_key', '') or '').strip()
         headers = {'X-API-Key': api_key} if api_key else {}
-        resp = requests.get(base + '/v1/portforward', headers=headers, timeout=timeout)
-        if resp.status_code >= 400:
-            return {'ok': False, 'ports': [], 'error': f'Gluetun /v1/portforward HTTP {resp.status_code}'}
-        try:
-            payload = resp.json()
-        except ValueError:
-            payload = resp.text
-        ports = _extract_ports(payload)
-        return {'ok': bool(ports), 'ports': ports, 'raw': payload, 'error': '' if ports else 'Aucun port retourné.'}
+        status, ports, payload, error = _fetch_portforward(base, '/v1/portforward', headers, timeout)
+        source = 'v1/portforward'
+        if not ports and status in (401, 403, 404):
+            _ls, l_ports, l_payload, l_error = _fetch_portforward(
+                base, '/v1/openvpn/portforwarded', headers, timeout)
+            if l_ports:
+                ports, payload, error, source = l_ports, l_payload, '', 'legacy'
+            elif not error:
+                error = l_error
+        if not ports:
+            return {'ok': False, 'ports': [],
+                    'error': _diagnose_no_native_port(container_name, error)}
+        return {'ok': True, 'ports': ports, 'raw': payload, 'error': '', 'source': source}
     except Exception as exc:
         return {'ok': False, 'ports': [], 'error': str(exc)}
 
@@ -651,7 +694,7 @@ def inspect_port_forward(
 def inspect_port_forwards(gluetun_container: str) -> list[dict]:
     forwards = list_port_forwards()
     native_status = (
-        read_gluetun_native_ports()
+        read_gluetun_native_ports(container_name=gluetun_container)
         if any((pf.get('mode') or 'manual') == 'native' for pf in forwards)
         else None
     )

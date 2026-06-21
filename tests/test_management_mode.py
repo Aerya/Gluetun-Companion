@@ -50,6 +50,37 @@ class ManagedEnvPairsTest(unittest.TestCase):
         d = dict(_managed_env_pairs('France', 'country', profile))
         self.assertEqual(d['SERVER_COUNTRIES'], '')
 
+    @patch('app.gluetun.get_setting', side_effect=_dns_setting)
+    def test_proton_port_forwarding_enables_pf_and_p2p(self, _gs):
+        profile = {'compose_provider': 'protonvpn', 'vpn_type': 'wireguard',
+                   'vars': {'WIREGUARD_PRIVATE_KEY': 'k'}, 'port_forwarding': True}
+        d = dict(_managed_env_pairs('France', 'country', profile))
+        self.assertEqual(d['VPN_PORT_FORWARDING'], 'on')
+        self.assertEqual(d['PORT_FORWARD_ONLY'], 'on')  # P2P targeting on by default
+
+    @patch('app.gluetun.get_setting', side_effect=_dns_setting)
+    def test_proton_pf_without_p2p_targeting(self, _gs):
+        profile = {'compose_provider': 'protonvpn', 'vpn_type': 'wireguard',
+                   'vars': {}, 'port_forwarding': True, 'port_forward_only': False}
+        d = dict(_managed_env_pairs('France', 'country', profile))
+        self.assertEqual(d['VPN_PORT_FORWARDING'], 'on')
+        self.assertNotIn('PORT_FORWARD_ONLY', d)
+
+    @patch('app.gluetun.get_setting', side_effect=_dns_setting)
+    def test_proton_without_pf_leaves_base_untouched(self, _gs):
+        profile = {'compose_provider': 'protonvpn', 'vpn_type': 'wireguard', 'vars': {}}
+        d = dict(_managed_env_pairs('France', 'country', profile))
+        self.assertNotIn('VPN_PORT_FORWARDING', d)
+        self.assertNotIn('PORT_FORWARD_ONLY', d)
+
+    @patch('app.gluetun.get_setting', side_effect=_dns_setting)
+    def test_non_pf_provider_neutralizes_port_forwarding(self, _gs):
+        profile = {'compose_provider': 'airvpn', 'vpn_type': 'wireguard',
+                   'vars': {'WIREGUARD_PRIVATE_KEY': 'k'}}
+        d = dict(_managed_env_pairs('Dalim', 'name', profile))
+        self.assertEqual(d['VPN_PORT_FORWARDING'], 'off')
+        self.assertNotIn('PORT_FORWARD_ONLY', d)
+
 
 class ManagementModeTest(unittest.TestCase):
     def _mode_with_labels(self, labels):
