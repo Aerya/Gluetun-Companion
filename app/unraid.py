@@ -300,7 +300,7 @@ def recreate_kwargs_from_inspect(
         'sysctls': dict(host.get('Sysctls') or {}),
         'devices': _devices_from_inspect(host.get('Devices')),
         'volumes': list(host.get('Binds') or []),
-        'restart_policy': rp if rp.get('Name') else None,
+        'restart_policy': rp if rp.get('Name') and rp.get('Name') != 'no' else None,
         'privileged': bool(host.get('Privileged')),
         'dns': list(host.get('Dns') or []),
         'detach': True,
@@ -310,3 +310,54 @@ def recreate_kwargs_from_inspect(
     if not str(kwargs['network_mode']).startswith('container:'):
         kwargs['ports'] = _ports_from_bindings(host.get('PortBindings'))
     return kwargs
+
+
+def sdk_recreate(
+    container_name: str,
+    env_overrides: 'dict[str, str] | None' = None,
+    network_mode: 'str | None' = None,
+    *,
+    stop_timeout: int = 30,
+):
+    """Recreate a container from its live inspect via the Docker SDK.
+
+    Stop and remove *container_name*, then re-create it with an identical
+    configuration except for the environment (merged with *env_overrides*, minus
+    image-baked defaults) and, optionally, *network_mode*.  On failure after
+    removal, attempt a best-effort rollback to the original configuration and
+    re-raise.  Returns the new container object.
+    """
+    import docker
+
+    client = docker.from_env()
+    c = client.containers.get(container_name)
+    attrs = c.attrs
+    try:
+        image_env = (
+            client.images.get(attrs.get('Config', {}).get('Image', ''))
+            .attrs.get('Config', {}).get('Env') or []
+        )
+    except Exception as exc:
+        logger.warning('sdk_recreate: cannot read image env for %s: %s', container_name, exc)
+        image_env = []
+
+    new_kwargs = recreate_kwargs_from_inspect(attrs, env_overrides, network_mode, image_env)
+    original_kwargs = recreate_kwargs_from_inspect(attrs, None, None, image_env)
+
+    logger.info('sdk_recreate: stopping + removing %s', container_name)
+    c.stop(timeout=stop_timeout)
+    c.remove()
+    try:
+        new = client.containers.run(**new_kwargs)
+        logger.info('sdk_recreate: %s recreated (id=%s)', container_name, new.short_id)
+        return new
+    except Exception as exc:
+        logger.error(
+            'sdk_recreate: recreate of %s failed (%s) — rolling back to original config',
+            container_name, exc,
+        )
+        try:
+            client.containers.run(**original_kwargs)
+        except Exception as rb:
+            logger.critical('sdk_recreate: ROLLBACK of %s FAILED: %s', container_name, rb)
+        raise

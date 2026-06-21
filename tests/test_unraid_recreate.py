@@ -1,6 +1,7 @@
 import unittest
+from unittest.mock import MagicMock, patch
 
-from app.unraid import recreate_kwargs_from_inspect
+from app.unraid import recreate_kwargs_from_inspect, sdk_recreate
 
 
 def _gluetun_attrs():
@@ -104,6 +105,41 @@ class RecreateKwargsTest(unittest.TestCase):
         attrs['HostConfig']['RestartPolicy'] = {'Name': '', 'MaximumRetryCount': 0}
         kw = recreate_kwargs_from_inspect(attrs)
         self.assertIsNone(kw['restart_policy'])
+
+
+class SdkRecreateTest(unittest.TestCase):
+    @patch('docker.from_env')
+    def test_stops_removes_and_runs_with_merged_env(self, from_env):
+        client = MagicMock()
+        cont = MagicMock()
+        cont.attrs = _gluetun_attrs()
+        client.containers.get.return_value = cont
+        client.images.get.return_value.attrs = {'Config': {'Env': []}}
+        from_env.return_value = client
+
+        sdk_recreate('gluetun', env_overrides={'SERVER_COUNTRIES': 'Germany'})
+
+        cont.stop.assert_called_once()
+        cont.remove.assert_called_once()
+        client.containers.run.assert_called_once()
+        kw = client.containers.run.call_args.kwargs
+        self.assertEqual(kw['name'], 'gluetun')
+        self.assertIn('SERVER_COUNTRIES=Germany', kw['environment'])
+
+    @patch('docker.from_env')
+    def test_rolls_back_on_run_failure(self, from_env):
+        client = MagicMock()
+        cont = MagicMock()
+        cont.attrs = _gluetun_attrs()
+        client.containers.get.return_value = cont
+        client.images.get.return_value.attrs = {'Config': {'Env': []}}
+        client.containers.run.side_effect = [RuntimeError('boom'), MagicMock()]
+        from_env.return_value = client
+
+        with self.assertRaises(RuntimeError):
+            sdk_recreate('gluetun', env_overrides={'X': '1'})
+        # original run + rollback run
+        self.assertEqual(client.containers.run.call_count, 2)
 
 
 if __name__ == '__main__':
