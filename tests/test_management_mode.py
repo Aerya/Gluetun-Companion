@@ -7,6 +7,7 @@ from app.gluetun import (
     CONTROL_BACKEND_UNRAID,
     _managed_env_pairs,
     _management_mode,
+    switch_server,
 )
 
 
@@ -89,6 +90,36 @@ class ManagementModeTest(unittest.TestCase):
         with patch('app.gluetun.docker.from_env', return_value=client), \
                 patch.dict(os.environ, {'CONTROL_BACKEND': 'unraid'}):
             self.assertEqual(_management_mode('gluetun'), CONTROL_BACKEND_UNRAID)
+
+
+class SwitchServerUnraidDispatchTest(unittest.TestCase):
+    @patch('app.gluetun.get_setting', side_effect=_dns_setting)
+    @patch('app.gluetun._management_mode', return_value=CONTROL_BACKEND_UNRAID)
+    @patch('app.gluetun.mark_companion_restart')
+    @patch('app.gluetun._unraid_apply_env_and_recreate')
+    def test_unraid_mode_uses_unraid_backend(self, apply_recreate, _mark, _mode, _gs):
+        ok, err = switch_server(
+            'France', 'country', 'gluetun', '/compose',
+            wg_profile={'compose_provider': 'protonvpn', 'vpn_type': 'wireguard',
+                        'vars': {'WIREGUARD_PRIVATE_KEY': 'k'}},
+        )
+        self.assertTrue(ok)
+        self.assertIsNone(err)
+        apply_recreate.assert_called_once()
+        container, pairs, _secret = apply_recreate.call_args.args
+        self.assertEqual(container, 'gluetun')
+        d = dict(pairs)
+        self.assertEqual(d['VPN_SERVICE_PROVIDER'], 'protonvpn')
+        self.assertEqual(d['SERVER_COUNTRIES'], 'France')
+
+    @patch('app.gluetun.get_setting', side_effect=_dns_setting)
+    @patch('app.gluetun._management_mode', return_value=CONTROL_BACKEND_UNRAID)
+    @patch('app.gluetun.mark_companion_restart')
+    @patch('app.gluetun._unraid_apply_env_and_recreate', side_effect=RuntimeError('boom'))
+    def test_unraid_failure_returns_error(self, _apply, _mark, _mode, _gs):
+        ok, err = switch_server('France', 'country', 'gluetun', '/compose')
+        self.assertFalse(ok)
+        self.assertIn('boom', err)
 
 
 if __name__ == '__main__':

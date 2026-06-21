@@ -309,6 +309,46 @@ def _managed_env_pairs(
     return pairs
 
 
+def _profile_secret_keys(wg_profile: 'dict | None') -> set[str]:
+    """Return the credential env keys that must be masked for *wg_profile*."""
+    if not wg_profile:
+        return set()
+    from .wg_providers import get_secret_field_keys
+    provider = (
+        wg_profile.get('compose_provider')
+        or (wg_profile.get('vars') or {}).get('VPN_SERVICE_PROVIDER', '')
+        or (wg_profile.get('extra_env') or {}).get('VPN_SERVICE_PROVIDER', '')
+    )
+    return get_secret_field_keys(provider, wg_profile.get('vpn_type', '') or '')
+
+
+def _unraid_apply_env_and_recreate(
+    container_name: str,
+    pairs: list[tuple[str, str]],
+    secret_keys: set[str],
+) -> None:
+    """Unraid control backend: persist managed env into the container's Unraid
+    template (so it survives Unraid auto-updates), then recreate the live
+    container from its inspect via the Docker SDK.
+    """
+    from . import unraid
+    template = unraid.find_template(container_name)
+    if template:
+        try:
+            unraid.write_template_env(template, pairs, secret_keys)
+        except Exception as exc:
+            logger.warning(
+                'Unraid template write-back failed for %s: %s — recreating live anyway',
+                container_name, exc,
+            )
+    else:
+        logger.warning(
+            'Unraid template for %s not found — recreating live only '
+            '(changes will not survive an Unraid container update)', container_name,
+        )
+    unraid.sdk_recreate(container_name, env_overrides=dict(pairs))
+
+
 def switch_server(
     filter_value: str,
     filter_type: str,
@@ -340,6 +380,20 @@ def switch_server(
 
     Returns (success, error_message).
     """
+    # Unraid (Docker Manager) hosts have no Compose project: persist the managed
+    # env into the container's template and recreate it via the Docker SDK.
+    if _management_mode(container_name) == CONTROL_BACKEND_UNRAID:
+        pairs = _managed_env_pairs(filter_value, filter_type, wg_profile)
+        mark_companion_restart()
+        try:
+            _unraid_apply_env_and_recreate(
+                container_name, pairs, _profile_secret_keys(wg_profile)
+            )
+            return True, None
+        except Exception as exc:
+            logger.error('Unraid server switch failed for %s: %s', container_name, exc)
+            return False, str(exc)
+
     # Resolve project and service name BEFORE writing the override so that the
     # YAML key matches the actual Compose service name (which may differ from
     # the container_name when an explicit container_name: is set in the compose).
@@ -414,6 +468,27 @@ def apply_dns_filtering(
     compose_project: str = '',
 ) -> tuple[bool, str | None]:
     """Persist DNS filtering values in Companion's override and recreate Gluetun."""
+    if _management_mode(container_name) == CONTROL_BACKEND_UNRAID:
+        pairs = [
+            ('BLOCK_MALICIOUS', 'on' if block_malicious else 'off'),
+            ('DNS_UNBLOCK_HOSTNAMES', unblock_hostnames),
+        ]
+        try:
+            deps = list_network_dependents_for_recreate(container_name)
+        except Exception:
+            deps = []
+        mark_companion_restart()
+        try:
+            _unraid_apply_env_and_recreate(container_name, pairs, set())
+        except Exception as exc:
+            logger.error('Unraid DNS update failed for %s: %s', container_name, exc)
+            return False, str(exc)
+        if deps:
+            restart_network_dependents(
+                container_name, compose_dir, compose_project, explicit_list=deps
+            )
+        return True, None
+
     service = _detect_compose_service(container_name)
     project = compose_project or _detect_compose_project(container_name)
     override_path = os.path.join(compose_dir, 'docker-compose.override.yml')
@@ -693,7 +768,11 @@ def restart_network_dependents(
                 logger.info('  pull %s: %s%s', img, 'updated' if updated else 'up to date', '' if ok else ' (failed)')
                 if updated:
                     updated_imgs.append(img)
-            _compose_recreate(name, compose_dir, compose_project)
+            if _management_mode(name) == CONTROL_BACKEND_UNRAID:
+                from . import unraid
+                unraid.sdk_recreate(name, network_mode=f'container:{container_name}')
+            else:
+                _compose_recreate(name, compose_dir, compose_project)
             restarted.append(name)
         except Exception as exc:
             logger.warning('Failed to recreate %s: %s', name, exc)
@@ -741,6 +820,7 @@ def start_stopped_containers(
     compose_dir: str = '',
     compose_project: str = '',
     pull_set: set[str] | None = None,
+    gluetun_name: str = '',
 ) -> list[str]:
     """
     Start containers that were previously stopped (but not removed) via
@@ -797,7 +877,14 @@ def start_stopped_containers(
                         # the container's own label (avoids using host-side paths
                         # from com.docker.compose.project.working_dir that are
                         # inaccessible from inside the Companion container).
-                        if compose_dir and (not compose_project or container_project == compose_project):
+                        if gluetun_name and _management_mode(name) == CONTROL_BACKEND_UNRAID:
+                            from . import unraid
+                            logger.info(
+                                '%s is Unraid-managed — recreating to rejoin %s namespace',
+                                name, gluetun_name,
+                            )
+                            unraid.sdk_recreate(name, network_mode=f'container:{gluetun_name}')
+                        elif compose_dir and (not compose_project or container_project == compose_project):
                             effective_project = compose_project or container_project
                             logger.info(
                                 '%s — compose recreate with dir=%r project=%r',
