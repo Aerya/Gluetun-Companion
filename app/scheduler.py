@@ -1122,22 +1122,28 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
     set_setting('benchmark_log_lines', '[]')
     _progress_log('Observation continue demarree' if observation else 'Benchmark demarre')
 
-    # ── Catalogue refresh via sidecar (always) ───────────────────────────────
-    # The sidecar downloads server lists from the public Gluetun GitHub repo.
-    # No volume mounting required.
+    # ── Catalogue refresh ───────────────────────────────────────────────────
+    # Prefer mounted Gluetun JSON files because they are the exact catalogue
+    # loaded by the user's Gluetun container; fall back to the public sidecar
+    # refresh for installs without that volume.
     try:
-        from .catalogue import refresh_catalogue_from_sidecar
+        from .catalogue import refresh_catalogue_from_local, refresh_catalogue_from_sidecar
         _sidecar_img       = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
         _sidecar_host      = app.config['GLUETUN_HOST']
         _cat_auto_add      = get_setting('catalogue_auto_add', '0') == '1'
         _notif_cat_changes = get_setting('notif_catalogue_changes', '0') == '1'
-        _cat = refresh_catalogue_from_sidecar(
-            sidecar_image=_sidecar_img,
-            sidecar_host=_sidecar_host,
-            auto_add=_cat_auto_add,
-        )
+        _cat = refresh_catalogue_from_local()
+        if not _cat.get('ok'):
+            _cat = refresh_catalogue_from_sidecar(
+                sidecar_image=_sidecar_img,
+                sidecar_host=_sidecar_host,
+                auto_add=_cat_auto_add,
+            )
         if _cat.get('ok'):
-            logger.info('catalogue: refreshed via sidecar — %d servers', _cat.get('total', 0))
+            logger.info(
+                'catalogue: refreshed via %s — %d servers',
+                _cat.get('source', 'sidecar'), _cat.get('total', 0),
+            )
             _cat_diff       = _cat.get('diff', {})
             _cat_auto_added = _cat.get('auto_added', [])
             if _notif_cat_changes and (_cat_diff or _cat_auto_added):

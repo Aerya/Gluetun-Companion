@@ -189,6 +189,41 @@ def read_catalogue_dir(servers_dir: str) -> dict[str, list[dict]]:
     return result
 
 
+def _has_catalogue_json(directory: str) -> bool:
+    if not directory or not os.path.isdir(directory):
+        return False
+    for filepath in glob_mod.glob(os.path.join(directory, '*.json')):
+        if os.path.basename(filepath) != 'manifest.json':
+            return True
+    return False
+
+
+def local_catalogue_candidates(servers_dir: str | None = None) -> list[str]:
+    """
+    Return local Gluetun catalogue paths in preferred order.
+
+    Gluetun writes the aggregate catalogue as /gluetun/servers.json while the
+    per-provider files live under /gluetun/servers/. The aggregate file is what
+    Gluetun actually loaded and can differ from the public GitHub provider list,
+    so prefer the parent directory when the default /gluetun/servers path is used.
+    """
+    if servers_dir is None:
+        servers_dir = get_setting('catalogue_servers_dir', '/gluetun/servers')
+
+    raw = (servers_dir or '').rstrip(os.sep) or servers_dir or ''
+    candidates: list[str] = []
+    parent = os.path.dirname(raw)
+    if os.path.basename(raw) == 'servers' and os.path.isfile(os.path.join(parent, 'servers.json')):
+        candidates.append(parent)
+    candidates.append(raw)
+
+    out: list[str] = []
+    for candidate in candidates:
+        if candidate and candidate not in out and _has_catalogue_json(candidate):
+            out.append(candidate)
+    return out
+
+
 def refresh_catalogue(servers_dir: str | None = None) -> dict:
     """
     Read Gluetun provider JSON files and update the gluetun_catalogue table.
@@ -240,6 +275,37 @@ def refresh_catalogue(servers_dir: str | None = None) -> dict:
         ', '.join(f'{p}:{n}' for p, n in provider_counts.items()),
     )
     return {'ok': True, 'total': total, 'providers': provider_counts}
+
+
+def refresh_catalogue_from_local(servers_dir: str | None = None) -> dict:
+    """
+    Refresh from mounted Gluetun JSON files, preferring /gluetun/servers.json
+    when available. Returns ok=False without side effects if no local source is
+    mounted, so callers can fall back to the catalogue sidecar.
+    """
+    candidates = local_catalogue_candidates(servers_dir)
+    if not candidates:
+        configured = servers_dir or get_setting('catalogue_servers_dir', '/gluetun/servers')
+        return {
+            'ok': False,
+            'error': f'No local Gluetun catalogue JSON files found near {configured}',
+            'source': 'local',
+        }
+
+    last_error = ''
+    for candidate in candidates:
+        result = refresh_catalogue(candidate)
+        if result.get('ok'):
+            result['source'] = 'local'
+            result['servers_dir'] = candidate
+            return result
+        last_error = result.get('error', '')
+
+    return {
+        'ok': False,
+        'error': last_error or 'No local Gluetun catalogue JSON files found',
+        'source': 'local',
+    }
 
 
 def detect_active_provider(container_name: str) -> str:
@@ -686,6 +752,7 @@ def refresh_catalogue_from_sidecar(
             'providers':  provider_counts,
             'diff':       diff,
             'auto_added': auto_added_names,
+            'source':     'sidecar',
         }
 
     except Exception as exc:

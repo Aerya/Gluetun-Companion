@@ -3086,10 +3086,16 @@ def api_gluetun_network_containers():
 @bp.route('/api/catalogue/refresh', methods=['POST'])
 @login_required
 def api_catalogue_refresh():
-    """Force-refresh the Gluetun server catalogue via a catalogue sidecar.
-    The sidecar downloads server lists from the public Gluetun GitHub repo —
-    no volume mounting required."""
-    from .catalogue import refresh_catalogue_from_sidecar
+    """Force-refresh the Gluetun server catalogue.
+
+    Prefer the mounted Gluetun catalogue when available; fall back to the
+    catalogue sidecar for installs without a Gluetun volume.
+    """
+    from .catalogue import refresh_catalogue_from_local, refresh_catalogue_from_sidecar
+    result = refresh_catalogue_from_local()
+    if result.get('ok'):
+        return jsonify(result), 200
+
     sidecar_image = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
     sidecar_host  = current_app.config['GLUETUN_HOST']
     result = refresh_catalogue_from_sidecar(

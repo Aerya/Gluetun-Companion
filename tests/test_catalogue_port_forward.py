@@ -4,7 +4,13 @@ import unittest
 from tempfile import TemporaryDirectory
 
 from app import database
-from app.catalogue import get_catalogue_entries, import_to_servers, refresh_catalogue
+from app.catalogue import (
+    get_catalogue_entries,
+    import_to_servers,
+    local_catalogue_candidates,
+    refresh_catalogue,
+    refresh_catalogue_from_local,
+)
 
 
 _RESTORE_DB_DIR = TemporaryDirectory()
@@ -142,6 +148,53 @@ class CataloguePortForwardingTest(unittest.TestCase):
             )
             self.assertEqual([e['value'] for e in stream], ['Netherlands'])
             self.assertEqual([e['value'] for e in p2p], ['Netherlands'])
+
+    def test_local_refresh_prefers_sibling_aggregate_servers_json(self):
+        with TemporaryDirectory() as d:
+            self._fresh_db(d)
+            servers_dir = os.path.join(d, 'servers')
+            os.mkdir(servers_dir)
+            aggregate = {
+                'version': 1,
+                'protonvpn': {
+                    'servers': [
+                        {
+                            'server_name': 'FR#109',
+                            'country': 'France',
+                            'hostname': 'node-fr-17.protonvpn.net',
+                            'port_forward': True,
+                        },
+                    ],
+                },
+            }
+            provider = {
+                'servers': [
+                    {
+                        'server_name': 'FR#440',
+                        'country': 'France',
+                        'hostname': 'node-fr-33.protonvpn.net',
+                        'port_forward': True,
+                    },
+                ],
+            }
+            with open(os.path.join(d, 'servers.json'), 'w', encoding='utf-8') as fh:
+                json.dump(aggregate, fh)
+            with open(os.path.join(servers_dir, 'protonvpn.json'), 'w', encoding='utf-8') as fh:
+                json.dump(provider, fh)
+
+            self.assertEqual(local_catalogue_candidates(servers_dir), [d, servers_dir])
+            result = refresh_catalogue_from_local(servers_dir)
+
+            self.assertTrue(result['ok'])
+            self.assertEqual(result['source'], 'local')
+            self.assertEqual(result['servers_dir'], d)
+            self.assertEqual(result['providers']['protonvpn'], 1)
+            p2p = get_catalogue_entries(
+                provider='protonvpn',
+                filter_type='name',
+                server_type='p2p',
+            )
+            self.assertEqual([e['value'] for e in p2p], ['FR#109'])
 
 
 if __name__ == '__main__':
