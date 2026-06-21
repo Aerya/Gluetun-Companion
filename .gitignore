@@ -2,6 +2,9 @@
 claude_*.txt
 rapport_*.txt
 CHANTIER.md
+plan.md
+CLAUDE.md
+AGENTS.md
 
 # ── Python ──────────────────────────────────────────────────────────────────
 __pycache__/

@@ -144,6 +144,51 @@ def _detect_compose_service(container_name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Control-backend detection
+# ---------------------------------------------------------------------------
+# Companion drives Gluetun differently depending on how the container is
+# managed.  Compose stacks are recreated with ``docker compose up -d``.  Unraid's
+# Docker Manager (``net.unraid.docker.managed=dockerman``) has no compose
+# project, so the container is recreated from its Unraid template instead.
+# Detection is automatic per container; the ``CONTROL_BACKEND`` environment
+# variable (``auto`` | ``compose`` | ``unraid``) forces a backend when needed.
+
+CONTROL_BACKEND_COMPOSE = 'compose'
+CONTROL_BACKEND_UNRAID = 'unraid'
+
+
+def _control_backend_override() -> str:
+    """Return a forced control backend from the environment, or '' for auto."""
+    value = (os.environ.get('CONTROL_BACKEND', '') or '').strip().lower()
+    return value if value in (CONTROL_BACKEND_COMPOSE, CONTROL_BACKEND_UNRAID) else ''
+
+
+def _management_mode(container_name: str) -> str:
+    """Return the control backend for *container_name*: 'compose' or 'unraid'.
+
+    Resolution order (first match wins):
+      1. ``CONTROL_BACKEND`` override (``compose``/``unraid``), when set;
+      2. a ``com.docker.compose.project`` label        → ``compose``;
+      3. ``net.unraid.docker.managed=dockerman`` label → ``unraid``;
+      4. default                                        → ``compose``
+         (preserves the historical behaviour for plain ``docker run`` setups).
+    """
+    override = _control_backend_override()
+    if override:
+        return override
+    try:
+        labels = docker.from_env().containers.get(container_name).labels or {}
+    except Exception as exc:
+        logger.warning('_management_mode(%s): %s — defaulting to compose', container_name, exc)
+        return CONTROL_BACKEND_COMPOSE
+    if labels.get('com.docker.compose.project'):
+        return CONTROL_BACKEND_COMPOSE
+    if (labels.get('net.unraid.docker.managed') or '').strip().lower() == 'dockerman':
+        return CONTROL_BACKEND_UNRAID
+    return CONTROL_BACKEND_COMPOSE
+
+
+# ---------------------------------------------------------------------------
 # Docker / container helpers
 # ---------------------------------------------------------------------------
 
@@ -172,6 +217,96 @@ def format_filters(filters: dict[str, str]) -> str:
     for value in filters.values():
         labels.extend(part.strip() for part in str(value).split(',') if part.strip())
     return ' · '.join(labels) if labels else '—'
+
+
+def _managed_env_pairs(
+    filter_value: str,
+    filter_type: str,
+    wg_profile: 'dict | None',
+) -> list[tuple[str, str]]:
+    """Compute the ordered (key, value) env vars Companion manages for a switch.
+
+    Single source of truth shared by every control backend (Compose override,
+    Unraid template recreate) so they all write exactly the same values and can
+    never diverge.  Values are RAW — each backend escapes them for its own
+    target format (YAML double-quoted, XML text, …).
+
+    Order (kept stable so the Compose override output is unchanged):
+      1. every SERVER_* filter var — the target one set to *filter_value*,
+         all others blanked so base-compose values cannot conflict;
+      2. DNS filtering (BLOCK_MALICIOUS, DNS_UNBLOCK_HOSTNAMES);
+      3. when *wg_profile* is given: VPN_SERVICE_PROVIDER, VPN_TYPE, the profile
+         credential vars, then every other known credential key blanked (so a
+         previous provider's secret cannot leak into the new session).
+    """
+    env_var = FILTER_VARS.get(filter_type, 'SERVER_NAMES')
+
+    compose_provider = ''
+    vpn_type = 'wireguard'
+    profile_vars: dict[str, str] = {}
+    if wg_profile:
+        compose_provider = wg_profile.get('compose_provider', '')
+        if wg_profile.get('vars') is not None:
+            profile_vars = dict(wg_profile.get('vars') or {})
+        else:
+            profile_vars = dict(wg_profile.get('extra_env') or {})
+        compose_provider = compose_provider or profile_vars.get('VPN_SERVICE_PROVIDER', '')
+        vpn_type = (
+            wg_profile.get('vpn_type')
+            or profile_vars.get('VPN_TYPE')
+            or 'wireguard'
+        )
+
+        # These values are generated explicitly below. Profiles imported from
+        # older code paths can still contain them, which would otherwise emit
+        # duplicate keys.
+        managed_vars = {
+            'VPN_SERVICE_PROVIDER',
+            'VPN_TYPE',
+            *FILTER_VARS.values(),
+        }
+        profile_vars = {
+            key: value for key, value in profile_vars.items()
+            if key not in managed_vars
+        }
+
+    uses_server_filter = compose_provider != 'custom'
+
+    pairs: list[tuple[str, str]] = []
+
+    # Set the target filter var, blank-out all others.
+    for label, var in FILTER_VARS.items():
+        raw = filter_value if uses_server_filter and var == env_var else ''
+        pairs.append((var, raw))
+
+    # DNS filtering is managed by Companion as well, so the user's choice
+    # survives every regenerated override and provider/server switch.
+    try:
+        dns_block_malicious = get_setting('dns_block_malicious', '1')
+        dns_unblock_hostnames = get_setting('dns_unblock_hostnames', '')
+    except Exception:
+        # Keep standalone uses and early-startup recovery aligned with
+        # Gluetun's own secure default if the settings DB is unavailable.
+        dns_block_malicious = '1'
+        dns_unblock_hostnames = ''
+    pairs.append(('BLOCK_MALICIOUS', 'on' if dns_block_malicious == '1' else 'off'))
+    pairs.append(('DNS_UNBLOCK_HOSTNAMES', dns_unblock_hostnames))
+
+    # VPN profile vars (provider + type + credentials).
+    if wg_profile:
+        if compose_provider:
+            pairs.append(('VPN_SERVICE_PROVIDER', compose_provider))
+        pairs.append(('VPN_TYPE', vpn_type))
+        for k, v in profile_vars.items():
+            pairs.append((k, v))
+        # Blank every known credential var the profile does not set, so values
+        # inherited from the base compose file (another provider/type) cannot
+        # leak into the new session (e.g. AirVPN preshared key on Mullvad).
+        from .wg_providers import all_credential_keys
+        for k in sorted(all_credential_keys() - set(profile_vars)):
+            pairs.append((k, ''))
+
+    return pairs
 
 
 def switch_server(
@@ -205,8 +340,6 @@ def switch_server(
 
     Returns (success, error_message).
     """
-    env_var = FILTER_VARS.get(filter_type, 'SERVER_NAMES')
-
     # Resolve project and service name BEFORE writing the override so that the
     # YAML key matches the actual Compose service name (which may differ from
     # the container_name when an explicit container_name: is set in the compose).
@@ -217,75 +350,12 @@ def switch_server(
         """Sanitise a value against YAML injection."""
         return raw.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '').replace('\r', '')
 
-    compose_provider = ''
-    vpn_type = 'wireguard'
-    profile_vars: dict[str, str] = {}
-    if wg_profile:
-        compose_provider = wg_profile.get('compose_provider', '')
-        if wg_profile.get('vars') is not None:
-            profile_vars = dict(wg_profile.get('vars') or {})
-        else:
-            profile_vars = dict(wg_profile.get('extra_env') or {})
-        compose_provider = compose_provider or profile_vars.get('VPN_SERVICE_PROVIDER', '')
-        vpn_type = (
-            wg_profile.get('vpn_type')
-            or profile_vars.get('VPN_TYPE')
-            or 'wireguard'
-        )
-
-        # These values are generated explicitly below. Profiles imported from
-        # older code paths can still contain them, which would otherwise emit
-        # duplicate YAML mapping keys and make Docker Compose reject the file.
-        managed_vars = {
-            'VPN_SERVICE_PROVIDER',
-            'VPN_TYPE',
-            *FILTER_VARS.values(),
-        }
-        profile_vars = {
-            key: value for key, value in profile_vars.items()
-            if key not in managed_vars
-        }
-
-    uses_server_filter = compose_provider != 'custom'
-
-    # Build environment block: set target filter var, blank-out all others
-    env_lines = ''
-    for label, var in FILTER_VARS.items():
-        raw = filter_value if uses_server_filter and var == env_var else ''
-        env_lines += f'      {var}: "{_safe(raw)}"\n'
-
-    # DNS filtering is managed by Companion as well, so the user's choice
-    # survives every regenerated override and provider/server switch.
-    try:
-        dns_block_malicious = get_setting('dns_block_malicious', '1')
-        dns_unblock_hostnames = get_setting('dns_unblock_hostnames', '')
-    except Exception:
-        # Keep standalone uses and early-startup recovery aligned with
-        # Gluetun's own secure default if the settings DB is unavailable.
-        dns_block_malicious = '1'
-        dns_unblock_hostnames = ''
-    env_lines += (
-        '      BLOCK_MALICIOUS: "'
-        + ('on' if dns_block_malicious == '1' else 'off')
-        + '"\n'
+    # Managed env vars (server filters + DNS + VPN profile) come from the single
+    # shared builder so every control backend writes exactly the same values.
+    env_lines = ''.join(
+        f'      {key}: "{_safe(value)}"\n'
+        for key, value in _managed_env_pairs(filter_value, filter_type, wg_profile)
     )
-    env_lines += (
-        f'      DNS_UNBLOCK_HOSTNAMES: "{_safe(dns_unblock_hostnames)}"\n'
-    )
-
-    # VPN profile vars (provider + type + credentials)
-    if wg_profile:
-        if compose_provider:
-            env_lines += f'      VPN_SERVICE_PROVIDER: "{_safe(compose_provider)}"\n'
-        env_lines += f'      VPN_TYPE: "{_safe(vpn_type)}"\n'
-        for k, v in profile_vars.items():
-            env_lines += f'      {k}: "{_safe(v)}"\n'
-        # Blank every known credential var the profile does not set, so values
-        # inherited from the base compose file (another provider/type) cannot
-        # leak into the new session (e.g. AirVPN preshared key on Mullvad).
-        from .wg_providers import all_credential_keys
-        for k in sorted(all_credential_keys() - set(profile_vars)):
-            env_lines += f'      {k}: ""\n'
 
     # Use the Compose service name (not the container name) as the YAML key so
     # that the override is applied to the correct service even when service name
