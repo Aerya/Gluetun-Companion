@@ -989,7 +989,7 @@ def _known_gluetun_ids() -> set[str]:
 
 def list_network_dependents(container_name: str) -> list[str]:
     """
-    Return the sorted names of all containers that use
+    Return the sorted names of running containers that use
     ``network_mode: service:<container_name>`` (i.e. share Gluetun's namespace).
     Read-only — does not restart anything.
     """
@@ -1005,6 +1005,8 @@ def list_network_dependents(container_name: str) -> list[str]:
         name_target = f'container:{container_name}'
         id_target   = f'container:{gluetun_id}' if gluetun_id else None
         for c in client.containers.list(all=True):
+            if not (c.attrs.get('State') or {}).get('Running'):
+                continue
             mode = c.attrs['HostConfig'].get('NetworkMode', '')
             if mode == name_target or (id_target and mode == id_target):
                 result.append(c.name)
@@ -1018,9 +1020,9 @@ def list_network_dependents_for_recreate(container_name: str) -> list[str]:
     Extended version of ``list_network_dependents`` for use as a pre-switch
     capture.  Returns the union of:
 
-    * Containers that currently reference ``container_name`` by name or ID
+    * Running containers that currently reference ``container_name`` by name or ID
       (the normal case — Gluetun hasn't been recreated yet).
-    * Containers whose NetworkMode references a **dead** container ID
+    * Running containers whose NetworkMode references a **dead** container ID
       (orphaned from a previous Gluetun recreate that didn't fix dependents).
 
     The second set handles the scenario where a previous switch failed to
@@ -1080,6 +1082,8 @@ def list_orphaned_network_dependents() -> list[str]:
         legacy_pass = get_setting('orphan_legacy_adoption_done', '0') != '1'
 
         for c in all_containers:
+            if not (c.attrs.get('State') or {}).get('Running'):
+                continue
             mode = c.attrs['HostConfig'].get('NetworkMode', '')
             if not mode.startswith('container:'):
                 continue
