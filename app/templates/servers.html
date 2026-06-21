@@ -499,6 +499,7 @@
               <a href="#" class="text-decoration-none"
                  onclick="openServerDrawer({{ s.name | tojson }}, {{ s.id }}, {{ 1 if s.enabled else 0 }}); return false;"
                  title="{{ t.drawer_open_hint }}"><code>{{ s.name }}</code></a>
+              {{ server_type_badges(s.name) | safe }}
               {% if is_active %}
               <span class="badge bg-success ms-1" style="font-size:.7rem">{{ t.srv_active_badge }}</span>
               {% endif %}
@@ -849,6 +850,15 @@
           <select class="form-select form-select-sm" style="max-width:190px"
                   id="cat-country-select" onchange="filterCatalogueTable()">
             <option value="">{{ t.cat_filter_country_all }}</option>
+          </select>
+          <select class="form-select form-select-sm" style="max-width:175px"
+                  id="cat-server-type-select" onchange="loadCatalogue()">
+            <option value="">{{ t.srv_catalogue_type_all }}</option>
+            <option value="p2p">P2P</option>
+            <option value="stream">Streaming</option>
+            <option value="secure_core">Secure Core</option>
+            <option value="tor">Tor</option>
+            <option value="free">Free</option>
           </select>
           <input type="text" class="form-control form-control-sm" style="max-width:220px"
                  id="cat-search" placeholder="{{ t.srv_catalogue_search }}"
@@ -1581,6 +1591,7 @@ const _catT = {
   selected:     {{ t.srv_catalogue_selected | tojson }},
   bulkAdded:    {{ t.srv_catalogue_bulk_added | tojson }},
   noAccount:    {{ t.srv_catalogue_no_account | tojson }},
+  p2pBadge:     {{ t.srv_catalogue_p2p_badge | tojson }},
 };
 
 // Providers the user has configured (vpn_profiles + active Gluetun provider).
@@ -1686,6 +1697,7 @@ function _catSelectProvider(el, e) {
 function loadCatalogue() {
   const provider    = document.getElementById('cat-provider-select').value;
   const filterType  = document.getElementById('cat-filter-select').value;
+  const serverType  = document.getElementById('cat-server-type-select')?.value || '';
 
   document.getElementById('cat-loading').classList.remove('d-none');
   document.getElementById('cat-error').classList.add('d-none');
@@ -1694,6 +1706,7 @@ function loadCatalogue() {
 
   const params = new URLSearchParams({ filter_type: filterType });
   if (provider) params.set('provider', provider);
+  if (serverType) params.set('server_type', serverType);
 
   fetch('{{ url_for("main.api_catalogue_servers") }}?' + params)
     .then(r => r.ok ? r.json() : Promise.reject())
@@ -1747,9 +1760,14 @@ function _renderCatalogueTable(entries) {
                 onchange="_catUpdateBulkBar()"></td>`
         : '<td></td>';   // no checkbox for locked providers
 
+    const typeLabels = {p2p:'P2P', stream:'Streaming', secure_core:'Secure Core', tor:'Tor', free:'Free'};
+    const pfBadge = (e.server_types || '').split(',').filter(Boolean)
+      .map(t => `<span class="badge text-bg-info ms-2" style="font-size:.65rem">${_esc(typeLabels[t] || t)}</span>`)
+      .join('');
+
     tr.innerHTML = `
       ${checkCell}
-      <td class="fw-semibold">${_esc(e.value)}</td>
+      <td class="fw-semibold">${_esc(e.value)}${pfBadge}</td>
       <td><small class="text-muted">${flag} ${_esc(e.country || '')}</small></td>
       <td><small class="text-muted">${_providerIcon(e.provider, 14)}${_esc(e.provider || '')}</small></td>
       <td class="text-end">

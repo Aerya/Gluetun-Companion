@@ -49,7 +49,7 @@ from .torrent_trackers import (
     tracker_summary,
 )
 from .port_forwarding import (
-    apply_after_provider_change, delete_port_forward, get_gluetun_provider,
+    apply_current_provider_port_forwards, delete_port_forward, get_gluetun_provider,
     inspect_port_forwards, read_gluetun_native_ports, save_port_forward,
     sync_qbit_listen_port,
 )
@@ -1181,6 +1181,7 @@ def manual_switch(server_id):
                 'vars':             _mp_vars,
                 'port_forwarding':  _mp.get('port_forwarding', False),
                 'port_forward_only': _mp.get('port_forward_only', True),
+                'server_types':      _mp.get('server_types', []),
             }
     to_provider = (
         (_manual_wg_profile or {}).get('compose_provider')
@@ -1232,13 +1233,13 @@ def manual_switch(server_id):
                     container, compose_dir, project,
                     explicit_list=pre_switch_deps,
                 )
-                pf_result = apply_after_provider_change(
-                    from_provider, to_provider, reason='manual_switch',
+                pf_result = apply_current_provider_port_forwards(
+                    container, reason='manual_switch',
                 )
-                if pf_result.get('provider_changed') and not pf_result.get('skipped_reason'):
+                if not pf_result.get('skipped_reason'):
                     logger.info(
-                        'Manual switch port forwards: provider %s -> %s, applied %s/%s',
-                        from_provider or '?', to_provider or '?',
+                        'Manual switch port forwards: provider %s, applied %s/%s',
+                        pf_result.get('provider') or to_provider or from_provider or '?',
                         pf_result.get('applied', 0), pf_result.get('rules', 0),
                     )
                 if vpn_ok:
@@ -1881,6 +1882,7 @@ def settings():
             set_setting('catalogue_import_mode',          request.form.get('catalogue_import_mode', 'active'))
             set_setting('catalogue_import_provider',      request.form.get('catalogue_import_provider', '').strip())
             set_setting('catalogue_bench_on_import',      '1' if request.form.get('catalogue_bench_on_import') else '0')
+            set_setting('catalogue_server_type',         request.form.get('catalogue_server_type', '').strip())
             set_setting('catalogue_import_filter_type',   request.form.get('catalogue_import_filter_type', 'all'))
             set_setting('catalogue_auto_add',             '1' if request.form.get('catalogue_auto_add') else '0')
             flash_t('flash_catalogue_saved', 'success')
@@ -2021,6 +2023,11 @@ def settings():
             _rotation = bool(request.form.get('wg_rotation_allowed'))
             _pf       = bool(request.form.get('wg_port_forwarding'))
             _pf_only  = bool(request.form.get('wg_port_forward_only'))
+            _server_types = request.form.getlist('wg_server_types')
+            if _provider != 'protonvpn':
+                _server_types = []
+            if _provider == 'protonvpn' and _pf and _pf_only and 'p2p' not in _server_types:
+                _server_types.append('p2p')
             try:
                 _priority = int(request.form.get('wg_rotation_priority', '0') or '0')
             except ValueError:
@@ -2072,6 +2079,7 @@ def settings():
                         rotation_priority=_priority,
                         port_forwarding=_pf,
                         port_forward_only=_pf_only,
+                        server_types=_server_types,
                         sidecar_private_key=_sc_pk,
                         sidecar_addresses=_sc_addr_val,
                         sidecar_preshared_key=_sc_psk,
@@ -2095,6 +2103,7 @@ def settings():
                         rotation_priority=_priority,
                         port_forwarding=_pf,
                         port_forward_only=_pf_only,
+                        server_types=_server_types,
                         sidecar_private_key=_sc_pk  or '',
                         sidecar_addresses=_sc_addr_val or '',
                         sidecar_preshared_key=_sc_psk or '',
@@ -2249,6 +2258,7 @@ def settings():
         'catalogue_import_mode':          get_setting('catalogue_import_mode', 'active'),
         'catalogue_import_provider':      get_setting('catalogue_import_provider', ''),
         'catalogue_bench_on_import':      get_setting('catalogue_bench_on_import', '0'),
+        'catalogue_server_type':          get_setting('catalogue_server_type', ''),
         'catalogue_import_filter_type':   get_setting('catalogue_import_filter_type', 'all'),
         'catalogue_auto_add':             get_setting('catalogue_auto_add', '0'),
         'catalogue_last_refresh':         get_setting('catalogue_last_refresh', ''),
@@ -3143,12 +3153,20 @@ def api_catalogue_providers():
 def api_catalogue_servers():
     """
     Return catalogue entries for a filter type.
-    Query params: provider (optional), filter_type (default: name)
+    Query params: provider (optional), filter_type (default: name),
+    port_forward_only (optional bool)
     """
     from .catalogue import get_catalogue_entries
     provider    = request.args.get('provider', '').strip() or None
     filter_type = request.args.get('filter_type', 'name')
-    entries     = get_catalogue_entries(provider=provider, filter_type=filter_type)
+    pf_only     = (request.args.get('port_forward_only', '') or '').lower() in ('1', 'true', 'yes', 'on')
+    server_type = request.args.get('server_type', '').strip()
+    entries     = get_catalogue_entries(
+        provider=provider,
+        filter_type=filter_type,
+        port_forward_only=pf_only,
+        server_type=server_type,
+    )
     return jsonify({'entries': entries, 'filter_type': filter_type})
 
 
@@ -3195,6 +3213,8 @@ def api_catalogue_import():
     mode        = data.get('mode', 'active')
     provider    = data.get('provider', '')
     filter_type = data.get('filter_type', 'name')
+    pf_only     = bool(data.get('port_forward_only'))
+    server_type = data.get('server_type', '')
     container   = current_app.config['GLUETUN_CONTAINER']
 
     result = import_to_servers(
@@ -3202,6 +3222,8 @@ def api_catalogue_import():
         provider=provider,
         filter_type=filter_type,
         container_name=container,
+        port_forward_only=pf_only,
+        server_type=server_type,
     )
 
     if result.get('ok') and data.get('bench_on_import'):

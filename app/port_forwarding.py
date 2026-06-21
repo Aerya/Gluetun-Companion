@@ -664,6 +664,18 @@ def apply_after_provider_change(old_provider: str, new_provider: str, *, reason:
     return result
 
 
+def apply_current_provider_port_forwards(container: str, *, reason: str) -> dict:
+    """Apply enabled port-forward rules for the provider currently running in Gluetun."""
+    if get_setting('port_forward_enabled', '0') != '1':
+        return {'ok': True, 'skipped_reason': 'disabled'}
+    if get_setting('port_forward_auto_sync', '0') != '1':
+        return {'ok': True, 'skipped_reason': 'manual_only'}
+    provider = get_gluetun_provider(container)
+    if not provider:
+        return {'ok': False, 'skipped_reason': 'missing_provider'}
+    return apply_provider_port_forwards(provider, reason=reason)
+
+
 def inspect_port_forward(
     pf: dict,
     gluetun_container: str,

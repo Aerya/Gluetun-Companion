@@ -479,17 +479,16 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
             pool_id, wait_secs, len(restarted), ', '.join(restarted) or 'none',
         )
 
-    # ── Port forwards: follow a provider change across the rotation ─────────
+    # ── Port forwards: re-apply the current provider after every switch ──────
     try:
-        from .port_forwarding import apply_after_provider_change
-        new_provider = _pf_provider(container)
-        pf_result = apply_after_provider_change(
-            old_provider, new_provider, reason='pool_rotation',
+        from .port_forwarding import apply_current_provider_port_forwards
+        pf_result = apply_current_provider_port_forwards(
+            container, reason='pool_rotation',
         )
-        if pf_result.get('provider_changed') and not pf_result.get('skipped_reason'):
+        if not pf_result.get('skipped_reason'):
             logger.info(
-                'Pool rotation [%d]: port forwards %s -> %s: applied %s/%s, ok=%s',
-                pool_id, old_provider or '?', new_provider or '?',
+                'Pool rotation [%d]: port forwards for provider %s: applied %s/%s, ok=%s',
+                pool_id, pf_result.get('provider') or old_provider or '?',
                 pf_result.get('applied', 0), pf_result.get('rules', 0), pf_result.get('ok'),
             )
     except Exception as _pf_exc:

@@ -36,6 +36,45 @@ logger = logging.getLogger(__name__)
 # Providers excluded from catalogue auto-import (empty = all allowed)
 _EXCLUDED_PROVIDERS: set[str] = set()
 
+SERVER_TYPE_FIELDS: dict[str, str] = {
+    'p2p':         'port_forward',
+    'stream':      'stream',
+    'secure_core': 'secure_core',
+    'tor':         'tor',
+    'free':        'free',
+}
+
+
+def normalize_server_types(value) -> str:
+    if isinstance(value, str):
+        raw = value.replace(';', ',').split(',')
+    elif isinstance(value, (list, tuple, set)):
+        raw = list(value)
+    else:
+        raw = []
+    aliases = {
+        'streaming': 'stream',
+        'secure-core': 'secure_core',
+        'secure core': 'secure_core',
+        'port_forward': 'p2p',
+        'port-forward': 'p2p',
+        'port forwarding': 'p2p',
+    }
+    out: list[str] = []
+    for item in raw:
+        key = aliases.get(str(item or '').strip().lower(), str(item or '').strip().lower())
+        if key in SERVER_TYPE_FIELDS and key not in out:
+            out.append(key)
+    return ','.join(out)
+
+
+def server_types_from_raw(server: dict) -> str:
+    return normalize_server_types(
+        [key for key, field in SERVER_TYPE_FIELDS.items()
+        if bool(server.get(field))
+        ]
+    )
+
 # Gluetun VPN_SERVICE_PROVIDER value → JSON filename mapping
 # (most match directly, a few differ)
 _PROVIDER_ALIASES: dict[str, str] = {
@@ -55,7 +94,8 @@ def read_catalogue_dir(servers_dir: str) -> dict[str, list[dict]]:
     Read all provider JSON files from the Gluetun servers directory.
     Returns {provider: [normalized_server_dict, ...]}
 
-    Each server dict has keys: name, country, country_code, region, city, hostname.
+    Each server dict has keys: name, country, country_code, region, city,
+    hostname, port_forward, server_types.
     """
     result: dict[str, list[dict]] = {}
 
@@ -87,7 +127,8 @@ def read_catalogue_dir(servers_dir: str) -> dict[str, list[dict]]:
             logger.debug('catalogue: %s has no servers', filename)
             continue
 
-        normalized: list[dict] = []
+        normalized_by_name: dict[str, dict] = {}
+        normalized_extra: list[dict] = []
         for s in raw_servers:
             # hostname: some providers use 'hostname', others 'hostnames' (list)
             hostnames = s.get('hostnames') or []
@@ -100,10 +141,27 @@ def read_catalogue_dir(servers_dir: str) -> dict[str, list[dict]]:
                 'region':       s.get('region') or '',
                 'city':         s.get('city') or '',
                 'hostname':     hostname or '',
+                'port_forward': bool(s.get('port_forward')),
+                'server_types':  server_types_from_raw(s),
             }
             # Skip fully empty entries
-            if any(entry.values()):
-                normalized.append(entry)
+            if any(v for k, v in entry.items() if k != 'port_forward'):
+                if entry['name']:
+                    existing = normalized_by_name.get(entry['name'])
+                    if existing:
+                        existing['port_forward'] = bool(existing.get('port_forward') or entry['port_forward'])
+                        existing['server_types'] = normalize_server_types(
+                            (existing.get('server_types') or '').split(',')
+                            + (entry.get('server_types') or '').split(',')
+                        )
+                        if not existing.get('hostname') and entry.get('hostname'):
+                            existing['hostname'] = entry['hostname']
+                    else:
+                        normalized_by_name[entry['name']] = entry
+                else:
+                    normalized_extra.append(entry)
+
+        normalized = list(normalized_by_name.values()) + normalized_extra
 
         if normalized:
             result[provider] = normalized
@@ -137,8 +195,9 @@ def refresh_catalogue(servers_dir: str | None = None) -> dict:
             for s in servers:
                 db.execute(
                     '''INSERT INTO gluetun_catalogue
-                        (provider, name, country, country_code, region, city, hostname, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                        (provider, name, country, country_code, region, city, hostname,
+                         port_forward, server_types, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                     (
                         provider,
                         s['name'],
@@ -147,6 +206,8 @@ def refresh_catalogue(servers_dir: str | None = None) -> dict:
                         s['region'],
                         s['city'],
                         s['hostname'],
+                        int(bool(s.get('port_forward'))),
+                        normalize_server_types(s.get('server_types', '')),
                         datetime.utcnow().isoformat(),
                     ),
                 )
@@ -189,6 +250,8 @@ def get_providers() -> list[str]:
 def get_catalogue_entries(
     provider: str | None = None,
     filter_type: str = 'name',
+    port_forward_only: bool = False,
+    server_type: str = '',
 ) -> list[dict]:
     """
     Return unique filter values from the catalogue for the given filter type.
@@ -206,23 +269,38 @@ def get_catalogue_entries(
     col = col_map.get(filter_type, 'name')
 
     with get_db() as db:
+        where = [f"{col} != ''"]
+        params: list = []
+        server_type = normalize_server_types([server_type])
         if provider:
-            rows = db.execute(
-                f'''SELECT DISTINCT {col} AS value, country, country_code, provider
-                    FROM gluetun_catalogue
-                    WHERE provider=? AND {col} != ''
-                    ORDER BY {col}''',
-                (provider,),
-            ).fetchall()
-        else:
-            rows = db.execute(
-                f'''SELECT DISTINCT {col} AS value, country, country_code, provider
-                    FROM gluetun_catalogue
-                    WHERE {col} != ''
-                    ORDER BY {col}''',
-            ).fetchall()
+            where.append('provider=?')
+            params.append(provider)
+        if port_forward_only:
+            server_type = server_type or 'p2p'
+        if server_type:
+            where.append("instr(',' || server_types || ',', ',' || ? || ',') > 0")
+            params.append(server_type)
+        where_sql = ' AND '.join(where)
+        rows = db.execute(
+            f'''SELECT {col} AS value,
+                       MAX(country) AS country,
+                       MAX(country_code) AS country_code,
+                       provider,
+                       MAX(port_forward) AS port_forward,
+                       GROUP_CONCAT(DISTINCT server_types) AS server_types
+                FROM gluetun_catalogue
+                WHERE {where_sql}
+                GROUP BY provider, {col}
+                ORDER BY {col}''',
+            params,
+        ).fetchall()
 
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        item = dict(r)
+        item['server_types'] = normalize_server_types(item.get('server_types', ''))
+        result.append(item)
+    return result
 
 
 _ALL_FILTER_TYPES = ['name', 'country', 'city', 'region', 'hostname']
@@ -233,6 +311,8 @@ def _import_one_filter_type(
     provider: str,
     filter_type: str,
     container_name: str,
+    port_forward_only: bool = False,
+    server_type: str = '',
 ) -> dict:
     """
     Core import logic for a single filter type.
@@ -246,6 +326,9 @@ def _import_one_filter_type(
         'hostname': 'hostname',
     }
     col = col_map.get(filter_type, 'name')
+    server_type = normalize_server_types([server_type])
+    if port_forward_only:
+        server_type = server_type or 'p2p'
 
     with get_db() as db:
         if mode == 'active':
@@ -255,21 +338,28 @@ def _import_one_filter_type(
                     'ok': False,
                     'error': 'Could not detect active VPN provider from Gluetun container',
                 }
-            rows = db.execute(
-                f'SELECT DISTINCT {col} FROM gluetun_catalogue WHERE provider=? AND {col} != ""',
-                (active,),
-            ).fetchall()
+            sql = f'SELECT DISTINCT {col} FROM gluetun_catalogue WHERE provider=? AND {col} != ""'
+            params = [active]
+            if server_type:
+                sql += " AND instr(',' || server_types || ',', ',' || ? || ',') > 0"
+                params.append(server_type)
+            rows = db.execute(sql, params).fetchall()
 
         elif mode == 'provider' and provider:
-            rows = db.execute(
-                f'SELECT DISTINCT {col} FROM gluetun_catalogue WHERE provider=? AND {col} != ""',
-                (provider,),
-            ).fetchall()
+            sql = f'SELECT DISTINCT {col} FROM gluetun_catalogue WHERE provider=? AND {col} != ""'
+            params = [provider]
+            if server_type:
+                sql += " AND instr(',' || server_types || ',', ',' || ? || ',') > 0"
+                params.append(server_type)
+            rows = db.execute(sql, params).fetchall()
 
         else:  # all providers
-            rows = db.execute(
-                f'SELECT DISTINCT {col} FROM gluetun_catalogue WHERE {col} != ""'
-            ).fetchall()
+            sql = f'SELECT DISTINCT {col} FROM gluetun_catalogue WHERE {col} != ""'
+            params = []
+            if server_type:
+                sql += " AND instr(',' || server_types || ',', ',' || ? || ',') > 0"
+                params.append(server_type)
+            rows = db.execute(sql, params).fetchall()
 
         added = skipped = 0
         for (value,) in rows:
@@ -297,6 +387,8 @@ def import_to_servers(
     provider: str = '',
     filter_type: str = 'name',
     container_name: str = '',
+    port_forward_only: bool = False,
+    server_type: str = '',
 ) -> dict:
     """
     Import servers from gluetun_catalogue into the servers table.
@@ -313,7 +405,11 @@ def import_to_servers(
 
     total_added = total_skipped = 0
     for ft in types_to_import:
-        result = _import_one_filter_type(mode, provider, ft, container_name)
+        result = _import_one_filter_type(
+            mode, provider, ft, container_name,
+            port_forward_only=port_forward_only,
+            server_type=server_type,
+        )
         if not result.get('ok'):
             return result   # propagate first error (e.g. active provider not detected)
         total_added   += result['added']
@@ -512,8 +608,9 @@ def refresh_catalogue_from_sidecar(
                 for s in servers:
                     db.execute(
                         '''INSERT INTO gluetun_catalogue
-                            (provider, name, country, country_code, region, city, hostname, updated_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                            (provider, name, country, country_code, region, city, hostname,
+                             port_forward, server_types, updated_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                         (
                             provider,
                             s.get('name', ''),
@@ -522,6 +619,8 @@ def refresh_catalogue_from_sidecar(
                             s.get('region', ''),
                             s.get('city', ''),
                             s.get('hostname', ''),
+                            int(bool(s.get('port_forward'))),
+                            normalize_server_types(s.get('server_types', '')),
                             now_iso,
                         ),
                     )

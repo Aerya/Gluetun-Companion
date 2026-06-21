@@ -57,6 +57,7 @@ class ManagedEnvPairsTest(unittest.TestCase):
         d = dict(_managed_env_pairs('France', 'country', profile))
         self.assertEqual(d['VPN_PORT_FORWARDING'], 'on')
         self.assertEqual(d['PORT_FORWARD_ONLY'], 'on')  # P2P targeting on by default
+        self.assertEqual(d['STREAM_ONLY'], 'off')
 
     @patch('app.gluetun.get_setting', side_effect=_dns_setting)
     def test_proton_pf_without_p2p_targeting(self, _gs):
@@ -64,14 +65,24 @@ class ManagedEnvPairsTest(unittest.TestCase):
                    'vars': {}, 'port_forwarding': True, 'port_forward_only': False}
         d = dict(_managed_env_pairs('France', 'country', profile))
         self.assertEqual(d['VPN_PORT_FORWARDING'], 'on')
-        self.assertNotIn('PORT_FORWARD_ONLY', d)
+        self.assertEqual(d['PORT_FORWARD_ONLY'], 'off')
 
     @patch('app.gluetun.get_setting', side_effect=_dns_setting)
     def test_proton_without_pf_leaves_base_untouched(self, _gs):
         profile = {'compose_provider': 'protonvpn', 'vpn_type': 'wireguard', 'vars': {}}
         d = dict(_managed_env_pairs('France', 'country', profile))
         self.assertNotIn('VPN_PORT_FORWARDING', d)
-        self.assertNotIn('PORT_FORWARD_ONLY', d)
+        self.assertEqual(d['PORT_FORWARD_ONLY'], 'off')
+
+    @patch('app.gluetun.get_setting', side_effect=_dns_setting)
+    def test_proton_country_can_target_streaming_type(self, _gs):
+        profile = {'compose_provider': 'protonvpn', 'vpn_type': 'wireguard',
+                   'vars': {}, 'server_types': ['stream']}
+        d = dict(_managed_env_pairs('Netherlands', 'country', profile))
+        self.assertEqual(d['SERVER_COUNTRIES'], 'Netherlands')
+        self.assertEqual(d['STREAM_ONLY'], 'on')
+        self.assertEqual(d['PORT_FORWARD_ONLY'], 'off')
+        self.assertEqual(d['TOR_ONLY'], 'off')
 
     @patch('app.gluetun.get_setting', side_effect=_dns_setting)
     def test_non_pf_provider_neutralizes_port_forwarding(self, _gs):

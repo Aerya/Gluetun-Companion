@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from app.port_forwarding import (
     _extract_ports,
+    apply_current_provider_port_forwards,
     inspect_port_forward,
     sync_qbit_listen_port,
 )
@@ -67,6 +68,23 @@ class ProtonPortForwardingTest(unittest.TestCase):
         self.assertIn('setPreferences', post.call_args.args[0])
         self.assertIn('5914', post.call_args.kwargs['data']['json'])
         remember_port.assert_called_once_with(7, 5914)
+
+    @patch('app.port_forwarding.apply_provider_port_forwards')
+    @patch('app.port_forwarding.get_gluetun_provider', return_value='protonvpn')
+    @patch('app.port_forwarding.get_setting')
+    def test_current_provider_apply_does_not_require_provider_change(
+        self, get_setting, _provider, apply_provider,
+    ):
+        get_setting.side_effect = lambda key, default='': {
+            'port_forward_enabled': '1',
+            'port_forward_auto_sync': '1',
+        }.get(key, default)
+        apply_provider.return_value = {'ok': True, 'provider': 'protonvpn', 'applied': 1, 'rules': 1}
+
+        result = apply_current_provider_port_forwards('gluetun', reason='manual_switch')
+
+        self.assertTrue(result['ok'])
+        apply_provider.assert_called_once_with('protonvpn', reason='manual_switch')
 
 
 if __name__ == '__main__':

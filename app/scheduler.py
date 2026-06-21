@@ -1461,6 +1461,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                 'sidecar_reuse_profile': _sidecar_reuse,
                 'port_forwarding':  _p.get('port_forwarding', False),
                 'port_forward_only': _p.get('port_forward_only', True),
+                'server_types':      _p.get('server_types', []),
             }
         if _distinct_profile_ids:
             logger.info(
@@ -1820,6 +1821,9 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                             k: v for k, v in _best_penv['extra_env'].items()
                             if k not in ('VPN_SERVICE_PROVIDER', 'VPN_TYPE')
                         },
+                        'port_forwarding':  _best_penv.get('port_forwarding', False),
+                        'port_forward_only': _best_penv.get('port_forward_only', True),
+                        'server_types':      _best_penv.get('server_types', []),
                     }
                 to_provider = ((_best_wg or {}).get('compose_provider') or from_provider or '').strip().lower()
                 ok, err = switch_server(
@@ -1850,9 +1854,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                             'Post-switch containers: %d/%d recreated',
                             len(_restarted2), len(_post_switch),
                         )
-                    _apply_port_forwards_after_provider_change(
-                        from_provider, to_provider, 'auto_best',
-                    )
+                    _apply_port_forwards_for_current_provider(container, 'auto_best')
                     to_ipv4, to_ipv6 = get_public_ips(proxy_host, proxy_port, proxy_user, proxy_pass)
                     logger.info(
                         'Switched to best: %s  (%s / %s)  connect %.0fs',
@@ -1946,6 +1948,9 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                             k: v for k, v in _orig_penv['extra_env'].items()
                             if k not in ('VPN_SERVICE_PROVIDER', 'VPN_TYPE')
                         },
+                        'port_forwarding':  _orig_penv.get('port_forwarding', False),
+                        'port_forward_only': _orig_penv.get('port_forward_only', True),
+                        'server_types':      _orig_penv.get('server_types', []),
                     }
                 _pre_deps = list_network_dependents_for_recreate(container)
                 _ok_r, _err_r = switch_server(
@@ -2166,6 +2171,9 @@ def _do_single_server(app, server_name: str, filter_type: str):
                     'compose_provider': _ss_compose_prov,
                     'vpn_type':         _ss_vpn_type,
                     'vars':             _ss_vars,
+                    'port_forwarding':  _ss_p.get('port_forwarding', False),
+                    'port_forward_only': _ss_p.get('port_forward_only', True),
+                    'server_types':      _ss_p.get('server_types', []),
                 }
                 # Per-profile sidecar key
                 _sc_pk = _ss_p.get('sidecar_private_key', '')
@@ -2252,9 +2260,7 @@ def _do_single_server(app, server_name: str, filter_type: str):
                     )
                     if restarted:
                         logger.info('Recreated network dependents: %s', ', '.join(restarted))
-                    _apply_port_forwards_after_provider_change(
-                        from_provider, to_provider, 'single_server',
-                    )
+                    _apply_port_forwards_for_current_provider(container, 'single_server')
                     if connected:
                         logger.info('Gluetun now on %s', server_name)
                     else:
@@ -2427,16 +2433,8 @@ def _check_port_forward_renewal(app) -> None:
 
 
 def _apply_port_forwards_for_current_provider(container: str, reason: str) -> dict:
-    from .database import get_setting
-    if get_setting('port_forward_enabled', '0') != '1':
-        return {'ok': True, 'skipped_reason': 'disabled'}
-    if get_setting('port_forward_auto_sync', '0') != '1':
-        return {'ok': True, 'skipped_reason': 'manual_only'}
-    from .port_forwarding import apply_provider_port_forwards, get_gluetun_provider
-    provider = get_gluetun_provider(container)
-    if not provider:
-        return {'ok': False, 'skipped_reason': 'missing_provider'}
-    return apply_provider_port_forwards(provider, reason=reason)
+    from .port_forwarding import apply_current_provider_port_forwards
+    return apply_current_provider_port_forwards(container, reason=reason)
 
 
 def _update_consecutive_failures(

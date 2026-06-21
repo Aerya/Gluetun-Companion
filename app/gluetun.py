@@ -306,18 +306,43 @@ def _managed_env_pairs(
         for k in sorted(all_credential_keys() - set(profile_vars)):
             pairs.append((k, ''))
 
+        # ProtonVPN server feature filters.  These combine with broad filters
+        # such as SERVER_COUNTRIES, so users can target "any P2P server in
+        # any country", "streaming in Switzerland", and similar combinations.
+        proton_type_env = {
+            'p2p':         'PORT_FORWARD_ONLY',
+            'stream':      'STREAM_ONLY',
+            'secure_core': 'SECURE_CORE_ONLY',
+            'tor':         'TOR_ONLY',
+            'free':        'FREE_ONLY',
+        }
+        selected_types = set()
+        raw_types = wg_profile.get('server_types') or []
+        if isinstance(raw_types, str):
+            raw_types = raw_types.replace(';', ',').split(',')
+        for item in raw_types:
+            key = str(item or '').strip().lower().replace('-', '_').replace(' ', '_')
+            if key == 'streaming':
+                key = 'stream'
+            if key == 'port_forward':
+                key = 'p2p'
+            if key in proton_type_env:
+                selected_types.add(key)
+        if wg_profile.get('port_forwarding') and wg_profile.get('port_forward_only', True):
+            selected_types.add('p2p')
+        if compose_provider == 'protonvpn':
+            for server_type, env_key in proton_type_env.items():
+                pairs.append((env_key, 'on' if server_type in selected_types else 'off'))
+
         # Port forwarding (NAT-PMP).  Only Gluetun-native-PF providers
         # (ProtonVPN, PIA, …) honour VPN_PORT_FORWARDING; for any other provider
         # (e.g. AirVPN, which forwards ports through its own panel) we force it
         # OFF so a stray base-compose value cannot make Gluetun reject the
-        # session.  PORT_FORWARD_ONLY targets P2P / port-forwarding-capable
-        # servers (ProtonVPN) and defaults on when port forwarding is requested.
+        # session.
         from .wg_providers import supports_native_port_forwarding
         if supports_native_port_forwarding(compose_provider):
             if wg_profile.get('port_forwarding'):
                 pairs.append(('VPN_PORT_FORWARDING', 'on'))
-                if wg_profile.get('port_forward_only', True):
-                    pairs.append(('PORT_FORWARD_ONLY', 'on'))
             # capable provider with port forwarding off → leave the base value
             # untouched (do not disable a working manual setup).
         else:

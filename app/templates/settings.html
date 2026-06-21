@@ -1221,6 +1221,33 @@
           <div class="form-text" style="font-size:.72rem">{{ t.set_wg_pf_hint }}</div>
         </div>
 
+        <div class="mb-3" id="wg_server_types_block" style="display:none">
+          <label class="form-label small fw-semibold">{{ t.set_wg_server_types_label }}</label>
+          <div class="d-flex flex-wrap gap-3">
+            <div class="form-check">
+              <input class="form-check-input wg-server-type-cb" type="checkbox" name="wg_server_types" value="p2p" id="wg_type_p2p">
+              <label class="form-check-label small" for="wg_type_p2p">P2P</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input wg-server-type-cb" type="checkbox" name="wg_server_types" value="stream" id="wg_type_stream">
+              <label class="form-check-label small" for="wg_type_stream">Streaming</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input wg-server-type-cb" type="checkbox" name="wg_server_types" value="secure_core" id="wg_type_secure_core">
+              <label class="form-check-label small" for="wg_type_secure_core">Secure Core</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input wg-server-type-cb" type="checkbox" name="wg_server_types" value="tor" id="wg_type_tor">
+              <label class="form-check-label small" for="wg_type_tor">Tor</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input wg-server-type-cb" type="checkbox" name="wg_server_types" value="free" id="wg_type_free">
+              <label class="form-check-label small" for="wg_type_free">Free</label>
+            </div>
+          </div>
+          <div class="form-text" style="font-size:.72rem">{{ t.set_wg_server_types_hint }}</div>
+        </div>
+
         <div class="mb-3" id="wg_priority_row" style="display:none">
           <label class="form-label small" for="wg_rotation_priority">{{ t.set_wg_rotation_priority }}</label>
           <input type="number" class="form-control form-control-sm" name="wg_rotation_priority"
@@ -1829,6 +1856,19 @@
           <label class="form-check-label small" for="catalogue_bench_on_import">
             {{ t.set_catalogue_bench_label }}
           </label>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small fw-semibold" for="catalogue_server_type">{{ t.set_catalogue_server_type_label }}</label>
+          <select name="catalogue_server_type" class="form-select form-select-sm"
+                  style="max-width:280px" id="catalogue_server_type">
+            <option value="" {{ 'selected' if not cfg.get('catalogue_server_type') }}>{{ t.set_catalogue_server_type_all }}</option>
+            <option value="p2p" {{ 'selected' if cfg.get('catalogue_server_type') == 'p2p' }}>P2P</option>
+            <option value="stream" {{ 'selected' if cfg.get('catalogue_server_type') == 'stream' }}>Streaming</option>
+            <option value="secure_core" {{ 'selected' if cfg.get('catalogue_server_type') == 'secure_core' }}>Secure Core</option>
+            <option value="tor" {{ 'selected' if cfg.get('catalogue_server_type') == 'tor' }}>Tor</option>
+            <option value="free" {{ 'selected' if cfg.get('catalogue_server_type') == 'free' }}>Free</option>
+          </select>
         </div>
 
         <div class="mb-3 form-check">
@@ -3619,6 +3659,11 @@ function _wgShowFields(providerKey, vpnType, existingVars) {
   const PF_PROVIDERS = ['protonvpn', 'private internet access', 'perfect privacy', 'privatevpn'];
   const pfBlock = document.getElementById('wg_pf_block');
   if (pfBlock) pfBlock.style.display = PF_PROVIDERS.includes(providerKey) ? '' : 'none';
+  const typeBlock = document.getElementById('wg_server_types_block');
+  if (typeBlock) typeBlock.style.display = providerKey === 'protonvpn' ? '' : 'none';
+  if (providerKey !== 'protonvpn') {
+    document.querySelectorAll('.wg-server-type-cb').forEach(cb => { cb.checked = false; });
+  }
 
   if (!providerKey || !_wgProviders[providerKey]) {
     if (sidecarEl) sidecarEl.style.display = '';
@@ -3699,6 +3744,9 @@ function _wgEditProfile(profile) {
   const pfoCb = document.getElementById('wg_port_forward_only');
   if (pfCb)  pfCb.checked  = !!profile.port_forwarding;
   if (pfoCb) pfoCb.checked = profile.port_forward_only !== false;
+  document.querySelectorAll('.wg-server-type-cb').forEach(cb => {
+    cb.checked = (profile.server_types || []).includes(cb.value);
+  });
   const pfP2pRow = document.getElementById('wg_pf_p2p_row');
   if (pfP2pRow) pfP2pRow.style.display = profile.port_forwarding ? '' : 'none';
 
@@ -3739,10 +3787,13 @@ function _wgCancelEdit() {
   // Reset port forwarding
   const pfBlock = document.getElementById('wg_pf_block');
   if (pfBlock) pfBlock.style.display = 'none';
+  const typeBlock = document.getElementById('wg_server_types_block');
+  if (typeBlock) typeBlock.style.display = 'none';
   const pfCb  = document.getElementById('wg_port_forwarding');
   const pfoCb = document.getElementById('wg_port_forward_only');
   if (pfCb)  pfCb.checked  = false;
   if (pfoCb) pfoCb.checked = true;
+  document.querySelectorAll('.wg-server-type-cb').forEach(cb => { cb.checked = false; });
   const pfP2pRow = document.getElementById('wg_pf_p2p_row');
   if (pfP2pRow) pfP2pRow.style.display = 'none';
   // Reset sidecar fields
@@ -3840,6 +3891,7 @@ function importCatalogue() {
   else if (provText) provider = provText.value.trim();
 
   const benchOnImport = document.getElementById('catalogue_bench_on_import')?.checked || false;
+  const serverType = document.getElementById('catalogue_server_type')?.value || '';
 
   btn.disabled = true;
   btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>{{ t.set_catalogue_importing }}';
@@ -3852,6 +3904,7 @@ function importCatalogue() {
       provider:        provider,
       filter_type:     filterType,
       bench_on_import: benchOnImport,
+      server_type:     serverType,
     }),
   })
   .then(r => r.json())
