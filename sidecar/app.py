@@ -24,7 +24,7 @@ POST /test?duration=8&streams=4&method=dual&iperf_fallback=1
                            "ul_iperf3": null,
                            "ookla_server": "Paris (Bouygues)",
                            "iperf_server": null,
-                           "jitter_ms": 2.1,           # null if ping failed
+                           "jitter_ms": 2.1,           # null if stability probe failed
                            "packet_loss_pct": 0.0,
                            "ping_min_ms": 4.9,
                            "ping_max_ms": 7.2,
@@ -52,11 +52,12 @@ import json
 import logging
 import os
 import re
+import socket
 import subprocess
 import time
 import glob
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from statistics import median
+from statistics import median, pstdev
 
 import requests
 from flask import Flask, jsonify, request
@@ -88,8 +89,21 @@ _IPERF3_SERVERS: list[tuple[str, int]] = [
     ('speedtest.uztelecom.uz', 5200),
 ]
 
-# ICMP ping targets — diverse ASNs for representative jitter measurement
-_PING_TARGETS = ['1.1.1.1', '8.8.8.8', '9.9.9.9']
+# Stability-probe targets — diverse ASNs (Cloudflare / Google / Quad9) for a
+# representative jitter/loss measurement. All three accept TCP on 443 and 53.
+_STABILITY_TARGETS = ['1.1.1.1', '8.8.8.8', '9.9.9.9']
+
+# Reachability is measured with TCP handshakes, NOT ICMP: commercial VPNs
+# (e.g. ProtonVPN) rate-limit concurrent ICMP, which starves parallel pings and
+# fabricates packet loss on a perfectly healthy tunnel. A SYN/ACK on either port
+# proves reachability; ports are tried in order and the first that answers is
+# reused for the remaining samples of that target.
+_STABILITY_PORTS = [443, 53]
+
+# Per-handshake timeout. The kernel retransmits a lost SYN at ~1 s, so a probe
+# only counts as lost after ~2 s of genuine non-response — single dropped SYNs
+# are absorbed by that retransmit rather than reported as loss.
+_STABILITY_TIMEOUT = 2.0
 
 _SERVER_TYPE_FIELDS = {
     'p2p':         'port_forward',
@@ -442,17 +456,21 @@ def test():
 @app.route('/ping', methods=['GET', 'POST'])
 def ping_endpoint():
     """
-    Run ICMP ping to one or more targets and return per-target jitter/loss stats.
-    Companion calls this when the /test response doesn't include stability data
-    (e.g. older sidecar image).
+    Probe one or more targets with TCP handshakes and return per-target
+    jitter/loss stats. Companion calls this when the /test response doesn't
+    include stability data (e.g. older sidecar image).
+
+    TCP (not ICMP) is used so the measurement is immune to the concurrent-ICMP
+    rate-limiting that some commercial VPNs apply (which otherwise fabricates
+    packet loss on a healthy tunnel). The response schema is unchanged.
 
     Params:
       targets  — comma-separated IPs (default: 1.1.1.1,8.8.8.8,9.9.9.9)
-      count    — packets per target (default: 20, range: 5–100)
-      interval — seconds between packets (default: 0.2, range: 0.1–1.0)
+      count    — handshakes per target (default: 20, range: 5–100)
+      interval — seconds between handshakes (default: 0.2, range: 0.1–1.0)
     """
     _require_auth()
-    targets_str = request.args.get('targets', ','.join(_PING_TARGETS))
+    targets_str = request.args.get('targets', ','.join(_STABILITY_TARGETS))
     targets     = [t.strip() for t in targets_str.split(',') if t.strip()]
     count       = max(5, min(100, int(request.args.get('count', 20))))
     interval    = max(0.1, min(1.0, float(request.args.get('interval', 0.2))))
@@ -462,7 +480,7 @@ def ping_endpoint():
 
     ping_results = []
     with ThreadPoolExecutor(max_workers=len(targets)) as ex:
-        futures = {ex.submit(_ping_target, t, count, interval): t for t in targets}
+        futures = {ex.submit(_tcp_probe_target, t, count, interval): t for t in targets}
         for fut in as_completed(futures):
             r = fut.result()
             if r:
@@ -472,85 +490,162 @@ def ping_endpoint():
 
 
 # ---------------------------------------------------------------------------
-# ICMP ping helpers
+# TCP-handshake stability probe
 # ---------------------------------------------------------------------------
+#
+# Why TCP and not ICMP: the previous implementation shelled out to `ping` and
+# measured ICMP echo loss. Commercial VPNs such as ProtonVPN rate-limit
+# *concurrent* ICMP, so probing three resolvers in parallel starved two of the
+# three flows (~90 % loss each) while the tunnel itself was perfectly healthy
+# (0 % loss, stable RTT over TCP/HTTP). Averaging the per-target losses then
+# reported ~60 % loss — a pure artifact. TCP SYN handshakes are not subject to
+# that rate-limit, so they measure real reachability and latency variability.
+# The output schema is byte-for-byte identical to the old ICMP path.
 
-def _ping_target(target: str, count: int, interval: float) -> dict | None:
+
+def _tcp_connect_once(ip: str, port: int, timeout: float) -> float:
+    """Open a TCP connection to (ip, port) and return the handshake RTT in ms.
+
+    A completed handshake (SYN → SYN/ACK → ACK) and a refused connection (RST)
+    both prove the host is reachable, so both yield a valid RTT sample. Only a
+    timeout or an unreachable route raises (OSError) — those are the genuine
+    "loss" cases the caller counts.
     """
-    Run `ping -c COUNT -i INTERVAL TARGET` and parse the summary line.
-
-    Returns:
-        {'target': str, 'jitter_ms': float, 'packet_loss_pct': float,
-         'ping_min_ms': float, 'ping_max_ms': float}
-    or None on failure.
-
-    jitter_ms = mdev (mean deviation) from the ping summary — a standard
-    measure of latency variability equivalent to ~0.8 × stddev.
-    """
-    timeout = count * interval + 10
+    t0 = time.perf_counter()
     try:
-        cmd = [
-            'ping', '-c', str(count),
-            '-i', str(interval),
-            '-W', '2',          # per-packet timeout: 2 s
-            target,
-        ]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        output = r.stdout + r.stderr
-    except Exception as exc:
-        logger.warning('ping %s failed: %s', target, exc)
-        return None
+        socket.create_connection((ip, port), timeout=timeout).close()
+    except ConnectionRefusedError:
+        pass  # RST received → reachable; the round-trip to the RST is a valid RTT
+    return (time.perf_counter() - t0) * 1000.0
 
-    # "5 packets transmitted, 5 received, 0% packet loss"
-    m_loss = re.search(r'(\d+)%\s+packet loss', output)
-    # "rtt min/avg/max/mdev = 4.936/5.621/7.234/0.541 ms"
-    m_rtt  = re.search(
-        r'rtt min/avg/max/mdev\s*=\s*([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+)',
-        output,
-    )
 
-    if not m_loss or not m_rtt:
-        logger.warning('ping %s: could not parse output:\n%s', target, output[:300])
-        return None
+def _tcp_probe_samples(
+    target: str,
+    count: int,
+    interval: float,
+    ports: list[int] | None = None,
+    timeout: float = _STABILITY_TIMEOUT,
+) -> dict:
+    """Probe `target` with `count` sequential TCP handshakes.
 
-    loss   = float(m_loss.group(1))
-    p_min  = float(m_rtt.group(1))
-    p_max  = float(m_rtt.group(3))
-    mdev   = float(m_rtt.group(4))   # mean deviation ≈ jitter
+    The first reachable port in `ports` is negotiated once and reused for the
+    remaining samples. If no port answers on a sample, later samples fall back
+    to the first port only, which bounds the time spent on a fully unreachable
+    target.
 
-    logger.info('ping %s → jitter=%.1f ms  loss=%.0f%%  min=%.0f ms  max=%.0f ms',
-                target, mdev, loss, p_min, p_max)
+    Returns raw counters so callers can pool them correctly across targets:
+        {'target': str, 'rtts': [float, ...], 'attempts': int, 'failures': int}
+    """
+    ports = ports or _STABILITY_PORTS
+    rtts: list[float] = []
+    attempts = 0
+    failures = 0
+    port: int | None = None
+
+    for i in range(count):
+        attempts += 1
+        candidates = [port] if port is not None else ports
+        rtt = None
+        for candidate in candidates:
+            try:
+                rtt = _tcp_connect_once(target, candidate, timeout)
+                port = candidate            # lock onto the port that answered
+                break
+            except OSError:
+                continue
+        if rtt is None:
+            failures += 1
+            if port is None:
+                port = ports[0]             # bound time on an unreachable target
+        else:
+            rtts.append(rtt)
+        if interval and i < count - 1:
+            time.sleep(interval)
+
+    logger.info('tcp-probe %s:%s → %d/%d ok', target, port, attempts - failures, attempts)
+    return {'target': target, 'rtts': rtts, 'attempts': attempts, 'failures': failures}
+
+
+def _stats_from_samples(rtts: list[float], attempts: int, failures: int) -> dict:
+    """Turn one target's raw samples into the per-target stability schema.
+
+    jitter_ms is the population stddev of the handshake RTTs (0.0 when only one
+    sample succeeded, None when none did); packet_loss_pct is failures/attempts.
+    """
+    loss = round(100.0 * failures / attempts, 1) if attempts else None
+    if rtts:
+        return {
+            'jitter_ms':       round(pstdev(rtts), 1) if len(rtts) > 1 else 0.0,
+            'packet_loss_pct': loss,
+            'ping_min_ms':     round(min(rtts), 1),
+            'ping_max_ms':     round(max(rtts), 1),
+        }
     return {
-        'target':          target,
-        'jitter_ms':       round(mdev,  1),
-        'packet_loss_pct': round(loss,  1),
-        'ping_min_ms':     round(p_min, 1),
-        'ping_max_ms':     round(p_max, 1),
+        'jitter_ms':       None,
+        'packet_loss_pct': loss,
+        'ping_min_ms':     None,
+        'ping_max_ms':     None,
+    }
+
+
+def _tcp_probe_target(target: str, count: int, interval: float) -> dict | None:
+    """Probe one target and return its per-target stability stats for /ping:
+    {target, jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms}, or None if
+    the probe could not run at all.
+    """
+    samples = _tcp_probe_samples(target, count, interval)
+    if samples['attempts'] == 0:
+        return None
+    stats = _stats_from_samples(samples['rtts'], samples['attempts'], samples['failures'])
+    return {'target': target, **stats}
+
+
+def _aggregate_stability(samples_list: list[dict]) -> dict | None:
+    """Aggregate per-target raw samples into the single stability dict for /test.
+
+    packet_loss_pct is POOLED — Σ failures / Σ attempts — not the mean of the
+    per-target loss percentages. That mean is exactly what fabricated ~60 % loss
+    under ICMP rate-limiting and would over-weight a single unreachable target.
+    jitter_ms is the mean of each target's RTT stddev, which isolates real
+    variability from the baseline-RTT differences between targets. min/max are
+    global across every successful handshake. Returns None when no target
+    produced a usable RTT sample (preserving the old "no data" contract).
+    """
+    total_attempts = sum(s['attempts'] for s in samples_list)
+    total_failures = sum(s['failures'] for s in samples_list)
+    all_rtts = [r for s in samples_list for r in s['rtts']]
+
+    if total_attempts == 0 or not all_rtts:
+        return None
+
+    per_target_jitter = [pstdev(s['rtts']) for s in samples_list if len(s['rtts']) > 1]
+    return {
+        'jitter_ms':       round(sum(per_target_jitter) / len(per_target_jitter), 1) if per_target_jitter else 0.0,
+        'packet_loss_pct': round(100.0 * total_failures / total_attempts, 1),
+        'ping_min_ms':     round(min(all_rtts), 1),
+        'ping_max_ms':     round(max(all_rtts), 1),
     }
 
 
 def _measure_stability(count: int = 20, interval: float = 0.2) -> dict | None:
+    """Probe _STABILITY_TARGETS in parallel (one thread per target, sequential
+    handshakes within each — TCP is not ICMP-rate-limited, so this stays safe)
+    and aggregate. Returns {jitter_ms, packet_loss_pct, ping_min_ms,
+    ping_max_ms} or None when no target produced a usable sample.
     """
-    Ping _PING_TARGETS in parallel and aggregate results.
-    Returns aggregated {jitter_ms, packet_loss_pct, ping_min_ms, ping_max_ms} or None.
-    """
-    results: list[dict] = []
-    with ThreadPoolExecutor(max_workers=len(_PING_TARGETS)) as ex:
-        futures = {ex.submit(_ping_target, t, count, interval): t for t in _PING_TARGETS}
+    samples: list[dict] = []
+    with ThreadPoolExecutor(max_workers=len(_STABILITY_TARGETS)) as ex:
+        futures = {ex.submit(_tcp_probe_samples, t, count, interval): t
+                   for t in _STABILITY_TARGETS}
         for fut in as_completed(futures):
-            r = fut.result()
-            if r:
-                results.append(r)
+            try:
+                samples.append(fut.result())
+            except Exception as exc:
+                logger.warning('tcp-probe failed: %s', exc)
 
-    if not results:
-        return None
-
-    return {
-        'jitter_ms':       round(sum(r['jitter_ms']       for r in results) / len(results), 1),
-        'packet_loss_pct': round(sum(r['packet_loss_pct'] for r in results) / len(results), 1),
-        'ping_min_ms':     round(min(r['ping_min_ms']     for r in results), 1),
-        'ping_max_ms':     round(max(r['ping_max_ms']     for r in results), 1),
-    }
+    # The /test handler logs the aggregate line; per-target lines come from
+    # _tcp_probe_samples, so no aggregate logging is needed here.
+    return _aggregate_stability(samples)
 
 
 # ---------------------------------------------------------------------------

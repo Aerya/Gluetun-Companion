@@ -1580,7 +1580,7 @@ def run_sidecar_ping_test(
 ) -> dict | None:
     """
     Call the sidecar /ping endpoint to measure jitter and packet loss from
-    inside the VPN tunnel (ICMP ping to diverse IPs).
+    inside the VPN tunnel (TCP handshakes to diverse IPs).
 
     Expected sidecar response:
         {"results": [{"target": "1.1.1.1", "avg_ms": 12.3, "jitter_ms": 2.1,
@@ -1613,7 +1613,7 @@ def run_sidecar_ping_test(
     except requests.exceptions.ConnectionError:
         return None
     except Exception as exc:
-        logger.warning('Sidecar ping test error: %s', exc)
+        logger.warning('Sidecar stability test error: %s', exc)
         return None
 
     results = data.get('results', [])
