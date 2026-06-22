@@ -19,6 +19,7 @@
 <a href="README.en.md"><img src="https://img.shields.io/badge/i18n-FR%20%7C%20EN-informational" alt="i18n"></a>
 <a href="https://github.com/qdm12/gluetun"><img src="https://img.shields.io/badge/Gluetun-compatible-0d1117?logo=github&logoColor=white" alt="Gluetun compatible"></a>
 <a href="https://airvpn.org/?referred_by=483746"><img src="https://img.shields.io/badge/AirVPN-compatible-1a7a3d?logoColor=white" alt="AirVPN"></a>
+<a href="https://protonvpn.com"><img src="https://img.shields.io/badge/Proton-compatible-6d4aff?logo=protonvpn&logoColor=white" alt="Proton compatible"></a>
 <a href="#"><img src="https://img.shields.io/badge/Unraid-DockerMan-f15a2b?logo=unraid&logoColor=white" alt="Unraid DockerMan"></a>
 <a href="https://discord.com/developers/docs/resources/webhook"><img src="https://img.shields.io/badge/Discord-webhook-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 <a href="https://github.com/caronc/apprise"><img src="https://img.shields.io/badge/Apprise-compatible-3d85c8?logo=python&logoColor=white" alt="Apprise"></a>
