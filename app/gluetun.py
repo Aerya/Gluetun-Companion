@@ -1658,13 +1658,13 @@ def create_catalogue_sidecar(
     sidecar_image: str,
     port: int = _CATALOGUE_SIDECAR_PORT,
     token: str = '',
+    gluetun_container_name: str | None = None,
 ) -> tuple[bool, str | None]:
     """
     Create a standalone sidecar container (bridge network, internet access).
-    The sidecar fetches server lists from the public Gluetun GitHub repository:
-      https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers
-
-    No volume mounting required — the sidecar only needs outbound HTTPS.
+    When possible, mount the real Gluetun /gluetun volume read-only so the
+    sidecar can read /gluetun/servers.json (the exact catalogue Gluetun loaded).
+    It falls back to the public Gluetun GitHub catalogue when no volume is found.
 
     *token* is passed as SIDECAR_SECRET env var so all sidecar endpoints
     require it on every request.  Generate with secrets.token_hex(32) in
@@ -1681,19 +1681,43 @@ def create_catalogue_sidecar(
         env: dict[str, str] = {}
         if token:
             env['SIDECAR_SECRET'] = token
+        volumes: dict[str, dict[str, str]] = {}
+        if gluetun_container_name:
+            try:
+                real = client.containers.get(gluetun_container_name)
+                attrs = real.attrs
+                for mount in attrs.get('Mounts') or []:
+                    if (mount.get('Destination') or '').rstrip('/') == '/gluetun':
+                        source = mount.get('Source') or mount.get('Name') or ''
+                        if source:
+                            volumes[source] = {'bind': '/gluetun', 'mode': 'ro'}
+                            break
+                if not volumes:
+                    for bind in attrs.get('HostConfig', {}).get('Binds') or []:
+                        parts = bind.split(':')
+                        if len(parts) >= 2 and parts[1].rstrip('/') == '/gluetun':
+                            volumes[parts[0]] = {'bind': '/gluetun', 'mode': 'ro'}
+                            break
+            except Exception as exc:
+                logger.warning(
+                    'Catalogue sidecar: cannot inspect Gluetun volume from %s: %s',
+                    gluetun_container_name, exc,
+                )
 
         client.containers.run(
             image=sidecar_image,
             name=_CATALOGUE_SIDECAR_NAME,
             network_mode='bridge',
             environment=env,
+            volumes=volumes or None,
             ports={'8766/tcp': port},
             detach=True,
             remove=False,
         )
         logger.info(
-            'Catalogue sidecar started: %s (port: %d, auth: %s)',
+            'Catalogue sidecar started: %s (port: %d, auth: %s, gluetun_volume: %s)',
             _CATALOGUE_SIDECAR_NAME, port, 'yes' if token else 'no',
+            'yes' if volumes else 'no',
         )
         return True, None
     except Exception as exc:

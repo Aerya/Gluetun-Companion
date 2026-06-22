@@ -648,14 +648,14 @@ def refresh_catalogue_from_sidecar(
     sidecar_host: str,
     catalogue_port: int = 8767,
     auto_add: bool = False,
+    gluetun_container_name: str | None = None,
 ) -> dict:
     """
     Spin up a catalogue-only sidecar container, call its /catalogue endpoint,
     save the results to gluetun_catalogue, then destroy the container.
 
-    The sidecar fetches server lists from the public Gluetun GitHub repository:
-      https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers
-    No volume mounting or Gluetun API required — pure HTTPS download.
+    The sidecar prefers the real Gluetun /gluetun volume when available, then
+    falls back to the public Gluetun GitHub repository.
 
     Returns {ok, total, providers, diff, auto_added} or {ok: False, error}.
 
@@ -673,7 +673,10 @@ def refresh_catalogue_from_sidecar(
     token = secrets.token_hex(32)
 
     # ── 1. Create sidecar ────────────────────────────────────────────────────
-    ok, err = create_catalogue_sidecar(sidecar_image, catalogue_port, token=token)
+    ok, err = create_catalogue_sidecar(
+        sidecar_image, catalogue_port, token=token,
+        gluetun_container_name=gluetun_container_name,
+    )
     if not ok:
         logger.error('refresh_catalogue_from_sidecar: sidecar creation failed: %s', err)
         return {'ok': False, 'error': f'Sidecar creation failed: {err}'}

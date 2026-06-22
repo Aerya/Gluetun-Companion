@@ -3146,6 +3146,7 @@ def api_catalogue_refresh():
     result = refresh_catalogue_from_sidecar(
         sidecar_image=sidecar_image,
         sidecar_host=sidecar_host,
+        gluetun_container_name=current_app.config['GLUETUN_CONTAINER'],
     )
     return jsonify(result), (200 if result.get('ok') else 500)
 
