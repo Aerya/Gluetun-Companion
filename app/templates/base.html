@@ -543,7 +543,7 @@ function stopBenchmark() {
 <script>
 const _countryDisplayNames = (() => {
   try {
-    return new Intl.DisplayNames(['{{ session.get("lang", "fr") }}'], { type: 'region' });
+    return new Intl.DisplayNames(['{{ lang }}'], { type: 'region' });
   } catch (_) {
     return null;
   }

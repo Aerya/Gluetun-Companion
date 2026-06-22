@@ -1029,7 +1029,7 @@ function triggerQuick() {
 
 // ── Sparkline active server ──────────────────────────────────────────────
 {% if sparkline_dl %}
-const _sparklineLocale = {{ ('fr-FR' if session.get('lang', 'fr') == 'fr' else 'en-US') | tojson }};
+const _sparklineLocale = {{ ('fr-FR' if lang == 'fr' else 'en-US') | tojson }};
 const _sparklineLabels = {{ sparkline_labels | tojson }}.map(value => {
   const raw = String(value || '');
   const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z';

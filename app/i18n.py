@@ -216,7 +216,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'srv_confirm_switch_b':  'maintenant ?',
         'srv_confirm_delete_a':  'Supprimer «',
         'srv_confirm_delete_b':  '» ?',
-        'srv_filter_all_types':  'Tous les types',
+        'srv_filter_all_types':  'Toutes les variables Gluetun',
         'srv_search_ph':         'Rechercher une valeur…',
         'srv_per_page':          'Par page',
         'srv_per_page_all':      'Tout',
@@ -1235,7 +1235,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'srv_confirm_switch_b':  'now?',
         'srv_confirm_delete_a':  'Delete',
         'srv_confirm_delete_b':  '?',
-        'srv_filter_all_types':  'All types',
+        'srv_filter_all_types':  'All Gluetun variables',
         'srv_search_ph':         'Search value…',
         'srv_per_page':          'Per page',
         'srv_per_page_all':      'All',
@@ -2052,26 +2052,27 @@ def get_translations(lang: str) -> dict[str, str]:
 def get_lang() -> str:
     """Resolve the active UI language.
 
-    The persisted ``ui_lang`` setting is the source of truth (it is what
-    background tasks and notifications use).  An explicit per-session choice
-    takes precedence so a user can preview the other language without changing
-    the saved preference; when the session has no explicit choice (e.g. after
-    logout or cookie expiry) we fall back to ``ui_lang`` so the UI and the
-    notifications never disagree.  French is the final default.
+    The persisted ``ui_lang`` setting is the source of truth.  Browser
+    sessions can survive image updates, so an old cookie carrying ``en`` must
+    not override a saved French preference after a restart.
     """
+    lang = 'fr'
+    try:
+        from .database import get_setting
+        lang = get_setting('ui_lang', 'fr')
+        if lang not in ('fr', 'en'):
+            lang = 'fr'
+    except Exception:
+        lang = 'fr'
+
     try:
         from flask import has_request_context, session
         if has_request_context():
-            sl = session.get('lang')
-            if sl:
-                return sl
+            session['lang'] = lang
     except Exception:
         pass
-    try:
-        from .database import get_setting
-        return get_setting('ui_lang', 'fr')
-    except Exception:
-        return 'fr'
+
+    return lang
 
 
 def get_t() -> dict[str, str]:

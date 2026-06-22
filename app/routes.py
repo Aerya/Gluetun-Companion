@@ -723,6 +723,35 @@ _SERVERS_SORT = {
 _SERVERS_VALID_PER_PAGE = {10, 20, 50, 100, 0}   # 0 = all
 
 
+def _catalogue_proton_options_allowed(mode: str, provider: str, container_name: str = '') -> bool:
+    """Allow ProtonVPN-specific catalogue options only for ProtonVPN imports."""
+    provider = (provider or '').strip().lower()
+    mode = (mode or '').strip().lower()
+    if mode == 'provider':
+        return provider == 'protonvpn'
+    if mode == 'active' and container_name:
+        try:
+            from .catalogue import detect_active_provider
+            return detect_active_provider(container_name) == 'protonvpn'
+        except Exception:
+            return False
+    return False
+
+
+def _normalize_catalogue_filter_type(mode: str, provider: str, filter_type: str, container_name: str = '') -> str:
+    filter_type = (filter_type or 'name').strip()
+    if filter_type == 'all' and not _catalogue_proton_options_allowed(mode, provider, container_name):
+        return 'name'
+    return filter_type
+
+
+def _normalize_catalogue_server_type(mode: str, provider: str, server_type: str, container_name: str = '') -> str:
+    server_type = (server_type or '').strip()
+    if not _catalogue_proton_options_allowed(mode, provider, container_name):
+        return ''
+    return server_type
+
+
 @bp.route('/servers')
 @login_required
 def servers():
@@ -1924,11 +1953,25 @@ def settings():
             flash_t('flash_sidecar_saved', 'success')
 
         elif action == 'catalogue':
-            set_setting('catalogue_import_mode',          request.form.get('catalogue_import_mode', 'active'))
-            set_setting('catalogue_import_provider',      request.form.get('catalogue_import_provider', '').strip())
+            _cat_mode = request.form.get('catalogue_import_mode', 'active')
+            _cat_provider = request.form.get('catalogue_import_provider', '').strip()
+            _cat_filter_type = _normalize_catalogue_filter_type(
+                _cat_mode,
+                _cat_provider,
+                request.form.get('catalogue_import_filter_type', 'name'),
+                current_app.config['GLUETUN_CONTAINER'],
+            )
+            _cat_server_type = _normalize_catalogue_server_type(
+                _cat_mode,
+                _cat_provider,
+                request.form.get('catalogue_server_type', ''),
+                current_app.config['GLUETUN_CONTAINER'],
+            )
+            set_setting('catalogue_import_mode',          _cat_mode)
+            set_setting('catalogue_import_provider',      _cat_provider)
             set_setting('catalogue_bench_on_import',      '1' if request.form.get('catalogue_bench_on_import') else '0')
-            set_setting('catalogue_server_type',         request.form.get('catalogue_server_type', '').strip())
-            set_setting('catalogue_import_filter_type',   request.form.get('catalogue_import_filter_type', 'all'))
+            set_setting('catalogue_server_type',          _cat_server_type)
+            set_setting('catalogue_import_filter_type',   _cat_filter_type)
             set_setting('catalogue_auto_add',             '1' if request.form.get('catalogue_auto_add') else '0')
             flash_t('flash_catalogue_saved', 'success')
 
@@ -3263,10 +3306,20 @@ def api_catalogue_import():
     data        = request.get_json(force=True, silent=True) or {}
     mode        = data.get('mode', 'active')
     provider    = data.get('provider', '')
-    filter_type = data.get('filter_type', 'name')
     pf_only     = bool(data.get('port_forward_only'))
-    server_type = data.get('server_type', '')
     container   = current_app.config['GLUETUN_CONTAINER']
+    filter_type = _normalize_catalogue_filter_type(
+        mode,
+        provider,
+        data.get('filter_type', 'name'),
+        container,
+    )
+    server_type = _normalize_catalogue_server_type(
+        mode,
+        provider,
+        data.get('server_type', ''),
+        container,
+    )
 
     result = import_to_servers(
         mode=mode,
@@ -3295,10 +3348,10 @@ def api_catalogue_import():
 @bp.route('/pools')
 @login_required
 def pools():
-    from .i18n import get_t
+    from .i18n import get_lang, get_t
     from .rotation_pools import resolve_pool_servers
     t    = get_t()
-    lang = get_setting('ui_lang', 'fr')
+    lang = get_lang()
     all_pools = get_rotation_pools()
 
     # Resolve candidate counts for each pool (for display)

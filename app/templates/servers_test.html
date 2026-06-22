@@ -207,8 +207,8 @@
   <button type="submit" name="active_profile" value="{{ pk }}"
           class="btn btn-sm {{ 'btn-success' if active_profile == pk else 'btn-outline-secondary' }} py-0 px-2"
           style="font-size:.78rem"
-          title="{{ pv.hint_fr if session.get('lang','fr') == 'fr' else pv.hint_en }}">
-    {{ pv.label_fr if session.get('lang','fr') == 'fr' else pv.label_en }}
+          title="{{ pv.hint_fr if lang == 'fr' else pv.hint_en }}">
+    {{ pv.label_fr if lang == 'fr' else pv.label_en }}
   </button>
   {% endfor %}
   {% if profile_best %}

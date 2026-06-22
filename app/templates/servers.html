@@ -262,8 +262,8 @@
     <button type="button" data-profile="{{ pk }}" data-best="{{ profile_bests.get(pk) or '' }}"
             class="btn btn-sm {{ 'btn-success' if active_profile == pk else 'btn-outline-secondary' }} py-0 px-2"
             style="font-size:.78rem"
-            title="{{ pv.hint_fr if session.get('lang','fr') == 'fr' else pv.hint_en }}">
-      {{ pv.label_fr if session.get('lang','fr') == 'fr' else pv.label_en }}
+            title="{{ pv.hint_fr if lang == 'fr' else pv.hint_en }}">
+      {{ pv.label_fr if lang == 'fr' else pv.label_en }}
     </button>
     {% endfor %}
     {% if profile_best %}
@@ -528,7 +528,7 @@
               {# ── Score breakdown popover ── #}
               {% set _det = profile_scores_detail.get(s.name) %}
               {% if _det %}
-                {%- set _lang = session.get('lang','fr') -%}
+                {%- set _lang = lang -%}
                 {%- set _profile_lbl = profiles.get(active_profile, {}) -%}
                 {%- set _plabel = _profile_lbl.label_fr if _lang == 'fr' else _profile_lbl.label_en -%}
                 {%- set _w = _det.weights -%}
@@ -682,7 +682,7 @@
               {%- if not _trk.known -%}
                 <span class="text-muted" style="font-size:.75rem"
                       data-bs-toggle="tooltip" data-bs-placement="top"
-                      title="{{ 'Aucun test tracker pour ce serveur' if session.get('lang','fr') == 'fr' else 'No tracker check for this server' }}">—</span>
+                      title="{{ 'Aucun test tracker pour ce serveur' if lang == 'fr' else 'No tracker check for this server' }}">—</span>
               {%- else -%}
                 {%- set _trk_cls = 'bg-success' if _trk.ok else 'bg-danger' -%}
                 {%- set _trk_tip = (_trk.success_pct|string ~ '% · ' ~ _trk.passed|string ~ '/' ~ _trk.tested|string ~ ' · seuil ' ~ _trk.threshold|string ~ '%') -%}

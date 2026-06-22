@@ -343,7 +343,7 @@
       <div class="label">{{ t.set_profile_label }}</div>
       <div class="value">
         {% set _p = profiles.get(cfg.active_profile) %}
-        {% if _p %}{{ _p.label_fr if session.get('lang','fr') == 'fr' else _p.label_en }}{% else %}{{ cfg.active_profile }}{% endif %}
+        {% if _p %}{{ _p.label_fr if lang == 'fr' else _p.label_en }}{% else %}{{ cfg.active_profile }}{% endif %}
       </div>
       <div class="small text-muted mt-1">{{ t.set_overview_profile_hint }}</div>
     </div>
@@ -359,37 +359,37 @@
   </div>
   {% endmacro %}
 
-  {% set readme_url = 'https://github.com/Aerya/Gluetun-Companion/blob/main/README.md' if session.get('lang','fr') == 'fr' else 'https://github.com/Aerya/Gluetun-Companion/blob/main/README.en.md' %}
+  {% set readme_url = 'https://github.com/Aerya/Gluetun-Companion/blob/main/README.md' if lang == 'fr' else 'https://github.com/Aerya/Gluetun-Companion/blob/main/README.en.md' %}
   {% set readme_links = {
     'measure': [
-      (readme_url ~ ('#sélection-intelligente-du-benchmark-recommandée-pour-les-gros-catalogues' if session.get('lang','fr') == 'fr' else '#smart-benchmark-selection-recommended-for-large-catalogues'), t.set_cycle_how_many_title),
-      (readme_url ~ ('#observation-continue-pyramidale' if session.get('lang','fr') == 'fr' else '#pyramidal-continuous-observation'), t.set_observation_label)
+      (readme_url ~ ('#sélection-intelligente-du-benchmark-recommandée-pour-les-gros-catalogues' if lang == 'fr' else '#smart-benchmark-selection-recommended-for-large-catalogues'), t.set_cycle_how_many_title),
+      (readme_url ~ ('#observation-continue-pyramidale' if lang == 'fr' else '#pyramidal-continuous-observation'), t.set_observation_label)
     ],
     'decide': [
-      (readme_url ~ ('#profils-dusage' if session.get('lang','fr') == 'fr' else '#usage-profiles'), t.set_profile_label),
-      (readme_url ~ ('#score-de-sélection--composantes-de-stabilité' if session.get('lang','fr') == 'fr' else '#selection-score--stability-components'), t.set_stability_weight_label)
+      (readme_url ~ ('#profils-dusage' if lang == 'fr' else '#usage-profiles'), t.set_profile_label),
+      (readme_url ~ ('#score-de-sélection--composantes-de-stabilité' if lang == 'fr' else '#selection-score--stability-components'), t.set_stability_weight_label)
     ],
     'wireguard': [
-      (readme_url ~ ('#profils-vpn-wireguard--openvpn' if session.get('lang','fr') == 'fr' else '#vpn-profiles-wireguard--openvpn'), t.set_tab_wireguard),
-      (readme_url ~ ('#profils-openvpn' if session.get('lang','fr') == 'fr' else '#openvpn-profiles'), 'Profils OpenVPN' if session.get('lang','fr') == 'fr' else 'OpenVPN profiles'),
-      (readme_url ~ ('#multi-provider-wireguard--openvpn' if session.get('lang','fr') == 'fr' else '#multi-provider-wireguard--openvpn'), 'Fournisseurs intégrés' if session.get('lang','fr') == 'fr' else 'Integrated providers'),
-      (readme_url ~ ('#-clé-wireguard-sidecar-par-profil-recommandée' if session.get('lang','fr') == 'fr' else '#-per-profile-wireguard-sidecar-key-recommended'), t.set_wg_profile_sidecar_title)
+      (readme_url ~ ('#profils-vpn-wireguard--openvpn' if lang == 'fr' else '#vpn-profiles-wireguard--openvpn'), t.set_tab_wireguard),
+      (readme_url ~ ('#profils-openvpn' if lang == 'fr' else '#openvpn-profiles'), 'Profils OpenVPN' if lang == 'fr' else 'OpenVPN profiles'),
+      (readme_url ~ ('#multi-provider-wireguard--openvpn' if lang == 'fr' else '#multi-provider-wireguard--openvpn'), 'Fournisseurs intégrés' if lang == 'fr' else 'Integrated providers'),
+      (readme_url ~ ('#-clé-wireguard-sidecar-par-profil-recommandée' if lang == 'fr' else '#-per-profile-wireguard-sidecar-key-recommended'), t.set_wg_profile_sidecar_title)
     ],
     'notifications': [
-      (readme_url ~ ('#notifications-contextuelles' if session.get('lang','fr') == 'fr' else '#contextual-notifications'), t.set_tab_notifications),
-      (readme_url ~ ('#notifications-de-rotation-de-pool' if session.get('lang','fr') == 'fr' else '#pool-rotation-notifications'), t.pools_notify_label)
+      (readme_url ~ ('#notifications-contextuelles' if lang == 'fr' else '#contextual-notifications'), t.set_tab_notifications),
+      (readme_url ~ ('#notifications-de-rotation-de-pool' if lang == 'fr' else '#pool-rotation-notifications'), t.pools_notify_label)
     ],
     'trackers': [
-      (readme_url ~ ('#contrôle-des-trackers-bittorrent-via-le-vpn' if session.get('lang','fr') == 'fr' else '#bittorrent-tracker-checks-through-the-vpn'), 'Contrôle trackers' if session.get('lang','fr') == 'fr' else 'Tracker checks'),
-      (readme_url ~ ('#clients-bittorrent-et-découverte-des-trackers' if session.get('lang','fr') == 'fr' else '#bittorrent-clients-and-tracker-discovery'), 'Clients BitTorrent' if session.get('lang','fr') == 'fr' else 'BitTorrent clients')
+      (readme_url ~ ('#contrôle-des-trackers-bittorrent-via-le-vpn' if lang == 'fr' else '#bittorrent-tracker-checks-through-the-vpn'), 'Contrôle trackers' if lang == 'fr' else 'Tracker checks'),
+      (readme_url ~ ('#clients-bittorrent-et-découverte-des-trackers' if lang == 'fr' else '#bittorrent-clients-and-tracker-discovery'), 'Clients BitTorrent' if lang == 'fr' else 'BitTorrent clients')
     ],
     'port_forwarding': [
-      (readme_url ~ ('#inventaire-des-ports-forwardés-vpn' if session.get('lang','fr') == 'fr' else '#vpn-forwarded-port-inventory'), 'Ports forwardés' if session.get('lang','fr') == 'fr' else 'Forwarded ports')
+      (readme_url ~ ('#inventaire-des-ports-forwardés-vpn' if lang == 'fr' else '#vpn-forwarded-port-inventory'), 'Ports forwardés' if lang == 'fr' else 'Forwarded ports')
     ],
     'maintenance': [
-      (readme_url ~ ('#endpoint-prometheus-metrics' if session.get('lang','fr') == 'fr' else '#prometheus-metrics-endpoint'), 'Prometheus /metrics'),
-      (readme_url ~ ('#rest-api' if session.get('lang','fr') == 'fr' else '#rest-api'), t.set_api_title),
-      (readme_url ~ ('#dashboard-grafana' if session.get('lang','fr') == 'fr' else '#grafana-dashboard'), t.set_grafana_title)
+      (readme_url ~ ('#endpoint-prometheus-metrics' if lang == 'fr' else '#prometheus-metrics-endpoint'), 'Prometheus /metrics'),
+      (readme_url ~ ('#rest-api' if lang == 'fr' else '#rest-api'), t.set_api_title),
+      (readme_url ~ ('#dashboard-grafana' if lang == 'fr' else '#grafana-dashboard'), t.set_grafana_title)
     ]
   } %}
 
@@ -545,7 +545,7 @@
           <div class="settings-help-card">
             <h6><i class="bi bi-person-badge me-1"></i>{{ t.set_profile_label }}</h6>
             {% set _p = profiles.get(cfg.active_profile) %}
-            <div class="fw-bold mb-2">{% if _p %}{{ _p.label_fr if session.get('lang','fr') == 'fr' else _p.label_en }}{% else %}{{ cfg.active_profile }}{% endif %}</div>
+            <div class="fw-bold mb-2">{% if _p %}{{ _p.label_fr if lang == 'fr' else _p.label_en }}{% else %}{{ cfg.active_profile }}{% endif %}</div>
             <div class="metric"><span>{{ t.set_switch_title }}</span><strong>{{ 'ON' if cfg.auto_sw == '1' else 'OFF' }}</strong></div>
             <div class="metric"><span>{{ t.set_stability_weight_label }}</span><strong>{{ cfg.stability_weight }}%</strong></div>
           </div>
@@ -591,12 +591,12 @@
           <div class="settings-help-card">
             <h6><i class="bi bi-broadcast-pin me-1"></i>BitTorrent</h6>
             <div class="metric"><span>Clients</span><strong id="tracker-summary-clients">{{ trackers_summary.clients }}</strong></div>
-            <div class="metric"><span>{{ 'URLs connues' if session.get('lang','fr') == 'fr' else 'Known URLs' }}</span><strong id="tracker-summary-total">{{ trackers_summary.total }}</strong></div>
-            <div class="metric"><span>{{ 'Contrôlées' if session.get('lang','fr') == 'fr' else 'Checked' }}</span><strong id="tracker-summary-enabled">{{ trackers_summary.enabled }}</strong></div>
-            <div class="metric"><span>{{ 'Seuil OK' if session.get('lang','fr') == 'fr' else 'OK threshold' }}</span><strong id="tracker-summary-threshold">{{ trackers_summary.threshold }}%</strong></div>
+            <div class="metric"><span>{{ 'URLs connues' if lang == 'fr' else 'Known URLs' }}</span><strong id="tracker-summary-total">{{ trackers_summary.total }}</strong></div>
+            <div class="metric"><span>{{ 'Contrôlées' if lang == 'fr' else 'Checked' }}</span><strong id="tracker-summary-enabled">{{ trackers_summary.enabled }}</strong></div>
+            <div class="metric"><span>{{ 'Seuil OK' if lang == 'fr' else 'OK threshold' }}</span><strong id="tracker-summary-threshold">{{ trackers_summary.threshold }}%</strong></div>
           </div>
           {{ readme_card(t.set_side_readme,
-            'Companion récupère les trackers depuis vos clients BitTorrent avant de stopper les containers, puis teste les URLs activées depuis le chemin VPN.' if session.get('lang','fr') == 'fr' else
+            'Companion récupère les trackers depuis vos clients BitTorrent avant de stopper les containers, puis teste les URLs activées depuis le chemin VPN.' if lang == 'fr' else
             'Companion discovers trackers from your BitTorrent clients before stopping containers, then checks enabled URLs through the VPN path.',
             readme_links.trackers) }}
         </aside>
@@ -608,14 +608,14 @@
         <aside class="settings-pane-aside">
           {{ settings_world_map() }}
           <div class="settings-help-card">
-            <h6><i class="bi bi-diagram-3 me-1"></i>{{ 'Port forwarding' if session.get('lang','fr') == 'fr' else 'Port forwarding' }}</h6>
-            <div class="metric"><span>{{ 'Règles' if session.get('lang','fr') == 'fr' else 'Rules' }}</span><strong>{{ port_forwards | length }}</strong></div>
-            <div class="metric"><span>{{ 'Contrôle' if session.get('lang','fr') == 'fr' else 'Enabled' }}</span><strong>{{ 'ON' if cfg.port_forward_enabled == '1' else 'OFF' }}</strong></div>
-            <div class="metric"><span>{{ 'Auto fournisseur' if session.get('lang','fr') == 'fr' else 'Provider auto' }}</span><strong>{{ 'ON' if cfg.port_forward_auto_sync == '1' else 'OFF' }}</strong></div>
-            <div class="metric"><span>{{ 'Port natif' if session.get('lang','fr') == 'fr' else 'Native port' }}</span><strong>{% if gluetun_native_portforward.ok %}{{ gluetun_native_portforward.ports | join(', ') }}{% else %}—{% endif %}</strong></div>
+            <h6><i class="bi bi-diagram-3 me-1"></i>{{ 'Port forwarding' if lang == 'fr' else 'Port forwarding' }}</h6>
+            <div class="metric"><span>{{ 'Règles' if lang == 'fr' else 'Rules' }}</span><strong>{{ port_forwards | length }}</strong></div>
+            <div class="metric"><span>{{ 'Contrôle' if lang == 'fr' else 'Enabled' }}</span><strong>{{ 'ON' if cfg.port_forward_enabled == '1' else 'OFF' }}</strong></div>
+            <div class="metric"><span>{{ 'Auto fournisseur' if lang == 'fr' else 'Provider auto' }}</span><strong>{{ 'ON' if cfg.port_forward_auto_sync == '1' else 'OFF' }}</strong></div>
+            <div class="metric"><span>{{ 'Port natif' if lang == 'fr' else 'Native port' }}</span><strong>{% if gluetun_native_portforward.ok %}{{ gluetun_native_portforward.ports | join(', ') }}{% else %}—{% endif %}</strong></div>
           </div>
           {{ readme_card(t.set_side_readme,
-            'Companion applique les règles de port forwarding par fournisseur VPN et peut synchroniser qBittorrent ou exécuter une commande on_port_change.' if session.get('lang','fr') == 'fr' else
+            'Companion applique les règles de port forwarding par fournisseur VPN et peut synchroniser qBittorrent ou exécuter une commande on_port_change.' if lang == 'fr' else
             'Companion applies VPN-provider port forwarding rules and can synchronize qBittorrent or run an on_port_change command.',
             readme_links.port_forwarding) }}
         </aside>
@@ -1403,7 +1403,7 @@
           <select name="active_profile" id="active_profile" class="form-select form-select-sm" style="max-width:300px">
             {% for pk, pv in profiles.items() %}
             <option value="{{ pk }}" {{ 'selected' if cfg.active_profile == pk }}>
-              {{ pv.label_fr if session.get('lang','fr') == 'fr' else pv.label_en }}
+              {{ pv.label_fr if lang == 'fr' else pv.label_en }}
             </option>
             {% endfor %}
           </select>
@@ -1416,7 +1416,7 @@
           <div class="form-text text-info profile-hint-{{ pk }}"
                style="{{ 'display:block' if cfg.active_profile == pk else 'display:none' }}">
             <i class="bi bi-info-circle me-1"></i>
-            {{ pv.hint_fr if session.get('lang','fr') == 'fr' else pv.hint_en }}
+            {{ pv.hint_fr if lang == 'fr' else pv.hint_en }}
           </div>
           {% endfor %}
         </div>
@@ -1826,7 +1826,7 @@
           <label class="form-label small fw-semibold">{{ t.set_catalogue_import_mode_label }}</label>
           <select name="catalogue_import_mode" class="form-select form-select-sm"
                   style="max-width:340px" id="catalogue_import_mode"
-                  onchange="document.getElementById('catalogue_provider_row').classList.toggle('d-none', this.value !== 'provider')">
+                  onchange="document.getElementById('catalogue_provider_row').classList.toggle('d-none', this.value !== 'provider'); updateCatalogueFilterOptions()">
             <option value="active"   {{ 'selected' if cfg.catalogue_import_mode == 'active' }}>{{ t.set_catalogue_mode_active }}</option>
             <option value="all"      {{ 'selected' if cfg.catalogue_import_mode == 'all' }}>{{ t.set_catalogue_mode_all }}</option>
             <option value="provider" {{ 'selected' if cfg.catalogue_import_mode == 'provider' }}>{{ t.set_catalogue_mode_provider }}</option>
@@ -1836,7 +1836,8 @@
         <div class="mb-3 {{ 'd-none' if cfg.catalogue_import_mode != 'provider' }}" id="catalogue_provider_row">
           <label class="form-label small fw-semibold">{{ t.set_catalogue_provider_label }}</label>
           {% if catalogue_stats.providers %}
-          <select name="catalogue_import_provider" class="form-select form-select-sm" style="max-width:280px">
+          <select name="catalogue_import_provider" class="form-select form-select-sm" style="max-width:280px"
+                  onchange="updateCatalogueFilterOptions()">
             {% for p in catalogue_stats.providers %}
             <option value="{{ p.name }}" {{ 'selected' if cfg.catalogue_import_provider == p.name }}>
               {{ p.name }} ({{ p.count }} {{ t.set_catalogue_servers }})
@@ -1846,7 +1847,7 @@
           {% else %}
           <input type="text" name="catalogue_import_provider" class="form-control form-control-sm"
                  style="max-width:280px" value="{{ cfg.catalogue_import_provider }}"
-                 placeholder="ex: airvpn">
+                 placeholder="ex: airvpn" oninput="updateCatalogueFilterOptions()">
           {% endif %}
         </div>
 
@@ -1858,7 +1859,8 @@
           </label>
         </div>
 
-        <div class="mb-3">
+        <div class="mb-3 {{ 'd-none' if cfg.catalogue_import_mode != 'provider' or (cfg.catalogue_import_provider or '')|lower != 'protonvpn' }}"
+             id="catalogue_server_type_row">
           <label class="form-label small fw-semibold" for="catalogue_server_type">{{ t.set_catalogue_server_type_label }}</label>
           <select name="catalogue_server_type" class="form-select form-select-sm"
                   style="max-width:280px" id="catalogue_server_type">
@@ -1887,7 +1889,7 @@
           <label class="form-label small fw-semibold">{{ t.set_catalogue_filter_type_label }}</label>
           <select name="catalogue_import_filter_type" class="form-select form-select-sm"
                   style="max-width:340px" id="catalogue_import_filter_type">
-            <option value="all"      {{ 'selected' if cfg.get('catalogue_import_filter_type','all') == 'all' }}>{{ t.set_catalogue_filter_all }}</option>
+            <option value="all" id="catalogue_filter_all_option" {{ 'selected' if cfg.get('catalogue_import_filter_type','name') == 'all' }}>{{ t.set_catalogue_filter_all }}</option>
             <option value="name"     {{ 'selected' if cfg.get('catalogue_import_filter_type') == 'name' }}>{{ t.set_catalogue_filter_name }}</option>
             <option value="country"  {{ 'selected' if cfg.get('catalogue_import_filter_type') == 'country' }}>{{ t.set_catalogue_filter_country }}</option>
             <option value="city"     {{ 'selected' if cfg.get('catalogue_import_filter_type') == 'city' }}>{{ t.set_catalogue_filter_city }}</option>
@@ -2020,13 +2022,13 @@
       <div>
         <h6 class="fw-bold mb-1 text-warning">
           <i class="bi bi-shield-check"></i>
-          {{ 'Filtrage DNS Gluetun' if session.get('lang','fr') == 'fr' else 'Gluetun DNS filtering' }}
+          {{ 'Filtrage DNS Gluetun' if lang == 'fr' else 'Gluetun DNS filtering' }}
         </h6>
         <p class="text-muted mb-0 settings-wide-hint">
-          {{ 'Gluetun bloque les domaines malveillants par défaut. Ce filtrage peut parfois bloquer l’URL d’annonce d’un tracker BitTorrent.' if session.get('lang','fr') == 'fr' else 'Gluetun blocks malicious domains by default. This filtering can occasionally block a BitTorrent tracker announce URL.' }}
+          {{ 'Gluetun bloque les domaines malveillants par défaut. Ce filtrage peut parfois bloquer l’URL d’annonce d’un tracker BitTorrent.' if lang == 'fr' else 'Gluetun blocks malicious domains by default. This filtering can occasionally block a BitTorrent tracker announce URL.' }}
           <a href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/options/dns.md"
              target="_blank" rel="noreferrer noopener" class="ms-1">
-            {{ 'Documentation DNS de Gluetun' if session.get('lang','fr') == 'fr' else 'Gluetun DNS documentation' }}
+            {{ 'Documentation DNS de Gluetun' if lang == 'fr' else 'Gluetun DNS documentation' }}
             <i class="bi bi-box-arrow-up-right small"></i>
           </a>
         </p>
@@ -2044,22 +2046,22 @@
           <input type="checkbox" name="dns_block_malicious" class="form-check-input"
                  id="dns_block_malicious" {{ 'checked' if cfg.dns_block_malicious == '1' }}>
           <label class="form-check-label fw-semibold" for="dns_block_malicious">
-            {{ 'Bloquer les domaines malveillants (recommandé)' if session.get('lang','fr') == 'fr' else 'Block malicious domains (recommended)' }}
+            {{ 'Bloquer les domaines malveillants (recommandé)' if lang == 'fr' else 'Block malicious domains (recommended)' }}
           </label>
           <div class="form-text">
-            {{ 'Pilote BLOCK_MALICIOUS. La désactivation réduit la protection DNS de tous les containers utilisant le réseau de Gluetun.' if session.get('lang','fr') == 'fr' else 'Controls BLOCK_MALICIOUS. Disabling it reduces DNS protection for every container using Gluetun’s network.' }}
+            {{ 'Pilote BLOCK_MALICIOUS. La désactivation réduit la protection DNS de tous les containers utilisant le réseau de Gluetun.' if lang == 'fr' else 'Controls BLOCK_MALICIOUS. Disabling it reduces DNS protection for every container using Gluetun’s network.' }}
           </div>
         </div>
       </div>
       <div class="col-12">
         <label class="form-label small mb-1" for="dns_unblock_hostnames">
-          {{ 'Domaines à autoriser malgré le filtrage' if session.get('lang','fr') == 'fr' else 'Domains to allow through filtering' }}
+          {{ 'Domaines à autoriser malgré le filtrage' if lang == 'fr' else 'Domains to allow through filtering' }}
         </label>
         <input type="text" name="dns_unblock_hostnames" id="dns_unblock_hostnames"
                class="form-control form-control-sm font-monospace"
                value="{{ cfg.dns_unblock_hostnames }}" placeholder="tracker.example.org,announce.example.net">
         <div class="form-text">
-          {{ 'Correspond à DNS_UNBLOCK_HOSTNAMES. Séparez les domaines par des virgules. Préférez cette exception ciblée à la désactivation complète.' if session.get('lang','fr') == 'fr' else 'Maps to DNS_UNBLOCK_HOSTNAMES. Separate domains with commas. Prefer this targeted exception over disabling all protection.' }}
+          {{ 'Correspond à DNS_UNBLOCK_HOSTNAMES. Séparez les domaines par des virgules. Préférez cette exception ciblée à la désactivation complète.' if lang == 'fr' else 'Maps to DNS_UNBLOCK_HOSTNAMES. Separate domains with commas. Prefer this targeted exception over disabling all protection.' }}
         </div>
       </div>
       <div class="col-12">
@@ -2067,7 +2069,7 @@
           <i class="bi bi-save"></i> {{ t.cmn_save }}
         </button>
         <span class="small text-muted ms-2">
-          {{ 'Gluetun sera recréé immédiatement.' if session.get('lang','fr') == 'fr' else 'Gluetun will be recreated immediately.' }}
+          {{ 'Gluetun sera recréé immédiatement.' if lang == 'fr' else 'Gluetun will be recreated immediately.' }}
         </span>
       </div>
     </form>
@@ -2078,10 +2080,10 @@
       <div>
         <h6 class="fw-bold mb-1 text-info">
           <i class="bi bi-broadcast-pin"></i>
-          {{ 'Contrôle des trackers BitTorrent' if session.get('lang','fr') == 'fr' else 'BitTorrent tracker checks' }}
+          {{ 'Contrôle des trackers BitTorrent' if lang == 'fr' else 'BitTorrent tracker checks' }}
         </h6>
         <p class="text-muted mb-0 settings-wide-hint">
-          {{ 'Les trackers activés sont testés depuis le chemin VPN. 80% de réussite par défaut suffit pour considérer le serveur compatible.' if session.get('lang','fr') == 'fr' else 'Enabled trackers are checked through the VPN path. By default, 80% success is enough to consider the server compatible.' }}
+          {{ 'Les trackers activés sont testés depuis le chemin VPN. 80% de réussite par défaut suffit pour considérer le serveur compatible.' if lang == 'fr' else 'Enabled trackers are checked through the VPN path. By default, 80% success is enough to consider the server compatible.' }}
         </p>
       </div>
       <span class="badge {{ 'bg-success' if cfg.tracker_check_enabled == '1' else 'bg-secondary' }}">
@@ -2097,7 +2099,7 @@
           <input type="checkbox" name="tracker_check_enabled" class="form-check-input"
                  id="tracker_check_enabled" {{ 'checked' if cfg.tracker_check_enabled == '1' }}>
           <label class="form-check-label fw-semibold" for="tracker_check_enabled">
-            {{ 'Activer le contrôle trackers pendant les vérifications VPN' if session.get('lang','fr') == 'fr' else 'Enable tracker checks during VPN verification' }}
+            {{ 'Activer le contrôle trackers pendant les vérifications VPN' if lang == 'fr' else 'Enable tracker checks during VPN verification' }}
           </label>
         </div>
       </div>
@@ -2106,15 +2108,15 @@
           <input type="checkbox" name="tracker_require_for_switch" class="form-check-input"
                  id="tracker_require_for_switch" {{ 'checked' if cfg.tracker_require_for_switch == '1' }}>
           <label class="form-check-label fw-semibold" for="tracker_require_for_switch">
-            {{ 'Exiger un résultat trackers OK pour les bascules automatiques et les pools' if session.get('lang','fr') == 'fr' else 'Require an OK tracker result for automatic switches and pools' }}
+            {{ 'Exiger un résultat trackers OK pour les bascules automatiques et les pools' if lang == 'fr' else 'Require an OK tracker result for automatic switches and pools' }}
           </label>
           <div class="form-text">
-            {{ 'Pendant un benchmark, un serveur sous le seuil est exclu du choix final. Dans les pools, les serveurs déjà connus sous le seuil sont ignorés; les serveurs jamais testés restent candidats.' if session.get('lang','fr') == 'fr' else 'During a benchmark, servers below the threshold are excluded from the final pick. In pools, servers already known below threshold are ignored; never-tested servers remain candidates.' }}
+            {{ 'Pendant un benchmark, un serveur sous le seuil est exclu du choix final. Dans les pools, les serveurs déjà connus sous le seuil sont ignorés; les serveurs jamais testés restent candidats.' if lang == 'fr' else 'During a benchmark, servers below the threshold are excluded from the final pick. In pools, servers already known below threshold are ignored; never-tested servers remain candidates.' }}
           </div>
         </div>
       </div>
       <div class="col-sm-4">
-        <label class="form-label small mb-1">{{ 'Seuil OK' if session.get('lang','fr') == 'fr' else 'OK threshold' }}</label>
+        <label class="form-label small mb-1">{{ 'Seuil OK' if lang == 'fr' else 'OK threshold' }}</label>
         <div class="input-group input-group-sm">
           <input type="number" name="tracker_check_threshold_pct" class="form-control"
                  value="{{ cfg.tracker_check_threshold_pct }}" min="1" max="100">
@@ -2130,7 +2132,7 @@
         </div>
       </div>
       <div class="col-sm-4">
-        <label class="form-label small mb-1">{{ 'Concurrence' if session.get('lang','fr') == 'fr' else 'Concurrency' }}</label>
+        <label class="form-label small mb-1">{{ 'Concurrence' if lang == 'fr' else 'Concurrency' }}</label>
         <input type="number" name="tracker_check_concurrency" class="form-control form-control-sm"
                value="{{ cfg.tracker_check_concurrency }}" min="1" max="64">
       </div>
@@ -2140,11 +2142,11 @@
         </button>
         <button type="button" class="btn btn-sm btn-outline-success" id="btn-trackers-discover"
                 onclick="trackerDiscover()">
-          <i class="bi bi-search"></i> {{ 'Découvrir les trackers' if session.get('lang','fr') == 'fr' else 'Discover trackers' }}
+          <i class="bi bi-search"></i> {{ 'Découvrir les trackers' if lang == 'fr' else 'Discover trackers' }}
         </button>
         <button type="button" class="btn btn-sm btn-outline-primary" id="btn-trackers-check"
                 onclick="trackerCheck()">
-          <i class="bi bi-lightning-charge"></i> {{ 'Tester les URLs activées' if session.get('lang','fr') == 'fr' else 'Check enabled URLs' }}
+          <i class="bi bi-lightning-charge"></i> {{ 'Tester les URLs activées' if lang == 'fr' else 'Check enabled URLs' }}
         </button>
         <span class="small text-muted align-self-center" id="tracker-action-result"></span>
       </div>
@@ -2154,7 +2156,7 @@
   <div class="card p-4 mb-4" id="card-torrent-clients">
     <h6 class="fw-bold mb-3">
       <i class="bi bi-hdd-stack text-primary"></i>
-      {{ 'Clients BitTorrent' if session.get('lang','fr') == 'fr' else 'BitTorrent clients' }}
+      {{ 'Clients BitTorrent' if lang == 'fr' else 'BitTorrent clients' }}
     </h6>
 
     {% if torrent_clients %}
@@ -2172,7 +2174,7 @@
           <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="client_id" value="{{ c.id }}">
           <div class="col-md-4">
-            <label class="form-label small mb-1">{{ 'Nom' if session.get('lang','fr') == 'fr' else 'Name' }}</label>
+            <label class="form-label small mb-1">{{ 'Nom' if lang == 'fr' else 'Name' }}</label>
             <input name="client_name" class="form-control form-control-sm" value="{{ c.name }}">
           </div>
           <div class="col-md-3">
@@ -2187,19 +2189,19 @@
             <input name="base_url" class="form-control form-control-sm font-monospace" value="{{ c.base_url }}">
           </div>
           <div class="col-md-3">
-            <label class="form-label small mb-1">{{ 'Utilisateur' if session.get('lang','fr') == 'fr' else 'Username' }}</label>
+            <label class="form-label small mb-1">{{ 'Utilisateur' if lang == 'fr' else 'Username' }}</label>
             <input name="client_username" class="form-control form-control-sm" value="{{ c.username }}" autocomplete="off">
           </div>
           <div class="col-md-3">
-            <label class="form-label small mb-1">{{ 'Mot de passe' if session.get('lang','fr') == 'fr' else 'Password' }}</label>
-            <input name="client_password" type="password" class="form-control form-control-sm" placeholder="{{ 'inchangé' if session.get('lang','fr') == 'fr' else 'unchanged' }}" autocomplete="new-password">
+            <label class="form-label small mb-1">{{ 'Mot de passe' if lang == 'fr' else 'Password' }}</label>
+            <input name="client_password" type="password" class="form-control form-control-sm" placeholder="{{ 'inchangé' if lang == 'fr' else 'unchanged' }}" autocomplete="new-password">
           </div>
           <div class="col-md-3">
             <label class="form-label small mb-1">Container</label>
             <input name="container_name" class="form-control form-control-sm" value="{{ c.container_name }}" placeholder="qbittorrent">
           </div>
           <div class="col-md-3">
-            <label class="form-label small mb-1">{{ 'Catégories' if session.get('lang','fr') == 'fr' else 'Categories' }}</label>
+            <label class="form-label small mb-1">{{ 'Catégories' if lang == 'fr' else 'Categories' }}</label>
             <input name="category_filter" class="form-control form-control-sm" value="{{ c.category_filter }}" placeholder="movies,tv">
           </div>
           <div class="col-md-3">
@@ -2213,17 +2215,17 @@
             </div>
             <div class="form-check">
               <input class="form-check-input" type="checkbox" name="include_paused" id="include_paused_{{ c.id }}" {{ 'checked' if c.include_paused }}>
-              <label class="form-check-label small" for="include_paused_{{ c.id }}">{{ 'Inclure pause' if session.get('lang','fr') == 'fr' else 'Include paused' }}</label>
+              <label class="form-check-label small" for="include_paused_{{ c.id }}">{{ 'Inclure pause' if lang == 'fr' else 'Include paused' }}</label>
             </div>
             <div class="form-check">
               <input class="form-check-input" type="checkbox" name="include_private" id="include_private_{{ c.id }}" {{ 'checked' if c.include_private }}>
-              <label class="form-check-label small" for="include_private_{{ c.id }}">{{ 'Inclure privés' if session.get('lang','fr') == 'fr' else 'Include private' }}</label>
+              <label class="form-check-label small" for="include_private_{{ c.id }}">{{ 'Inclure privés' if lang == 'fr' else 'Include private' }}</label>
             </div>
           </div>
           <div class="col-12 d-flex gap-2">
             <button class="btn btn-sm btn-primary"><i class="bi bi-save"></i> {{ t.cmn_save }}</button>
             <button type="button" class="btn btn-sm btn-outline-success" onclick="trackerDiscover({{ c.id }})">
-              <i class="bi bi-search"></i> {{ 'Scanner ce client' if session.get('lang','fr') == 'fr' else 'Scan this client' }}
+              <i class="bi bi-search"></i> {{ 'Scanner ce client' if lang == 'fr' else 'Scan this client' }}
             </button>
           </div>
         </form>
@@ -2231,7 +2233,7 @@
           <input type="hidden" name="action" value="torrent_client_delete">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="client_id" value="{{ c.id }}">
-          <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash3"></i> {{ 'Supprimer' if session.get('lang','fr') == 'fr' else 'Delete' }}</button>
+          <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash3"></i> {{ 'Supprimer' if lang == 'fr' else 'Delete' }}</button>
         </form>
       </details>
       {% endfor %}
@@ -2241,7 +2243,7 @@
     <form method="post" class="border rounded p-3" style="border-color:var(--bs-border-color)!important">
       <input type="hidden" name="action" value="torrent_client_save">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <div class="fw-semibold mb-2"><i class="bi bi-plus-circle me-1"></i>{{ 'Ajouter un client' if session.get('lang','fr') == 'fr' else 'Add a client' }}</div>
+      <div class="fw-semibold mb-2"><i class="bi bi-plus-circle me-1"></i>{{ 'Ajouter un client' if lang == 'fr' else 'Add a client' }}</div>
       <div class="row g-2">
         <div class="col-md-3"><input name="client_name" class="form-control form-control-sm" placeholder="qBittorrent"></div>
         <div class="col-md-3">
@@ -2251,8 +2253,8 @@
           </select>
         </div>
         <div class="col-md-6"><input name="base_url" class="form-control form-control-sm font-monospace" placeholder="http://qbittorrent:8080"></div>
-        <div class="col-md-3"><input name="client_username" class="form-control form-control-sm" placeholder="{{ 'Utilisateur' if session.get('lang','fr') == 'fr' else 'Username' }}" autocomplete="off"></div>
-        <div class="col-md-3"><input name="client_password" type="password" class="form-control form-control-sm" placeholder="{{ 'Mot de passe' if session.get('lang','fr') == 'fr' else 'Password' }}" autocomplete="new-password"></div>
+        <div class="col-md-3"><input name="client_username" class="form-control form-control-sm" placeholder="{{ 'Utilisateur' if lang == 'fr' else 'Username' }}" autocomplete="off"></div>
+        <div class="col-md-3"><input name="client_password" type="password" class="form-control form-control-sm" placeholder="{{ 'Mot de passe' if lang == 'fr' else 'Password' }}" autocomplete="new-password"></div>
         <div class="col-md-3"><input name="container_name" class="form-control form-control-sm" placeholder="container"></div>
         <div class="col-md-3 d-flex gap-3 align-items-center">
           <input type="hidden" name="client_enabled" value="on">
@@ -2260,7 +2262,7 @@
           <input type="hidden" name="include_private" value="on">
           <button class="btn btn-sm btn-success fw-semibold">
             <i class="bi bi-save"></i>
-            {{ 'Enregistrer le client' if session.get('lang','fr') == 'fr' else 'Save client' }}
+            {{ 'Enregistrer le client' if lang == 'fr' else 'Save client' }}
           </button>
         </div>
       </div>
@@ -2272,16 +2274,16 @@
       <div>
         <h6 class="fw-bold mb-1">
           <i class="bi bi-diagram-3 text-info"></i>
-          {{ 'Ports forwardés VPN' if session.get('lang','fr') == 'fr' else 'VPN forwarded ports' }}
+          {{ 'Ports forwardés VPN' if lang == 'fr' else 'VPN forwarded ports' }}
         </h6>
         <p class="text-muted small mb-0">
-          {{ 'Déclarer les règles par fournisseur. Si l’automatisme est activé (par défaut), Companion applique les règles quand Gluetun change de fournisseur VPN, après reconnexion native et lors d’un renouvellement de port.' if session.get('lang','fr') == 'fr' else 'Declare rules per provider. When automation is enabled (default), Companion applies rules when Gluetun changes VPN provider, after native reconnection and on port renewal.' }}
+          {{ 'Déclarer les règles par fournisseur. Si l’automatisme est activé (par défaut), Companion applique les règles quand Gluetun change de fournisseur VPN, après reconnexion native et lors d’un renouvellement de port.' if lang == 'fr' else 'Declare rules per provider. When automation is enabled (default), Companion applies rules when Gluetun changes VPN provider, after native reconnection and on port renewal.' }}
         </p>
         <p class="text-muted small mb-0 mt-1">
-          {{ 'Vérification externe manuelle :' if session.get('lang','fr') == 'fr' else 'Manual external check:' }}
+          {{ 'Vérification externe manuelle :' if lang == 'fr' else 'Manual external check:' }}
           <a href="https://canyouseeme.org/" target="_blank" rel="noopener">canyouseeme.org</a> ·
           <a href="https://www.yougetsignal.com/tools/open-ports/" target="_blank" rel="noopener">yougetsignal.com</a>
-          <span data-bs-toggle="tooltip" data-bs-title="{{ 'Saisir l’IP publique VPN et le port manuellement — ces sites ne sont pas pré-remplissables. Le bouton « Tester depuis Internet » de chaque règle fait le même test TCP automatiquement.' if session.get('lang','fr') == 'fr' else 'Enter the VPN public IP and port manually — these sites cannot be pre-filled. The per-rule “Test from Internet” button runs the same TCP test automatically.' }}">
+          <span data-bs-toggle="tooltip" data-bs-title="{{ 'Saisir l’IP publique VPN et le port manuellement — ces sites ne sont pas pré-remplissables. Le bouton « Tester depuis Internet » de chaque règle fait le même test TCP automatiquement.' if lang == 'fr' else 'Enter the VPN public IP and port manually — these sites cannot be pre-filled. The per-rule “Test from Internet” button runs the same TCP test automatically.' }}">
             <i class="bi bi-question-circle"></i>
           </span>
         </p>
@@ -2298,10 +2300,10 @@
             <input class="form-check-input" type="checkbox" name="port_forward_enabled"
                    id="port_forward_enabled" {{ 'checked' if cfg.port_forward_enabled == '1' }}>
             <label class="form-check-label fw-semibold" for="port_forward_enabled">
-              {{ 'Utiliser les règles de port forwarding' if session.get('lang','fr') == 'fr' else 'Use port forwarding rules' }}
+              {{ 'Utiliser les règles de port forwarding' if lang == 'fr' else 'Use port forwarding rules' }}
             </label>
             <span class="text-muted ms-1" data-bs-toggle="tooltip"
-                  data-bs-title="{{ 'Active l’inventaire, les vérifications et les synchronisations manuelles. Si cette option est désactivée, aucune règle n’est appliquée.' if session.get('lang','fr') == 'fr' else 'Enables inventory, checks and manual synchronization. When disabled, no rule is applied.' }}">
+                  data-bs-title="{{ 'Active l’inventaire, les vérifications et les synchronisations manuelles. Si cette option est désactivée, aucune règle n’est appliquée.' if lang == 'fr' else 'Enables inventory, checks and manual synchronization. When disabled, no rule is applied.' }}">
               <i class="bi bi-question-circle"></i>
             </span>
           </div>
@@ -2309,17 +2311,17 @@
             <input class="form-check-input" type="checkbox" name="port_forward_auto_sync"
                    id="port_forward_auto_sync" {{ 'checked' if cfg.port_forward_auto_sync == '1' }}>
             <label class="form-check-label fw-semibold" for="port_forward_auto_sync">
-              {{ 'Automatiser après changement de fournisseur VPN' if session.get('lang','fr') == 'fr' else 'Automate after VPN provider change' }}
+              {{ 'Automatiser après changement de fournisseur VPN' if lang == 'fr' else 'Automate after VPN provider change' }}
             </label>
             <a class="text-muted ms-1" href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md#port-forwarding"
                target="_blank" rel="noopener"
                data-bs-toggle="tooltip"
-               data-bs-title="{{ 'Après une bascule vers un autre fournisseur, Companion applique les règles correspondantes. Les règles natives lisent le port via l’API Gluetun GET /v1/portforward.' if session.get('lang','fr') == 'fr' else 'After switching to another provider, Companion applies matching rules. Native rules read the port through the Gluetun API GET /v1/portforward.' }}">
+               data-bs-title="{{ 'Après une bascule vers un autre fournisseur, Companion applique les règles correspondantes. Les règles natives lisent le port via l’API Gluetun GET /v1/portforward.' if lang == 'fr' else 'After switching to another provider, Companion applies matching rules. Native rules read the port through the Gluetun API GET /v1/portforward.' }}">
               <i class="bi bi-question-circle"></i>
             </a>
           </div>
           <div class="form-text">
-            {{ 'Premier interrupteur : règles disponibles. Second interrupteur : application automatique après bascule fournisseur.' if session.get('lang','fr') == 'fr' else 'First switch: rules are available. Second switch: automatic application after provider switch.' }}
+            {{ 'Premier interrupteur : règles disponibles. Second interrupteur : application automatique après bascule fournisseur.' if lang == 'fr' else 'First switch: rules are available. Second switch: automatic application after provider switch.' }}
           </div>
         </div>
         <div class="col-lg-4">
@@ -2328,10 +2330,10 @@
                  value="{{ cfg.port_forward_gluetun_api_url }}" placeholder="http://host.docker.internal:8000">
           <div class="form-text">
             {% if gluetun_native_portforward.ok %}
-            {{ 'Port natif détecté' if session.get('lang','fr') == 'fr' else 'Native port detected' }} :
+            {{ 'Port natif détecté' if lang == 'fr' else 'Native port detected' }} :
             <code>{{ gluetun_native_portforward.ports | join(', ') }}</code>
             {% else %}
-            {{ 'Port natif non disponible' if session.get('lang','fr') == 'fr' else 'Native port unavailable' }}
+            {{ 'Port natif non disponible' if lang == 'fr' else 'Native port unavailable' }}
             {% endif %}
           </div>
         </div>
@@ -2339,20 +2341,20 @@
           <label class="form-label small mb-1">X-API-Key</label>
           <input name="port_forward_gluetun_api_key" type="password"
                  class="form-control form-control-sm font-monospace"
-                 placeholder="{{ 'déjà configurée' if cfg.port_forward_gluetun_api_key_set == '1' and session.get('lang','fr') == 'fr' else ('configured' if cfg.port_forward_gluetun_api_key_set == '1' else 'optional') }}"
+                 placeholder="{{ 'déjà configurée' if cfg.port_forward_gluetun_api_key_set == '1' and lang == 'fr' else ('configured' if cfg.port_forward_gluetun_api_key_set == '1' else 'optional') }}"
                  autocomplete="new-password">
           {% if cfg.port_forward_gluetun_api_key_set == '1' %}
           <div class="form-check mt-1">
             <input class="form-check-input" type="checkbox" name="port_forward_gluetun_api_key_action"
                    value="clear" id="port_forward_gluetun_api_key_clear">
             <label class="form-check-label small" for="port_forward_gluetun_api_key_clear">
-              {{ 'Effacer' if session.get('lang','fr') == 'fr' else 'Clear' }}
+              {{ 'Effacer' if lang == 'fr' else 'Clear' }}
             </label>
           </div>
           {% endif %}
         </div>
         <div class="col-lg-1">
-          <label class="form-label small mb-1">{{ 'Timeout hook' if session.get('lang','fr') == 'fr' else 'Hook timeout' }}</label>
+          <label class="form-label small mb-1">{{ 'Timeout hook' if lang == 'fr' else 'Hook timeout' }}</label>
           <div class="input-group input-group-sm">
             <input name="port_forward_hook_timeout_secs" type="number" class="form-control"
                    value="{{ cfg.port_forward_hook_timeout_secs }}" min="1" max="120">
@@ -2367,7 +2369,7 @@
 
     <div class="alert alert-info py-2 px-3 mb-3 small">
       <strong>ProtonVPN :</strong>
-      {{ 'utilisez une règle ProtonVPN en mode Natif Gluetun, sans port statique. Gluetun obtient le port NAT-PMP aléatoire ; Companion le lit via /v1/portforward, l’injecte dans qBittorrent et surveille ses renouvellements toutes les 5 minutes. Activez VPN_PORT_FORWARDING=on dans Gluetun. En OpenVPN, ajoutez aussi +pmp à l’identifiant Proton ; en WireGuard, +pmp n’est pas utilisé.' if session.get('lang','fr') == 'fr' else 'use a ProtonVPN rule in Gluetun native mode, without a static port. Gluetun obtains the random NAT-PMP port; Companion reads it from /v1/portforward, injects it into qBittorrent, and monitors renewals every 5 minutes. Enable VPN_PORT_FORWARDING=on in Gluetun. With OpenVPN, also append +pmp to the Proton username; WireGuard does not use +pmp.' }}
+      {{ 'utilisez une règle ProtonVPN en mode Natif Gluetun, sans port statique. Gluetun obtient le port NAT-PMP aléatoire ; Companion le lit via /v1/portforward, l’injecte dans qBittorrent et surveille ses renouvellements toutes les 5 minutes. Activez VPN_PORT_FORWARDING=on dans Gluetun. En OpenVPN, ajoutez aussi +pmp à l’identifiant Proton ; en WireGuard, +pmp n’est pas utilisé.' if lang == 'fr' else 'use a ProtonVPN rule in Gluetun native mode, without a static port. Gluetun obtains the random NAT-PMP port; Companion reads it from /v1/portforward, injects it into qBittorrent, and monitors renewals every 5 minutes. Enable VPN_PORT_FORWARDING=on in Gluetun. With OpenVPN, also append +pmp to the Proton username; WireGuard does not use +pmp.' }}
     </div>
 
     {% if port_forwards %}
@@ -2379,7 +2381,7 @@
           <strong>{{ pf.name }}</strong>
           <code>{{ (pf.effective_port or '—') if pf.mode == 'native' else pf.port }}/{{ pf.protocols }}</code>
           <span class="badge {{ 'bg-success' if pf.overall_state == 'ok' else ('bg-danger' if pf.overall_state == 'bad' else 'bg-secondary') }}">{{ pf.overall_label }}</span>
-          <span class="text-muted small">{{ pf.provider }} · {{ 'Natif Gluetun' if pf.mode == 'native' and session.get('lang','fr') == 'fr' else ('Gluetun native' if pf.mode == 'native' else ('Manuel' if session.get('lang','fr') == 'fr' else 'Manual')) }}</span>
+          <span class="text-muted small">{{ pf.provider }} · {{ 'Natif Gluetun' if pf.mode == 'native' and lang == 'fr' else ('Gluetun native' if pf.mode == 'native' else ('Manuel' if lang == 'fr' else 'Manual')) }}</span>
           {% if pf.client_name %}
           <span class="text-muted small text-truncate">{{ pf.client_name }}</span>
           {% endif %}
@@ -2390,7 +2392,7 @@
             <thead>
               <tr>
                 <th>Gluetun VPN</th>
-                <th>{{ 'Entrée Gluetun' if session.get('lang','fr') == 'fr' else 'Gluetun input' }}</th>
+                <th>{{ 'Entrée Gluetun' if lang == 'fr' else 'Gluetun input' }}</th>
                 <th>Docker</th>
                 <th>Client</th>
               </tr>
@@ -2423,11 +2425,11 @@
           <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="port_forward_id" value="{{ pf.id }}">
           <div class="col-md-3">
-            <label class="form-label small mb-1">{{ 'Nom' if session.get('lang','fr') == 'fr' else 'Name' }}</label>
+            <label class="form-label small mb-1">{{ 'Nom' if lang == 'fr' else 'Name' }}</label>
             <input name="pf_name" class="form-control form-control-sm" value="{{ pf.name }}">
           </div>
           <div class="col-md-2">
-            <label class="form-label small mb-1">{{ 'Fournisseur' if session.get('lang','fr') == 'fr' else 'Provider' }}</label>
+            <label class="form-label small mb-1">{{ 'Fournisseur' if lang == 'fr' else 'Provider' }}</label>
             <select name="pf_provider" class="form-select form-select-sm">
               {% for pk, pdef in port_forward_providers %}
               <option value="{{ pk }}" {{ 'selected' if pf.provider == pk }}>{{ pdef.label }}</option>
@@ -2437,8 +2439,8 @@
           <div class="col-md-2">
             <label class="form-label small mb-1">Mode</label>
             <select name="pf_mode" class="form-select form-select-sm">
-              <option value="manual" {{ 'selected' if pf.mode == 'manual' }}>{{ 'Manuel' if session.get('lang','fr') == 'fr' else 'Manual' }}</option>
-              <option value="native" {{ 'selected' if pf.mode == 'native' }}>{{ 'Natif Gluetun' if session.get('lang','fr') == 'fr' else 'Gluetun native' }}</option>
+              <option value="manual" {{ 'selected' if pf.mode == 'manual' }}>{{ 'Manuel' if lang == 'fr' else 'Manual' }}</option>
+              <option value="native" {{ 'selected' if pf.mode == 'native' }}>{{ 'Natif Gluetun' if lang == 'fr' else 'Gluetun native' }}</option>
             </select>
           </div>
           <div class="col-md-2">
@@ -2446,9 +2448,9 @@
             <input name="pf_port" type="number" class="form-control form-control-sm" value="{{ pf.port }}" min="1" max="65535">
           </div>
           <div class="col-md-3">
-            <label class="form-label small mb-1">{{ 'Client lié' if session.get('lang','fr') == 'fr' else 'Linked client' }}</label>
+            <label class="form-label small mb-1">{{ 'Client lié' if lang == 'fr' else 'Linked client' }}</label>
             <select name="pf_torrent_client_id" class="form-select form-select-sm">
-              <option value="">{{ 'Aucun' if session.get('lang','fr') == 'fr' else 'None' }}</option>
+              <option value="">{{ 'Aucun' if lang == 'fr' else 'None' }}</option>
               {% for c in torrent_clients %}
               <option value="{{ c.id }}" {{ 'selected' if pf.torrent_client_id == c.id }}>{{ c.name }} · {{ c.client_type }}</option>
               {% endfor %}
@@ -2469,12 +2471,12 @@
             </div>
           </div>
           <div class="col-md-6">
-            <input name="pf_notes" class="form-control form-control-sm" value="{{ pf.notes }}" placeholder="{{ 'Note' if session.get('lang','fr') == 'fr' else 'Note' }}">
+            <input name="pf_notes" class="form-control form-control-sm" value="{{ pf.notes }}" placeholder="{{ 'Note' if lang == 'fr' else 'Note' }}">
           </div>
           <div class="col-md-9">
             <input name="pf_on_port_change_cmd" class="form-control form-control-sm font-monospace"
                    value="{{ pf.on_port_change_cmd }}"
-                   placeholder="{{ 'Commande optionnelle on_port_change : rtorrent, script custom, serveur WireGuard perso' if session.get('lang','fr') == 'fr' else 'Optional on_port_change command: rtorrent, custom script, personal WireGuard server' }}">
+                   placeholder="{{ 'Commande optionnelle on_port_change : rtorrent, script custom, serveur WireGuard perso' if lang == 'fr' else 'Optional on_port_change command: rtorrent, custom script, personal WireGuard server' }}">
             <div class="form-text">{port} {provider} {name} {protocols} {client}</div>
           </div>
           <div class="col-md-3 d-flex gap-2 flex-wrap">
@@ -2482,21 +2484,21 @@
             {% if pf.client_type in ('qbittorrent', 'rtorrent') %}
             <button type="button" class="btn btn-sm btn-outline-info" onclick="portForwardSyncQbit({{ pf.id }}, this)">
               <i class="bi bi-arrow-repeat"></i>
-              {{ ('Synchroniser ' ~ ('qBittorrent' if pf.client_type == 'qbittorrent' else 'rTorrent')) if session.get('lang','fr') == 'fr' else ('Sync ' ~ ('qBittorrent' if pf.client_type == 'qbittorrent' else 'rTorrent')) }}
+              {{ ('Synchroniser ' ~ ('qBittorrent' if pf.client_type == 'qbittorrent' else 'rTorrent')) if lang == 'fr' else ('Sync ' ~ ('qBittorrent' if pf.client_type == 'qbittorrent' else 'rTorrent')) }}
             </button>
             {% endif %}
             <button type="button" class="btn btn-sm btn-outline-success" onclick="portForwardCheckReach({{ pf.id }}, this)"
-                    title="{{ 'Connexion TCP réelle depuis Companion (sortie box, hors VPN) vers IP_publique_VPN:port. UDP non vérifiable.' if session.get('lang','fr') == 'fr' else 'Real TCP connect from Companion (ISP egress, outside the VPN) to VPN_public_IP:port. UDP not verifiable.' }}">
-              <i class="bi bi-broadcast"></i> {{ 'Tester depuis Internet' if session.get('lang','fr') == 'fr' else 'Test from Internet' }}
+                    title="{{ 'Connexion TCP réelle depuis Companion (sortie box, hors VPN) vers IP_publique_VPN:port. UDP non vérifiable.' if lang == 'fr' else 'Real TCP connect from Companion (ISP egress, outside the VPN) to VPN_public_IP:port. UDP not verifiable.' }}">
+              <i class="bi bi-broadcast"></i> {{ 'Tester depuis Internet' if lang == 'fr' else 'Test from Internet' }}
             </button>
             <div id="port-forward-result-{{ pf.id }}" class="small w-100 mt-1" role="status" aria-live="polite"></div>
           </div>
         </form>
-        <form method="post" class="mt-2" onsubmit="return confirm('{{ 'Supprimer ce port forward ?' if session.get('lang','fr') == 'fr' else 'Delete this forwarded port?' }}')">
+        <form method="post" class="mt-2" onsubmit="return confirm('{{ 'Supprimer ce port forward ?' if lang == 'fr' else 'Delete this forwarded port?' }}')">
           <input type="hidden" name="action" value="port_forward_delete">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="port_forward_id" value="{{ pf.id }}">
-          <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash3"></i> {{ 'Supprimer' if session.get('lang','fr') == 'fr' else 'Delete' }}</button>
+          <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash3"></i> {{ 'Supprimer' if lang == 'fr' else 'Delete' }}</button>
         </form>
       </details>
       {% endfor %}
@@ -2506,7 +2508,7 @@
     <form method="post" class="border rounded p-3" style="border-color:var(--bs-border-color)!important">
       <input type="hidden" name="action" value="port_forward_save">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <div class="fw-semibold mb-2"><i class="bi bi-plus-circle me-1"></i>{{ 'Ajouter un port forwardé' if session.get('lang','fr') == 'fr' else 'Add forwarded port' }}</div>
+      <div class="fw-semibold mb-2"><i class="bi bi-plus-circle me-1"></i>{{ 'Ajouter un port forwardé' if lang == 'fr' else 'Add forwarded port' }}</div>
       <div class="row g-2">
         <div class="col-md-3"><input name="pf_name" class="form-control form-control-sm" placeholder="qBittorrent AirVPN"></div>
         <div class="col-md-2">
@@ -2518,14 +2520,14 @@
         </div>
         <div class="col-md-2">
           <select name="pf_mode" class="form-select form-select-sm">
-            <option value="manual">{{ 'Manuel' if session.get('lang','fr') == 'fr' else 'Manual' }}</option>
-            <option value="native">{{ 'Natif Gluetun' if session.get('lang','fr') == 'fr' else 'Gluetun native' }}</option>
+            <option value="manual">{{ 'Manuel' if lang == 'fr' else 'Manual' }}</option>
+            <option value="native">{{ 'Natif Gluetun' if lang == 'fr' else 'Gluetun native' }}</option>
           </select>
         </div>
         <div class="col-md-2"><input name="pf_port" type="number" class="form-control form-control-sm" placeholder="19975" min="0" max="65535"></div>
         <div class="col-md-3">
           <select name="pf_torrent_client_id" class="form-select form-select-sm">
-            <option value="">{{ 'Client BitTorrent optionnel' if session.get('lang','fr') == 'fr' else 'Optional BitTorrent client' }}</option>
+            <option value="">{{ 'Client BitTorrent optionnel' if lang == 'fr' else 'Optional BitTorrent client' }}</option>
             {% for c in torrent_clients %}
             <option value="{{ c.id }}">{{ c.name }} · {{ c.client_type }}</option>
             {% endfor %}
@@ -2542,13 +2544,13 @@
             <label class="form-check-label small" for="pf_new_udp">UDP</label>
           </div>
         </div>
-        <div class="col-md-6"><input name="pf_notes" class="form-control form-control-sm" placeholder="{{ 'Note' if session.get('lang','fr') == 'fr' else 'Note' }}"></div>
+        <div class="col-md-6"><input name="pf_notes" class="form-control form-control-sm" placeholder="{{ 'Note' if lang == 'fr' else 'Note' }}"></div>
         <div class="col-md-9">
           <input name="pf_on_port_change_cmd" class="form-control form-control-sm font-monospace"
-                 placeholder="{{ 'Commande optionnelle on_port_change' if session.get('lang','fr') == 'fr' else 'Optional on_port_change command' }}">
+                 placeholder="{{ 'Commande optionnelle on_port_change' if lang == 'fr' else 'Optional on_port_change command' }}">
         </div>
         <div class="col-md-3">
-          <button class="btn btn-sm btn-success fw-semibold"><i class="bi bi-save"></i> {{ 'Enregistrer le port' if session.get('lang','fr') == 'fr' else 'Save port' }}</button>
+          <button class="btn btn-sm btn-success fw-semibold"><i class="bi bi-save"></i> {{ 'Enregistrer le port' if lang == 'fr' else 'Save port' }}</button>
         </div>
       </div>
     </form>
@@ -2559,10 +2561,10 @@
       <div>
         <h6 class="fw-bold mb-1">
           <i class="bi bi-list-check text-success"></i>
-          {{ 'URLs de trackers détectées' if session.get('lang','fr') == 'fr' else 'Discovered tracker URLs' }}
+          {{ 'URLs de trackers détectées' if lang == 'fr' else 'Discovered tracker URLs' }}
         </h6>
         <p class="text-muted small mb-0">
-          {{ 'Désactiver une URL pour ne plus la contrôler pendant les tests futurs.' if session.get('lang','fr') == 'fr' else 'Disable a URL to skip it in future checks.' }}
+          {{ 'Désactiver une URL pour ne plus la contrôler pendant les tests futurs.' if lang == 'fr' else 'Disable a URL to skip it in future checks.' }}
         </p>
       </div>
       <span class="badge bg-secondary" id="tracker-total-badge">{{ trackers | length }}</span>
@@ -2572,12 +2574,12 @@
       <table class="table table-sm align-middle mb-0" style="font-size:.82rem">
         <thead class="sticky-top" style="z-index:1">
           <tr>
-            <th>{{ 'Contrôle' if session.get('lang','fr') == 'fr' else 'Check' }}</th>
+            <th>{{ 'Contrôle' if lang == 'fr' else 'Check' }}</th>
             <th>URL</th>
-            <th>{{ 'Sources' if session.get('lang','fr') == 'fr' else 'Sources' }}</th>
-            <th>{{ 'Torrents' if session.get('lang','fr') == 'fr' else 'Torrents' }}</th>
-            <th>{{ 'Dernier test' if session.get('lang','fr') == 'fr' else 'Last check' }}</th>
-            <th>{{ 'Résultat' if session.get('lang','fr') == 'fr' else 'Result' }}</th>
+            <th>{{ 'Sources' if lang == 'fr' else 'Sources' }}</th>
+            <th>{{ 'Torrents' if lang == 'fr' else 'Torrents' }}</th>
+            <th>{{ 'Dernier test' if lang == 'fr' else 'Last check' }}</th>
+            <th>{{ 'Résultat' if lang == 'fr' else 'Result' }}</th>
           </tr>
         </thead>
         <tbody id="tracker-table-body">
@@ -2612,7 +2614,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="text-center text-muted py-4">{{ 'Aucun tracker détecté pour le moment.' if session.get('lang','fr') == 'fr' else 'No trackers discovered yet.' }}</td></tr>
+          <tr><td colspan="6" class="text-center text-muted py-4">{{ 'Aucun tracker détecté pour le moment.' if lang == 'fr' else 'No trackers discovered yet.' }}</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -3876,6 +3878,32 @@ function triggerQuick() {
     });
 }
 
+function updateCatalogueFilterOptions() {
+  const modeEl = document.getElementById('catalogue_import_mode');
+  const filterEl = document.getElementById('catalogue_import_filter_type');
+  const allOpt = document.getElementById('catalogue_filter_all_option');
+  const serverTypeRow = document.getElementById('catalogue_server_type_row');
+  const serverTypeEl = document.getElementById('catalogue_server_type');
+  if (!modeEl || !filterEl || !allOpt) return;
+
+  let provider = '';
+  const provSelect = document.querySelector('select[name="catalogue_import_provider"]');
+  const provText = document.querySelector('input[name="catalogue_import_provider"]');
+  if (provSelect) provider = provSelect.value;
+  else if (provText) provider = provText.value.trim();
+
+  const allowAll = modeEl.value === 'provider' && provider.toLowerCase() === 'protonvpn';
+  allOpt.hidden = !allowAll;
+  allOpt.disabled = !allowAll;
+  if (serverTypeRow) serverTypeRow.classList.toggle('d-none', !allowAll);
+  if (!allowAll && serverTypeEl) serverTypeEl.value = '';
+  if (!allowAll && filterEl.value === 'all') {
+    filterEl.value = 'name';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', updateCatalogueFilterOptions);
+
 function importCatalogue() {
   const btn      = document.getElementById('btn-catalogue-import');
   const origHtml = btn.innerHTML;
@@ -3994,7 +4022,7 @@ function _renderTrackerRows(trackers) {
   if (!tbody) return;
   document.getElementById('tracker-total-badge').textContent = trackers.length;
   if (!trackers.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">{{ "Aucun tracker détecté pour le moment." if session.get("lang","fr") == "fr" else "No trackers discovered yet." }}</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">{{ "Aucun tracker détecté pour le moment." if lang == 'fr' else "No trackers discovered yet." }}</td></tr>';
     return;
   }
   tbody.innerHTML = trackers.map(tr => {
@@ -4023,7 +4051,7 @@ function trackerDiscover(clientId) {
   const btn = clientId ? null : document.getElementById('btn-trackers-discover');
   const old = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Scan'; }
-  _trackerMsg('{{ "Découverte en cours…" if session.get("lang","fr") == "fr" else "Discovery running…" }}', 'text-info');
+  _trackerMsg('{{ "Découverte en cours…" if lang == 'fr' else "Discovery running…" }}', 'text-info');
   fetch('{{ url_for("main.api_trackers_discover") }}', {
     method: 'POST',
     headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _trackerCsrf},
@@ -4045,7 +4073,7 @@ function trackerCheck() {
   const btn = document.getElementById('btn-trackers-check');
   const old = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Check'; }
-  _trackerMsg('{{ "Test en cours…" if session.get("lang","fr") == "fr" else "Check running…" }}', 'text-info');
+  _trackerMsg('{{ "Test en cours…" if lang == 'fr' else "Check running…" }}', 'text-info');
   fetch('{{ url_for("main.api_trackers_check") }}', {
     method: 'POST',
     headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _trackerCsrf},
@@ -4089,7 +4117,7 @@ function portForwardCheckReach(id, btn) {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Test...';
   }
   showResult(
-    '{{ "Test TCP en cours… Cela peut prendre quelques secondes." if session.get("lang","fr") == "fr" else "TCP test running… This may take a few seconds." }}',
+    '{{ "Test TCP en cours… Cela peut prendre quelques secondes." if lang == 'fr' else "TCP test running… This may take a few seconds." }}',
     'text-info'
   );
   fetch(`{{ url_for("main.api_port_forward_check_reachability", port_forward_id=0) }}`.replace('/0/', `/${id}/`), {
@@ -4101,21 +4129,21 @@ function portForwardCheckReach(id, btn) {
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.ok) throw new Error(data.error || 'test failed');
       if (data.open) {
-        const message = `{{ 'Port ouvert depuis Internet :' if session.get('lang','fr') == 'fr' else 'Port open from the Internet:' }} ` +
+        const message = `{{ 'Port ouvert depuis Internet :' if lang == 'fr' else 'Port open from the Internet:' }} ` +
           `${data.ip}:${data.port} (TCP, ${data.elapsed_ms} ms)`;
         showResult(message, 'text-success fw-semibold');
-        if (btn) btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>{{ "Port ouvert" if session.get("lang","fr") == "fr" else "Port open" }}';
+        if (btn) btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>{{ "Port ouvert" if lang == 'fr' else "Port open" }}';
       } else {
-        const message = `{{ 'Port fermé ou filtré :' if session.get('lang','fr') == 'fr' else 'Port closed or filtered:' }} ` +
+        const message = `{{ 'Port fermé ou filtré :' if lang == 'fr' else 'Port closed or filtered:' }} ` +
           `${data.ip}:${data.port} — ${data.error}`;
         showResult(message, 'text-danger fw-semibold');
-        if (btn) btn.innerHTML = '<i class="bi bi-x-circle me-1"></i>{{ "Port fermé" if session.get("lang","fr") == "fr" else "Port closed" }}';
+        if (btn) btn.innerHTML = '<i class="bi bi-x-circle me-1"></i>{{ "Port fermé" if lang == 'fr' else "Port closed" }}';
       }
     })
     .catch(err => {
-      const message = err.message || '{{ "Échec du test" if session.get("lang","fr") == "fr" else "Test failed" }}';
+      const message = err.message || '{{ "Échec du test" if lang == 'fr' else "Test failed" }}';
       showResult(message, 'text-danger fw-semibold');
-      if (btn) btn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>{{ "Erreur" if session.get("lang","fr") == "fr" else "Error" }}';
+      if (btn) btn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>{{ "Erreur" if lang == 'fr' else "Error" }}';
     })
     .finally(() => {
       if (btn) {
@@ -4129,7 +4157,7 @@ function portForwardSyncQbit(id, btn) {
   const oldHtml = btn ? btn.innerHTML : '';
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>{{ "Sync..." if session.get("lang","fr") == "fr" else "Sync..." }}';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>{{ "Sync..." if lang == 'fr' else "Sync..." }}';
   }
   fetch(`{{ url_for("main.api_port_forward_sync_qbittorrent", port_forward_id=0) }}`.replace('/0/', `/${id}/`), {
     method: 'POST',
@@ -4139,7 +4167,7 @@ function portForwardSyncQbit(id, btn) {
     .then(async response => {
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.ok) throw new Error(data.error || 'sync failed');
-      _trackerMsg('{{ "Port qBittorrent synchronisé." if session.get("lang","fr") == "fr" else "qBittorrent port synchronized." }}', 'text-success');
+      _trackerMsg('{{ "Port qBittorrent synchronisé." if lang == 'fr' else "qBittorrent port synchronized." }}', 'text-success');
       window.setTimeout(() => window.location.reload(), 650);
     })
     .catch(err => _trackerMsg(err.message || 'Sync failed', 'text-danger'))
