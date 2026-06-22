@@ -49,7 +49,7 @@ from .torrent_trackers import (
     tracker_summary,
 )
 from .port_forwarding import (
-    apply_after_provider_change, delete_port_forward, get_gluetun_provider,
+    apply_current_provider_port_forwards, delete_port_forward, get_gluetun_provider,
     inspect_port_forwards, read_gluetun_native_ports, save_port_forward,
     sync_qbit_listen_port,
 )
@@ -781,6 +781,21 @@ def servers():
 
     with get_db() as db:
         rows = db.execute(f'''
+            WITH catalogue_meta AS (
+                SELECT
+                    name,
+                    MAX(provider) AS catalogue_provider,
+                    MAX(country) AS catalogue_country,
+                    MAX(country_code) AS catalogue_country_code,
+                    MAX(city) AS catalogue_city,
+                    MAX(hostname) AS catalogue_hostname,
+                    MAX(ips) AS catalogue_ips,
+                    MAX(port_forward) AS catalogue_port_forward,
+                    GROUP_CONCAT(DISTINCT server_types) AS catalogue_server_types
+                FROM gluetun_catalogue
+                WHERE name != ''
+                GROUP BY name
+            )
             SELECT
                 s.id, s.name, s.filter_type, s.enabled,
                 s.consecutive_failures, s.created_at,
@@ -810,11 +825,20 @@ def servers():
                 av.users AS airvpn_users,
                 av.bw_mbps AS airvpn_bw,
                 av.bw_max_mbps AS airvpn_bw_max,
-                av.avail_mbps AS airvpn_avail_mbps
+                av.avail_mbps AS airvpn_avail_mbps,
+                cm.catalogue_provider,
+                cm.catalogue_country,
+                cm.catalogue_country_code,
+                cm.catalogue_city,
+                cm.catalogue_hostname,
+                cm.catalogue_ips,
+                cm.catalogue_port_forward,
+                cm.catalogue_server_types
             FROM servers s
             LEFT JOIN speed_tests st ON st.server_name = s.name
             LEFT JOIN airvpn_snapshot av ON av.name = s.name
             LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
+            LEFT JOIN catalogue_meta cm ON cm.name = s.name
             {where_sql}
             GROUP BY s.id
             {having_sql}
@@ -864,6 +888,12 @@ def servers():
         r['_raw_avg_dl']  = r.get('avg_dl')
         r['_raw_avg_ul']  = r.get('avg_ul')
         r['_raw_avg_lat'] = r.get('avg_lat')
+        try:
+            r['catalogue_ip_list'] = json.loads(r.get('catalogue_ips') or '[]')
+        except Exception:
+            r['catalogue_ip_list'] = []
+        if not isinstance(r['catalogue_ip_list'], list):
+            r['catalogue_ip_list'] = []
 
     for r in rows:
         fs = _fstats.get(r['name'])
@@ -1181,6 +1211,7 @@ def manual_switch(server_id):
                 'vars':             _mp_vars,
                 'port_forwarding':  _mp.get('port_forwarding', False),
                 'port_forward_only': _mp.get('port_forward_only', True),
+                'server_types':      _mp.get('server_types', []),
             }
     to_provider = (
         (_manual_wg_profile or {}).get('compose_provider')
@@ -1223,22 +1254,37 @@ def manual_switch(server_id):
                     proxy_user=proxy_user,
                     proxy_password=proxy_pass,
                 )
-                # Recreate dependents regardless of VPN status — Gluetun's
-                # container IS alive (switch_server() just recreated it), so
-                # its network namespace is valid even if the VPN tunnel hasn't
-                # come up yet.  Leaving dependents attached to the old (dead)
-                # namespace would break them permanently until the next switch.
-                restarted, _ = restart_network_dependents(
-                    container, compose_dir, project,
-                    explicit_list=pre_switch_deps,
+                gluetun_running = False
+                try:
+                    import docker
+                    gluetun_running = (
+                        docker.from_env().containers.get(container).status == 'running'
+                    )
+                except Exception as exc:
+                    logger.warning('Manual switch: cannot inspect %s status: %s', container, exc)
+
+                restarted = []
+                if gluetun_running:
+                    # The VPN may still be settling, but the namespace exists.
+                    # Reattach dependents so they do not stay bound to the old
+                    # Gluetun container ID after a successful recreate.
+                    restarted, _ = restart_network_dependents(
+                        container, compose_dir, project,
+                        explicit_list=pre_switch_deps,
+                    )
+                else:
+                    logger.warning(
+                        'Manual switch: %s is not running after %.0fs — '
+                        'skipping network-dependent recreate',
+                        container, elapsed,
+                    )
+                pf_result = apply_current_provider_port_forwards(
+                    container, reason='manual_switch',
                 )
-                pf_result = apply_after_provider_change(
-                    from_provider, to_provider, reason='manual_switch',
-                )
-                if pf_result.get('provider_changed') and not pf_result.get('skipped_reason'):
+                if not pf_result.get('skipped_reason'):
                     logger.info(
-                        'Manual switch port forwards: provider %s -> %s, applied %s/%s',
-                        from_provider or '?', to_provider or '?',
+                        'Manual switch port forwards: provider %s, applied %s/%s',
+                        pf_result.get('provider') or to_provider or from_provider or '?',
                         pf_result.get('applied', 0), pf_result.get('rules', 0),
                     )
                 if vpn_ok:
@@ -1881,6 +1927,7 @@ def settings():
             set_setting('catalogue_import_mode',          request.form.get('catalogue_import_mode', 'active'))
             set_setting('catalogue_import_provider',      request.form.get('catalogue_import_provider', '').strip())
             set_setting('catalogue_bench_on_import',      '1' if request.form.get('catalogue_bench_on_import') else '0')
+            set_setting('catalogue_server_type',         request.form.get('catalogue_server_type', '').strip())
             set_setting('catalogue_import_filter_type',   request.form.get('catalogue_import_filter_type', 'all'))
             set_setting('catalogue_auto_add',             '1' if request.form.get('catalogue_auto_add') else '0')
             flash_t('flash_catalogue_saved', 'success')
@@ -2021,6 +2068,11 @@ def settings():
             _rotation = bool(request.form.get('wg_rotation_allowed'))
             _pf       = bool(request.form.get('wg_port_forwarding'))
             _pf_only  = bool(request.form.get('wg_port_forward_only'))
+            _server_types = request.form.getlist('wg_server_types')
+            if _provider != 'protonvpn':
+                _server_types = []
+            if _provider == 'protonvpn' and _pf and _pf_only and 'p2p' not in _server_types:
+                _server_types.append('p2p')
             try:
                 _priority = int(request.form.get('wg_rotation_priority', '0') or '0')
             except ValueError:
@@ -2072,6 +2124,7 @@ def settings():
                         rotation_priority=_priority,
                         port_forwarding=_pf,
                         port_forward_only=_pf_only,
+                        server_types=_server_types,
                         sidecar_private_key=_sc_pk,
                         sidecar_addresses=_sc_addr_val,
                         sidecar_preshared_key=_sc_psk,
@@ -2095,6 +2148,7 @@ def settings():
                         rotation_priority=_priority,
                         port_forwarding=_pf,
                         port_forward_only=_pf_only,
+                        server_types=_server_types,
                         sidecar_private_key=_sc_pk  or '',
                         sidecar_addresses=_sc_addr_val or '',
                         sidecar_preshared_key=_sc_psk or '',
@@ -2249,6 +2303,7 @@ def settings():
         'catalogue_import_mode':          get_setting('catalogue_import_mode', 'active'),
         'catalogue_import_provider':      get_setting('catalogue_import_provider', ''),
         'catalogue_bench_on_import':      get_setting('catalogue_bench_on_import', '0'),
+        'catalogue_server_type':          get_setting('catalogue_server_type', ''),
         'catalogue_import_filter_type':   get_setting('catalogue_import_filter_type', 'all'),
         'catalogue_auto_add':             get_setting('catalogue_auto_add', '0'),
         'catalogue_last_refresh':         get_setting('catalogue_last_refresh', ''),
@@ -3076,10 +3131,16 @@ def api_gluetun_network_containers():
 @bp.route('/api/catalogue/refresh', methods=['POST'])
 @login_required
 def api_catalogue_refresh():
-    """Force-refresh the Gluetun server catalogue via a catalogue sidecar.
-    The sidecar downloads server lists from the public Gluetun GitHub repo —
-    no volume mounting required."""
-    from .catalogue import refresh_catalogue_from_sidecar
+    """Force-refresh the Gluetun server catalogue.
+
+    Prefer the mounted Gluetun catalogue when available; fall back to the
+    catalogue sidecar for installs without a Gluetun volume.
+    """
+    from .catalogue import refresh_catalogue_from_local, refresh_catalogue_from_sidecar
+    result = refresh_catalogue_from_local()
+    if result.get('ok'):
+        return jsonify(result), 200
+
     sidecar_image = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
     sidecar_host  = current_app.config['GLUETUN_HOST']
     result = refresh_catalogue_from_sidecar(
@@ -3143,12 +3204,20 @@ def api_catalogue_providers():
 def api_catalogue_servers():
     """
     Return catalogue entries for a filter type.
-    Query params: provider (optional), filter_type (default: name)
+    Query params: provider (optional), filter_type (default: name),
+    port_forward_only (optional bool)
     """
     from .catalogue import get_catalogue_entries
     provider    = request.args.get('provider', '').strip() or None
     filter_type = request.args.get('filter_type', 'name')
-    entries     = get_catalogue_entries(provider=provider, filter_type=filter_type)
+    pf_only     = (request.args.get('port_forward_only', '') or '').lower() in ('1', 'true', 'yes', 'on')
+    server_type = request.args.get('server_type', '').strip()
+    entries     = get_catalogue_entries(
+        provider=provider,
+        filter_type=filter_type,
+        port_forward_only=pf_only,
+        server_type=server_type,
+    )
     return jsonify({'entries': entries, 'filter_type': filter_type})
 
 
@@ -3195,6 +3264,8 @@ def api_catalogue_import():
     mode        = data.get('mode', 'active')
     provider    = data.get('provider', '')
     filter_type = data.get('filter_type', 'name')
+    pf_only     = bool(data.get('port_forward_only'))
+    server_type = data.get('server_type', '')
     container   = current_app.config['GLUETUN_CONTAINER']
 
     result = import_to_servers(
@@ -3202,6 +3273,8 @@ def api_catalogue_import():
         provider=provider,
         filter_type=filter_type,
         container_name=container,
+        port_forward_only=pf_only,
+        server_type=server_type,
     )
 
     if result.get('ok') and data.get('bench_on_import'):

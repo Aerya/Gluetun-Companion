@@ -89,6 +89,21 @@ _IPERF3_SERVERS: list[tuple[str, int]] = [
 # ICMP ping targets — diverse ASNs for representative jitter measurement
 _PING_TARGETS = ['1.1.1.1', '8.8.8.8', '9.9.9.9']
 
+_SERVER_TYPE_FIELDS = {
+    'p2p':         'port_forward',
+    'stream':      'stream',
+    'secure_core': 'secure_core',
+    'tor':         'tor',
+    'free':        'free',
+}
+
+
+def _server_types_from_raw(server: dict) -> str:
+    return ','.join(
+        key for key, field in _SERVER_TYPE_FIELDS.items()
+        if bool(server.get(field))
+    )
+
 
 # ---------------------------------------------------------------------------
 # Auth helper
@@ -190,7 +205,8 @@ def catalogue():
             continue
 
         raw_servers = data.get('servers', [])
-        normalized: list[dict] = []
+        normalized_by_name: dict[str, dict] = {}
+        normalized_extra: list[dict] = []
         for s in raw_servers:
             hostnames = s.get('hostnames') or []
             hostname  = s.get('hostname') or (hostnames[0] if hostnames else '')
@@ -201,9 +217,29 @@ def catalogue():
                 'region':       s.get('region') or '',
                 'city':         s.get('city') or '',
                 'hostname':     hostname or '',
+                'port_forward': bool(s.get('port_forward')),
+                'server_types':  _server_types_from_raw(s),
             }
-            if any(srv.values()):
-                normalized.append(srv)
+            if any(v for k, v in srv.items() if k != 'port_forward'):
+                if srv['name']:
+                    existing = normalized_by_name.get(srv['name'])
+                    if existing:
+                        existing['port_forward'] = bool(existing.get('port_forward') or srv['port_forward'])
+                        existing_types = {
+                            t for t in (existing.get('server_types') or '').split(',') if t
+                        }
+                        existing_types.update(t for t in (srv.get('server_types') or '').split(',') if t)
+                        existing['server_types'] = ','.join(
+                            t for t in _SERVER_TYPE_FIELDS if t in existing_types
+                        )
+                        if not existing.get('hostname') and srv.get('hostname'):
+                            existing['hostname'] = srv['hostname']
+                    else:
+                        normalized_by_name[srv['name']] = srv
+                else:
+                    normalized_extra.append(srv)
+
+        normalized = list(normalized_by_name.values()) + normalized_extra
 
         if normalized:
             result[provider] = normalized

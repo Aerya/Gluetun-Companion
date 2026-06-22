@@ -16,9 +16,10 @@ from .i18n import get_translations, get_lang
 _cleanup_hooks_registered = False
 
 # Process-wide cache for server→flag and server→provider lookups used by the
-# template helpers (server_flag / server_provider_icon).  Rebuilt at most every
+# template helpers (server_flag / server_provider_icon / server_type_badges).
+# Rebuilt at most every
 # 5 minutes — new catalogue imports appear after the TTL expires.
-_server_lookup_cache: dict = {'flags': {}, 'providers': {}, 'ts': 0.0}
+_server_lookup_cache: dict = {'flags': {}, 'providers': {}, 'server_types': {}, 'ts': 0.0}
 
 
 def _utc_to_local(dt_str: str | None) -> str:
@@ -364,8 +365,26 @@ def create_app():
                             _providers.setdefault(r['name'], r['provider'].lower())
                     except Exception:
                         pass
+                    try:
+                        _type_rows = _db.execute(
+                            'SELECT name, GROUP_CONCAT(DISTINCT server_types) AS server_types '
+                            'FROM gluetun_catalogue '
+                            'WHERE name != "" '
+                            'GROUP BY name'
+                        ).fetchall()
+                        _server_types = {}
+                        for r in _type_rows:
+                            types = []
+                            for item in (r['server_types'] or '').replace(';', ',').split(','):
+                                item = item.strip()
+                                if item and item not in types:
+                                    types.append(item)
+                            _server_types[r['name']] = types
+                    except Exception:
+                        _server_types = {}
                 _server_lookup_cache['flags'] = _flags
                 _server_lookup_cache['providers'] = _providers
+                _server_lookup_cache['server_types'] = _server_types
                 _server_lookup_cache['ts'] = now
             except Exception:
                 # Keep stale cache on error; empty dicts if never built
@@ -373,6 +392,7 @@ def create_app():
 
         _flags = _server_lookup_cache['flags']
         _providers = _server_lookup_cache['providers']
+        _server_types = _server_lookup_cache.get('server_types', {})
 
         def server_flag_emoji(label: str | None) -> str:
             """Return the raw flag emoji for text-only contexts such as charts."""
@@ -428,10 +448,32 @@ def create_app():
                 f'width="{s}" height="{s}" style="{style}" title="{provider}">'
             )
 
+        def server_type_badges(label: str | None) -> Markup | str:
+            if not label or label in ('-', '—'):
+                return ''
+            name = label.split('=', 1)[-1].strip() if '=' in label else label.strip()
+            types = _server_types.get(name) or []
+            if not types:
+                return ''
+            labels = {
+                'p2p': 'P2P',
+                'stream': 'Streaming',
+                'secure_core': 'Secure Core',
+                'tor': 'Tor',
+                'free': 'Free',
+            }
+            html = ''.join(
+                '<span class="badge text-bg-info ms-1" style="font-size:.65rem" '
+                f'title="Server type">{labels.get(t, t)}</span>'
+                for t in types if t in labels
+            )
+            return Markup(html)
+
         return {
             'server_flag': server_flag,
             'server_flag_emoji': server_flag_emoji,
             'server_provider_icon': server_provider_icon,
+            'server_type_badges': server_type_badges,
         }
 
     from .routes import bp
