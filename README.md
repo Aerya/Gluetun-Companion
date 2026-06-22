@@ -150,6 +150,9 @@ environment:
 
 Le companion doit pouvoir écrire un `docker-compose.override.yml` dans le dossier qui contient votre `docker-compose.yml` Gluetun, puis relancer le service.
 
+> **Unraid / DockerMan**
+> Si Gluetun est géré par le Docker Manager d'Unraid (`net.unraid.docker.managed=dockerman`), Companion détecte ce backend automatiquement et n'utilise pas `docker compose` pour les bascules. Montez le dossier des templates Unraid en écriture, par exemple `- /boot/config/plugins/dockerMan/templates-user:/boot/config/plugins/dockerMan/templates-user`, afin que les changements soient persistés dans le template DockerMan avant recréation du container. `CONTROL_BACKEND=unraid` permet de forcer ce mode si la détection automatique ne suffit pas.
+
 ### 3. Lancer le companion
 
 ```yaml
@@ -398,6 +401,8 @@ L'encart **Statut VPN** affiche l'intermédiaire et les opérateurs observés. D
 | `GLUETUN_PROXY_PORT` | `8887` | Port du proxy HTTP Gluetun |
 | `GLUETUN_CONTAINER` | `gluetun-airvpn` | Nom du container Gluetun |
 | `COMPOSE_DIR` | `/compose` | Chemin (dans le container) du dossier compose Gluetun |
+| `CONTROL_BACKEND` | `auto` | Backend de contrôle : détection automatique, ou `compose` / `unraid` pour forcer le mode |
+| `UNRAID_TEMPLATE_DIR` | `/boot/config/plugins/dockerMan/templates-user` | Dossier des templates DockerMan Unraid, à monter en écriture si `CONTROL_BACKEND=unraid` ou si le container Gluetun est détecté comme DockerMan |
 | `DATA_DIR` | `/data` | Dossier de la base SQLite |
 | `OPENVPN_CONFIG_DIR` | `/openvpn` | Dossier accessible en écriture par Companion pour les fichiers Custom OpenVPN |
 | `OPENVPN_CONTAINER_DIR` | `/gluetun/openvpn` | Chemin équivalent vu depuis le container Gluetun |
@@ -471,7 +476,7 @@ Activer via **Paramètres → Mesurer → Mode Sidecar → désactiver**.
 
 ### Containers à redémarrer après bascule
 
-Dans **Paramètres → Décider → Containers à redémarrer après bascule** : liste ordonnée de containers recréés via `docker compose up -d --force-recreate` après chaque bascule VPN. Drag & drop pour réordonner. Utile pour `qbittorrent`, `radarr`, `sonarr`, ou tout service avec `network_mode: service:gluetun`.
+Dans **Paramètres → Décider → Containers à redémarrer après bascule** : liste ordonnée de containers recréés après chaque bascule VPN. En mode Compose, Companion utilise `docker compose up -d --force-recreate` ; en mode Unraid/DockerMan, il recrée les containers via le Docker SDK pour les rattacher au namespace réseau Gluetun courant. Drag & drop pour réordonner. Utile pour `qbittorrent`, `radarr`, `sonarr`, ou tout service avec `network_mode: service:gluetun`.
 
 ### Containers à stopper pendant le benchmark
 
@@ -1256,7 +1261,7 @@ Une réussite du workflow Docker signifie que les images se construisent et dém
 
 - **Mode sidecar (défaut) :** votre Gluetun principal n'est jamais relancé pendant les tests — les services dépendants ne sont pas interrompus. **Mode proxy (optionnel) :** le benchmark interrompt brièvement ces services à chaque test de serveur. Planifiez pendant les heures creuses.
 - **Fréquence et nombre de serveurs :** chaque test génère une reconnexion VPN. Tester 10 serveurs toutes les 2 heures = 120 reconnexions/jour. La plupart des fournisseurs limitent les connexions *simultanées*, pas la fréquence — mais un intervalle trop court peut déclencher une détection d'abus. **6 h et moins de 10 serveurs** est un réglage raisonnable.
-- Le fichier `docker-compose.override.yml` est géré automatiquement — ne le modifiez pas manuellement.
+- En mode Compose, le fichier `docker-compose.override.yml` est géré automatiquement — ne le modifiez pas manuellement. En mode Unraid/DockerMan, Companion écrit les variables gérées dans le template DockerMan du container Gluetun avant recréation.
 - L'IPv6 est affiché si votre fournisseur VPN le supporte (AirVPN le supporte).
 - Le socket Docker (`/var/run/docker.sock`) est requis pour le mode sidecar, les containers post-bascule et la pause pendant le benchmark.
 
@@ -1267,7 +1272,7 @@ Une réussite du workflow Docker signifie que les images se construisent et dém
 - **CSRF** — Toutes les actions POST (formulaires et AJAX) sont protégées par un token CSRF via session serveur. L'en-tête `X-CSRF-Token` est injecté automatiquement sur chaque `fetch` non-GET grâce à un intercepteur JavaScript.
 - **XSS** — Les données issues d'API tierces (AirVPN) injectées dans le DOM via `innerHTML` sont systématiquement échappées par une fonction `_esc()` (HTML entity encoding) avant insertion. Les attributs `onclick`/`onchange` inline présents dans les composants dynamiques ne contiennent que des valeurs JSONifiées ou des constantes — aucune donnée utilisateur non échappée n'y est interpolée.
 - **SECRET_KEY** — L'application refuse de démarrer si `SECRET_KEY` est absente ou égale à la valeur par défaut (`dev-secret-change-me`, `remplacer-par-une-chaine-aleatoire-longue`). Génère une clé sécurisée avec : `openssl rand -hex 32`.
-- **Injection YAML** — La valeur du filtre de serveur est assainie avant écriture dans `docker-compose.override.yml` (retours à la ligne supprimés, guillemets et backslashs échappés).
+- **Injection YAML/XML** — La valeur du filtre de serveur est assainie avant écriture dans `docker-compose.override.yml` en mode Compose (retours à la ligne supprimés, guillemets et backslashs échappés). En mode Unraid/DockerMan, les valeurs sont échappées avant écriture dans le template XML, avec sauvegarde `.bak` datée.
 - **Socket Docker** — Le socket Docker est sécurisé via [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy), qui restreint les appels autorisés : lecture (containers, images, réseaux, volumes) + POST/DELETE pour la gestion des sidecars temporaires. Tout accès direct au daemon Docker (exec, swarm, info…) est bloqué.
 - **Anti brute-force** — Le login bloque une IP après 5 échecs en 5 minutes pendant 15 minutes (compteur en mémoire, remis à zéro à la connexion réussie).
 - **Exposition réseau** — Gunicorn écoute sur `0.0.0.0:8765` (toutes interfaces). **Ne pas exposer ce port directement sur Internet.** Sur un serveur accessible publiquement, placez Companion derrière un reverse proxy (Nginx, Caddy, Traefik) avec HTTPS et authentification forte, ou restreignez le binding à l'interface locale : `127.0.0.1:8765:8765` dans le `docker-compose.yml`.
