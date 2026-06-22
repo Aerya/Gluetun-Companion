@@ -90,7 +90,27 @@ class ManagedEnvPairsTest(unittest.TestCase):
                    'vars': {'WIREGUARD_PRIVATE_KEY': 'k'}}
         d = dict(_managed_env_pairs('Dalim', 'name', profile))
         self.assertEqual(d['VPN_PORT_FORWARDING'], 'off')
-        self.assertNotIn('PORT_FORWARD_ONLY', d)
+        self.assertEqual(d['VPN_PORT_FORWARDING_PROVIDER'], '')
+        self.assertEqual(d['PORT_FORWARD_ONLY'], '')
+        self.assertEqual(d['STREAM_ONLY'], '')
+        self.assertEqual(d['SERVER_TYPES'], '')
+
+    @patch('app.gluetun.get_setting', side_effect=_dns_setting)
+    def test_profile_vars_cannot_reintroduce_provider_specific_filters(self, _gs):
+        profile = {
+            'compose_provider': 'airvpn',
+            'vpn_type': 'wireguard',
+            'vars': {
+                'WIREGUARD_PRIVATE_KEY': 'k',
+                'PORT_FORWARD_ONLY': 'on',
+                'SERVER_TYPES': 'P2P',
+                'VPN_PORT_FORWARDING_PROVIDER': 'protonvpn',
+            },
+        }
+        d = dict(_managed_env_pairs('Adhara', 'name', profile))
+        self.assertEqual(d['PORT_FORWARD_ONLY'], '')
+        self.assertEqual(d['SERVER_TYPES'], '')
+        self.assertEqual(d['VPN_PORT_FORWARDING_PROVIDER'], '')
 
 
 class ManagementModeTest(unittest.TestCase):

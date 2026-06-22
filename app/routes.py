@@ -1224,15 +1224,30 @@ def manual_switch(server_id):
                     proxy_user=proxy_user,
                     proxy_password=proxy_pass,
                 )
-                # Recreate dependents regardless of VPN status — Gluetun's
-                # container IS alive (switch_server() just recreated it), so
-                # its network namespace is valid even if the VPN tunnel hasn't
-                # come up yet.  Leaving dependents attached to the old (dead)
-                # namespace would break them permanently until the next switch.
-                restarted, _ = restart_network_dependents(
-                    container, compose_dir, project,
-                    explicit_list=pre_switch_deps,
-                )
+                gluetun_running = False
+                try:
+                    import docker
+                    gluetun_running = (
+                        docker.from_env().containers.get(container).status == 'running'
+                    )
+                except Exception as exc:
+                    logger.warning('Manual switch: cannot inspect %s status: %s', container, exc)
+
+                restarted = []
+                if gluetun_running:
+                    # The VPN may still be settling, but the namespace exists.
+                    # Reattach dependents so they do not stay bound to the old
+                    # Gluetun container ID after a successful recreate.
+                    restarted, _ = restart_network_dependents(
+                        container, compose_dir, project,
+                        explicit_list=pre_switch_deps,
+                    )
+                else:
+                    logger.warning(
+                        'Manual switch: %s is not running after %.0fs — '
+                        'skipping network-dependent recreate',
+                        container, elapsed,
+                    )
                 pf_result = apply_current_provider_port_forwards(
                     container, reason='manual_switch',
                 )

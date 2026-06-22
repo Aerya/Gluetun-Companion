@@ -264,6 +264,14 @@ def _managed_env_pairs(
             'VPN_SERVICE_PROVIDER',
             'VPN_TYPE',
             *FILTER_VARS.values(),
+            'SERVER_TYPES',
+            'VPN_PORT_FORWARDING',
+            'VPN_PORT_FORWARDING_PROVIDER',
+            'PORT_FORWARD_ONLY',
+            'STREAM_ONLY',
+            'SECURE_CORE_ONLY',
+            'TOR_ONLY',
+            'FREE_ONLY',
         }
         profile_vars = {
             key: value for key, value in profile_vars.items()
@@ -333,6 +341,13 @@ def _managed_env_pairs(
         if compose_provider == 'protonvpn':
             for server_type, env_key in proton_type_env.items():
                 pairs.append((env_key, 'on' if server_type in selected_types else 'off'))
+        else:
+            # These selectors are ProtonVPN-specific in Gluetun.  Unraid
+            # persists env vars in templates, so explicitly blank stale Proton
+            # filters when switching to AirVPN, Mullvad, custom WireGuard, etc.
+            for env_key in proton_type_env.values():
+                pairs.append((env_key, ''))
+        pairs.append(('SERVER_TYPES', ''))
 
         # Port forwarding (NAT-PMP).  Only Gluetun-native-PF providers
         # (ProtonVPN, PIA, …) honour VPN_PORT_FORWARDING; for any other provider
@@ -343,10 +358,12 @@ def _managed_env_pairs(
         if supports_native_port_forwarding(compose_provider):
             if wg_profile.get('port_forwarding'):
                 pairs.append(('VPN_PORT_FORWARDING', 'on'))
+                pairs.append(('VPN_PORT_FORWARDING_PROVIDER', compose_provider))
             # capable provider with port forwarding off → leave the base value
             # untouched (do not disable a working manual setup).
         else:
             pairs.append(('VPN_PORT_FORWARDING', 'off'))
+            pairs.append(('VPN_PORT_FORWARDING_PROVIDER', ''))
 
     return pairs
 
