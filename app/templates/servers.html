@@ -508,6 +508,23 @@
               {% elif not s.enabled %}
               <span class="badge bg-secondary ms-1" style="font-size:.7rem">OFF</span>
               {% endif %}
+              {% if s.catalogue_provider %}
+              <div class="text-muted mt-1" style="font-size:.68rem;line-height:1.25;max-width:220px">
+                {% set _loc = [s.catalogue_city, s.catalogue_country] | reject('equalto', '') | list %}
+                {% if _loc %}
+                  <span title="{{ s.catalogue_provider }}">{{ _loc | join(' · ') }}</span>
+                {% endif %}
+                {% if s.catalogue_hostname %}
+                  <br><code class="text-muted">{{ s.catalogue_hostname }}</code>
+                {% endif %}
+                {% if s.catalogue_ip_list %}
+                  <br><span class="font-monospace">{{ s.catalogue_ip_list[0] }}</span>
+                  {% if s.catalogue_ip_list | length > 1 %}
+                    <span title="{{ s.catalogue_ip_list | join(', ') }}">+{{ (s.catalogue_ip_list | length) - 1 }}</span>
+                  {% endif %}
+                {% endif %}
+              </div>
+              {% endif %}
               {# ── Score breakdown popover ── #}
               {% set _det = profile_scores_detail.get(s.name) %}
               {% if _det %}

@@ -76,6 +76,20 @@ def server_types_from_raw(server: dict) -> str:
     )
 
 
+def ips_from_raw(server: dict) -> str:
+    raw = server.get('ips') or []
+    if isinstance(raw, str):
+        raw = [part.strip() for part in raw.replace(';', ',').split(',')]
+    elif not isinstance(raw, (list, tuple, set)):
+        raw = []
+    ips: list[str] = []
+    for item in raw:
+        value = str(item or '').strip()
+        if value and value not in ips:
+            ips.append(value)
+    return json.dumps(ips, separators=(',', ':')) if ips else ''
+
+
 def _normalize_server_list(raw_servers: list[dict]) -> list[dict]:
     normalized_by_name: dict[str, dict] = {}
     normalized_extra: list[dict] = []
@@ -91,6 +105,7 @@ def _normalize_server_list(raw_servers: list[dict]) -> list[dict]:
             'region':       s.get('region') or '',
             'city':         s.get('city') or '',
             'hostname':     hostname or '',
+            'ips':          ips_from_raw(s),
             'port_forward': bool(s.get('port_forward')),
             'server_types':  server_types_from_raw(s),
         }
@@ -106,6 +121,8 @@ def _normalize_server_list(raw_servers: list[dict]) -> list[dict]:
                     )
                     if not existing.get('hostname') and entry.get('hostname'):
                         existing['hostname'] = entry['hostname']
+                    if not existing.get('ips') and entry.get('ips'):
+                        existing['ips'] = entry['ips']
                 else:
                     normalized_by_name[entry['name']] = entry
             else:
@@ -250,8 +267,8 @@ def refresh_catalogue(servers_dir: str | None = None) -> dict:
                 db.execute(
                     '''INSERT INTO gluetun_catalogue
                         (provider, name, country, country_code, region, city, hostname,
-                         port_forward, server_types, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                         ips, port_forward, server_types, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                     (
                         provider,
                         s['name'],
@@ -260,6 +277,7 @@ def refresh_catalogue(servers_dir: str | None = None) -> dict:
                         s['region'],
                         s['city'],
                         s['hostname'],
+                        s.get('ips', ''),
                         int(bool(s.get('port_forward'))),
                         normalize_server_types(s.get('server_types', '')),
                         datetime.utcnow().isoformat(),
@@ -371,6 +389,9 @@ def get_catalogue_entries(
                        MAX(country) AS country,
                        MAX(country_code) AS country_code,
                        provider,
+                       MAX(city) AS city,
+                       MAX(hostname) AS hostname,
+                       MAX(ips) AS ips,
                        MAX(port_forward) AS port_forward,
                        GROUP_CONCAT(DISTINCT server_types) AS server_types
                 FROM gluetun_catalogue
@@ -694,8 +715,8 @@ def refresh_catalogue_from_sidecar(
                     db.execute(
                         '''INSERT INTO gluetun_catalogue
                             (provider, name, country, country_code, region, city, hostname,
-                             port_forward, server_types, updated_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                             ips, port_forward, server_types, updated_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                         (
                             provider,
                             s.get('name', ''),
@@ -704,6 +725,7 @@ def refresh_catalogue_from_sidecar(
                             s.get('region', ''),
                             s.get('city', ''),
                             s.get('hostname', ''),
+                            s.get('ips', ''),
                             int(bool(s.get('port_forward'))),
                             normalize_server_types(s.get('server_types', '')),
                             now_iso,

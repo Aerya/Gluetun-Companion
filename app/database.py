@@ -134,6 +134,7 @@ def init_db(db_path: str):
                 region       TEXT NOT NULL DEFAULT '',
                 city         TEXT NOT NULL DEFAULT '',
                 hostname     TEXT NOT NULL DEFAULT '',
+                ips          TEXT NOT NULL DEFAULT '',
                 port_forward INTEGER NOT NULL DEFAULT 0,
                 server_types TEXT NOT NULL DEFAULT '',
                 updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -480,6 +481,7 @@ def init_db(db_path: str):
             "ALTER TABLE vpn_profiles ADD COLUMN server_types TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE gluetun_catalogue ADD COLUMN port_forward INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE gluetun_catalogue ADD COLUMN server_types TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE gluetun_catalogue ADD COLUMN ips TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE rotation_pools ADD COLUMN criteria_logic TEXT NOT NULL DEFAULT 'union'",
             "ALTER TABLE rotation_pools ADD COLUMN last_server TEXT",
             "ALTER TABLE rotation_pools ADD COLUMN last_error TEXT",

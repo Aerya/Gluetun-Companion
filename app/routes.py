@@ -781,6 +781,21 @@ def servers():
 
     with get_db() as db:
         rows = db.execute(f'''
+            WITH catalogue_meta AS (
+                SELECT
+                    name,
+                    MAX(provider) AS catalogue_provider,
+                    MAX(country) AS catalogue_country,
+                    MAX(country_code) AS catalogue_country_code,
+                    MAX(city) AS catalogue_city,
+                    MAX(hostname) AS catalogue_hostname,
+                    MAX(ips) AS catalogue_ips,
+                    MAX(port_forward) AS catalogue_port_forward,
+                    GROUP_CONCAT(DISTINCT server_types) AS catalogue_server_types
+                FROM gluetun_catalogue
+                WHERE name != ''
+                GROUP BY name
+            )
             SELECT
                 s.id, s.name, s.filter_type, s.enabled,
                 s.consecutive_failures, s.created_at,
@@ -810,11 +825,20 @@ def servers():
                 av.users AS airvpn_users,
                 av.bw_mbps AS airvpn_bw,
                 av.bw_max_mbps AS airvpn_bw_max,
-                av.avail_mbps AS airvpn_avail_mbps
+                av.avail_mbps AS airvpn_avail_mbps,
+                cm.catalogue_provider,
+                cm.catalogue_country,
+                cm.catalogue_country_code,
+                cm.catalogue_city,
+                cm.catalogue_hostname,
+                cm.catalogue_ips,
+                cm.catalogue_port_forward,
+                cm.catalogue_server_types
             FROM servers s
             LEFT JOIN speed_tests st ON st.server_name = s.name
             LEFT JOIN airvpn_snapshot av ON av.name = s.name
             LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
+            LEFT JOIN catalogue_meta cm ON cm.name = s.name
             {where_sql}
             GROUP BY s.id
             {having_sql}
@@ -864,6 +888,12 @@ def servers():
         r['_raw_avg_dl']  = r.get('avg_dl')
         r['_raw_avg_ul']  = r.get('avg_ul')
         r['_raw_avg_lat'] = r.get('avg_lat')
+        try:
+            r['catalogue_ip_list'] = json.loads(r.get('catalogue_ips') or '[]')
+        except Exception:
+            r['catalogue_ip_list'] = []
+        if not isinstance(r['catalogue_ip_list'], list):
+            r['catalogue_ip_list'] = []
 
     for r in rows:
         fs = _fstats.get(r['name'])

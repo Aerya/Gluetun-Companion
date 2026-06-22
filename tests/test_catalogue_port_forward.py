@@ -30,7 +30,9 @@ class CataloguePortForwardingTest(unittest.TestCase):
                     'name': 'FR#61',
                     'country': 'France',
                     'country_code': 'fr',
+                    'city': 'Paris',
                     'hostname': 'fr-61.protonvpn.net',
+                    'ips': ['78.159.131.1', '2a07:b944::2:2'],
                     'port_forward': True,
                     'stream': True,
                 },
@@ -80,6 +82,12 @@ class CataloguePortForwardingTest(unittest.TestCase):
             self.assertEqual([e['value'] for e in p2p_entries], ['FR#61'])
             self.assertEqual(p2p_entries[0]['port_forward'], 1)
             self.assertEqual(p2p_entries[0]['server_types'], 'p2p,stream')
+            self.assertEqual(p2p_entries[0]['city'], 'Paris')
+            self.assertEqual(p2p_entries[0]['hostname'], 'fr-61.protonvpn.net')
+            self.assertEqual(
+                json.loads(p2p_entries[0]['ips']),
+                ['78.159.131.1', '2a07:b944::2:2'],
+            )
 
             countries = get_catalogue_entries(
                 provider='protonvpn',
@@ -117,6 +125,7 @@ class CataloguePortForwardingTest(unittest.TestCase):
                             'server_name': 'NL#1',
                             'country': 'Netherlands',
                             'hostname': 'nl-01.protonvpn.net',
+                            'ips': ['185.107.56.1'],
                             'stream': True,
                         },
                         {
@@ -148,6 +157,7 @@ class CataloguePortForwardingTest(unittest.TestCase):
             )
             self.assertEqual([e['value'] for e in stream], ['Netherlands'])
             self.assertEqual([e['value'] for e in p2p], ['Netherlands'])
+            self.assertEqual(json.loads(stream[0]['ips']), ['185.107.56.1'])
 
     def test_local_refresh_prefers_sibling_aggregate_servers_json(self):
         with TemporaryDirectory() as d:
