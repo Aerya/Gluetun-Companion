@@ -1179,6 +1179,8 @@ def manual_switch(server_id):
                 'compose_provider': _mp_compose_prov,
                 'vpn_type':         _mp.get('vpn_type', 'wireguard') or 'wireguard',
                 'vars':             _mp_vars,
+                'port_forwarding':  _mp.get('port_forwarding', False),
+                'port_forward_only': _mp.get('port_forward_only', True),
             }
     to_provider = (
         (_manual_wg_profile or {}).get('compose_provider')
@@ -2017,6 +2019,8 @@ def settings():
             _vpn_type = request.form.get('wg_vpn_type', '').strip()
             _enabled  = bool(request.form.get('wg_enabled'))
             _rotation = bool(request.form.get('wg_rotation_allowed'))
+            _pf       = bool(request.form.get('wg_port_forwarding'))
+            _pf_only  = bool(request.form.get('wg_port_forward_only'))
             try:
                 _priority = int(request.form.get('wg_rotation_priority', '0') or '0')
             except ValueError:
@@ -2066,6 +2070,8 @@ def settings():
                         enabled=_enabled,
                         rotation_allowed=_rotation,
                         rotation_priority=_priority,
+                        port_forwarding=_pf,
+                        port_forward_only=_pf_only,
                         sidecar_private_key=_sc_pk,
                         sidecar_addresses=_sc_addr_val,
                         sidecar_preshared_key=_sc_psk,
@@ -2087,6 +2093,8 @@ def settings():
                         enabled=_enabled,
                         rotation_allowed=_rotation,
                         rotation_priority=_priority,
+                        port_forwarding=_pf,
+                        port_forward_only=_pf_only,
                         sidecar_private_key=_sc_pk  or '',
                         sidecar_addresses=_sc_addr_val or '',
                         sidecar_preshared_key=_sc_psk or '',

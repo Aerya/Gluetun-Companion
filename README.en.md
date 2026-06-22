@@ -49,7 +49,7 @@ Gluetun Companion is a Web UI for automatically managing WireGuard and OpenVPN s
 > - **100% functional with AirVPN over WireGuard**;
 > - tested over WireGuard with a few other providers;
 > - feedback needed for **OpenVPN providers**;
-> - feedback needed for **ProtonVPN port forwarding**, especially dynamic NAT-PMP port detection and qBittorrent synchronization;
+> - **ProtonVPN WireGuard + NAT-PMP port forwarding** supported through VPN profiles; real-world qBittorrent synchronization feedback is still useful;
 > - feedback needed for **Custom WireGuard** and **Custom OpenVPN** servers.
 
  **AI-assisted development:** approximately **70% of the code was produced with the assistance of Claude Code and Codex**, under human direction and validation. Particular attention is paid to security: [secret encryption and protection](#security), [automated workflows, Dependabot and Trivy](#automated-workflows), restricted Docker socket access through [`docker-socket-proxy`](#quick-start), automated tests, and change review. This transparency does not replace real-world feedback, which remains especially important during beta testing.
@@ -227,7 +227,7 @@ Open **http://localhost:8765** — first login: enter the credentials you want (
 
 ### 4. Import servers
 
-**Servers → Import from Gluetun**: the companion reads `SERVER_NAMES`, `SERVER_COUNTRIES`, etc. directly from the running container and imports each value with its filter type. Manual addition is also available on the same screen.
+**Servers → Import from Gluetun**: the companion reads `SERVER_NAMES`, `SERVER_COUNTRIES`, etc. directly from the running container and imports each value with its filter type. The Gluetun catalogue can also import servers by country, city, region, hostname or name, with server-type filtering when the provider exposes it (for example `P2P`, `Streaming`, `Secure Core`, `Tor` or `Free` on ProtonVPN). Manual addition is also available on the same screen.
 
 > ⚠️ **Companion benchmarks each server individually, by name.** Setting `SERVER_COUNTRIES`, `SERVER_REGIONS` or `SERVER_CITIES` adds a single entry (e.g. "France") — Companion does **not** automatically discover individual servers in that country. Add each server by its name (`SERVER_NAMES`) for benchmarking to work. **Minimum 2 named servers required.**
 
@@ -360,7 +360,7 @@ The **VPN Status** card displays the intermediary and observed operators. In tab
 - **Per-URL control** — each tracker can be enabled or ignored individually for future checks
 - **VPN compatibility score** — enabled trackers are checked through the VPN path; by default, 80% success is enough to consider the server compatible, avoiding false negatives when a single tracker is down
 - **Optional switch criterion** — when enabled, a benchmarked server below the tracker threshold is excluded from the auto-switch pick; pools ignore servers already known as tracker-incompatible
-- **Per-provider port forwarding** — declare AirVPN/manual, Gluetun-native (`/v1/portforward`) or custom rules in **Settings → Port Forwarding**; when automation is enabled, Companion applies the new provider's rules after every switch (manual, benchmark, pool rotation), resynchronizes qBittorrent or rTorrent *(beta)* and runs the configured `on_port_change` hooks; a periodic check also catches port renewals that happen without a container restart
+- **Per-provider port forwarding** — declare AirVPN/manual, Gluetun-native (`/v1/portforward`) or custom rules in **Settings → Port Forwarding**; when automation is enabled, Companion applies the current provider's rules after every switch (manual, benchmark, pool rotation), resynchronizes qBittorrent or rTorrent *(beta)* and runs the configured `on_port_change` hooks; a periodic check also catches port renewals that happen without a container restart
 
 ### AirVPN
 - **Built-in AirVPN server picker** — *+ Add AirVPN servers* button on the Servers page: live data from `airvpn.org/api/status/` (5-min server-side cache), four tabs — full searchable list, geographic distribution by country, **Recommended** tab (load < 70 %, bandwidth ≥ 5 Gbit/s) and **Changes** tab (newly detected servers, disappeared servers, load shifts, top 5 healthiest countries); multi-select, one-click add
@@ -528,7 +528,7 @@ In **Settings → Port Forwarding**, Companion manages incoming ports required b
 
 - **Disabled** — rules remain stored but are not applied.
 - **Manual active** — rules can be declared, checked and synchronized on demand.
-- **Automatic active** *(default once port forwarding is enabled; can be turned off)* — when Gluetun switches to another VPN provider (manual switch, benchmark **or pool rotation**), Companion automatically applies the new provider's rules. After a Docker-detected Gluetun reconnection, Companion also rereads the native port and propagates it when needed. Finally, a **periodic check (every 5 min)** compares the native `/v1/portforward` port to the last applied port: if Gluetun renewed the port **without a container restart** (e.g. NAT-PMP renewal), the rules are re-applied automatically.
+- **Automatic active** *(default once port forwarding is enabled; can be turned off)* — when Gluetun switches to another VPN server or provider (manual switch, benchmark **or pool rotation**), Companion automatically applies the current provider's rules. This also covers ProtonVPN switches to another server of the same provider, where the NAT-PMP port may change. After a Docker-detected Gluetun reconnection, Companion also rereads the native port and propagates it when needed. Finally, a **periodic check (every 5 min)** compares the native `/v1/portforward` port to the last applied port: if Gluetun renewed the port **without a container restart** (e.g. NAT-PMP renewal), the rules are re-applied automatically.
 
 Each entry contains:
 
@@ -552,19 +552,19 @@ The **Sync** button updates the linked client's listen port: qBittorrent through
 
 **Testing reachability from the Internet**: each rule's **Test from Internet** button performs a **real TCP connection** from Companion to `VPN_public_IP:port`. Since Companion egresses through your ISP connection (not the VPN tunnel), this exercises the actual inbound path: Internet → VPN provider → Gluetun → client. **TCP only** — UDP has no handshake and cannot be verified this way. The configuration indicators (firewall, Docker publishing, listen port) remain local checks; this button is the only one proving real reachability. For a manual external double-check: [canyouseeme.org](https://canyouseeme.org/) or [yougetsignal.com](https://www.yougetsignal.com/tools/open-ports/) (VPN public IP and port must be typed by hand — these sites cannot be pre-filled).
 
-To enable Gluetun native support, configure Gluetun with [`VPN_PORT_FORWARDING=on`](https://github.com/qdm12/gluetun-wiki/blob/main/setup/options/port-forwarding.md) and expose its [Control Server](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md). In Companion, set the URL, for example `http://host.docker.internal:8967` when Docker publishes `8967:8000`. If Gluetun uses `apikey` authentication, also enter the `X-API-Key` value. Companion uses `/v1/portforward` as the primary source; the historical Gluetun status file is not used as the preferred source because Gluetun documents it as eventually deprecated.
+To enable Gluetun native support, expose its [Control Server](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md). In Companion, set the URL, for example `http://host.docker.internal:8967` when Docker publishes `8967:8000`. If Gluetun uses `apikey` authentication, also enter the `X-API-Key` value. Companion uses `/v1/portforward` as the primary source and retries the legacy `/v1/openvpn/portforwarded` endpoint if the Control Server rejects or does not expose the modern endpoint.
 
 #### ProtonVPN and qBittorrent
 
-ProtonVPN assigns a random NAT-PMP port which may change on every connection or renewal. Do not enter a fixed port or publish that port in the Docker Compose file. Configure a rule using provider `ProtonVPN`, **Gluetun native** mode, and the relevant qBittorrent client. Companion:
+ProtonVPN assigns a random NAT-PMP port which may change on every connection or renewal. Do not enter a fixed port or publish that port in the Docker Compose file. In the ProtonVPN profile, enable **Port forwarding**; Companion then writes `VPN_PORT_FORWARDING=on` for that profile and can restrict selection to **P2P / port-forwarding** servers with `PORT_FORWARD_ONLY=on`. Other Gluetun server types (`Streaming`, `Secure Core`, `Tor`, `Free`) can also be selected from the profile or catalogue when useful. Then configure a rule using provider `ProtonVPN`, **Gluetun native** mode, and the relevant qBittorrent client. Companion:
 
 1. reads the current port from `GET /v1/portforward`;
 2. sends it to qBittorrent through `/api/v2/app/setPreferences`;
 3. reads qBittorrent preferences back to confirm the change;
 4. checks every 5 minutes whether Gluetun renewed the port and injects the new value when needed;
-5. repeats after a Gluetun reconnect or a switch to ProtonVPN.
+5. repeats after a Gluetun reconnect, a switch to ProtonVPN or a switch between ProtonVPN servers.
 
-Add `VPN_PORT_FORWARDING=on` to Gluetun. With ProtonVPN over **OpenVPN**, the OpenVPN username must also carry the `+pmp` suffix. ProtonVPN over **WireGuard** does not use this suffix. Gluetun native integrations open the dynamic port on the VPN side themselves, so `FIREWALL_VPN_INPUT_PORTS`, `FIREWALL_INPUT_PORTS`, and a static Docker port mapping are not required for this port.
+With ProtonVPN over **OpenVPN**, the OpenVPN username must also carry the `+pmp` suffix. ProtonVPN over **WireGuard** does not use this suffix. Gluetun native integrations open the dynamic port on the VPN side themselves, so `FIREWALL_VPN_INPUT_PORTS`, `FIREWALL_INPUT_PORTS`, and a static Docker port mapping are not required for this port.
 
 For AirVPN, Companion does not create the port in the AirVPN panel. The expected flow is:
 

@@ -306,6 +306,23 @@ def _managed_env_pairs(
         for k in sorted(all_credential_keys() - set(profile_vars)):
             pairs.append((k, ''))
 
+        # Port forwarding (NAT-PMP).  Only Gluetun-native-PF providers
+        # (ProtonVPN, PIA, …) honour VPN_PORT_FORWARDING; for any other provider
+        # (e.g. AirVPN, which forwards ports through its own panel) we force it
+        # OFF so a stray base-compose value cannot make Gluetun reject the
+        # session.  PORT_FORWARD_ONLY targets P2P / port-forwarding-capable
+        # servers (ProtonVPN) and defaults on when port forwarding is requested.
+        from .wg_providers import supports_native_port_forwarding
+        if supports_native_port_forwarding(compose_provider):
+            if wg_profile.get('port_forwarding'):
+                pairs.append(('VPN_PORT_FORWARDING', 'on'))
+                if wg_profile.get('port_forward_only', True):
+                    pairs.append(('PORT_FORWARD_ONLY', 'on'))
+            # capable provider with port forwarding off → leave the base value
+            # untouched (do not disable a working manual setup).
+        else:
+            pairs.append(('VPN_PORT_FORWARDING', 'off'))
+
     return pairs
 
 

@@ -720,3 +720,21 @@ def all_credential_keys() -> set[str]:
         for fields in p['fields'].values():
             keys.update(f['key'] for f in fields)
     return keys
+
+
+# Providers for which Gluetun performs native VPN port forwarding (NAT-PMP/PMP),
+# i.e. the accepted values of Gluetun's VPN_PORT_FORWARDING_PROVIDER.  For these,
+# Companion can enable VPN_PORT_FORWARDING (and, for ProtonVPN, PORT_FORWARD_ONLY
+# to target P2P / port-forwarding-capable servers).  See
+# https://github.com/qdm12/gluetun-wiki/blob/main/setup/options/port-forwarding.md
+NATIVE_PORT_FORWARDING_PROVIDERS: frozenset[str] = frozenset({
+    'protonvpn',
+    'private internet access',
+    'perfect privacy',
+    'privatevpn',
+})
+
+
+def supports_native_port_forwarding(provider_key: str) -> bool:
+    """Return True if Gluetun does native VPN port forwarding for this provider."""
+    return (provider_key or '').strip().lower() in NATIVE_PORT_FORWARDING_PROVIDERS

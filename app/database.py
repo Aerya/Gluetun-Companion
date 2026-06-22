@@ -441,6 +441,10 @@ def init_db(db_path: str):
             "ALTER TABLE vpn_profiles ADD COLUMN sidecar_addresses     TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE vpn_profiles ADD COLUMN sidecar_preshared_key TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE vpn_profiles ADD COLUMN sidecar_reuse_profile INTEGER NOT NULL DEFAULT 0",
+            # ProtonVPN (and other native-PF providers): enable Gluetun VPN port
+            # forwarding for this profile, and target P2P / port-forwarding servers.
+            "ALTER TABLE vpn_profiles ADD COLUMN port_forwarding   INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE vpn_profiles ADD COLUMN port_forward_only INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE rotation_pools ADD COLUMN criteria_logic TEXT NOT NULL DEFAULT 'union'",
             "ALTER TABLE rotation_pools ADD COLUMN last_server TEXT",
             "ALTER TABLE rotation_pools ADD COLUMN last_error TEXT",
@@ -946,7 +950,8 @@ def get_vpn_profiles(enabled_only: bool = False) -> list[dict]:
         profiles = db.execute(
             f'SELECT id, name, provider, vpn_type, enabled, rotation_allowed, '
             f'rotation_priority, created_at, updated_at, '
-            f'sidecar_private_key, sidecar_addresses, sidecar_preshared_key, sidecar_reuse_profile '
+            f'sidecar_private_key, sidecar_addresses, sidecar_preshared_key, sidecar_reuse_profile, '
+            f'port_forwarding, port_forward_only '
             f'FROM vpn_profiles {where} ORDER BY rotation_priority, id'
         ).fetchall()
 
@@ -971,6 +976,8 @@ def get_vpn_profiles(enabled_only: bool = False) -> list[dict]:
                 'sidecar_addresses':    p['sidecar_addresses']    or '',
                 'sidecar_preshared_key': p['sidecar_preshared_key'] or '',
                 'sidecar_reuse_profile': bool(p['sidecar_reuse_profile']),
+                'port_forwarding':       bool(p['port_forwarding']),
+                'port_forward_only':     bool(p['port_forward_only']),
             })
     return result
 
@@ -981,7 +988,8 @@ def get_vpn_profile(profile_id: int) -> dict | None:
         p = db.execute(
             'SELECT id, name, provider, vpn_type, enabled, rotation_allowed, '
             'rotation_priority, created_at, updated_at, '
-            'sidecar_private_key, sidecar_addresses, sidecar_preshared_key, sidecar_reuse_profile '
+            'sidecar_private_key, sidecar_addresses, sidecar_preshared_key, sidecar_reuse_profile, '
+            'port_forwarding, port_forward_only '
             'FROM vpn_profiles WHERE id = ?',
             (profile_id,),
         ).fetchone()
@@ -1006,6 +1014,8 @@ def get_vpn_profile(profile_id: int) -> dict | None:
         'sidecar_addresses':     p['sidecar_addresses']     or '',
         'sidecar_preshared_key': p['sidecar_preshared_key'] or '',
         'sidecar_reuse_profile': bool(p['sidecar_reuse_profile']),
+        'port_forwarding':       bool(p['port_forwarding']),
+        'port_forward_only':     bool(p['port_forward_only']),
     }
 
 
@@ -1021,6 +1031,8 @@ def create_vpn_profile(
     sidecar_preshared_key: str = '',
     sidecar_reuse_profile: bool = False,
     vpn_type: str = 'wireguard',
+    port_forwarding: bool = False,
+    port_forward_only: bool = True,
 ) -> int:
     """Insert a new VPN profile and its vars.  Returns the new profile id.
 
@@ -1031,11 +1043,12 @@ def create_vpn_profile(
         cur = db.execute(
             'INSERT INTO vpn_profiles '
             '(name, provider, vpn_type, enabled, rotation_allowed, rotation_priority, '
-            ' sidecar_private_key, sidecar_addresses, sidecar_preshared_key, sidecar_reuse_profile) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            ' sidecar_private_key, sidecar_addresses, sidecar_preshared_key, sidecar_reuse_profile, '
+            ' port_forwarding, port_forward_only) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             (name, provider, vpn_type, int(enabled), int(rotation_allowed), rotation_priority,
              sidecar_private_key, sidecar_addresses, sidecar_preshared_key,
-             int(sidecar_reuse_profile)),
+             int(sidecar_reuse_profile), int(port_forwarding), int(port_forward_only)),
         )
         profile_id = cur.lastrowid
         for var_key, var_value in vars.items():
@@ -1061,6 +1074,8 @@ def update_vpn_profile(
     sidecar_reuse_profile: bool | None = None,
     vpn_type: str | None = None,
     allowed_var_keys: 'set[str] | None' = None,
+    port_forwarding: bool | None = None,
+    port_forward_only: bool | None = None,
 ) -> bool:
     """Update an existing VPN profile.  Returns False if the profile doesn't exist.
 
@@ -1099,6 +1114,10 @@ def update_vpn_profile(
             fields.append('sidecar_preshared_key = ?'); params.append(sidecar_preshared_key)
         if sidecar_reuse_profile is not None:
             fields.append('sidecar_reuse_profile = ?'); params.append(int(sidecar_reuse_profile))
+        if port_forwarding is not None:
+            fields.append('port_forwarding = ?');    params.append(int(port_forwarding))
+        if port_forward_only is not None:
+            fields.append('port_forward_only = ?');  params.append(int(port_forward_only))
 
         if fields:
             params.append(profile_id)

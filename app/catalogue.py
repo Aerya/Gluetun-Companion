@@ -12,8 +12,10 @@ The Gluetun container exports per-provider JSON files to a volume:
 The Sidecar mounts the same volume read-only and reads
 /gluetun/servers/<provider>.json to build the catalogue.
 
-⚠️  ProtonVPN is excluded: generating its JSON requires Proton credentials
-    (paid account for premium servers) and cannot be automated transparently.
+Note: Gluetun ships an embedded ProtonVPN server list, so ProtonVPN servers
+    appear in the catalogue when the Gluetun volume exposes protonvpn.json.
+    Premium-only servers may be missing from the public list — in that case use
+    "Import from Gluetun" in Companion to pull the servers Gluetun actually knows.
     See https://github.com/qdm12/gluetun-wiki/blob/main/setup/servers.md#list-of-vpn-servers
 """
 
@@ -70,7 +72,7 @@ def read_catalogue_dir(servers_dir: str) -> dict[str, list[dict]]:
         provider = filename[:-5].lower()  # strip .json → provider name
 
         if provider in _EXCLUDED_PROVIDERS:
-            logger.info('catalogue: skipping %s (requires Proton credentials)', provider)
+            logger.info('catalogue: skipping excluded provider %s', provider)
             continue
 
         try:
