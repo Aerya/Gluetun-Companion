@@ -2066,7 +2066,8 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             # so they don't need compose recreate.  This also works for
             # containers from stacks other than the gluetun stack.
             _resumed = start_stopped_containers(pause_containers, compose_dir, project,
-                                                pull_set=pull_pause_bench_set)
+                                                pull_set=pull_pause_bench_set,
+                                                gluetun_name=container)
             logger.info(
                 'Paused containers restarted: %d/%d',
                 len(_resumed), len(pause_containers),

@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>gluetun</Name>
+  <Repository>qmcgaw/gluetun:v3.39.1</Repository>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Overview>Gluetun &amp;gt; multi-provider VPN client &#x1F389; with NAT-PMP.</Overview>
+  <ExtraParams>--cap-add=NET_ADMIN --restart always --sysctl net.ipv6.conf.all.disable_ipv6=1</ExtraParams>
+  <Config Name="TIMEZONE" Target="TZ" Default="" Mode="" Description="tz" Type="Variable" Display="always" Required="true" Mask="false">Europe/Paris</Config>
+  <Config Name="config" Target="/gluetun" Default="/mnt/user/appdata/gluetun" Mode="rw" Description="" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/gluetun</Config>
+  <Config Name="VPN_SERVICE_PROVIDER" Target="VPN_SERVICE_PROVIDER" Default="" Mode="" Description="" Type="Variable" Display="always" Required="true" Mask="false">protonvpn</Config>
+  <Config Name="VPN_TYPE" Target="VPN_TYPE" Default="" Mode="" Description="" Type="Variable" Display="always" Required="true" Mask="false">wireguard</Config>
+  <Config Name="WIREGUARD_PRIVATE_KEY" Target="WIREGUARD_PRIVATE_KEY" Default="" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="true">PLACEHOLDER_SECRET_DO_NOT_USE=</Config>
+  <Config Name="UNBLOCK" Target="UNBLOCK" Default="" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="VPN_PORT_FORWARDING" Target="VPN_PORT_FORWARDING" Default="on" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">on</Config>
+  <Config Name="HTTP_CONTROL_SERVER_PORT" Target="8000" Default="8000" Mode="tcp" Description="" Type="Port" Display="advanced" Required="true" Mask="false">8222</Config>
+  <Config Name="SERVER_COUNTRIES" Target="SERVER_COUNTRIES" Default="" Mode="" Description="" Type="Variable" Display="always" Required="false" Mask="false">France</Config>
+</Container>
