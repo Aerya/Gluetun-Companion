@@ -331,20 +331,20 @@ L'encart **Statut VPN** affiche l'intermédiaire et les opérateurs observés. D
 ---
 
 ### Catalogue de serveurs Gluetun
-- **Téléchargement GitHub** — le Sidecar catalogue télécharge les listes de serveurs directement depuis le dépôt public [`qdm12/gluetun-servers`](https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers) ; **aucun volume à monter**, aucune modification de votre configuration Gluetun requise
+- **Catalogue réel Gluetun en priorité** — le Sidecar catalogue monte automatiquement le volume `/gluetun` du container Gluetun quand il est accessible et lit `/gluetun/servers.json` en priorité ; ce fichier correspond à la liste réellement chargée par Gluetun. Si ce volume n'est pas disponible, Companion retombe sur le dépôt public [`qdm12/gluetun-servers`](https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers)
 - **Mise à jour automatique** — la liste est rafraîchie **à chaque cycle de benchmark** (intervalle configurable dans Paramètres → Mesurer, défaut : 6 h) ; un bouton dédié dans les Paramètres et dans le modal `/servers` permet de forcer une mise à jour immédiate
 - **Auto-ajout des nouveaux serveurs** *(option)* — quand de nouveaux serveurs apparaissent dans le catalogue pour un **pays**, une **région** ou une **ville** que vous avez déjà configuré, Companion les ajoute automatiquement à votre liste (type `SERVER_NAMES`) sans intervention manuelle ; désactivé par défaut, activable dans **Paramètres → Maintenance → Catalogue**
 - **Notification de changements** *(option)* — Discord/Apprise envoyés à chaque refresh si des serveurs sont ajoutés ou supprimés du catalogue, avec le détail par provider (+N/-N) ; activable dans **Paramètres → Notifications**
 - **3 modes d'import dans les Paramètres** :
-  1. **Tous les providers** — importe les serveurs de tous les providers disponibles sur GitHub
+  1. **Tous les providers** — importe les serveurs de tous les providers disponibles dans le catalogue local Gluetun, ou dans le fallback GitHub
   2. **Provider au choix** — importe uniquement les serveurs du provider sélectionné manuellement
   3. **Provider actif** — détecte automatiquement le provider configuré dans votre Gluetun et n'importe que ses serveurs
   — pour chacun de ces modes, option de **lancer un benchmark complet** immédiatement après l'import (méthode configurée dans Paramètres, sur tous les serveurs de la liste)
 - **Tous les types de filtre** — chaque serveur est importé avec ses attributs complets : `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`
 - **Sélection multi-filtre depuis `/servers`** — sélectionnez des serveurs en mixant librement les types de filtre (ex : noms + pays + villes simultanément) ; Companion applique le bon filtre dans Gluetun et change le type à la volée si nécessaire
-- ⚠️ **ProtonVPN** — Les serveurs gratuits ProtonVPN sont disponibles via le **Catalogue**. Pour accéder aux serveurs Premium, utilisez **Importer depuis Gluetun** afin de récupérer les serveurs déjà configurés dans votre compose Gluetun (compte payant requis).
+- ⚠️ **ProtonVPN** — Quand le volume `/gluetun` du container Gluetun est accessible, le **Catalogue** utilise `servers.json` et peut donc afficher les serveurs Premium réellement chargés par Gluetun, avec leurs métadonnées P2P/Streaming/hostname. Sans ce volume, le fallback GitHub peut rester limité aux données publiques.
 
-**Prérequis** — le sidecar catalogue a uniquement besoin d'un accès HTTPS sortant (réseau bridge Docker, activé par défaut). **Aucune modification de `docker-compose.yml` requise.**
+**Prérequis** — le sidecar catalogue fonctionne sans configuration supplémentaire. Pour enrichir le catalogue avec les données réellement chargées par Gluetun, Companion tente de monter automatiquement le volume `/gluetun` du container Gluetun en lecture seule ; sinon un accès HTTPS sortant suffit pour le fallback GitHub.
 
 ### Gestion des containers Docker
 - **Containers réseau Gluetun (auto-gérés)** — tous les containers en `network_mode: service:gluetun` sont détectés et recréés automatiquement après chaque bascule, quel que soit leur état : containers encore fonctionnels **ou déjà dans un namespace mort** (suite à une bascule précédente ratée). Les containers dans une **stack Compose différente** de Gluetun sont également gérés si leur répertoire est accessible depuis Companion ou si leurs labels `com.docker.compose` sont présents. La détection d'orphelins est limitée aux containers référençant un **ancien Gluetun connu** (historique d'IDs en base) — Companion ne touche jamais aux dépendants d'un autre VPN ou d'une stack étrangère

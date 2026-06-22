@@ -332,20 +332,20 @@ The **VPN Status** card displays the intermediary and observed operators. In tab
 ---
 
 ### Gluetun server catalogue
-- **GitHub download** — the catalogue Sidecar downloads server lists directly from the public [`qdm12/gluetun-servers`](https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers) repository; **no volume to mount**, no changes to your Gluetun configuration required
+- **Real Gluetun catalogue first** — the catalogue Sidecar automatically mounts the Gluetun container's `/gluetun` volume when it is available and reads `/gluetun/servers.json` first; this is the exact list loaded by Gluetun. If that volume is not available, Companion falls back to the public [`qdm12/gluetun-servers`](https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers) repository
 - **Automatic refresh** — the list is updated **at every benchmark cycle** (configurable interval in Settings → Measure, default: 6 h); a dedicated button in Settings and in the `/servers` modal lets you force an immediate refresh
 - **Auto-add new servers** *(option)* — when new servers appear in the catalogue for a **country**, **region** or **city** you already have configured, Companion automatically adds them to your server list (as `SERVER_NAMES` entries) without any manual action; disabled by default, enable in **Settings → Maintenance → Catalogue**
 - **Change notifications** *(option)* — Discord/Apprise alert sent on each refresh when servers are added to or removed from the catalogue, with per-provider detail (+N/−N); enable in **Settings → Notifications**
 - **3 import modes in Settings**:
-  1. **All providers** — imports servers from every provider available on GitHub
+  1. **All providers** — imports servers from every provider available in the local Gluetun catalogue, or from the GitHub fallback
   2. **Chosen provider** — imports only the servers of a provider selected manually
   3. **Active provider** — automatically detects the provider configured in your Gluetun and imports its servers only
   — for each mode, an option to **run a full benchmark** immediately after import (using the configured method in Settings, across all servers in the list)
 - **All filter types** — each server is imported with its full attributes: `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_CITIES`, `SERVER_REGIONS`, `SERVER_HOSTNAMES`
 - **Multi-filter selection from `/servers`** — select servers by freely mixing filter types (e.g. names + countries + cities at the same time); Companion applies the right filter in Gluetun and changes the filter type on the fly if needed
-- ⚠️ **ProtonVPN** — Free ProtonVPN servers are available via the **Catalogue**. To access Premium servers, use **Import from Gluetun** to retrieve the servers already configured in your Gluetun compose (paid account required).
+- ⚠️ **ProtonVPN** — When the Gluetun container's `/gluetun` volume is available, the **Catalogue** uses `servers.json` and can therefore show the Premium servers actually loaded by Gluetun, including P2P/Streaming/hostname metadata. Without that volume, the GitHub fallback may still be limited to public data.
 
-**Prerequisites** — the catalogue sidecar only needs outbound HTTPS access (Docker bridge network, enabled by default). **No `docker-compose.yml` changes required.**
+**Prerequisites** — the catalogue sidecar works without extra configuration. To enrich the catalogue with the data actually loaded by Gluetun, Companion tries to mount the Gluetun container's `/gluetun` volume read-only; otherwise outbound HTTPS access is enough for the GitHub fallback.
 
 ### Docker container management
 - **Gluetun network containers (auto-managed)** — all containers using `network_mode: service:gluetun` are detected and recreated automatically after each switch, regardless of their state: containers still functional **or already stuck in a dead namespace** (left over from a previously failed switch). Containers in a **different Compose stack** from Gluetun are also handled if their directory is accessible from Companion or if their `com.docker.compose` labels are present. Orphan detection is limited to containers referencing a **known former Gluetun** (ID history kept in the database) — Companion never touches dependents of another VPN or an unrelated stack
