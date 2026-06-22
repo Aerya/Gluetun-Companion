@@ -10,6 +10,25 @@
 
 > **Article lié** — Présentation et tour d'horizon illustré (captures d'écran de l'interface) sur le blog : **[Gluetun Companion : interface web pour piloter automatiquement vos serveurs VPN WireGuard et OpenVPN dans Gluetun](https://upandclear.org/2026/06/16/gluetun-companion-interface-web-pour-piloter-automatiquement-vos-serveurs-vpn-wireguard-et-openvpn-dans-gluetun/)**.
 
+<p align="center">
+<a href="https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml"><img src="https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml/badge.svg?branch=main" alt="Build"></a>
+<a href="https://github.com/Aerya/Gluetun-Companion/blob/main/.github/workflows/trivy-scan.yml"><img src="https://img.shields.io/badge/Trivy-enabled-1904DA?logo=aquasecurity&logoColor=white" alt="Trivy CVE scan"></a>
+<a href="https://github.com/Aerya/Gluetun-Companion/blob/main/.github/dependabot.yml"><img src="https://img.shields.io/badge/Dependabot-enabled-025E8C?logo=dependabot&logoColor=white" alt="Dependabot"></a>
+<a href="https://github.com/Aerya/Gluetun-Companion/pkgs/container/gluetun-companion"><img src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker"></a>
+<a href="#"><img src="https://img.shields.io/badge/arch-amd64%20%7C%20arm64-lightgrey" alt="arch"></a>
+<a href="README.en.md"><img src="https://img.shields.io/badge/i18n-FR%20%7C%20EN-informational" alt="i18n"></a>
+<a href="https://github.com/qdm12/gluetun"><img src="https://img.shields.io/badge/Gluetun-compatible-0d1117?logo=github&logoColor=white" alt="Gluetun compatible"></a>
+<a href="https://airvpn.org/?referred_by=483746"><img src="https://img.shields.io/badge/AirVPN-compatible-1a7a3d?logoColor=white" alt="AirVPN"></a>
+<a href="#"><img src="https://img.shields.io/badge/Unraid-DockerMan-f15a2b?logo=unraid&logoColor=white" alt="Unraid DockerMan"></a>
+<a href="https://discord.com/developers/docs/resources/webhook"><img src="https://img.shields.io/badge/Discord-webhook-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
+<a href="https://github.com/caronc/apprise"><img src="https://img.shields.io/badge/Apprise-compatible-3d85c8?logo=python&logoColor=white" alt="Apprise"></a>
+<a href="https://github.com/Tecnativa/docker-socket-proxy"><img src="https://img.shields.io/badge/socket--proxy-compatible-blueviolet?logo=docker&logoColor=white" alt="Docker socket-proxy"></a>
+</p>
+
+> **Vous l'utilisez ? Vous l'aimez ? [⭐ Ajouter une étoile !](https://github.com/Aerya/Gluetun-Companion/stargazers)** — ça prend deux secondes.
+
+> **Vous voulez aller à l’essentiel ?** Consultez la [compatibilité](#compatibilité), passez directement au [démarrage rapide](#démarrage-rapide), puis revenez aux [fonctionnalités](#fonctionnalités) et au [fonctionnement détaillé](#fonctionnement) selon vos besoins. La maintenance du projet est décrite dans les [workflows automatisés](#workflows-automatisés) et la [sécurité](#sécurité).
+
 Gluetun Companion est une interface Web pour piloter automatiquement vos serveurs VPN WireGuard et OpenVPN dans [Gluetun](https://github.com/qdm12/gluetun) :
  - Il benchmarke vos serveurs depuis le tunnel VPN lui-même, en mode sidecar sans redémarrer Gluetun, ou via le proxy HTTP intégré
  - Chaque serveur est évalué sur le débit, la latence, le jitter, la perte de paquets, le DNS, l’historique et la stabilité réelle
@@ -35,24 +54,6 @@ Gluetun Companion est une interface Web pour piloter automatiquement vos serveur
 
 **Issues et pull requests bienvenues**, en respectant les formes : pour une [issue](https://github.com/Aerya/Gluetun-Companion/issues), merci d'indiquer la version, le fournisseur VPN, les logs pertinents et les étapes de reproduction ; pour une PR, une description claire du problème résolu et du comportement attendu.
 
-
-<p align="center">
-<a href="https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml"><img src="https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml/badge.svg?branch=main" alt="Build"></a>
-<a href="https://github.com/Aerya/Gluetun-Companion/blob/main/.github/workflows/trivy-scan.yml"><img src="https://img.shields.io/badge/Trivy-enabled-1904DA?logo=aquasecurity&logoColor=white" alt="Trivy CVE scan"></a>
-<a href="https://github.com/Aerya/Gluetun-Companion/blob/main/.github/dependabot.yml"><img src="https://img.shields.io/badge/Dependabot-enabled-025E8C?logo=dependabot&logoColor=white" alt="Dependabot"></a>
-<a href="https://github.com/Aerya/Gluetun-Companion/pkgs/container/gluetun-companion"><img src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker"></a>
-<a href="#"><img src="https://img.shields.io/badge/arch-amd64%20%7C%20arm64-lightgrey" alt="arch"></a>
-<a href="README.en.md"><img src="https://img.shields.io/badge/i18n-FR%20%7C%20EN-informational" alt="i18n"></a>
-<a href="https://github.com/qdm12/gluetun"><img src="https://img.shields.io/badge/Gluetun-compatible-0d1117?logo=github&logoColor=white" alt="Gluetun compatible"></a>
-<a href="https://airvpn.org/?referred_by=483746"><img src="https://img.shields.io/badge/AirVPN-compatible-1a7a3d?logoColor=white" alt="AirVPN"></a>
-<a href="https://discord.com/developers/docs/resources/webhook"><img src="https://img.shields.io/badge/Discord-webhook-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
-<a href="https://github.com/caronc/apprise"><img src="https://img.shields.io/badge/Apprise-compatible-3d85c8?logo=python&logoColor=white" alt="Apprise"></a>
-<a href="https://github.com/Tecnativa/docker-socket-proxy"><img src="https://img.shields.io/badge/socket--proxy-compatible-blueviolet?logo=docker&logoColor=white" alt="Docker socket-proxy"></a>
-</p>
-
-> **Vous l'utilisez ? Vous l'aimez ? [⭐ Ajouter une étoile !](https://github.com/Aerya/Gluetun-Companion/stargazers)** — ça prend deux secondes.
-
-> **Vous voulez aller à l’essentiel ?** Consultez la [compatibilité](#compatibilité), passez directement au [démarrage rapide](#démarrage-rapide), puis revenez aux [fonctionnalités](#fonctionnalités) et au [fonctionnement détaillé](#fonctionnement) selon vos besoins. La maintenance du projet est décrite dans les [workflows automatisés](#workflows-automatisés) et la [sécurité](#sécurité).
 
 ---
 
