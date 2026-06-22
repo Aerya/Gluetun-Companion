@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>gluetun-companion</Name>
+  <Repository>ghcr.io/aerya/gluetun-companion:latest</Repository>
+  <Registry>https://github.com/Aerya/Gluetun-Companion/pkgs/container/gluetun-companion</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <MyMAC/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Aerya/Gluetun-Companion/issues</Support>
+  <Project>https://github.com/Aerya/Gluetun-Companion</Project>
+  <ReadMe>https://github.com/Aerya/Gluetun-Companion/blob/main/README.md</ReadMe>
+  <Overview>Gluetun Companion is a web UI that controls an existing Gluetun container: server catalogue, benchmarks, automatic/manual switches, Docker dependent recreation, VPN port forwarding rules, qBittorrent/rTorrent synchronization and Prometheus metrics.&#13;
+&#13;
+Unraid notes: this template is made for DockerMan-managed Gluetun containers. Companion needs read/write access to /boot/config/plugins/dockerMan/templates-user so server switches persist in the Unraid template XML. It also needs the Docker socket to inspect/recreate Gluetun and its running network dependents. Because DockerMan templates are root-owned and mode 600 on Unraid, the container intentionally runs as root; PUID/PGID are not exposed because they would break template write-back unless the host permissions are changed manually.&#13;
+&#13;
+Before first start, set SECRET_KEY to a long random value and keep it forever. Changing it later makes encrypted VPN credentials unreadable. Example: openssl rand -hex 32</Overview>
+  <Category>Tools:Network:VPN</Category>
+  <WebUI>http://[IP]:[PORT:8765]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/Aerya/Gluetun-Companion/main/templates/unraid/gluetun-companion.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/Aerya/Gluetun-Companion/main/assets/logo.png</Icon>
+  <ExtraParams>--add-host=host.docker.internal:host-gateway --restart=unless-stopped</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>Existing Gluetun container managed by Unraid DockerMan. Gluetun HTTP proxy is recommended for proxy tests; Gluetun Control Server is required for native port forwarding synchronization.</Requires>
+  <Config Name="WebUI" Target="8765" Default="8765" Mode="tcp" Description="Gluetun Companion web interface. The WebUI entry intentionally references the container port so Unraid follows any host port remap." Type="Port" Display="always" Required="true" Mask="false">8765</Config>
+  <Config Name="Appdata" Target="/data" Default="/mnt/user/appdata/gluetun-companion" Mode="rw" Description="Persistent Companion database, encrypted VPN profiles, benchmark history and settings." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/gluetun-companion</Config>
+  <Config Name="Docker Socket" Target="/var/run/docker.sock" Default="/var/run/docker.sock" Mode="rw" Description="Required to inspect Gluetun, create sidecar test containers, watch Docker events and recreate running containers attached to Gluetun network namespace." Type="Path" Display="always" Required="true" Mask="false">/var/run/docker.sock</Config>
+  <Config Name="Unraid DockerMan templates" Target="/boot/config/plugins/dockerMan/templates-user" Default="/boot/config/plugins/dockerMan/templates-user" Mode="rw" Description="Required in Unraid mode. Companion updates the Gluetun DockerMan XML template so VPN switches persist across Unraid recreates/updates." Type="Path" Display="always" Required="true" Mask="false">/boot/config/plugins/dockerMan/templates-user</Config>
+  <Config Name="Gluetun appdata" Target="/gluetun" Default="/mnt/user/appdata/gluetun" Mode="ro" Description="Read-only access to Gluetun local server catalogues, especially /gluetun/servers.json and /gluetun/servers/*.json. This lets Companion import the exact server list used by the installed Gluetun container instead of falling back to the public GitHub catalogue." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/gluetun</Config>
+  <Config Name="Custom OpenVPN config folder" Target="/openvpn" Default="/mnt/user/appdata/gluetun/openvpn" Mode="rw" Description="Optional. Folder where Companion can store uploaded Custom OpenVPN profiles. It should be the same host folder mounted into Gluetun." Type="Path" Display="advanced" Required="false" Mask="false">/mnt/user/appdata/gluetun/openvpn</Config>
+  <Config Name="SECRET_KEY" Target="SECRET_KEY" Default="" Mode="" Description="Required. Generate once with: openssl rand -hex 32. Keep it stable; changing it makes encrypted VPN credentials unreadable." Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="Timezone" Target="TZ" Default="Europe/Paris" Mode="" Description="Timezone used for logs and UI timestamps." Type="Variable" Display="always" Required="true" Mask="false">Europe/Paris</Config>
+  <Config Name="Gluetun container name" Target="GLUETUN_CONTAINER" Default="gluetun" Mode="" Description="Exact name of the existing Gluetun container managed by Unraid DockerMan." Type="Variable" Display="always" Required="true" Mask="false">gluetun</Config>
+  <Config Name="Gluetun proxy host" Target="GLUETUN_HOST" Default="host.docker.internal" Mode="" Description="Host used by Companion to reach Gluetun HTTP proxy from inside this container. For the standard Unraid bridge setup, keep host.docker.internal." Type="Variable" Display="always" Required="true" Mask="false">host.docker.internal</Config>
+  <Config Name="Gluetun HTTP proxy host port" Target="GLUETUN_PROXY_PORT" Default="8888" Mode="" Description="Host port published by Gluetun for its HTTP proxy. Used for proxy quick checks and public IP detection. Match the host port mapped to Gluetun container port 8888." Type="Variable" Display="always" Required="true" Mask="false">8888</Config>
+  <Config Name="Sidecar image" Target="SIDECAR_IMAGE" Default="ghcr.io/aerya/gluetun-companion-sidecar:latest" Mode="" Description="Sidecar image used for speed tests and catalogue imports. Keep it aligned with the Companion image tag." Type="Variable" Display="always" Required="true" Mask="false">ghcr.io/aerya/gluetun-companion-sidecar:latest</Config>
+  <Config Name="DATA_DIR" Target="DATA_DIR" Default="/data" Mode="" Description="Internal data directory. Do not change unless you also change the Appdata mount target." Type="Variable" Display="advanced" Required="true" Mask="false">/data</Config>
+  <Config Name="COMPOSE_DIR" Target="COMPOSE_DIR" Default="/compose" Mode="" Description="Internal compose directory for non-Unraid compose mode. DockerMan-managed Unraid Gluetun containers do not need this mount." Type="Variable" Display="advanced" Required="false" Mask="false">/compose</Config>
+  <Config Name="OPENVPN_CONFIG_DIR" Target="OPENVPN_CONFIG_DIR" Default="/openvpn" Mode="" Description="Internal path where Companion writes uploaded Custom OpenVPN files." Type="Variable" Display="advanced" Required="false" Mask="false">/openvpn</Config>
+  <Config Name="OPENVPN_CONTAINER_DIR" Target="OPENVPN_CONTAINER_DIR" Default="/gluetun/openvpn" Mode="" Description="Path where the same OpenVPN folder is visible from inside the Gluetun container." Type="Variable" Display="advanced" Required="false" Mask="false">/gluetun/openvpn</Config>
+  <Config Name="UNRAID_TEMPLATE_DIR" Target="UNRAID_TEMPLATE_DIR" Default="/boot/config/plugins/dockerMan/templates-user" Mode="" Description="Internal path to Unraid DockerMan user templates. Keep aligned with the DockerMan templates mount target." Type="Variable" Display="advanced" Required="false" Mask="false">/boot/config/plugins/dockerMan/templates-user</Config>
+  <Config Name="METRICS_TOKEN" Target="METRICS_TOKEN" Default="" Mode="" Description="Optional Bearer token for /metrics. Leave empty for LAN-only Prometheus scraping or set a strong token if exposed through a reverse proxy." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="LOG_LEVEL" Target="LOG_LEVEL" Default="INFO" Mode="" Description="Logging verbosity: INFO for normal use, DEBUG while troubleshooting." Type="Variable" Display="advanced" Required="false" Mask="false">INFO</Config>
+  <Config Name="LOG_JSON" Target="LOG_JSON" Default="0" Mode="" Description="Set to 1 to emit structured JSON logs." Type="Variable" Display="advanced" Required="false" Mask="false">0</Config>
+  <TailscaleStateDir/>
+</Container>

@@ -527,6 +527,20 @@ def init_db(db_path: str):
                 "VALUES ('pf_auto_sync_default_migrated', '1')"
             )
 
+        # Allow fork/packaging templates to seed the matching sidecar image
+        # without overwriting users who changed it in the UI.
+        sidecar_image = (os.environ.get('SIDECAR_IMAGE') or '').strip()
+        if sidecar_image:
+            default_sidecar = 'ghcr.io/aerya/gluetun-companion-sidecar:latest'
+            row = db.execute(
+                "SELECT value FROM settings WHERE key='sidecar_image'"
+            ).fetchone()
+            if not row or (row['value'] or '').strip() == default_sidecar:
+                db.execute(
+                    "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                    ('sidecar_image', sidecar_image),
+                )
+
 
 @contextmanager
 def get_db():
