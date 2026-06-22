@@ -829,6 +829,13 @@
       </div>
       <div class="modal-body">
         <p class="text-muted small mb-3">{{ t.srv_catalogue_modal_subtitle | safe }}</p>
+        <div class="alert alert-info py-2 px-3 mb-3" style="font-size:.82rem">
+          <i class="bi bi-info-circle me-1"></i>
+          {{ t.srv_catalogue_profile_hint }}
+          <a href="{{ url_for('main.settings') }}#wireguard" class="alert-link ms-1">
+            {{ t.srv_catalogue_profile_link }}
+          </a>
+        </div>
 
         {# ── Filters row ── #}
         <div class="d-flex gap-2 flex-wrap mb-3">
