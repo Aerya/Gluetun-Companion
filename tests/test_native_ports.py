@@ -60,6 +60,40 @@ class ReadGluetunNativePortsTest(unittest.TestCase):
         self.assertFalse(res['ok'])
         self.assertIn('airvpn', res['error'])
 
+    @patch.dict('os.environ', {'GLUETUN_HOST': '172.17.0.1', 'GLUETUN_CONTAINER': 'gluetun'}, clear=False)
+    @patch('app.port_forwarding.get_setting')
+    @patch('app.port_forwarding.docker.from_env')
+    @patch('app.port_forwarding.requests.get')
+    def test_falls_back_to_docker_published_control_port(self, rget, docker_env, get_setting):
+        get_setting.side_effect = lambda key, default='': {
+            'port_forward_gluetun_api_url': 'http://host.docker.internal:8000',
+            'port_forward_gluetun_api_key': '',
+            'gluetun_host': '',
+        }.get(key, default)
+        container = MagicMock()
+        container.attrs = {
+            'NetworkSettings': {
+                'Ports': {'8000/tcp': [{'HostIp': '', 'HostPort': '8222'}]},
+            },
+        }
+        docker_env.return_value.containers.get.return_value = container
+
+        def _get(url, headers=None, timeout=None):
+            if url.startswith('http://host.docker.internal:8000'):
+                raise OSError('unreachable')
+            if url == 'http://172.17.0.1:8222/v1/openvpn/portforwarded':
+                return _resp(200, {'port': 41893})
+            if url == 'http://172.17.0.1:8222/v1/portforward':
+                return _resp(404, text='not found')
+            raise AssertionError(url)
+        rget.side_effect = _get
+
+        res = read_gluetun_native_ports()
+
+        self.assertTrue(res['ok'])
+        self.assertEqual(res['ports'], [41893])
+        self.assertEqual(res['api_url'], 'http://172.17.0.1:8222')
+
 
 if __name__ == '__main__':
     unittest.main()

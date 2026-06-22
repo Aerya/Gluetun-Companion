@@ -35,6 +35,7 @@ def _gluetun_attrs():
             'RestartPolicy': {'Name': 'always', 'MaximumRetryCount': 0},
             'Privileged': False,
             'Dns': [],
+            'ExtraHosts': ['host.docker.internal:host-gateway'],
             'PortBindings': {
                 '8000/tcp': [{'HostIp': '', 'HostPort': '8222'}],
                 '8080/tcp': [{'HostIp': '', 'HostPort': '8080'},
@@ -66,6 +67,7 @@ class RecreateKwargsTest(unittest.TestCase):
         self.assertEqual(kw['labels']['net.unraid.docker.managed'], 'dockerman')
         self.assertEqual(kw['cap_add'], ['CAP_NET_ADMIN'])
         self.assertEqual(kw['sysctls'], {'net.ipv6.conf.all.disable_ipv6': '1'})
+        self.assertEqual(kw['extra_hosts'], ['host.docker.internal:host-gateway'])
         self.assertEqual(kw['restart_policy'], {'Name': 'always', 'MaximumRetryCount': 0})
         self.assertIn('/mnt/user/appdata/gluetun:/gluetun:rw', kw['volumes'])
 

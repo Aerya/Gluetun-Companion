@@ -303,6 +303,7 @@ def recreate_kwargs_from_inspect(
         'restart_policy': rp if rp.get('Name') and rp.get('Name') != 'no' else None,
         'privileged': bool(host.get('Privileged')),
         'dns': list(host.get('Dns') or []),
+        'extra_hosts': list(host.get('ExtraHosts') or []),
         'detach': True,
     }
     # Published ports are meaningless (and rejected by Docker) for a container

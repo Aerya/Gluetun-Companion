@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 import subprocess
 import time
@@ -207,6 +208,45 @@ def _fetch_portforward(base: str, path: str, headers: dict, timeout: float):
     return resp.status_code, _extract_ports(payload), payload, ''
 
 
+def _gluetun_control_url_candidates(api_url: str | None, container_name: str = '') -> list[str]:
+    """Return ordered Control Server base URLs to try.
+
+    Users can configure an explicit URL, but on Unraid the Gluetun Control
+    Server is commonly published on a remapped host port (for example host
+    8222 -> container 8000).  If the configured/default URL is stale, derive a
+    candidate from Docker's published 8000/tcp binding.
+    """
+    candidates: list[str] = []
+
+    def _add(value: str | None) -> None:
+        base = (value or '').strip().rstrip('/')
+        if base and base not in candidates:
+            candidates.append(base)
+
+    configured = api_url if api_url is not None else get_setting('port_forward_gluetun_api_url', '')
+    _add(configured)
+
+    host = (
+        get_setting('gluetun_host', '')
+        or os.environ.get('GLUETUN_HOST', '')
+        or 'host.docker.internal'
+    ).strip()
+    target = (container_name or os.environ.get('GLUETUN_CONTAINER', '') or 'gluetun').strip()
+    try:
+        container = docker.from_env().containers.get(target)
+        ports = container.attrs.get('NetworkSettings', {}).get('Ports') or {}
+        bindings = ports.get('8000/tcp') or []
+        for binding in bindings:
+            host_port = (binding or {}).get('HostPort') or ''
+            if host_port:
+                _add(f'http://{host}:{host_port}')
+    except Exception as exc:
+        logger.debug('Gluetun Control Server docker inspect fallback unavailable: %s', exc)
+
+    _add(f'http://{host}:8000')
+    return candidates
+
+
 def _diagnose_no_native_port(container_name: str, base_error: str) -> str:
     """Turn a generic 'no port' result into a specific, actionable message."""
     if not container_name:
@@ -236,25 +276,38 @@ def read_gluetun_native_ports(
     and *container_name* is given, the error is enriched with a diagnostic
     (port forwarding off, provider without native PF, …).
     """
-    base = (api_url or get_setting('port_forward_gluetun_api_url', '') or '').strip().rstrip('/')
-    if not base:
+    bases = _gluetun_control_url_candidates(api_url, container_name)
+    if not bases:
         return {'ok': False, 'ports': [], 'error': 'URL Control Server Gluetun absente.'}
+    last_error = ''
+    actual_container = (container_name or os.environ.get('GLUETUN_CONTAINER', '') or 'gluetun').strip()
     try:
         api_key = (get_setting('port_forward_gluetun_api_key', '') or '').strip()
         headers = {'X-API-Key': api_key} if api_key else {}
-        status, ports, payload, error = _fetch_portforward(base, '/v1/portforward', headers, timeout)
-        source = 'v1/portforward'
-        if not ports and status in (401, 403, 404):
-            _ls, l_ports, l_payload, l_error = _fetch_portforward(
-                base, '/v1/openvpn/portforwarded', headers, timeout)
-            if l_ports:
-                ports, payload, error, source = l_ports, l_payload, '', 'legacy'
-            elif not error:
-                error = l_error
-        if not ports:
-            return {'ok': False, 'ports': [],
-                    'error': _diagnose_no_native_port(container_name, error)}
-        return {'ok': True, 'ports': ports, 'raw': payload, 'error': '', 'source': source}
+        for base in bases:
+            try:
+                status, ports, payload, error = _fetch_portforward(base, '/v1/portforward', headers, timeout)
+                source = 'v1/portforward'
+                if not ports and status in (401, 403, 404):
+                    _ls, l_ports, l_payload, l_error = _fetch_portforward(
+                        base, '/v1/openvpn/portforwarded', headers, timeout)
+                    if l_ports:
+                        ports, payload, error, source = l_ports, l_payload, '', 'legacy'
+                    elif not error:
+                        error = l_error
+                if ports:
+                    return {
+                        'ok': True, 'ports': ports, 'raw': payload,
+                        'error': '', 'source': source, 'api_url': base,
+                    }
+                last_error = error
+                break
+            except Exception as exc:
+                last_error = str(exc)
+                logger.debug('Gluetun Control Server %s failed: %s', base, exc)
+                continue
+        return {'ok': False, 'ports': [],
+                'error': _diagnose_no_native_port(actual_container, last_error)}
     except Exception as exc:
         return {'ok': False, 'ports': [], 'error': str(exc)}
 
