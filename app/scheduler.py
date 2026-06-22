@@ -54,6 +54,29 @@ def _progress_log(message: str) -> None:
     set_setting('benchmark_log_lines', json.dumps(lines[-5:], ensure_ascii=False))
 
 
+def _sidecar_extra_env(
+    server_name: str,
+    filter_type: str,
+    wg_profile: dict | None,
+    sidecar_override: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Build the managed Gluetun env used by sidecar test clones.
+
+    Sidecar clones must use the same env normalization as real switches:
+    stale provider-specific filters (PORT_FORWARD_ONLY, SERVER_TYPES, etc.) and
+    unsupported native port-forwarding flags must be neutralized before the
+    clone starts. Dedicated sidecar keys are applied last so they can replace
+    the main WireGuard identity.
+    """
+    env: dict[str, str] = {}
+    if wg_profile:
+        from .gluetun import _managed_env_pairs
+        env.update(dict(_managed_env_pairs(server_name, filter_type, wg_profile)))
+    if sidecar_override:
+        env.update(sidecar_override)
+    return env
+
+
 # Docker event listener state
 _last_docker_event_ts: float = 0.0   # epoch of last event-triggered quick check
 _DOCKER_EVENT_COOLDOWN = 300          # minimum seconds between two event-triggered checks
@@ -1513,8 +1536,6 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             # Resolve VPN profile extra_env for this server (None if no profile)
             _pid = row['vpn_profile_id']
             _penv = _profile_env_cache.get(_pid) if _pid is not None else None
-            _extra_env = _penv['extra_env'] if _penv else None
-
             # Sidecar uses either a dedicated per-profile identity or, when the
             # profile explicitly allows it, the same WireGuard identity as Gluetun.
             # OpenVPN profiles always reuse their own credentials in the sidecar.
@@ -1551,8 +1572,9 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                         _progress_log(f'Ignore {row["name"]} : {_skip_reason}')
                         continue   # not a failure — just untestable in this mode
                 else:
-                    _sidecar_env: dict[str, str] = dict(_extra_env) if _extra_env else {}
-                    _sidecar_env.update(_effective_sidecar)
+                    _sidecar_env = _sidecar_extra_env(
+                        row['name'], row['filter_type'], _penv, _effective_sidecar,
+                    )
                     result = _test_server_sidecar_with_retry(
                         row['name'], row['filter_type'],
                         container, sidecar_image, proxy_host, sidecar_port,
@@ -2209,14 +2231,11 @@ def _do_single_server(app, server_name: str, filter_type: str):
             # ── Sidecar mode: test in isolation, switch only on success ──────
             # Build sidecar env: profile vars + dedicated key override, or
             # profile vars only when reuse is explicitly enabled.
-            _ss_sidecar_env: dict[str, str] = {}
             _ss_sidecar_allowed = bool(_ss_sidecar_override) or _ss_sidecar_reuse
-            if _ss_wg_profile and _ss_sidecar_allowed:
-                _ss_sidecar_env.update({'VPN_SERVICE_PROVIDER': _ss_wg_profile['compose_provider'],
-                                         'VPN_TYPE': _ss_wg_profile.get('vpn_type', 'wireguard')})
-                _ss_sidecar_env.update(_ss_wg_profile['vars'])
-            if _ss_sidecar_override:
-                _ss_sidecar_env.update(_ss_sidecar_override)
+            _ss_sidecar_env = (
+                _sidecar_extra_env(server_name, filter_type, _ss_wg_profile, _ss_sidecar_override)
+                if _ss_wg_profile and _ss_sidecar_allowed else {}
+            )
             if _ss_wg_profile and not _ss_sidecar_allowed:
                 logger.info(
                     'Server %s: skipping sidecar (no sidecar key or reuse option for profile #%s)',

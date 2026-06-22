@@ -24,7 +24,7 @@ POST /test?duration=8&streams=4&method=dual&iperf_fallback=1
                            "ul_iperf3": null,
                            "ookla_server": "Paris (Bouygues)",
                            "iperf_server": null,
-                           "jitter_ms": 2.1,           # null if ping failed
+                           "jitter_ms": 2.1,           # null if stability probe failed
                            "packet_loss_pct": 0.0,
                            "ping_min_ms": 4.9,
                            "ping_max_ms": 7.2,

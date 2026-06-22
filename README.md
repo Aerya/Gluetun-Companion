@@ -248,7 +248,7 @@ Ouvrir **http://localhost:8765** — première connexion : entrez le compte à c
 - **Optimisation horaire** *(option)* — analyse les patterns horaires de débit et de variance pour identifier les meilleures et pires fenêtres de benchmark ; affiche les plages recommandées dans les Paramètres ; option de décalage automatique : si le prochain cycle tombe sur une heure défavorable, il est décalé jusqu'à 3 h vers la prochaine fenêtre favorable
 - **Benchmark rapide à la demande** — bouton disponible en permanence (dashboard et paramètres) ; teste uniquement le serveur actif via le proxy HTTP de Gluetun, résultat en quelques secondes, aucune interruption VPN, résultat sauvegardé dans l'historique
 - **Estimation de durée** — le dashboard affiche une fourchette de durée calculée dynamiquement (optimiste / pessimiste) selon vos paramètres (`wait_secs`, `duration`, `samples`, `retries`, mode sidecar ou proxy) ; alerte automatique si le total estimé dépasse 30 minutes ; la même estimation est affichée dans Paramètres au fil de vos réglages
-- **Jitter & Packet Loss** — stabilité réseau mesurée à chaque test (21 sondes TTFB en mode proxy, ICMP via sidecar) ; indicateur 🟢/🟡/🔴 sur la page Serveurs, colonnes dédiées dans l'historique, jitter affiché dans les patterns horaires ; intégré dans le score de sélection (pénalité jusqu'à −15 % jitter / −25 % perte)
+- **Jitter & Packet Loss** — stabilité réseau mesurée à chaque test (21 sondes TTFB en mode proxy, handshakes TCP via sidecar) ; indicateur 🟢/🟡/🔴 sur la page Serveurs, colonnes dédiées dans l'historique, jitter affiché dans les patterns horaires ; intégré dans le score de sélection (pénalité jusqu'à −15 % jitter / −25 % perte)
 - **Latence DNS** *(sidecar)* — mesure du temps de résolution DNS depuis l'intérieur du tunnel VPN via `dig` (4 domaines en parallèle, médiane retournée) ; détecte les résolveurs lents, surchargés ou qui interceptent les requêtes ; colonne dans l'historique, tooltip sur l'indicateur Stabilité, données dans les patterns horaires
 - **Écoute Docker events** — thread daemon qui surveille les événements `start` du container Gluetun ; si Gluetun redémarre de lui-même (crash, mise à jour, watchdog), déclenche automatiquement un quick check après N secondes (délai de reconnexion VPN) ; si la dérive de débit dépasse le seuil configuré et que la bascule automatique est activée, lance immédiatement un benchmark complet ; les redémarrages déclenchés par Companion lui-même sont ignorés ; cooldown de 5 min entre deux déclenchements
 
@@ -1100,7 +1100,7 @@ Chaque test mesure automatiquement la **stabilité** de la connexion VPN, en plu
 
 **Méthode selon le mode :**
 - **Mode proxy** — 21 sondes TTFB (Time To First Byte) réparties sur 3 cibles (Cloudflare, Google, Quad9). La variance des temps de réponse donne le jitter, les requêtes échouées donnent le taux de perte.
-- **Mode sidecar** — l'endpoint `/ping` du container sidecar effectue un ping ICMP sur les mêmes 3 cibles (20 paquets chacune). Retombe sur None si l'ancienne version du sidecar ne supporte pas `/ping`.
+- **Mode sidecar** — l'endpoint `/ping` du container sidecar effectue des handshakes TCP sur les mêmes 3 cibles (20 tentatives chacune). Retombe sur None si l'ancienne version du sidecar ne supporte pas `/ping`.
 
 **Métriques produites :**
 - `jitter_ms` — écart-type des temps de réponse (ms) — représente la variabilité/instabilité

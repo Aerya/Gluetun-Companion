@@ -625,7 +625,7 @@ def _auto_add_matched_servers(
 def _wait_for_catalogue_sidecar(host: str, port: int, timeout: int = 60, token: str = '') -> bool:
     """
     Poll the sidecar /ready endpoint until it responds 200 or timeout expires.
-    Uses /ready (not /ping) to avoid routing to the ICMP-ping endpoint.
+    Uses /ready (not /ping) to avoid routing to the stability-probe endpoint.
     Passes X-Sidecar-Token header when token is set.
     """
     url      = f'http://{host}:{port}/ready'
