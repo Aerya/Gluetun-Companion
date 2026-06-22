@@ -3254,7 +3254,11 @@ def api_catalogue_servers():
     provider    = request.args.get('provider', '').strip() or None
     filter_type = request.args.get('filter_type', 'name')
     pf_only     = (request.args.get('port_forward_only', '') or '').lower() in ('1', 'true', 'yes', 'on')
-    server_type = request.args.get('server_type', '').strip()
+    server_type = _normalize_catalogue_server_type(
+        'provider',
+        provider or '',
+        request.args.get('server_type', ''),
+    )
     entries     = get_catalogue_entries(
         provider=provider,
         filter_type=filter_type,

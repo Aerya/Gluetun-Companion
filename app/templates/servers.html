@@ -868,7 +868,7 @@
                   id="cat-country-select" onchange="filterCatalogueTable()">
             <option value="">{{ t.cat_filter_country_all }}</option>
           </select>
-          <select class="form-select form-select-sm" style="max-width:175px"
+          <select class="form-select form-select-sm d-none" style="max-width:175px"
                   id="cat-server-type-select" onchange="loadCatalogue()">
             <option value="">{{ t.srv_catalogue_type_all }}</option>
             <option value="p2p">P2P</option>
@@ -1653,6 +1653,19 @@ let _catEntries = [];
 let _catProviders = [];
 let _catAddedCount = 0;   // tracks servers added during this modal session
 
+function _catIsProtonSelected() {
+  return (document.getElementById('cat-provider-select')?.value || '').toLowerCase() === 'protonvpn';
+}
+
+function _catUpdateProviderSpecificFilters() {
+  const typeSelect = document.getElementById('cat-server-type-select');
+  if (!typeSelect) return;
+  const showTypes = _catIsProtonSelected();
+  typeSelect.classList.toggle('d-none', !showTypes);
+  typeSelect.disabled = !showTypes;
+  if (!showTypes) typeSelect.value = '';
+}
+
 // Reload page if servers were added when the modal closes
 document.getElementById('catalogueModal').addEventListener('hidden.bs.modal', () => {
   if (_catAddedCount > 0) { _catAddedCount = 0; location.reload(); }
@@ -1661,6 +1674,7 @@ document.getElementById('catalogueModal').addEventListener('hidden.bs.modal', ()
 // Reset counter when modal opens
 document.getElementById('catalogueModal').addEventListener('show.bs.modal', () => {
   _catAddedCount = 0;
+  _catUpdateProviderSpecificFilters();
   if (_catProviders.length === 0) {
     fetch('{{ url_for("main.api_catalogue_providers") }}')
       .then(r => r.json())
@@ -1677,10 +1691,12 @@ document.getElementById('catalogueModal').addEventListener('show.bs.modal', () =
           </a>`;
           menu.appendChild(li);
         });
+        _catUpdateProviderSpecificFilters();
         loadCatalogue();
       })
       .catch(() => loadCatalogue());
   } else {
+    _catUpdateProviderSpecificFilters();
     loadCatalogue();
   }
 });
@@ -1708,13 +1724,16 @@ function _catSelectProvider(el, e) {
   const btn = document.getElementById('cat-provider-btn');
   const dd  = bootstrap.Dropdown.getInstance(btn);
   if (dd) dd.hide();
+  _catUpdateProviderSpecificFilters();
   loadCatalogue();
 }
 
 function loadCatalogue() {
   const provider    = document.getElementById('cat-provider-select').value;
   const filterType  = document.getElementById('cat-filter-select').value;
-  const serverType  = document.getElementById('cat-server-type-select')?.value || '';
+  const serverType  = _catIsProtonSelected()
+    ? (document.getElementById('cat-server-type-select')?.value || '')
+    : '';
 
   document.getElementById('cat-loading').classList.remove('d-none');
   document.getElementById('cat-error').classList.add('d-none');
@@ -1862,6 +1881,7 @@ async function catalogueRefresh() {
       document.getElementById('cat-provider-select').value = '';
       document.getElementById('cat-provider-label').textContent = '{{ t.srv_catalogue_provider_all }}';
       document.getElementById('cat-provider-icon-slot').innerHTML = '';
+      _catUpdateProviderSpecificFilters();
       // Clear dynamic items from menu (keep "all" + divider = first 2 items)
       const menu = document.getElementById('cat-provider-menu');
       while (menu.children.length > 2) menu.removeChild(menu.lastChild);
