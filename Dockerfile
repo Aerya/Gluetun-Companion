@@ -3,26 +3,36 @@
 #                    sans attendre que le tag flottant docker:29-cli soit rescanné.
 FROM docker:29.6.0-cli AS docker-bin
 
-# Stage 2 — image finale
+# Stage 2 — compile docker compose avec les dépendances Go patchées.
+# docker/compose v5.1.4 est la dernière release upstream disponible, mais son
+# binaire précompilé embarque encore containerd v2.2.3 et Go 1.26.3. On garde
+# donc la même version fonctionnelle de Compose, recompilée avec les versions
+# corrigées signalées par Trivy.
+FROM --platform=$BUILDPLATFORM golang:1.26.4-alpine AS compose-bin
+
+ARG TARGETOS=linux
+ARG TARGETARCH
+ARG COMPOSE_VERSION=v5.1.4
+
+RUN apk add --no-cache git \
+    && git clone --depth 1 --branch "${COMPOSE_VERSION}" https://github.com/docker/compose.git /src
+
+WORKDIR /src
+RUN go mod edit -require=github.com/containerd/containerd/v2@v2.2.5 \
+    && go mod tidy \
+    && CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH:-amd64}" \
+       go build -trimpath -tags e2e \
+         -ldflags "-w -X github.com/docker/compose/v5/internal.Version=${COMPOSE_VERSION}" \
+         -o /out/docker-compose ./cmd
+
+# Stage 3 — image finale
 FROM python:3.12-slim
 
 # Copie du CLI docker depuis l'image officielle (pas de daemon, pas de containerd, pas de runc)
 COPY --from=docker-bin /usr/local/bin/docker /usr/local/bin/docker
 
-# Installation du plugin docker compose (multi-arch : amd64 + arm64)
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
-    && ARCH=$(uname -m) \
-    && case "$ARCH" in \
-         x86_64)  COMPOSE_ARCH="x86_64"  ;; \
-         aarch64) COMPOSE_ARCH="aarch64" ;; \
-         *) echo "Unsupported arch: $ARCH" && exit 1 ;; \
-       esac \
-    && mkdir -p /usr/local/lib/docker/cli-plugins \
-    && curl -fsSL "https://github.com/docker/compose/releases/download/v5.1.4/docker-compose-linux-${COMPOSE_ARCH}" \
-         -o /usr/local/lib/docker/cli-plugins/docker-compose \
-    && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose \
-    && apt-get purge -y curl && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
+# Plugin docker compose recompilé depuis la source avec les dépendances patchées.
+COPY --from=compose-bin /out/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
 
 WORKDIR /app
 COPY requirements.txt .
