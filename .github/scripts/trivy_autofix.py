@@ -76,24 +76,36 @@ def _hub_tags(image: str, name_filter: str) -> list[str]:
         return []
 
 
+def _docker_cli_version(tag: str) -> tuple[int, int, int] | None:
+    """Return comparable version for docker CLI tags such as 29-cli or 29.6.0-cli."""
+    match = re.fullmatch(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?-cli", tag)
+    if not match:
+        return None
+    return tuple(int(part or 0) for part in match.groups())
+
+
 def latest_docker_cli_tag(current_tag: str) -> str | None:
     """
-    Given a tag like '27-cli' or '27.3-cli', find the latest same-or-newer
-    major-version 'XX-cli' tag on Docker Hub.
+    Given a tag like '29-cli', '29.6-cli' or '29.6.0-cli', find the latest
+    same-or-newer docker CLI tag on Docker Hub.
     Returns the tag name if a newer one is found, else None.
     """
-    m = re.match(r"^(\d+)", current_tag)
-    if not m:
+    current_version = _docker_cli_version(current_tag)
+    if not current_version:
         return None
-    current_major = int(m.group(1))
+    current_major = current_version[0]
+
+    candidates: list[tuple[tuple[int, int, int], str]] = []
 
     # Try current+1 first (prefer upgrade), then current (patch within major)
     for try_major in (current_major + 1, current_major):
         for tag in _hub_tags("docker", str(try_major)):
-            # Accept only exact "XX-cli" pattern (not "XX.Y.Z-cli" floaters)
-            if tag == f"{try_major}-cli":
-                return tag
-    return None
+            version = _docker_cli_version(tag)
+            if version and version[0] >= current_major and version > current_version:
+                candidates.append((version, tag))
+    if not candidates:
+        return None
+    return max(candidates)[1]
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +181,7 @@ def main() -> None:
                         )
                 else:
                     pr_lines.append(
-                        f"> ⚠️ No newer `docker:XX-cli` tag found on Docker Hub "
+                        f"> ⚠️ No newer `docker:*cli` tag found on Docker Hub "
                         f"(current: `docker:{current_tag}`). Manual review required.\n\n"
                     )
 
