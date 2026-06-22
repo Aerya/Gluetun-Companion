@@ -54,6 +54,7 @@ import os
 import re
 import subprocess
 import time
+import glob
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from statistics import median
 
@@ -73,6 +74,7 @@ _CAT_EXCLUDED: set[str] = set()
 # No volume mounting or Gluetun API required — pure HTTP download.
 _GITHUB_API_URL = 'https://api.github.com/repos/qdm12/gluetun-servers/contents/pkg/servers'
 _GITHUB_RAW_URL = 'https://raw.githubusercontent.com/qdm12/gluetun-servers/main/pkg/servers'
+_LOCAL_GLUETUN_DIR = os.environ.get('GLUETUN_DIR', '/gluetun')
 # Shared secret — Companion generates a random token per sidecar instance and
 # passes it via SIDECAR_SECRET env var.  All endpoints require it when set.
 _SECRET       = os.environ.get('SIDECAR_SECRET', '')
@@ -103,6 +105,109 @@ def _server_types_from_raw(server: dict) -> str:
         key for key, field in _SERVER_TYPE_FIELDS.items()
         if bool(server.get(field))
     )
+
+
+def _ips_from_raw(server: dict) -> str:
+    raw = server.get('ips') or []
+    if isinstance(raw, str):
+        raw = [part.strip() for part in raw.replace(';', ',').split(',')]
+    elif not isinstance(raw, (list, tuple, set)):
+        raw = []
+    ips: list[str] = []
+    for item in raw:
+        value = str(item or '').strip()
+        if value and value not in ips:
+            ips.append(value)
+    return json.dumps(ips, separators=(',', ':')) if ips else ''
+
+
+def _normalize_server_list(raw_servers: list[dict]) -> list[dict]:
+    normalized_by_name: dict[str, dict] = {}
+    normalized_extra: list[dict] = []
+    for s in raw_servers:
+        hostnames = s.get('hostnames') or []
+        hostname = s.get('hostname') or (hostnames[0] if hostnames else '')
+        srv = {
+            'name':         s.get('name') or s.get('server_name') or '',
+            'country':      s.get('country') or '',
+            'country_code': (s.get('country_code') or s.get('countryCode') or '').lower(),
+            'region':       s.get('region') or '',
+            'city':         s.get('city') or '',
+            'hostname':     hostname or '',
+            'ips':          _ips_from_raw(s),
+            'port_forward': bool(s.get('port_forward')),
+            'server_types':  _server_types_from_raw(s),
+        }
+        if any(v for k, v in srv.items() if k != 'port_forward'):
+            if srv['name']:
+                existing = normalized_by_name.get(srv['name'])
+                if existing:
+                    existing['port_forward'] = bool(existing.get('port_forward') or srv['port_forward'])
+                    existing_types = {
+                        t for t in (existing.get('server_types') or '').split(',') if t
+                    }
+                    existing_types.update(t for t in (srv.get('server_types') or '').split(',') if t)
+                    existing['server_types'] = ','.join(
+                        t for t in _SERVER_TYPE_FIELDS if t in existing_types
+                    )
+                    if not existing.get('hostname') and srv.get('hostname'):
+                        existing['hostname'] = srv['hostname']
+                    if not existing.get('ips') and srv.get('ips'):
+                        existing['ips'] = srv['ips']
+                else:
+                    normalized_by_name[srv['name']] = srv
+            else:
+                normalized_extra.append(srv)
+    return list(normalized_by_name.values()) + normalized_extra
+
+
+def _read_mounted_catalogue(root: str = _LOCAL_GLUETUN_DIR) -> dict[str, list[dict]]:
+    """Read Gluetun's mounted catalogue, preferring the loaded aggregate file.
+
+    `/gluetun/servers.json` is the catalogue Gluetun actually loaded and can
+    contain Proton premium servers missing from the public provider JSON files.
+    """
+    result: dict[str, list[dict]] = {}
+    aggregate = os.path.join(root, 'servers.json')
+    if os.path.isfile(aggregate):
+        try:
+            with open(aggregate, encoding='utf-8') as fh:
+                data = json.load(fh)
+            if isinstance(data, dict):
+                for provider, provider_data in data.items():
+                    if provider == 'version' or provider in _CAT_EXCLUDED:
+                        continue
+                    servers = provider_data.get('servers', []) if isinstance(provider_data, dict) else []
+                    normalized = _normalize_server_list(servers)
+                    if normalized:
+                        result[provider.lower()] = normalized
+        except Exception as exc:
+            logger.warning('catalogue: cannot read mounted aggregate %s: %s', aggregate, exc)
+        if result:
+            return result
+
+    for directory in (root, os.path.join(root, 'servers')):
+        if not os.path.isdir(directory):
+            continue
+        for path in sorted(glob.glob(os.path.join(directory, '*.json'))):
+            fname = os.path.basename(path)
+            if fname == 'manifest.json':
+                continue
+            provider = fname[:-5].lower()
+            if provider in _CAT_EXCLUDED:
+                continue
+            try:
+                with open(path, encoding='utf-8') as fh:
+                    data = json.load(fh)
+                normalized = _normalize_server_list(data.get('servers', []))
+            except Exception as exc:
+                logger.warning('catalogue: cannot read mounted provider %s: %s', path, exc)
+                continue
+            if normalized:
+                result[provider] = normalized
+        if result:
+            return result
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -154,15 +259,22 @@ def ready():
 @app.route('/catalogue')
 def catalogue():
     """
-    Download per-provider server JSON files from the public Gluetun repository:
-      https://github.com/qdm12/gluetun-servers/tree/main/pkg/servers
+    Return the Gluetun server catalogue.
 
-    No volume mounting, no Gluetun API — pure public HTTPS download.
+    Prefer a mounted /gluetun/servers.json from the user's Gluetun container
+    (the exact catalogue Gluetun loaded), then fall back to the public
+    gluetun-servers repository for installs without that volume.
     Requires X-Sidecar-Token header when SIDECAR_SECRET is set.
     Called by the Companion at the start of each benchmark cycle and on
     manual catalogue refresh.
     """
     _require_auth()
+
+    local = _read_mounted_catalogue()
+    if local:
+        total = sum(len(v) for v in local.values())
+        logger.info('catalogue: total %d servers from mounted Gluetun catalogue', total)
+        return jsonify({'ok': True, 'providers': local, 'source': 'local'})
 
     # ── 1. List available provider files via GitHub API ──────────────────────
     try:
@@ -204,43 +316,7 @@ def catalogue():
             logger.warning('catalogue: cannot fetch %s: %s', fname, exc)
             continue
 
-        raw_servers = data.get('servers', [])
-        normalized_by_name: dict[str, dict] = {}
-        normalized_extra: list[dict] = []
-        for s in raw_servers:
-            hostnames = s.get('hostnames') or []
-            hostname  = s.get('hostname') or (hostnames[0] if hostnames else '')
-            srv = {
-                'name':         s.get('name') or s.get('server_name') or '',
-                'country':      s.get('country') or '',
-                'country_code': (s.get('country_code') or s.get('countryCode') or '').lower(),
-                'region':       s.get('region') or '',
-                'city':         s.get('city') or '',
-                'hostname':     hostname or '',
-                'port_forward': bool(s.get('port_forward')),
-                'server_types':  _server_types_from_raw(s),
-            }
-            if any(v for k, v in srv.items() if k != 'port_forward'):
-                if srv['name']:
-                    existing = normalized_by_name.get(srv['name'])
-                    if existing:
-                        existing['port_forward'] = bool(existing.get('port_forward') or srv['port_forward'])
-                        existing_types = {
-                            t for t in (existing.get('server_types') or '').split(',') if t
-                        }
-                        existing_types.update(t for t in (srv.get('server_types') or '').split(',') if t)
-                        existing['server_types'] = ','.join(
-                            t for t in _SERVER_TYPE_FIELDS if t in existing_types
-                        )
-                        if not existing.get('hostname') and srv.get('hostname'):
-                            existing['hostname'] = srv['hostname']
-                    else:
-                        normalized_by_name[srv['name']] = srv
-                else:
-                    normalized_extra.append(srv)
-
-        normalized = list(normalized_by_name.values()) + normalized_extra
-
+        normalized = _normalize_server_list(data.get('servers', []))
         if normalized:
             result[provider] = normalized
             logger.info('catalogue: %s → %d servers', provider, len(normalized))

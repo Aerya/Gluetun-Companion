@@ -1137,6 +1137,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             _cat = refresh_catalogue_from_sidecar(
                 sidecar_image=_sidecar_img,
                 sidecar_host=_sidecar_host,
+                gluetun_container_name=app.config['GLUETUN_CONTAINER'],
                 auto_add=_cat_auto_add,
             )
         if _cat.get('ok'):
