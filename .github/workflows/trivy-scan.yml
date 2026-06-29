@@ -82,13 +82,17 @@ jobs:
       # ── Create PR if the script modified any Dockerfile ──────────────────
       - name: Create fix PR
         if: steps.fix.outputs.changed == 'true'
+        id: create-pr
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: security/trivy-autofix
           delete-branch: false
-          title: 'security: bump Docker base images to patch CVEs'
+          title: 'sécurité : mettre à jour les images Docker pour corriger les CVE'
           body-path: .github/pr_body.md
+          add-paths: |
+            Dockerfile
+            sidecar/Dockerfile
           labels: |
             security
             automated
@@ -97,6 +101,15 @@ jobs:
 
             Automated update triggered by weekly Trivy scan.
             See PR body for full CVE list.
+
+      # PRs created with GITHUB_TOKEN do not emit another pull_request event.
+      # Dispatch the validation workflow explicitly on the generated branch.
+      - name: Validate fix PR
+        if: steps.create-pr.outputs.pull-request-operation == 'created' || steps.create-pr.outputs.pull-request-operation == 'updated'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BRANCH: ${{ steps.create-pr.outputs.pull-request-branch }}
+        run: gh workflow run docker-publish.yml --ref "$PR_BRANCH"
 
       # ── Count remaining fixable CVEs (for issue creation) ────────────────
       - name: Count fixable CVEs

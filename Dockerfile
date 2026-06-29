@@ -1,5 +1,5 @@
 # Stage 1 — récupère uniquement le binaire docker CLI (pas le daemon)
-# docker:29.6.0-cli — tag précis pour récupérer les correctifs Go/containerd
+# docker:29.6.1-cli — tag précis pour récupérer les correctifs Go/containerd
 #                    sans attendre que le tag flottant docker:29-cli soit rescanné.
 FROM docker:29.6.1-cli AS docker-bin
 
