@@ -1,7 +1,7 @@
 # Stage 1 — récupère uniquement le binaire docker CLI (pas le daemon)
 # docker:29.6.0-cli — tag précis pour récupérer les correctifs Go/containerd
 #                    sans attendre que le tag flottant docker:29-cli soit rescanné.
-FROM docker:29.6.0-cli AS docker-bin
+FROM docker:29.6.1-cli AS docker-bin
 
 # Stage 2 — compile docker compose avec les dépendances Go patchées.
 # docker/compose v5.1.4 est la dernière release upstream disponible, mais son
