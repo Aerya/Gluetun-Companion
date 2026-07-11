@@ -2725,6 +2725,12 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
               </div>
               <div class="form-check form-switch mb-0">
                 <input class="form-check-input" type="checkbox" role="switch"
+                       name="notif_benchmark_start" id="notif_benchmark_start"
+                       {{ 'checked' if cfg.notif_benchmark_start == '1' }}>
+                <label class="form-check-label small" for="notif_benchmark_start">Début de cycle benchmark</label>
+              </div>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
                        name="notif_benchmark_end" id="notif_benchmark_end"
                        {{ 'checked' if cfg.notif_benchmark_end == '1' }}>
                 <label class="form-check-label small" for="notif_benchmark_end">Fin de cycle benchmark</label>

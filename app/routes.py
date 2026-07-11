@@ -1920,7 +1920,7 @@ def settings():
             set_setting('airvpn_new_server_notif','1' if request.form.get('airvpn_new_server_notif') else '0')
             # Per-type toggles
             for _k in ('notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
-                       'notif_auto_exclude', 'notif_benchmark_end', 'notif_benchmark_failure',
+                       'notif_auto_exclude', 'notif_benchmark_start', 'notif_benchmark_end', 'notif_benchmark_failure',
                        'notif_quick_check', 'notif_optimal_hour_change', 'notif_catalogue_changes'):
                 set_setting(_k, '1' if request.form.get(_k) else '0')
             # Global mention
@@ -2302,6 +2302,7 @@ def settings():
         'notif_manual_switch':      get_setting('notif_manual_switch',  '0'),
         'notif_already_best':       get_setting('notif_already_best',   '0'),
         'notif_auto_exclude':       get_setting('notif_auto_exclude',   '1'),
+        'notif_benchmark_start':    get_setting('notif_benchmark_start',    '0'),
         'notif_benchmark_end':      get_setting('notif_benchmark_end',     '0'),
         'notif_benchmark_failure':  get_setting('notif_benchmark_failure', '1'),
         'notif_quick_check':           get_setting('notif_quick_check',            '1'),
