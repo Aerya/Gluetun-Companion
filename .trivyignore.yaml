@@ -1,0 +1,9 @@
+vulnerabilities:
+  - id: CVE-2026-34040
+    purls:
+      - pkg:golang/github.com/docker/docker@v28.5.2+incompatible
+    expired_at: 2027-07-11
+    statement: >-
+      The Companion image embeds Docker CLI and Docker Compose, not Docker Engine.
+      This CVE only affects Engine deployments using an AuthZ plugin. Reassess when
+      Compose migrates away from the deprecated github.com/docker/docker module.
