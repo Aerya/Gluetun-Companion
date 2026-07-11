@@ -31,6 +31,7 @@ _SEVERITY: dict[str, str] = {
     'pool_rotation':      'medium',
     'manual_switch':      'info',
     'already_best':       'info',
+    'benchmark_start':    'info',
     'benchmark_end':      'info',
     'quick_check':        'info',
     'optimal_hour':       'info',
@@ -438,6 +439,65 @@ def send_benchmark_failure_notification(
             logger.info('Apprise benchmark-failure notification sent')
         except Exception as exc:
             logger.warning('Apprise benchmark-failure notification failed: %s', exc)
+
+
+def send_benchmark_start_notification(
+    sidecar_mode: bool,
+    paused_containers: list[str],
+    discord_url: str | None = None,
+    apprise_urls: str | None = None,
+    lang: str = 'fr',
+    companion_url: str | None = None,
+    mention: str | None = None,
+    mention_level: str = 'critical',
+):
+    """Notify just before a full benchmark can interrupt VPN-dependent services."""
+    if not discord_url and not apprise_urls:
+        return
+    t = get_translations(lang)
+    mode = t.get('notif_benchmark_start_sidecar', 'Sidecar') if sidecar_mode else t.get(
+        'notif_benchmark_start_proxy', 'HTTP proxy'
+    )
+    paused = ', '.join(paused_containers) if paused_containers else t.get(
+        'notif_benchmark_start_none', 'None'
+    )
+
+    if discord_url:
+        try:
+            fields = [
+                {'name': t.get('notif_benchmark_start_mode', 'Mode'), 'value': mode, 'inline': True},
+                {'name': t.get('notif_benchmark_start_paused', 'Paused containers'),
+                 'value': paused, 'inline': False},
+            ]
+            payload = _discord_base_payload(
+                t.get('notif_benchmark_start_title', 'Benchmark started'),
+                0x58a6ff,
+                fields,
+                t,
+                companion_url,
+            )
+            _post_discord(discord_url, payload, mention, 'benchmark_start', mention_level)
+            logger.info('Discord benchmark-start notification sent')
+        except Exception as exc:
+            logger.warning('Discord benchmark-start notification failed: %s', exc)
+
+    if apprise_urls:
+        try:
+            lines = [
+                f"{t.get('notif_benchmark_start_mode', 'Mode')}: {mode}",
+                f"{t.get('notif_benchmark_start_paused', 'Paused containers')}: {paused}",
+                t.get('notif_benchmark_start_hint', 'Temporary VPN interruptions may occur during the cycle.'),
+            ]
+            if companion_url:
+                lines.append(companion_url)
+            _notify_apprise(
+                apprise_urls,
+                t.get('notif_benchmark_start_apprise_title', 'Benchmark started — Gluetun Companion'),
+                '\n'.join(lines),
+            )
+            logger.info('Apprise benchmark-start notification sent')
+        except Exception as exc:
+            logger.warning('Apprise benchmark-start notification failed: %s', exc)
 
 
 def send_benchmark_end_notification(

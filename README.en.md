@@ -385,7 +385,7 @@ The **VPN Status** card displays the intermediary and observed operators. In tab
 - **Settings search** — search field filtering cards across all tabs with a per-tab match counter
 - **VPN provider logos** — shown next to server names throughout the UI and in the catalogue (bundled SVGs + server-side cached favicons — the browser never contacts a third-party service)
 - **Global test banner** — visible on every page during a test: test type, current server, progress %, estimated time remaining and a Stop button (state persists across page reloads)
-- **Contextual notifications** — 10 independently-configurable alert types (auto/manual switch, auto-exclude, benchmark with no results, benchmark complete, quick check result, pool rotation, new AirVPN servers, catalogue changes, optimal window change) via Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…); severity levels 🔴/🟡/🔵; global Discord mention with configurable severity threshold
+- **Contextual notifications** — 11 independently-configurable alert types (benchmark start/complete, auto/manual switch, auto-exclude, benchmark with no results, quick check result, pool rotation, new AirVPN servers, catalogue changes, optimal window change) via Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…); severity levels 🔴/🟡/🔵; global Discord mention with configurable severity threshold
 - **Automatic purge** of SQLite history with configurable retention (in days)
 
 ### Integration & infrastructure
@@ -1079,6 +1079,7 @@ Companion sends targeted alerts via **Discord webhook** and/or **[Apprise](https
 | 🟡 Automatic switch | Medium | ✅ | Companion switches to a faster server |
 | 🟡 New AirVPN servers | Medium | *(depends on AirVPN detection)* | New servers detected in your countries |
 | 🔵 Manual switch | Info | ❌ | Switch triggered manually from the UI |
+| 🔵 Benchmark started | Info | ❌ | Confirmed cycle; may announce temporary VPN interruptions and paused containers |
 | 🔵 Benchmark complete | Info | ❌ | Benchmark cycle finished successfully |
 | 🔵 Already on best | Info | ❌ | Active server is already the best — no change |
 | 🔵 Quick check result | Info | ✅ | Manual quick benchmark completed (server, speed, delta vs baseline) |

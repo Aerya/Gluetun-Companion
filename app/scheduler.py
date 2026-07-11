@@ -1233,6 +1233,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
     _notif_auto_sw    = get_setting('notif_auto_switch',       '1') == '1'
     _notif_best       = get_setting('notif_already_best',      '0') == '1'
     _notif_exclude    = get_setting('notif_auto_exclude',      '1') == '1'
+    _notif_bench_start = get_setting('notif_benchmark_start',  '0') == '1'
     _notif_bench_end  = get_setting('notif_benchmark_end',     '0') == '1'
     _notif_bench_fail = get_setting('notif_benchmark_failure', '1') == '1'
 
@@ -1283,6 +1284,21 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
     pull_post_switch_set = set(_json.loads(get_setting('pull_post_switch_containers', '[]')))
     pull_pause_bench_set = set(_json.loads(get_setting('pull_pause_bench_containers', '[]')))
     pull_network_set     = set(_json.loads(get_setting('pull_network_containers', '[]')))
+
+    # Send this after a quick check has confirmed that a full cycle is needed,
+    # but before tracker discovery or stopping any configured containers.
+    if _notif_bench_start and not observation:
+        from .notify import send_benchmark_start_notification
+        send_benchmark_start_notification(
+            sidecar_mode=sidecar_mode,
+            paused_containers=pause_containers,
+            discord_url=_discord_url,
+            apprise_urls=_apprise_urls,
+            lang=_notif_lang,
+            companion_url=_companion_url,
+            mention=_mention,
+            mention_level=_mention_level,
+        )
 
     if tracker_checks_enabled and not observation:
         try:

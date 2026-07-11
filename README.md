@@ -384,7 +384,7 @@ L'encart **Statut VPN** affiche l'intermédiaire et les opérateurs observés. D
 - **Recherche dans les paramètres** — champ de recherche filtrant les cartes de tous les onglets avec compteur de résultats par onglet
 - **Logos des fournisseurs VPN** — affichés à côté des noms de serveurs partout dans l'UI et dans le catalogue (SVG embarqués + favicons mis en cache côté serveur — le navigateur ne contacte jamais de service tiers)
 - **Bandeau de test global** — visible sur toutes les pages pendant un test : type de test, serveur en cours, progression en %, estimation du temps restant et bouton Arrêter (état persistant au rechargement de page)
-- **Notifications contextuelles** — 10 types d'alertes configurables indépendamment (bascule auto/manuelle, auto-exclusion, benchmark sans résultat, fin de benchmark, résultat quick check, rotation de pool, nouveaux serveurs AirVPN, changements catalogue, changement fenêtre optimale) via webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…) ; sévérité 🔴/🟡/🔵 ; mention Discord globale avec seuil de sévérité configurable
+- **Notifications contextuelles** — 11 types d'alertes configurables indépendamment (début/fin de benchmark, bascule auto/manuelle, auto-exclusion, benchmark sans résultat, résultat quick check, rotation de pool, nouveaux serveurs AirVPN, changements catalogue, changement fenêtre optimale) via webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…) ; sévérité 🔴/🟡/🔵 ; mention Discord globale avec seuil de sévérité configurable
 - **Purge automatique** de l'historique SQLite configurable (rétention en jours)
 
 ### Intégration & infrastructure
@@ -1079,6 +1079,7 @@ Companion envoie des alertes ciblées via **webhook Discord** et/ou **[Apprise](
 | 🟡 Rotation de pool | Moyen | ✅ | Un pool de rotation bascule vers un nouveau serveur (auto ou manuel) |
 | 🟡 Nouveaux serveurs AirVPN | Moyen | *(selon détection AirVPN)* | Nouveaux serveurs détectés dans vos pays |
 | 🔵 Bascule manuelle | Info | ❌ | Bascule déclenchée manuellement depuis l'UI |
+| 🔵 Début de benchmark | Info | ❌ | Cycle confirmé ; peut annoncer des interruptions VPN temporaires et les containers mis en pause |
 | 🔵 Fin de benchmark | Info | ❌ | Cycle de benchmark terminé avec succès |
 | 🔵 Déjà sur le meilleur | Info | ❌ | Le serveur actif est déjà le meilleur — aucun changement |
 | 🔵 Résultat quick check | Info | ✅ | Benchmark rapide manuel terminé (serveur, vitesse, delta vs baseline) |

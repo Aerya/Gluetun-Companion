@@ -374,6 +374,7 @@ def init_db(db_path: str):
                 ('notif_manual_switch',         '0'),
                 ('notif_already_best',          '0'),
                 ('notif_auto_exclude',          '1'),
+                ('notif_benchmark_start',       '0'),
                 ('notif_benchmark_end',         '0'),
                 ('notif_benchmark_failure',     '1'),
                 ('notif_quick_check',           '1'),
