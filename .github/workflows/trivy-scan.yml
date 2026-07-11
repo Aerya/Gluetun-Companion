@@ -128,10 +128,13 @@ jobs:
                   data = json.loads(pathlib.Path(f).read_text())
               except Exception:
                   continue
+              seen = set()
               for result in data.get('Results', []):
-                  for v in result.get('Vulnerabilities', []):
-                      if v.get('FixedVersion'):
-                          total += 1
+                for v in result.get('Vulnerabilities', []):
+                  cve_id = v.get('VulnerabilityID')
+                  if v.get('FixedVersion') and cve_id and cve_id not in seen:
+                      seen.add(cve_id)
+                      total += 1
 
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write(f'total={total}\n')
