@@ -8,7 +8,7 @@ FROM docker:29.6.1-cli AS docker-bin
 # binaire précompilé embarque encore containerd v2.2.3 et Go 1.26.3. On garde
 # donc la même version fonctionnelle de Compose, recompilée avec les versions
 # corrigées signalées par Trivy.
-FROM --platform=$BUILDPLATFORM golang:1.26.4-alpine AS compose-bin
+FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine AS compose-bin
 
 ARG TARGETOS=linux
 ARG TARGETARCH
