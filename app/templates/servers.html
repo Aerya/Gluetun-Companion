@@ -485,7 +485,7 @@
                  data-bs-toggle="tooltip" title="{{ t.hist_col_dns_tooltip }}{% if dns_path.tooltip %} · {{ dns_path.tooltip }}{% endif %}"
                  onclick="event.stopPropagation()"></i>
             </th>
-            <th>{{ t.srv_col_last_test }}</th>
+            {{ srv_th(t.srv_col_last_test, 'last_test', 'desc') }}
             <th class="text-end">{{ t.srv_col_actions }}</th>
           </tr>
         </thead>

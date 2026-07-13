@@ -80,6 +80,9 @@ def _sidecar_extra_env(
 # Docker event listener state
 _last_docker_event_ts: float = 0.0   # epoch of last event-triggered quick check
 _DOCKER_EVENT_COOLDOWN = 300          # minimum seconds between two event-triggered checks
+_gluetun_unhealthy_since: float | None = None
+_failover_last_attempt: float = 0.0
+_failover_failed_servers: set[str] = set()
 
 
 # ---------------------------------------------------------------------------
@@ -1349,6 +1352,22 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             logger.info('No enabled servers — skipping benchmark')
             _progress_log('Aucun serveur actif a tester')
             return 0
+
+        # Global country exclusions apply only to automatic choices. Manual
+        # tests and switches remain available from the server page.
+        from .server_eligibility import parse_excluded_countries, excluded_server_names
+        _excluded_countries = parse_excluded_countries(
+            get_setting('excluded_countries', '[]')
+        )
+        if _excluded_countries:
+            with get_db() as db:
+                _country_excluded_names = excluded_server_names(db, _excluded_countries)
+            _before_country_filter = len(servers)
+            servers = [s for s in servers if s['name'] not in _country_excluded_names]
+            logger.info(
+                'Country exclusion filter %s: keeping %d/%d server(s)',
+                sorted(_excluded_countries), len(servers), _before_country_filter,
+            )
 
         # ── Pre-filter 0: exclude orphan servers when WireGuard profiles exist ─
         # If ANY vpn_profiles exist the user has set up WireGuard multi-provider.
@@ -2639,6 +2658,225 @@ def check_airvpn_new_servers(app):
 # Docker event listener — automatic quick check on Gluetun restart
 # ---------------------------------------------------------------------------
 
+def _failover_wg_profile(profile_id: int | None) -> dict | None:
+    """Build the decrypted profile payload expected by switch_server()."""
+    if profile_id is None:
+        return None
+    from .crypto import decrypt, is_encrypted
+    from .database import get_vpn_profile
+    from .wg_providers import WG_PROVIDERS
+
+    profile = get_vpn_profile(profile_id)
+    if not profile or not profile.get('enabled'):
+        return None
+    provider = profile['provider']
+    provider_def = WG_PROVIDERS.get(provider, {})
+    values: dict[str, str] = {}
+    for key, value in profile['vars'].items():
+        values[key] = decrypt(value) if is_encrypted(value) else value
+    return {
+        'compose_provider': provider_def.get('compose_provider', provider),
+        'vpn_type': profile.get('vpn_type', 'wireguard') or 'wireguard',
+        'vars': values,
+        'port_forwarding': profile.get('port_forwarding', False),
+        'port_forward_only': profile.get('port_forward_only', True),
+        'server_types': profile.get('server_types', []),
+    }
+
+
+def _select_failover_candidate(
+    current_server: str | None,
+    extra_excluded: set[str] | None = None,
+) -> dict | None:
+    """Pick the best historical alternative in the current VPN profile."""
+    from .database import get_db, get_setting
+    from .server_eligibility import parse_excluded_countries, excluded_server_names
+
+    with get_db() as db:
+        current = db.execute(
+            'SELECT vpn_profile_id FROM servers WHERE name = ?', (current_server or '',)
+        ).fetchone()
+        profile_id = current['vpn_profile_id'] if current else None
+        country_codes = parse_excluded_countries(get_setting('excluded_countries', '[]'))
+        excluded = excluded_server_names(db, country_codes)
+        params: list = [current_server or '']
+        profile_sql = 's.vpn_profile_id IS NULL'
+        if profile_id is not None:
+            profile_sql = 's.vpn_profile_id = ?'
+            params.append(profile_id)
+        rows = db.execute(
+            f'''SELECT s.name, s.filter_type, s.vpn_profile_id,
+                       AVG(CASE WHEN st.success = 1 AND st.test_method != 'proxy_qc'
+                                THEN st.download_mbps END) AS avg_dl,
+                       MAX(CASE WHEN st.success = 1 THEN st.tested_at END) AS last_ok
+                FROM servers s
+                LEFT JOIN vpn_profiles vp ON vp.id = s.vpn_profile_id
+                LEFT JOIN speed_tests st ON st.server_name = s.name
+                WHERE s.enabled = 1 AND s.name != ?
+                  AND (s.vpn_profile_id IS NULL OR vp.enabled = 1)
+                  AND {profile_sql}
+                GROUP BY s.id
+                HAVING last_ok IS NOT NULL
+                ORDER BY avg_dl DESC NULLS LAST, last_ok DESC, s.name''',
+            params,
+        ).fetchall()
+    excluded |= extra_excluded or set()
+    return next((dict(row) for row in rows if row['name'] not in excluded), None)
+
+
+def _run_emergency_failover(app, health_status: str) -> bool:
+    """Switch away from an unavailable server, independently of auto_switch."""
+    global _failover_failed_servers
+    from .database import get_setting, set_setting
+    from .gluetun import (
+        get_current_filters, get_public_ips, list_network_dependents_for_recreate,
+        restart_network_dependents, switch_server, wait_for_vpn,
+    )
+
+    container = app.config['GLUETUN_CONTAINER']
+    filters = get_current_filters(container)
+    current_server = (
+        next(iter(filters.values()), '').split(',')[0].strip() if filters else None
+    )
+    if current_server:
+        _failover_failed_servers.add(current_server)
+    candidate = _select_failover_candidate(current_server, _failover_failed_servers)
+    error = ''
+    ok = False
+    elapsed = None
+    to_ipv4 = to_ipv6 = None
+
+    set_setting('benchmark_running', '1')
+    set_setting('benchmark_mode', 'failover')
+    set_setting('benchmark_current_server', current_server or '')
+    try:
+        if not candidate:
+            error = 'no eligible server outside the excluded countries'
+        else:
+            dependents = list_network_dependents_for_recreate(container)
+            try:
+                wg_profile = _failover_wg_profile(candidate['vpn_profile_id'])
+            except ValueError as exc:
+                wg_profile = None
+                error = f'VPN profile decryption failed: {exc}'
+            if not error:
+                switched, switch_error = switch_server(
+                    candidate['name'], candidate['filter_type'], container,
+                    app.config['COMPOSE_DIR'], app.config.get('COMPOSE_PROJECT', ''),
+                    wg_profile=wg_profile,
+                )
+                if not switched:
+                    error = switch_error or 'server switch failed'
+                else:
+                    ok, elapsed = wait_for_vpn(
+                        app.config['GLUETUN_HOST'], app.config['GLUETUN_PROXY_PORT'],
+                        timeout=int(get_setting('connection_wait_seconds', '45')),
+                        proxy_user=get_setting('proxy_username', '') or None,
+                        proxy_password=get_setting('proxy_password', '') or None,
+                    )
+                    restart_network_dependents(
+                        container, app.config['COMPOSE_DIR'],
+                        app.config.get('COMPOSE_PROJECT', ''), explicit_list=dependents,
+                    )
+                    if ok:
+                        _apply_port_forwards_for_current_provider(container, 'emergency_failover')
+                        to_ipv4, to_ipv6 = get_public_ips(
+                            app.config['GLUETUN_HOST'], app.config['GLUETUN_PROXY_PORT'],
+                            get_setting('proxy_username', '') or None,
+                            get_setting('proxy_password', '') or None,
+                        )
+                    else:
+                        error = f'VPN still unavailable after {elapsed:.0f}s'
+                        _failover_failed_servers.add(candidate['name'])
+
+        target = candidate['name'] if candidate else ''
+        _record_switch(
+            from_server=current_server, to_server=target,
+            reason='emergency_failover', success=ok,
+            connect_secs=elapsed, to_mbps=candidate.get('avg_dl') if candidate else None,
+            to_ipv4=to_ipv4, to_ipv6=to_ipv6,
+        )
+
+        if get_setting('notif_failover', '1') == '1':
+            common = {
+                'discord_url': get_setting('discord_webhook_url') or None,
+                'apprise_urls': get_setting('apprise_urls') or None,
+                'lang': get_setting('ui_lang', 'fr'),
+                'companion_url': get_setting('companion_url') or None,
+                'mention': get_setting('notify_mention', '').strip() or None,
+                'mention_level': get_setting('notify_mention_level', 'critical'),
+            }
+            if ok:
+                from .notify import send_switch_notification
+                send_switch_notification(
+                    from_server=current_server, to_server=target,
+                    from_mbps=None, to_mbps=candidate.get('avg_dl'),
+                    connect_secs=elapsed, to_ipv4=to_ipv4, to_ipv6=to_ipv6,
+                    reason='emergency_failover', alert_type='failover', **common,
+                )
+            else:
+                from .notify import send_failover_failure_notification
+                send_failover_failure_notification(current_server, error or health_status, **common)
+        logger.log(
+            logging.INFO if ok else logging.ERROR,
+            'Emergency failover from %s to %s: %s',
+            current_server or '?', target or '?', 'success' if ok else error,
+        )
+        return ok
+    finally:
+        _clear_benchmark_running()
+        set_setting('benchmark_mode', '')
+        set_setting('benchmark_current_server', '')
+
+
+def _check_gluetun_failover(app) -> None:
+    """Periodic Gluetun health watchdog with grace period and cooldown."""
+    global _gluetun_unhealthy_since, _failover_last_attempt, _failover_failed_servers
+    with app.app_context():
+        from .database import get_setting
+        if get_setting('failover_enabled', '1') != '1':
+            _gluetun_unhealthy_since = None
+            return
+        try:
+            import docker
+            container = docker.from_env().containers.get(app.config['GLUETUN_CONTAINER'])
+            container.reload()
+            state = container.attrs.get('State', {})
+            status = state.get('Status', container.status)
+            health = (state.get('Health') or {}).get('Status')
+            available = status == 'running' and health in (None, 'healthy')
+            health_status = f'{status}/{health or "no-healthcheck"}'
+        except Exception as exc:
+            logger.warning('Failover watchdog cannot inspect Gluetun: %s', exc)
+            return
+
+        now = time.time()
+        if available:
+            if _gluetun_unhealthy_since is not None:
+                logger.info('Gluetun health restored before emergency failover')
+            _gluetun_unhealthy_since = None
+            _failover_failed_servers.clear()
+            return
+        if _gluetun_unhealthy_since is None:
+            _gluetun_unhealthy_since = now
+            logger.warning('Gluetun unavailable (%s) — starting failover grace period', health_status)
+            return
+        grace = int(get_setting('failover_unhealthy_grace_seconds', '90'))
+        cooldown = int(get_setting('failover_cooldown_seconds', '600'))
+        if (now - _gluetun_unhealthy_since < grace
+                or (_failover_last_attempt > 0 and now - _failover_last_attempt < cooldown)):
+            return
+        if get_setting('benchmark_running', '0') == '1' or not _lock.acquire(blocking=False):
+            return
+        _failover_last_attempt = now
+        try:
+            if _run_emergency_failover(app, health_status):
+                _gluetun_unhealthy_since = None
+                _failover_failed_servers.clear()
+        finally:
+            _lock.release()
+
+
 def _run_event_triggered_quick_check(app):
     """
     Called after the Docker event listener detects an unexpected Gluetun restart.
@@ -3097,6 +3335,15 @@ def start_scheduler(app):
         id='continuous_observation_watchdog',
         replace_existing=True,
         misfire_grace_time=120,
+    )
+    _scheduler.add_job(
+        _check_gluetun_failover,
+        trigger=IntervalTrigger(seconds=30),
+        args=[app],
+        id='gluetun_failover_watchdog',
+        replace_existing=True,
+        misfire_grace_time=20,
+        max_instances=1,
     )
     _scheduler.start()
 

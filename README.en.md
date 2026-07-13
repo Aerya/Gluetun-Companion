@@ -268,6 +268,8 @@ The **VPN Status** card displays the intermediary and observed operators. In tab
 
 ### Server selection & automatic switching
 - **Automatic switching** to the fastest server (`docker compose up -d`), based on a weighted score combining current speed, exponential history, jitter, packet loss and involuntary reconnects (via Docker events); configurable *Speed vs stability* slider; **6 usage profiles** (Balanced, Gaming, BitTorrent, DDL, Download, Streaming) — each profile weights metrics differently to find the server best suited to your actual use case; dependent services (`network_mode: service:gluetun`) are recreated automatically
+- **Independent emergency failover** — a watchdog checks Gluetun health every 30 seconds and selects the best historical server from the same profile after a configurable grace period, even when performance-based automatic switching is disabled; includes an anti-flapping cooldown, dependent recreation and a critical notification
+- **Global country exclusions** — select countries to ignore in benchmarks, emergency failover and automatic pool rotations, without enabling Rotation or removing their servers; manual tests, switches and pool rotations remain available
 - **Manual switch** to any configured server from the Servers page — Gluetun is reconfigured and `network_mode: service:gluetun` containers are recreated automatically
 - **5 filter types**: `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - Configurable **retry** per server + global timeout per server
@@ -385,7 +387,7 @@ The **VPN Status** card displays the intermediary and observed operators. In tab
 - **Settings search** — search field filtering cards across all tabs with a per-tab match counter
 - **VPN provider logos** — shown next to server names throughout the UI and in the catalogue (bundled SVGs + server-side cached favicons — the browser never contacts a third-party service)
 - **Global test banner** — visible on every page during a test: test type, current server, progress %, estimated time remaining and a Stop button (state persists across page reloads)
-- **Contextual notifications** — 11 independently-configurable alert types (benchmark start/complete, auto/manual switch, auto-exclude, benchmark with no results, quick check result, pool rotation, new AirVPN servers, catalogue changes, optimal window change) via Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…); severity levels 🔴/🟡/🔵; global Discord mention with configurable severity threshold
+- **Contextual notifications** — 12 independently-configurable alert types (VPN outage and emergency failover, benchmark start/complete, auto/manual switch, auto-exclude, benchmark with no results, quick check result, pool rotation, new AirVPN servers, catalogue changes, optimal window change) via Discord webhook (rich embed) and/or [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…); severity levels 🔴/🟡/🔵; global Discord mention with configurable severity threshold
 - **Automatic purge** of SQLite history with configurable retention (in days)
 
 ### Integration & infrastructure
@@ -1074,6 +1076,7 @@ Companion sends targeted alerts via **Discord webhook** and/or **[Apprise](https
 
 | Alert type | Severity | On by default | Trigger |
 |---|---|---|---|
+| 🔴 VPN outage / emergency failover | Critical | ✅ | Gluetun remains unavailable after the grace period; reports the recovery attempt result |
 | 🔴 Server auto-exclude | Critical | ✅ | A server is disabled after N consecutive failures |
 | 🔴 Benchmark with no results | Critical | ✅ | A full cycle completes with no valid results |
 | 🟡 Automatic switch | Medium | ✅ | Companion switches to a faster server |

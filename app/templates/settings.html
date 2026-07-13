@@ -1605,6 +1605,49 @@
           <div class="form-text text-muted">{{ t.set_auto_exclude_hint }}</div>
         </div>
 
+        <hr class="my-3">
+        <div class="mb-2 form-check form-switch">
+          <input type="checkbox" name="failover_enabled" class="form-check-input"
+                 id="failover_enabled" {{ 'checked' if cfg.failover_enabled == '1' }}>
+          <label class="form-check-label fw-semibold" for="failover_enabled">
+            {{ t.set_failover_label }}
+          </label>
+        </div>
+        <div class="form-text text-muted mb-3 ms-4">{{ t.set_failover_hint }}</div>
+
+        <div class="row g-3 mb-3 ms-1">
+          <div class="col-sm-6">
+            <label class="form-label small" for="failover_unhealthy_grace_seconds">{{ t.set_failover_grace }}</label>
+            <div class="input-group input-group-sm">
+              <input type="number" name="failover_unhealthy_grace_seconds"
+                     id="failover_unhealthy_grace_seconds" class="form-control"
+                     value="{{ cfg.failover_unhealthy_grace_seconds }}" min="30" max="600" step="10">
+              <span class="input-group-text">{{ t.cmn_seconds }}</span>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label small" for="failover_cooldown_seconds">{{ t.set_failover_cooldown }}</label>
+            <div class="input-group input-group-sm">
+              <input type="number" name="failover_cooldown_seconds"
+                     id="failover_cooldown_seconds" class="form-control"
+                     value="{{ cfg.failover_cooldown_seconds }}" min="60" max="3600" step="60">
+              <span class="input-group-text">{{ t.cmn_seconds }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="excluded_countries">{{ t.set_excluded_countries_label }}</label>
+          <select class="form-select" id="excluded_countries" name="excluded_countries" multiple size="6">
+            {% for country in excluded_country_options %}
+            <option value="{{ country.code }}" {{ 'selected' if country.code in cfg.excluded_countries }}>
+              {{ country.name }} ({{ country.code }})
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text text-muted">{{ t.set_excluded_countries_hint }}</div>
+        </div>
+
         <div class="d-flex gap-2 mt-3 mb-0">
           <button type="submit" class="btn btn-sm btn-info fw-semibold text-dark">
             <i class="bi bi-save"></i> {{ t.cmn_save }}
@@ -2677,6 +2720,12 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
           <div class="d-flex align-items-start gap-2">
             <span class="badge rounded-pill flex-shrink-0 mt-1" style="background:#f85149;font-size:.65rem;min-width:4.5rem">🔴 Critique</span>
             <div class="d-flex flex-column gap-1">
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       name="notif_failover" id="notif_failover"
+                       {{ 'checked' if cfg.notif_failover == '1' }}>
+                <label class="form-check-label small" for="notif_failover">{{ t.set_notif_failover }}</label>
+              </div>
               <div class="form-check form-switch mb-0">
                 <input class="form-check-input" type="checkbox" role="switch"
                        name="notif_auto_exclude" id="notif_auto_exclude"
