@@ -1,9 +1,30 @@
-# Stage 1 — récupère uniquement le binaire docker CLI (pas le daemon)
-# docker:29.6.1-cli — tag précis pour récupérer les correctifs Go/containerd
-#                    sans attendre que le tag flottant docker:29-cli soit rescanné.
-FROM docker:29.6.1-cli AS docker-bin
+ARG BUILDPLATFORM=linux/amd64
 
-# Stage 2 — compile docker compose avec les dépendances Go patchées.
+# Stage 1 — conserve le tag officiel comme référence de version. Dependabot et
+# le workflow Trivy peuvent ainsi continuer à le mettre à jour automatiquement.
+FROM --platform=$BUILDPLATFORM docker:29.6.1-cli AS docker-release
+
+# Stage 2 — recompile la même version du Docker CLI avec la stdlib Go corrigée.
+# L'image officielle 29.6.1-cli embarque Go 1.26.4 (CVE-2026-39822). La version
+# exacte du CLI est lue depuis l'image officielle pour éviter un second pin.
+FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine AS docker-bin
+
+ARG TARGETOS=linux
+ARG TARGETARCH
+
+RUN apk add --no-cache bash git
+COPY --from=docker-release /usr/local/bin/docker /tmp/docker-reference
+RUN DOCKER_CLI_VERSION="$(/tmp/docker-reference --version | awk '{gsub(",", "", $3); print $3}')" \
+    && git clone --depth 1 --branch "v${DOCKER_CLI_VERSION}" \
+       https://github.com/docker/cli.git /src
+
+WORKDIR /src
+RUN CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH:-amd64}" \
+      GO_STRIP=1 TARGET=/out \
+      ./scripts/with-go-mod.sh ./scripts/build/binary \
+    && cp "$(readlink -f /out/docker)" /out/docker-cli
+
+# Stage 3 — compile docker compose avec les dépendances Go patchées.
 # docker/compose v5.1.4 est la dernière release upstream disponible, mais son
 # binaire précompilé embarque encore containerd v2.2.3 et Go 1.26.3. On garde
 # donc la même version fonctionnelle de Compose, recompilée avec les versions
@@ -25,11 +46,11 @@ RUN go mod edit -require=github.com/containerd/containerd/v2@v2.2.5 \
          -ldflags "-w -X github.com/docker/compose/v5/internal.Version=${COMPOSE_VERSION}" \
          -o /out/docker-compose ./cmd
 
-# Stage 3 — image finale
+# Stage 4 — image finale
 FROM python:3.12-slim
 
-# Copie du CLI docker depuis l'image officielle (pas de daemon, pas de containerd, pas de runc)
-COPY --from=docker-bin /usr/local/bin/docker /usr/local/bin/docker
+# Copie uniquement le Docker CLI recompilé (pas de daemon, containerd ou runc).
+COPY --from=docker-bin /out/docker-cli /usr/local/bin/docker
 
 # Plugin docker compose recompilé depuis la source avec les dépendances patchées.
 COPY --from=compose-bin /out/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
