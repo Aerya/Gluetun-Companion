@@ -371,6 +371,7 @@ def init_db(db_path: str):
                 ('gluetun_id_history',          '[]'),
                 ('orphan_legacy_adoption_done', '0'),
                 ('notif_auto_switch',           '1'),
+                ('notif_failover',              '1'),
                 ('notif_manual_switch',         '0'),
                 ('notif_already_best',          '0'),
                 ('notif_auto_exclude',          '1'),
@@ -403,6 +404,10 @@ def init_db(db_path: str):
                 ('port_forward_gluetun_api_key', ''),
                 ('port_forward_hook_timeout_secs', '20'),
                 ('port_forward_last_auto_result', ''),
+                ('failover_enabled',            '1'),
+                ('failover_unhealthy_grace_seconds', '90'),
+                ('failover_cooldown_seconds',   '600'),
+                ('excluded_countries',          '[]'),
                 -- WireGuard multi-provider rotation
                 ('wg_rotation_mode',           'none'),   -- none | free | conditional
                 ('wg_rotation_threshold',      '10');     -- % score gain required (conditional mode)

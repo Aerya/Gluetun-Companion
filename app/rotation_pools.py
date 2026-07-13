@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Server resolution
 # ---------------------------------------------------------------------------
 
-def resolve_pool_servers(pool_id: int) -> list[dict]:
+def resolve_pool_servers(pool_id: int, automatic: bool = True) -> list[dict]:
     """
     Return the list of candidate servers for this pool, combining all criteria
     using either union (each criterion adds servers) or intersection (each
@@ -33,6 +33,8 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
     download speed (proxy_qc excluded, same window as scoring).
 
     Explicit per-pool exclusions are applied after criteria and before top_n.
+    Global country exclusions apply to automatic rotations, while a manual
+    pool rotation can still be used as an explicit override.
 
     Each returned dict: {id, name, filter_type, vpn_profile_id, avg_dl}
     """
@@ -197,6 +199,12 @@ def resolve_pool_servers(pool_id: int) -> list[dict]:
         }
         candidate_names -= excluded_names
 
+        if automatic:
+            from .database import get_setting
+            from .server_eligibility import parse_excluded_countries, excluded_server_names
+            country_codes = parse_excluded_countries(get_setting('excluded_countries', '[]'))
+            candidate_names -= excluded_server_names(db, country_codes)
+
         if not candidate_names:
             return []
 
@@ -345,7 +353,7 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
         pool_id, pool['name'], pool['mode'], manual,
     )
 
-    candidates = resolve_pool_servers(pool_id)
+    candidates = resolve_pool_servers(pool_id, automatic=not manual)
     if not candidates:
         logger.warning('Pool rotation [%d] "%s": no candidates — skipping', pool_id, pool['name'])
         set_pool_last_error(pool_id, 'No candidates')

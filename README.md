@@ -267,6 +267,8 @@ L'encart **Statut VPN** affiche l'intermédiaire et les opérateurs observés. D
 
 ### Sélection & bascule automatique
 - **Bascule automatique** vers le meilleur serveur (`docker compose up -d`), basée sur un score pondéré intégrant débit actuel, historique exponentiel, jitter, perte paquets et reconnexions involontaires (via Docker events) ; curseur *Priorité débit vs stabilité* configurable ; **6 profils d'usage** sélectionnables (Équilibré, Jeu en ligne, BitTorrent, DDL, Téléchargement, Streaming) — chaque profil pondère différemment les métriques pour trouver le serveur le mieux adapté à l'usage réel ; les services dépendants (`network_mode: service:gluetun`) sont recréés automatiquement
+- **Basculement de secours indépendant** — un watchdog contrôle la santé de Gluetun toutes les 30 secondes et choisit le meilleur serveur historique du même profil après un délai de grâce configurable, même si la bascule automatique selon les performances est désactivée ; cooldown anti-flapping, recréation des dépendants et notification critique inclus
+- **Exclusions globales par pays** — sélectionnez les pays à ignorer dans les benchmarks, basculements de secours et rotations automatiques, sans désactiver Rotation ni retirer les serveurs ; les tests, bascules et rotations manuels restent possibles
 - **Bascule manuelle** vers n'importe quel serveur configuré depuis la page Serveurs — Gluetun est reconfiguré et les containers `network_mode: service:gluetun` sont recréés automatiquement
 - **5 types de filtre** : `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - **Retry** configurable par serveur + timeout global par serveur
@@ -384,7 +386,7 @@ L'encart **Statut VPN** affiche l'intermédiaire et les opérateurs observés. D
 - **Recherche dans les paramètres** — champ de recherche filtrant les cartes de tous les onglets avec compteur de résultats par onglet
 - **Logos des fournisseurs VPN** — affichés à côté des noms de serveurs partout dans l'UI et dans le catalogue (SVG embarqués + favicons mis en cache côté serveur — le navigateur ne contacte jamais de service tiers)
 - **Bandeau de test global** — visible sur toutes les pages pendant un test : type de test, serveur en cours, progression en %, estimation du temps restant et bouton Arrêter (état persistant au rechargement de page)
-- **Notifications contextuelles** — 11 types d'alertes configurables indépendamment (début/fin de benchmark, bascule auto/manuelle, auto-exclusion, benchmark sans résultat, résultat quick check, rotation de pool, nouveaux serveurs AirVPN, changements catalogue, changement fenêtre optimale) via webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…) ; sévérité 🔴/🟡/🔵 ; mention Discord globale avec seuil de sévérité configurable
+- **Notifications contextuelles** — 12 types d'alertes configurables indépendamment (panne VPN et basculement de secours, début/fin de benchmark, bascule auto/manuelle, auto-exclusion, benchmark sans résultat, résultat quick check, rotation de pool, nouveaux serveurs AirVPN, changements catalogue, changement fenêtre optimale) via webhook Discord (embed coloré) et/ou [Apprise](https://github.com/caronc/apprise/wiki) (Telegram, ntfy, Gotify, Slack, Pushover…) ; sévérité 🔴/🟡/🔵 ; mention Discord globale avec seuil de sévérité configurable
 - **Purge automatique** de l'historique SQLite configurable (rétention en jours)
 
 ### Intégration & infrastructure
@@ -1073,6 +1075,7 @@ Companion envoie des alertes ciblées via **webhook Discord** et/ou **[Apprise](
 
 | Type d'alerte | Sévérité | Activé par défaut | Déclenchement |
 |---|---|---|---|
+| 🔴 Panne VPN / basculement de secours | Critique | ✅ | Gluetun reste indisponible après le délai de grâce ; résultat de la tentative de secours |
 | 🔴 Auto-exclusion serveur | Critique | ✅ | Un serveur est désactivé après N échecs consécutifs |
 | 🔴 Benchmark sans résultat | Critique | ✅ | Le cycle complet se termine sans aucun résultat valide |
 | 🟡 Bascule automatique | Moyen | ✅ | Companion bascule vers un meilleur serveur |

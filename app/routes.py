@@ -716,6 +716,8 @@ _SERVERS_SORT = {
     'loss_desc':      'avg_loss   DESC NULLS LAST, s.name',
     'dns_asc':        'avg_dns    ASC  NULLS LAST, s.name',
     'dns_desc':       'avg_dns    DESC NULLS LAST, s.name',
+    'last_test_desc': 'last_tested DESC NULLS LAST, s.name',
+    'last_test_asc':  'last_tested ASC  NULLS LAST, s.name',
     'trackers_desc':  's.name',
     'trackers_asc':   's.name',
 }
@@ -895,8 +897,11 @@ def servers():
     _score_window  = int(get_setting('scoring_window_days', '30')) or None  # 0 → None = all
     _outlier_on    = get_setting('outlier_detection', '1') == '1'
 
-    # ── Filtered per-server stats (avg_dl/ul/lat with window + IQR) ───────────
-    _fstats = get_server_filtered_stats(_score_window, _outlier_on)
+    # Display history and scoring history deliberately use different windows.
+    # The score window controls recommendations, but must never make valid older
+    # measurements disappear from the server table.
+    _display_fstats = get_server_filtered_stats(None, _outlier_on)
+    _score_fstats   = get_server_filtered_stats(_score_window, _outlier_on)
     # Save raw SQL averages (include proxy_qc) before overwriting with filtered stats.
     # These are used as a fallback for profile scoring when the filtered stats return None
     # (which happens for servers that only have proxy_qc quick-check tests, not full benchmarks).
@@ -925,7 +930,7 @@ def servers():
             r['catalogue_ip_list'] = []
 
     for r in rows:
-        fs = _fstats.get(r['name'])
+        fs = _display_fstats.get(r['name'])
         if fs:
             r['avg_dl']        = fs['avg_dl']
             r['avg_ul']        = fs['avg_ul']
@@ -936,7 +941,8 @@ def servers():
             r.setdefault('outliers_removed', 0)
 
     # ── Profile scores for display ────────────────────────────────────────────
-    _stability = get_stability_all(_score_window)
+    _display_stability = get_stability_all(None)
+    _score_stability   = get_stability_all(_score_window)
     active_profile = get_setting('active_profile', 'balanced')
 
     # Build scoring rows: use filtered (IQR-cleaned, no proxy_qc) stats when available;
@@ -944,7 +950,13 @@ def servers():
     # only quick-check data still differentiate by download speed instead of all tying.
     def _make_scoring_row(r: dict) -> dict:
         sr = dict(r)
-        if sr.get('avg_dl') is None and sr.get('_raw_avg_dl') is not None:
+        fs = _score_fstats.get(sr['name'])
+        if fs:
+            sr['avg_dl']        = fs['avg_dl']
+            sr['avg_ul']        = fs['avg_ul']
+            sr['avg_lat']       = fs['avg_lat']
+            sr['avg_dl_single'] = fs['avg_dl_single']
+        elif sr.get('_raw_avg_dl') is not None:
             sr['avg_dl']  = sr['_raw_avg_dl']
             sr['avg_ul']  = sr.get('_raw_avg_ul')
             sr['avg_lat'] = sr.get('_raw_avg_lat')
@@ -952,11 +964,11 @@ def servers():
 
     _rows_scoring = [_make_scoring_row(r) for r in rows]
 
-    profile_scores, profile_scores_detail = _score_servers_detail(_rows_scoring, active_profile, _stability)
+    profile_scores, profile_scores_detail = _score_servers_detail(_rows_scoring, active_profile, _score_stability)
     profile_best   = max(profile_scores, key=profile_scores.get) if profile_scores else None
     profile_bests = {}
     for profile_key in PROFILES:
-        _scores = _score_servers(_rows_scoring, profile_key, _stability)
+        _scores = _score_servers(_rows_scoring, profile_key, _score_stability)
         profile_bests[profile_key] = max(_scores, key=_scores.get) if _scores else None
 
     # Detect whether all profiles converge to the same best server (= data-limited situation:
@@ -971,7 +983,7 @@ def servers():
         r.pop('_raw_avg_lat', None)
 
     # ── Confidence filter (Python-side — computed from benchmark history) ────
-    _confidence_all = compute_confidence_all(_score_window)
+    _confidence_all = compute_confidence_all(None)
     if conf_filter in ('HIGH', 'MEDIUM', 'LOW'):
         rows = [r for r in rows
                 if _confidence_all.get(r['name'], {}).get('level') == conf_filter]
@@ -1041,7 +1053,7 @@ def servers():
         configured_server_count=configured_server_count,
         active_server=active_server,
         confidence=_confidence_all,
-        stability=_stability,
+        stability=_display_stability,
         new_airvpn=new_airvpn,
         new_airvpn_names=new_airvpn_names,
         new_airvpn_countries=new_airvpn_countries,
@@ -1870,6 +1882,21 @@ def settings():
             set_setting('speedtest_retries',       request.form.get('speedtest_retries', '2'))
             set_setting('server_timeout_secs',     request.form.get('server_timeout_secs', '300'))
             set_setting('auto_exclude_failures',   request.form.get('auto_exclude_failures', '5'))
+            set_setting('failover_enabled', '1' if request.form.get('failover_enabled') else '0')
+            for _key, _default, _min_v, _max_v in (
+                ('failover_unhealthy_grace_seconds', '90', 30, 600),
+                ('failover_cooldown_seconds', '600', 60, 3600),
+            ):
+                try:
+                    _value = int(request.form.get(_key, _default) or _default)
+                except ValueError:
+                    _value = int(_default)
+                set_setting(_key, str(max(_min_v, min(_value, _max_v))))
+            _country_codes = sorted({
+                code.strip().upper() for code in request.form.getlist('excluded_countries')
+                if code.strip()
+            })
+            set_setting('excluded_countries', json.dumps(_country_codes))
             flash_t('flash_settings_saved', 'success')
 
         elif action == 'save_switch':
@@ -1920,6 +1947,7 @@ def settings():
             set_setting('airvpn_new_server_notif','1' if request.form.get('airvpn_new_server_notif') else '0')
             # Per-type toggles
             for _k in ('notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
+                       'notif_failover',
                        'notif_auto_exclude', 'notif_benchmark_start', 'notif_benchmark_end', 'notif_benchmark_failure',
                        'notif_quick_check', 'notif_optimal_hour_change', 'notif_catalogue_changes'):
                 set_setting(_k, '1' if request.form.get(_k) else '0')
@@ -2278,6 +2306,7 @@ def settings():
 
         return redirect(url_for('main.settings'))
 
+    from .server_eligibility import parse_excluded_countries
     cfg = {
         'interval':              get_setting('test_interval_hours', '6'),
         'auto_benchmark':        get_setting('auto_benchmark', '1'),
@@ -2291,6 +2320,12 @@ def settings():
         'speedtest_retries':     get_setting('speedtest_retries', '2'),
         'server_timeout_secs':   get_setting('server_timeout_secs', '300'),
         'auto_exclude_failures': get_setting('auto_exclude_failures', '5'),
+        'failover_enabled':      get_setting('failover_enabled', '1'),
+        'failover_unhealthy_grace_seconds': get_setting('failover_unhealthy_grace_seconds', '90'),
+        'failover_cooldown_seconds': get_setting('failover_cooldown_seconds', '600'),
+        'excluded_countries':    sorted(parse_excluded_countries(
+            get_setting('excluded_countries', '[]')
+        )),
         'speedtest_warmup':      get_setting('speedtest_warmup', '1'),
         'speedtest_streams':     get_setting('speedtest_streams', '4'),
         'db_retention_days':     get_setting('db_retention_days', '30'),
@@ -2299,6 +2334,7 @@ def settings():
         'airvpn_new_server_notif':  get_setting('airvpn_new_server_notif', '0'),
         'airvpn_notify_mention':    get_setting('airvpn_notify_mention', ''),   # legacy
         'notif_auto_switch':        get_setting('notif_auto_switch',    '1'),
+        'notif_failover':           get_setting('notif_failover',       '1'),
         'notif_manual_switch':      get_setting('notif_manual_switch',  '0'),
         'notif_already_best':       get_setting('notif_already_best',   '0'),
         'notif_auto_exclude':       get_setting('notif_auto_exclude',   '1'),
@@ -2402,6 +2438,9 @@ def settings():
         _progress_estimated_count(settings_bench_progress) or benchmark_estimated_count_settings
     )
     settings_history_counts = _server_history_counts()
+    from .server_eligibility import available_countries
+    with get_db() as _countries_db:
+        excluded_country_options = available_countries(_countries_db)
     settings_sidebar = {
         'active_server': '',
         'active_server_name': '',
@@ -2493,6 +2532,7 @@ def settings():
         wg_orphan_count=_orphan_count,
         has_wg_profiles=_has_wg_profiles,
         active_auto_pools=active_auto_pools,
+        excluded_country_options=excluded_country_options,
         torrent_clients=list_torrent_clients(),
         trackers=list_trackers(),
         trackers_summary=tracker_summary(),

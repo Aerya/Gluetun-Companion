@@ -24,6 +24,7 @@ _LOGO_URL = 'https://raw.githubusercontent.com/Aerya/Gluetun-Companion/main/asse
 # ── Severity ──────────────────────────────────────────────────────────────────
 
 _SEVERITY: dict[str, str] = {
+    'failover':           'critical',
     'auto_exclude':       'critical',
     'benchmark_failure':  'critical',
     'auto_switch':        'medium',
@@ -253,7 +254,12 @@ def send_switch_notification(
 ):
     if not discord_url and not apprise_urls:
         return
-    t = get_translations(lang)
+    t = dict(get_translations(lang))
+    if reason == 'emergency_failover':
+        t['notif_title'] = t.get('notif_failover_title', 'VPN outage — emergency failover')
+        t['notif_apprise_title'] = t.get(
+            'notif_failover_apprise_title', 'VPN outage — Gluetun Companion'
+        )
 
     if discord_url:
         try:
@@ -280,6 +286,46 @@ def send_switch_notification(
             logger.info('Apprise switch notification sent (%s)', alert_type)
         except Exception as exc:
             logger.warning('Apprise switch notification failed: %s', exc)
+
+
+def send_failover_failure_notification(
+    server: str | None,
+    error: str,
+    discord_url: str | None = None,
+    apprise_urls: str | None = None,
+    lang: str = 'fr',
+    companion_url: str | None = None,
+    mention: str | None = None,
+    mention_level: str = 'critical',
+) -> None:
+    """Notify that the VPN is down and emergency failover could not recover it."""
+    if not discord_url and not apprise_urls:
+        return
+    t = get_translations(lang)
+    title = t.get('notif_failover_failed_title', 'VPN outage — failover failed')
+    body = t.get('notif_failover_failed_body', 'No usable replacement server: {error}').replace(
+        '{error}', error
+    )
+    if discord_url:
+        try:
+            payload = _discord_base_payload(title, 0xf85149, [
+                {'name': t.get('notif_field_from', 'Current server'),
+                 'value': f'`{_strip_filter(server)}`', 'inline': True},
+                {'name': t.get('notif_failover_error', 'Error'),
+                 'value': body, 'inline': False},
+            ], t, companion_url)
+            _post_discord(discord_url, payload, mention, 'failover', mention_level)
+        except Exception as exc:
+            logger.warning('Discord failover failure notification failed: %s', exc)
+    if apprise_urls:
+        try:
+            _notify_apprise(
+                apprise_urls,
+                t.get('notif_failover_apprise_title', title),
+                f'{_strip_filter(server)}\n{body}',
+            )
+        except Exception as exc:
+            logger.warning('Apprise failover failure notification failed: %s', exc)
 
 
 def send_already_best_notification(
