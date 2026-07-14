@@ -12,6 +12,7 @@ from .database import get_db, get_setting, set_setting
 
 
 SUPPORTED_CLIENT_TYPES = {'qbittorrent', 'rtorrent'}
+TRACKER_CHECK_SCOPES = {'enabled', 'all'}
 _TRACKER_SKIP_PREFIXES = ('** [', 'dht:', 'pex:', 'lsd:')
 _SENSITIVE_QUERY_KEYS = {
     'passkey', 'pass_key', 'authkey', 'auth_key', 'key', 'token', 'apikey',
@@ -114,6 +115,25 @@ def normalize_tracker_url(url: str) -> str:
 
 def display_tracker_url(url: str) -> str:
     return normalize_tracker_url(url) or ''
+
+
+def tracker_display_name(host: str) -> str:
+    """Build a short human-readable tracker name from its hostname."""
+    value = (host or '').strip().lower().rstrip('.')
+    if not value:
+        return ''
+    labels = [label for label in value.split('.') if label]
+    if not labels:
+        return value
+    generic = {'www', 'tracker', 'tracker1', 'tracker2', 'announce', 'bt', 'udp'}
+    meaningful = [label for label in labels[:-1] if label not in generic]
+    label = meaningful[0] if meaningful else labels[0]
+    return label.replace('-', ' ').replace('_', ' ').title()
+
+
+def tracker_check_scope() -> str:
+    scope = (get_setting('tracker_check_scope', 'enabled') or 'enabled').strip().lower()
+    return scope if scope in TRACKER_CHECK_SCOPES else 'enabled'
 
 
 def tracker_parts(url: str) -> dict:
@@ -427,6 +447,9 @@ def list_trackers() -> list[dict]:
         for r in rows:
             d = dict(r)
             d['display_url'] = display_tracker_url(d['url'])
+            d['display_name'] = tracker_display_name(d['host'])
+            attempts = int(d.get('success_count') or 0) + int(d.get('failure_count') or 0)
+            d['success_pct'] = round((int(d.get('success_count') or 0) / attempts) * 100, 1) if attempts else None
             out.append(d)
         return out
 
@@ -448,15 +471,18 @@ def tracker_summary() -> dict:
             'failed': row['failed'] or 0,
             'clients': clients or 0,
             'threshold': int(get_setting('tracker_check_threshold_pct', '80') or '80'),
+            'scope': tracker_check_scope(),
         }
 
 
 def tracker_status_for_servers(server_names: list[str] | None = None) -> dict[str, dict]:
     """Return the latest enabled-tracker check aggregate for each server."""
     threshold = int(get_setting('tracker_check_threshold_pct', '80') or '80')
+    scope = tracker_check_scope()
+    scope_join = '' if scope == 'all' else 'AND tu.enabled = 1'
     with get_db() as db:
         enabled_total = db.execute(
-            'SELECT COUNT(*) AS n FROM tracker_urls WHERE enabled=1'
+            'SELECT COUNT(*) AS n FROM tracker_urls' + ('' if scope == 'all' else ' WHERE enabled=1')
         ).fetchone()['n'] or 0
         if not enabled_total:
             return {}
@@ -475,7 +501,7 @@ def tracker_status_for_servers(server_names: list[str] | None = None) -> dict[st
             WITH latest AS (
                 SELECT tc.*
                 FROM tracker_checks tc
-                JOIN tracker_urls tu ON tu.id = tc.tracker_id AND tu.enabled = 1
+                JOIN tracker_urls tu ON tu.id = tc.tracker_id {scope_join}
                 JOIN (
                     SELECT tracker_id, server_name, MAX(checked_at) AS checked_at
                     FROM tracker_checks
@@ -548,10 +574,12 @@ def set_tracker_enabled(tracker_id: int, enabled: bool) -> bool:
         return cur.rowcount > 0
 
 
-def save_tracker_settings(threshold: int, timeout: int, concurrency: int) -> None:
+def save_tracker_settings(threshold: int, timeout: int, concurrency: int, scope: str = 'enabled') -> None:
     set_setting('tracker_check_threshold_pct', str(max(1, min(int(threshold), 100))))
     set_setting('tracker_check_timeout_secs', str(max(1, min(int(timeout), 15))))
     set_setting('tracker_check_concurrency', str(max(1, min(int(concurrency), 64))))
+    normalized_scope = (scope or 'enabled').strip().lower()
+    set_setting('tracker_check_scope', normalized_scope if normalized_scope in TRACKER_CHECK_SCOPES else 'enabled')
 
 
 def _tcp_probe(host: str, port: int, timeout: float) -> bool:
@@ -696,15 +724,19 @@ def check_enabled_trackers(tracker_ids: list[int] | None = None, server_name: st
     timeout = float(get_setting('tracker_check_timeout_secs', '3') or '3')
     concurrency = int(get_setting('tracker_check_concurrency', '12') or '12')
     threshold = int(get_setting('tracker_check_threshold_pct', '80') or '80')
+    scope = tracker_check_scope()
+    scope_sql = '' if scope == 'all' else 'enabled=1 AND '
     with get_db() as db:
         if tracker_ids:
             placeholders = ','.join('?' for _ in tracker_ids)
             rows = db.execute(
-                f'SELECT * FROM tracker_urls WHERE enabled=1 AND id IN ({placeholders})',
+                f'SELECT * FROM tracker_urls WHERE {scope_sql}id IN ({placeholders})',
                 tracker_ids,
             ).fetchall()
         else:
-            rows = db.execute('SELECT * FROM tracker_urls WHERE enabled=1').fetchall()
+            rows = db.execute(
+                'SELECT * FROM tracker_urls' + ('' if scope == 'all' else ' WHERE enabled=1')
+            ).fetchall()
     trackers = [dict(r) for r in rows]
     results: list[dict] = []
     if trackers:
@@ -718,6 +750,7 @@ def check_enabled_trackers(tracker_ids: list[int] | None = None, server_name: st
     return {
         'ok': pct >= threshold if total else False,
         'threshold': threshold,
+        'scope': scope,
         'success_pct': pct,
         'passed': ok,
         'failed': total - ok,

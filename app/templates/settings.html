@@ -2131,7 +2131,7 @@
           {{ 'Contrôle des trackers BitTorrent' if lang == 'fr' else 'BitTorrent tracker checks' }}
         </h6>
         <p class="text-muted mb-0 settings-wide-hint">
-          {{ 'Les trackers activés sont testés depuis le chemin VPN. 80% de réussite par défaut suffit pour considérer le serveur compatible.' if lang == 'fr' else 'Enabled trackers are checked through the VPN path. By default, 80% success is enough to consider the server compatible.' }}
+          {{ 'Les trackers sont testés depuis le chemin VPN. Le périmètre ci-dessous détermine si le taux porte sur toutes les URLs ou uniquement sur celles cochées.' if lang == 'fr' else 'Trackers are checked through the VPN path. The scope below determines whether the success rate covers every URL or checked URLs only.' }}
         </p>
       </div>
       <span class="badge {{ 'bg-success' if cfg.tracker_check_enabled == '1' else 'bg-secondary' }}">
@@ -2163,7 +2163,18 @@
           </div>
         </div>
       </div>
-      <div class="col-sm-4">
+      <div class="col-sm-6 col-lg-3">
+        <label class="form-label small mb-1">{{ 'Périmètre du taux' if lang == 'fr' else 'Success-rate scope' }}</label>
+        <select name="tracker_check_scope" class="form-select form-select-sm">
+          <option value="enabled" {{ 'selected' if cfg.tracker_check_scope == 'enabled' }}>
+            {{ 'Trackers cochés seulement' if lang == 'fr' else 'Checked trackers only' }}
+          </option>
+          <option value="all" {{ 'selected' if cfg.tracker_check_scope == 'all' }}>
+            {{ 'Tous les trackers détectés' if lang == 'fr' else 'All discovered trackers' }}
+          </option>
+        </select>
+      </div>
+      <div class="col-sm-6 col-lg-3">
         <label class="form-label small mb-1">{{ 'Seuil OK' if lang == 'fr' else 'OK threshold' }}</label>
         <div class="input-group input-group-sm">
           <input type="number" name="tracker_check_threshold_pct" class="form-control"
@@ -2171,7 +2182,7 @@
           <span class="input-group-text">%</span>
         </div>
       </div>
-      <div class="col-sm-4">
+      <div class="col-sm-6 col-lg-3">
         <label class="form-label small mb-1">Timeout</label>
         <div class="input-group input-group-sm">
           <input type="number" name="tracker_check_timeout_secs" class="form-control"
@@ -2179,7 +2190,7 @@
           <span class="input-group-text">s</span>
         </div>
       </div>
-      <div class="col-sm-4">
+      <div class="col-sm-6 col-lg-3">
         <label class="form-label small mb-1">{{ 'Concurrence' if lang == 'fr' else 'Concurrency' }}</label>
         <input type="number" name="tracker_check_concurrency" class="form-control form-control-sm"
                value="{{ cfg.tracker_check_concurrency }}" min="1" max="64">
@@ -2612,7 +2623,7 @@
           {{ 'URLs de trackers détectées' if lang == 'fr' else 'Discovered tracker URLs' }}
         </h6>
         <p class="text-muted small mb-0">
-          {{ 'Désactiver une URL pour ne plus la contrôler pendant les tests futurs.' if lang == 'fr' else 'Disable a URL to skip it in future checks.' }}
+          {{ 'En mode « trackers cochés », désactiver une URL la retire des tests et du taux de réussite. En mode « tous », les coches sont ignorées.' if lang == 'fr' else 'In “checked trackers” mode, disabling a URL removes it from checks and the success rate. In “all” mode, checkboxes are ignored.' }}
         </p>
       </div>
       <span class="badge bg-secondary" id="tracker-total-badge">{{ trackers | length }}</span>
@@ -2623,16 +2634,23 @@
         <thead class="sticky-top" style="z-index:1">
           <tr>
             <th>{{ 'Contrôle' if lang == 'fr' else 'Check' }}</th>
+            <th role="button" onclick="trackerSort('name')">
+              {{ 'Nom' if lang == 'fr' else 'Name' }} <span class="tracker-sort-icon" data-key="name">⇅</span>
+            </th>
             <th>URL</th>
             <th>{{ 'Sources' if lang == 'fr' else 'Sources' }}</th>
             <th>{{ 'Torrents' if lang == 'fr' else 'Torrents' }}</th>
             <th>{{ 'Dernier test' if lang == 'fr' else 'Last check' }}</th>
-            <th>{{ 'Résultat' if lang == 'fr' else 'Result' }}</th>
+            <th role="button" onclick="trackerSort('result')">
+              {{ 'Résultat' if lang == 'fr' else 'Result' }} <span class="tracker-sort-icon" data-key="result">⇅</span>
+            </th>
           </tr>
         </thead>
         <tbody id="tracker-table-body">
           {% for tr in trackers %}
-          <tr data-tracker-id="{{ tr.id }}">
+          <tr data-tracker-id="{{ tr.id }}"
+              data-tracker-name="{{ tr.display_name | lower }}"
+              data-tracker-result="{{ tr.success_pct if tr.success_pct is not none else -1 }}">
             <td>
               <div class="form-check form-switch mb-0">
                 <input class="form-check-input tracker-enabled-toggle" type="checkbox"
@@ -2640,6 +2658,7 @@
                        onchange="trackerToggle({{ tr.id }}, this.checked)">
               </div>
             </td>
+            <td><strong>{{ tr.display_name or tr.host }}</strong></td>
             <td style="min-width:260px">
               <div class="d-flex align-items-center gap-2">
                 <span class="badge bg-{{ 'primary' if tr.scheme in ('http','https') else 'warning text-dark' }}">{{ tr.scheme }}</span>
@@ -2658,11 +2677,14 @@
               {% else %}
                 <span class="badge bg-danger">{{ tr.last_status }}</span>
               {% endif %}
+              {% if tr.success_pct is not none %}
+                <div class="small text-muted">{{ tr.success_pct }}% · {{ tr.success_count }}/{{ tr.success_count + tr.failure_count }}</div>
+              {% endif %}
               {% if tr.last_error %}<div class="small text-muted text-truncate" style="max-width:260px">{{ tr.last_error }}</div>{% endif %}
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="text-center text-muted py-4">{{ 'Aucun tracker détecté pour le moment.' if lang == 'fr' else 'No trackers discovered yet.' }}</td></tr>
+          <tr><td colspan="7" class="text-center text-muted py-4">{{ 'Aucun tracker détecté pour le moment.' if lang == 'fr' else 'No trackers discovered yet.' }}</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -4066,6 +4088,40 @@ function _trackerBadge(status) {
   if (!status || status === 'unknown') return '<span class="badge bg-secondary">unknown</span>';
   return `<span class="badge bg-danger">${_escHtml(status)}</span>`;
 }
+let _trackerSortKey = 'name';
+let _trackerSortDir = 1;
+function _trackerSorted(trackers) {
+  return [...trackers].sort((a, b) => {
+    let av;
+    let bv;
+    if (_trackerSortKey === 'result') {
+      av = a.success_pct == null ? -1 : Number(a.success_pct);
+      bv = b.success_pct == null ? -1 : Number(b.success_pct);
+    } else {
+      av = String(a.display_name || a.host || '').toLocaleLowerCase();
+      bv = String(b.display_name || b.host || '').toLocaleLowerCase();
+    }
+    return (av < bv ? -1 : av > bv ? 1 : 0) * _trackerSortDir;
+  });
+}
+function _trackerSortIcons() {
+  document.querySelectorAll('.tracker-sort-icon').forEach(el => {
+    el.textContent = el.dataset.key === _trackerSortKey ? (_trackerSortDir > 0 ? '▲' : '▼') : '⇅';
+  });
+}
+function trackerSort(key) {
+  _trackerSortDir = key === _trackerSortKey ? -_trackerSortDir : (key === 'result' ? -1 : 1);
+  _trackerSortKey = key;
+  const tbody = document.getElementById('tracker-table-body');
+  if (!tbody) return;
+  const rows = [...tbody.querySelectorAll('tr[data-tracker-id]')];
+  rows.sort((a, b) => {
+    let av = key === 'result' ? Number(a.dataset.trackerResult || -1) : (a.dataset.trackerName || '');
+    let bv = key === 'result' ? Number(b.dataset.trackerResult || -1) : (b.dataset.trackerName || '');
+    return (av < bv ? -1 : av > bv ? 1 : 0) * _trackerSortDir;
+  }).forEach(row => tbody.appendChild(row));
+  _trackerSortIcons();
+}
 function _updateTrackerSummary(summary) {
   if (!summary) return;
   const set = (id, value) => {
@@ -4082,17 +4138,19 @@ function _renderTrackerRows(trackers) {
   if (!tbody) return;
   document.getElementById('tracker-total-badge').textContent = trackers.length;
   if (!trackers.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">{{ "Aucun tracker détecté pour le moment." if lang == 'fr' else "No trackers discovered yet." }}</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">{{ "Aucun tracker détecté pour le moment." if lang == 'fr' else "No trackers discovered yet." }}</td></tr>';
     return;
   }
-  tbody.innerHTML = trackers.map(tr => {
+  tbody.innerHTML = _trackerSorted(trackers).map(tr => {
     const schemeCls = (tr.scheme === 'http' || tr.scheme === 'https') ? 'bg-primary' : 'bg-warning text-dark';
     const err = tr.last_error ? `<div class="small text-muted text-truncate" style="max-width:260px">${_escHtml(tr.last_error)}</div>` : '';
-    return `<tr data-tracker-id="${tr.id}">
+    const pct = tr.success_pct == null ? '' : `<div class="small text-muted">${tr.success_pct}% · ${tr.success_count || 0}/${(tr.success_count || 0) + (tr.failure_count || 0)}</div>`;
+    return `<tr data-tracker-id="${tr.id}" data-tracker-name="${_escHtml(String(tr.display_name || tr.host || '').toLocaleLowerCase())}" data-tracker-result="${tr.success_pct == null ? -1 : tr.success_pct}">
       <td><div class="form-check form-switch mb-0">
         <input class="form-check-input tracker-enabled-toggle" type="checkbox" ${tr.enabled ? 'checked' : ''}
                onchange="trackerToggle(${tr.id}, this.checked)">
       </div></td>
+      <td><strong>${_escHtml(tr.display_name || tr.host || '—')}</strong></td>
       <td style="min-width:260px">
         <div class="d-flex align-items-center gap-2">
           <span class="badge ${schemeCls}">${_escHtml(tr.scheme || '?')}</span>
@@ -4103,9 +4161,10 @@ function _renderTrackerRows(trackers) {
       <td>${_escHtml(tr.client_names || '—')}</td>
       <td>${tr.torrent_count || 0}</td>
       <td class="text-muted">${_escHtml((tr.last_checked_at || '—').slice(0, 19))}</td>
-      <td>${_trackerBadge(tr.last_status)}${err}</td>
+      <td>${_trackerBadge(tr.last_status)}${pct}${err}</td>
     </tr>`;
   }).join('');
+  _trackerSortIcons();
 }
 function trackerDiscover(clientId) {
   const btn = clientId ? null : document.getElementById('btn-trackers-discover');
@@ -4144,7 +4203,10 @@ function trackerCheck() {
       _renderTrackerRows(data.trackers || []);
       _updateTrackerSummary(data.tracker_summary);
       const cls = data.ok ? 'text-success' : 'text-warning';
-      _trackerMsg(`${data.success_pct}% · ${data.passed}/${data.total} · threshold ${data.threshold}%`, cls);
+      const scope = data.scope === 'all'
+        ? '{{ "tous les trackers" if lang == "fr" else "all trackers" }}'
+        : '{{ "trackers cochés" if lang == "fr" else "checked trackers" }}';
+      _trackerMsg(`${data.success_pct}% · ${data.passed}/${data.total} · ${scope} · threshold ${data.threshold}%`, cls);
     })
     .catch(() => _trackerMsg('Check failed', 'text-danger'))
     .finally(() => { if (btn) { btn.disabled = false; btn.innerHTML = old; } });
@@ -4162,6 +4224,7 @@ function trackerToggle(id, enabled) {
     _trackerMsg(enabled ? 'Tracker enabled' : 'Tracker ignored', 'text-muted');
   }).catch(() => _trackerMsg('Toggle failed', 'text-danger'));
 }
+_trackerSortIcons();
 
 function portForwardCheckReach(id, btn) {
   const oldHtml = btn ? btn.innerHTML : '';

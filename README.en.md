@@ -269,7 +269,7 @@ The **VPN Status** card displays the intermediary and observed operators. In tab
 ### Server selection & automatic switching
 - **Automatic switching** to the fastest server (`docker compose up -d`), based on a weighted score combining current speed, exponential history, jitter, packet loss and involuntary reconnects (via Docker events); configurable *Speed vs stability* slider; **6 usage profiles** (Balanced, Gaming, BitTorrent, DDL, Download, Streaming) — each profile weights metrics differently to find the server best suited to your actual use case; dependent services (`network_mode: service:gluetun`) are recreated automatically
 - **Independent emergency failover** — a watchdog checks Gluetun health every 30 seconds and selects the best historical server from the same profile after a configurable grace period, even when performance-based automatic switching is disabled; includes an anti-flapping cooldown, dependent recreation and a critical notification
-- **Global country exclusions** — select countries to ignore in benchmarks, emergency failover and automatic pool rotations, without enabling Rotation or removing their servers; manual tests, switches and pool rotations remain available
+- **Global country exclusions** — select countries from **Servers → Excluded countries** (or Settings) to remove them from AirVPN/catalogue pickers, benchmarks, emergency failover and automatic pool rotations without removing existing servers; manual tests and switches remain available
 - **Manual switch** to any configured server from the Servers page — Gluetun is reconfigured and `network_mode: service:gluetun` containers are recreated automatically
 - **5 filter types**: `SERVER_NAMES`, `SERVER_COUNTRIES`, `SERVER_REGIONS`, `SERVER_CITIES`, `SERVER_HOSTNAMES`
 - Configurable **retry** per server + global timeout per server
@@ -359,10 +359,10 @@ The **VPN Status** card displays the intermediary and observed operators. In tab
 
 ### BitTorrent tracker checks
 - **Multiple clients** — configure one or more qBittorrent or rTorrent/ruTorrent clients in **Settings → BitTorrent**; each client can be a tracker source, even if its container is also stopped during benchmarks
-- **Persistent discovery** — Companion fetches tracker URLs from loaded torrents, deduplicates them, then displays source clients, torrent count, last check and success status
+- **Persistent discovery** — Companion fetches tracker URLs from loaded torrents, deduplicates them, then displays a domain-derived name, source clients, torrent count, last check and success rate; sortable by name or result
 - **Passkeys hidden** — private passkeys and tokens are stripped from detected URLs before storage/display, including query-string keys and token-like path segments
 - **Per-URL control** — each tracker can be enabled or ignored individually for future checks
-- **VPN compatibility score** — enabled trackers are checked through the VPN path; by default, 80% success is enough to consider the server compatible, avoiding false negatives when a single tracker is down
+- **VPN compatibility score** — either every discovered URL or checked trackers only are checked through the VPN path; by default, 80% success is enough to consider the server compatible, avoiding false negatives when a single tracker is down
 - **Optional switch criterion** — when enabled, a benchmarked server below the tracker threshold is excluded from the auto-switch pick; pools ignore servers already known as tracker-incompatible
 - **Per-provider port forwarding** — declare AirVPN/manual, Gluetun-native (`/v1/portforward`) or custom rules in **Settings → Port Forwarding**; when automation is enabled, Companion applies the current provider's rules after every switch (manual, benchmark, pool rotation), resynchronizes qBittorrent or rTorrent *(beta)* and runs the configured `on_port_change` hooks; a periodic check also catches port renewals that happen without a container restart
 
@@ -508,7 +508,7 @@ This threshold avoids false negatives: a private or public tracker can be tempor
 
 Two separate toggles are available in **Settings → BitTorrent**:
 
-- **Enable tracker checks during VPN verification** runs discovery before benchmarks, then checks enabled URLs for each tested server.
+- **Enable tracker checks during VPN verification** runs discovery before benchmarks, then checks either every discovered URL or checked URLs only for each server, depending on the selected scope.
 - **Require an OK tracker result for automatic switches and pools** turns that score into an eligibility criterion: during a benchmark, servers below the threshold are excluded from the final pick; in pool rotation, servers already known below threshold are ignored, while never-tested servers remain candidates.
 
 The **Servers** page shows a sortable **Trackers** column with the latest known result per server (`OK`, below-threshold percentage, or `—` when never tested). This makes compatible and problematic servers easy to spot.
@@ -528,7 +528,7 @@ Companion can manage multiple BitTorrent sources: for example one main qBittorre
 
 For qBittorrent, Companion uses the Web API: torrent list, then the trackers endpoint for each hash. For rTorrent/ruTorrent, Companion uses XML-RPC/RPC2 and fetches trackers per torrent.
 
-Discovery always runs **before** stopping containers configured in "Containers to pause during benchmark". So if `qbittorrent` or `rutorrent` is stopped during measurement, Companion uses the already cached tracker list. Discovered URLs remain visible in the UI and can be enabled or ignored one by one for future cycles. URLs are normalized without passkeys (`?passkey=...`, `authkey`, `token`, private path segments, etc.) so secrets are not exposed in the interface.
+Discovery always runs **before** stopping containers configured in "Containers to pause during benchmark". So if `qbittorrent` or `rutorrent` is stopped during measurement, Companion uses the already cached tracker list. The UI derives a readable tracker name from each domain, shows its cumulative success rate, and supports sorting by name or result. URLs can be enabled or ignored one by one when the “checked trackers” scope is selected. URLs are normalized without passkeys (`?passkey=...`, `authkey`, `token`, private path segments, etc.) so secrets are not exposed in the interface.
 
 ### VPN forwarded port inventory
 

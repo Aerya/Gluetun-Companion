@@ -396,6 +396,7 @@ def init_db(db_path: str):
                 ('tracker_check_threshold_pct','80'),
                 ('tracker_check_timeout_secs', '3'),
                 ('tracker_check_concurrency',  '12'),
+                ('tracker_check_scope',        'enabled'),
                 ('dns_block_malicious',        '1'),
                 ('dns_unblock_hostnames',      ''),
                 ('port_forward_enabled',       '0'),
