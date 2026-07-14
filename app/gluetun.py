@@ -12,7 +12,9 @@ Network architecture (no shared Docker network required)
 """
 
 import json
+import ipaddress
 import os
+import re
 import subprocess
 import threading
 import time
@@ -27,6 +29,8 @@ from .database import get_setting
 logger = logging.getLogger(__name__)
 
 _PROBE_URL = 'https://www.cloudflare.com/cdn-cgi/trace'
+
+_active_server_cache: dict[str, tuple[str, str]] = {}
 
 # Mapping: short label → Gluetun environment variable name
 FILTER_VARS: dict[str, str] = {
@@ -217,6 +221,83 @@ def format_filters(filters: dict[str, str]) -> str:
     for value in filters.values():
         labels.extend(part.strip() for part in str(value).split(',') if part.strip())
     return ' · '.join(labels) if labels else '—'
+
+
+def _latest_vpn_endpoint(logs: str) -> str | None:
+    """Extract the latest VPN endpoint address reported by Gluetun."""
+    patterns = (
+        r'\[wireguard\]\s+Connecting to\s+(\[[0-9a-fA-F:]+\]|[0-9.]+):\d+',
+        r'\[openvpn\].*?remote[^\n]*?(?:\[AF_INET6?\])?\s*'
+        r'(\[[0-9a-fA-F:]+\]|[0-9a-fA-F:.]+):\d+',
+    )
+    matches: list[tuple[int, str]] = []
+    for pattern in patterns:
+        for match in re.finditer(pattern, logs, flags=re.IGNORECASE):
+            raw = match.group(1).strip('[]')
+            try:
+                matches.append((match.start(), str(ipaddress.ip_address(raw))))
+            except ValueError:
+                continue
+    return max(matches, default=(0, ''))[1] or None
+
+
+def get_active_server(container_name: str) -> str | None:
+    """Return the server Gluetun is really connected to.
+
+    ``SERVER_NAMES`` and the other ``SERVER_*`` variables are selection
+    filters.  They may contain several candidates and therefore cannot be
+    presented as the active server.  Gluetun logs the selected VPN endpoint;
+    this function maps that address through its live provider catalogue.
+
+    If the endpoint cannot be resolved, a single configured filter value is a
+    safe fallback.  With several candidates, the last observed real server is
+    preferred instead of displaying the whole candidate list.
+    """
+    try:
+        container = docker.from_env().containers.get(container_name)
+        container.reload()
+        container_id = container.id
+        logs = container.logs(tail=800).decode('utf-8', errors='replace')
+        endpoint = _latest_vpn_endpoint(logs)
+
+        cached = _active_server_cache.get(container_id)
+        if endpoint and cached and cached[0] == endpoint:
+            return cached[1]
+
+        env = _container_env(container_name)
+        provider = (env.get('VPN_SERVICE_PROVIDER') or '').strip().lower()
+        if endpoint and provider and '/' not in provider and '..' not in provider:
+            result = container.exec_run(
+                ['cat', f'/gluetun/servers/{provider}.json'], demux=False
+            )
+            if result.exit_code == 0:
+                catalogue = json.loads(result.output.decode('utf-8', errors='replace'))
+                for server in catalogue.get('servers', []):
+                    if endpoint in (server.get('ips') or []):
+                        name = (server.get('server_name') or '').strip()
+                        if name:
+                            _active_server_cache.clear()
+                            _active_server_cache[container_id] = (endpoint, name)
+                            return name
+    except Exception as exc:
+        logger.debug('get_active_server endpoint lookup failed: %s', exc)
+
+    filters = get_current_filters(container_name)
+    candidates = [
+        item.strip()
+        for value in filters.values()
+        for item in str(value).split(',')
+        if item.strip()
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    try:
+        observed = get_setting('last_observed_active_server', '').strip()
+        if observed and (not candidates or observed in candidates):
+            return observed
+    except Exception:
+        pass
+    return None
 
 
 def _managed_env_pairs(
@@ -818,7 +899,14 @@ def restart_network_dependents(
         except Exception as exc:
             logger.warning('restart_network_dependents (detect): %s', exc)
 
-    # Restart each container
+    try:
+        current_gluetun_id = docker.from_env().containers.get(container_name).id
+    except Exception:
+        current_gluetun_id = ''
+
+    # Restart each container and verify that Docker resolved the current
+    # Gluetun namespace, rather than accepting a successful Compose exit code
+    # while the dependent still references the previous container ID.
     for name in names_to_restart:
         logger.info('Recreating network-dependent container: %s', name)
         try:
@@ -832,11 +920,68 @@ def restart_network_dependents(
                 unraid.sdk_recreate(name, network_mode=f'container:{container_name}')
             else:
                 _compose_recreate(name, compose_dir, compose_project)
-            restarted.append(name)
+            attached = False
+            for attempt in range(2):
+                try:
+                    dependent = docker.from_env().containers.get(name)
+                    dependent.reload()
+                    mode = dependent.attrs.get('HostConfig', {}).get('NetworkMode', '')
+                    attached = mode in {
+                        f'container:{container_name}',
+                        f'container:{current_gluetun_id}',
+                    }
+                except Exception as inspect_exc:
+                    logger.warning('Cannot verify network namespace for %s: %s', name, inspect_exc)
+                if attached:
+                    break
+                if attempt == 0:
+                    logger.warning(
+                        '%s is still not attached to current Gluetun; retrying recreate', name
+                    )
+                    _compose_recreate(name, compose_dir, compose_project)
+                    time.sleep(1)
+            if attached:
+                restarted.append(name)
+            else:
+                logger.error(
+                    'Network-dependent %s could not be attached to current Gluetun %s',
+                    name, current_gluetun_id[:12] or '?',
+                )
         except Exception as exc:
             logger.warning('Failed to recreate %s: %s', name, exc)
 
     return restarted, updated_imgs
+
+
+def pull_gluetun_before_switch(container_name: str) -> list[str]:
+    """Honor the global Gluetun image-update option for production switches."""
+    if get_setting('pull_gluetun', '0') != '1':
+        return []
+    ok, updated, image = pull_image(container_name)
+    logger.info(
+        'Pre-switch Gluetun pull: %s — %s', image,
+        'updated' if updated else 'up to date' if ok else 'failed',
+    )
+    return [image] if updated else []
+
+
+def restart_configured_post_switch_containers(
+    compose_dir: str = '',
+    compose_project: str = '',
+    already_restarted: set[str] | None = None,
+    exclude: set[str] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Apply the configured post-switch list consistently on every switch."""
+    try:
+        names = json.loads(get_setting('post_switch_containers', '[]') or '[]')
+        pull_set = set(json.loads(get_setting('pull_post_switch_containers', '[]') or '[]'))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        logger.warning('Invalid post-switch container settings; skipping configured restarts')
+        return [], []
+    skipped = set(already_restarted or set()) | set(exclude or set())
+    return restart_containers_in_order(
+        names, compose_dir, compose_project, exclude=skipped, pull_set=pull_set,
+    )
 
 
 def stop_containers(container_names: list[str]) -> list[str]:

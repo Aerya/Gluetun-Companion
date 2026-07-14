@@ -160,6 +160,42 @@ def _weighted_score(
     return base * confidence_factor * effective_stab
 
 
+def _best_result_for_active_profile(results: list[dict]) -> tuple[dict | None, dict[str, float]]:
+    """Rank successful benchmark results even when auto-switch is disabled."""
+    if not results:
+        return None, {}
+    from .database import (
+        compute_confidence_all,
+        get_db,
+        get_docker_event_counts,
+        get_setting,
+    )
+    from .profiles import score_results
+
+    current_pct = float(get_setting('weighted_score_current_pct', '65'))
+    stability_weight = float(get_setting('stability_weight', '30'))
+    retention_days = int(get_setting('db_retention_days', '30'))
+    confidence = compute_confidence_all()
+    reconnects = get_docker_event_counts(days=retention_days)
+    confidence_factors = {'HIGH': 1.0, 'MEDIUM': 0.95, 'LOW': 0.85}
+    with get_db() as db:
+        weighted = {
+            result['server']: _weighted_score(
+                result['server'], result['dl'], db, current_pct,
+                confidence_factors.get(
+                    confidence.get(result['server'], {}).get('level', 'MEDIUM'), 0.95
+                ),
+                jitter_ms=result.get('jitter_ms'),
+                packet_loss_pct=result.get('packet_loss_pct'),
+                reconnect_count=reconnects.get(result['server'], 0),
+                stability_weight=stability_weight,
+            )
+            for result in results
+        }
+    scores = score_results(results, get_setting('active_profile', 'balanced'), weighted)
+    return max(results, key=lambda item: scores.get(item['server'], 0.0)), scores
+
+
 # ---------------------------------------------------------------------------
 # Per-server test (isolated function so we can run it in a timed thread)
 # ---------------------------------------------------------------------------
@@ -585,16 +621,13 @@ def _quick_check(
     last_dl_mbps is None when no prior result exists.
     """
     from .database import get_db
-    from .gluetun import get_current_filters, get_public_ips
+    from .gluetun import get_active_server, get_public_ips
 
     # ── Identify current server ───────────────────────────────────────────
-    filters = get_current_filters(container)
-    if not filters:
+    server_name = get_active_server(container)
+    if not server_name:
         logger.info('Quick check: cannot read current server from Gluetun — running full benchmark')
         return False, None, None, None
-
-    filter_type = next(iter(filters))
-    server_name = filters[filter_type].split(',')[0].strip()
 
     # ── Last known *proxy* speed ──────────────────────────────────────────
     # We only compare against proxy measurements — sidecar results use a
@@ -1344,9 +1377,6 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                 '  AND (s.vpn_profile_id IS NULL OR vp.enabled = 1) '
                 'ORDER BY s.name'
             ).fetchall()
-            cycle_id = db.execute(
-                'INSERT INTO benchmark_cycles (started_at) VALUES (CURRENT_TIMESTAMP)'
-            ).lastrowid
 
         if not servers:
             logger.info('No enabled servers — skipping benchmark')
@@ -1444,6 +1474,10 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             logger.info('No servers left after pre-filters — skipping benchmark')
             _progress_log('Aucun serveur restant dans le perimetre')
             return 0
+        with get_db() as db:
+            cycle_id = db.execute(
+                'INSERT INTO benchmark_cycles (started_at) VALUES (CURRENT_TIMESTAMP)'
+            ).lastrowid
         set_setting('benchmark_total_servers', str(len(servers)))
         set_setting('benchmark_done_servers', '0')
         _progress_log(f'{len(servers)} serveur(s) selectionne(s)')
@@ -1717,6 +1751,26 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                 )
                 _progress_log('Auto-switch ignore : aucun serveur compatible trackers')
 
+        # A completed benchmark always has a best result.  Previously this was
+        # calculated only inside the auto-switch branch, leaving
+        # benchmark_cycles.best_server and notifications empty whenever the
+        # perfectly valid "measure only" mode (auto_switch=0) was selected.
+        if results:
+            ranked_best, ranked_scores = _best_result_for_active_profile(results)
+            if ranked_best:
+                best_server_name = ranked_best['server']
+                best_server_label = (
+                    f"{FILTER_VARS.get(ranked_best['filter_type'], 'SERVER_NAMES')}="
+                    f"{best_server_name}"
+                )
+                logger.info(
+                    'Benchmark best (profile=%s, auto-switch=%s): %s '
+                    '(%.1f Mbps, score=%.4f)',
+                    get_setting('active_profile', 'balanced'), auto_sw,
+                    best_server_label, ranked_best['dl'],
+                    ranked_scores.get(best_server_name, 0.0),
+                )
+
         if auto_sw and decision_results:
             current_pct      = float(get_setting('weighted_score_current_pct', '65'))
             stability_weight = float(get_setting('stability_weight', '30'))
@@ -1911,7 +1965,8 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                     if _post_switch:
                         _restarted2, ps_updated = restart_containers_in_order(
                             _post_switch, compose_dir, project,
-                            exclude=pause_exclude, pull_set=pull_post_switch_set,
+                            exclude=(pause_exclude | set(restarted)),
+                            pull_set=pull_post_switch_set,
                         )
                         updated_images.extend(ps_updated)
                         logger.info(
@@ -2729,15 +2784,13 @@ def _run_emergency_failover(app, health_status: str) -> bool:
     global _failover_failed_servers
     from .database import get_setting, set_setting
     from .gluetun import (
-        get_current_filters, get_public_ips, list_network_dependents_for_recreate,
-        restart_network_dependents, switch_server, wait_for_vpn,
+        get_active_server, get_public_ips, list_network_dependents_for_recreate,
+        restart_network_dependents, restart_configured_post_switch_containers,
+        pull_gluetun_before_switch, switch_server, wait_for_vpn,
     )
 
     container = app.config['GLUETUN_CONTAINER']
-    filters = get_current_filters(container)
-    current_server = (
-        next(iter(filters.values()), '').split(',')[0].strip() if filters else None
-    )
+    current_server = get_active_server(container)
     if current_server:
         _failover_failed_servers.add(current_server)
     candidate = _select_failover_candidate(current_server, _failover_failed_servers)
@@ -2760,6 +2813,7 @@ def _run_emergency_failover(app, health_status: str) -> bool:
                 wg_profile = None
                 error = f'VPN profile decryption failed: {exc}'
             if not error:
+                pull_gluetun_before_switch(container)
                 switched, switch_error = switch_server(
                     candidate['name'], candidate['filter_type'], container,
                     app.config['COMPOSE_DIR'], app.config.get('COMPOSE_PROJECT', ''),
@@ -2774,9 +2828,13 @@ def _run_emergency_failover(app, health_status: str) -> bool:
                         proxy_user=get_setting('proxy_username', '') or None,
                         proxy_password=get_setting('proxy_password', '') or None,
                     )
-                    restart_network_dependents(
+                    restarted, _ = restart_network_dependents(
                         container, app.config['COMPOSE_DIR'],
                         app.config.get('COMPOSE_PROJECT', ''), explicit_list=dependents,
+                    )
+                    restart_configured_post_switch_containers(
+                        app.config['COMPOSE_DIR'], app.config.get('COMPOSE_PROJECT', ''),
+                        already_restarted=set(restarted),
                     )
                     if ok:
                         _apply_port_forwards_for_current_provider(container, 'emergency_failover')
@@ -2875,6 +2933,94 @@ def _check_gluetun_failover(app) -> None:
                 _failover_failed_servers.clear()
         finally:
             _lock.release()
+
+
+def _check_active_server_history(app) -> None:
+    """Reconcile the real Gluetun endpoint with display state and switch history."""
+    with app.app_context():
+        from .database import get_db, get_setting, set_setting
+        from .gluetun import get_active_server, get_public_ips
+
+        # During a benchmark the production tunnel may move through candidates.
+        # Reconcile only its final state once the cycle has finished.
+        if get_setting('benchmark_running', '0') == '1':
+            return
+        container_name = app.config['GLUETUN_CONTAINER']
+        active = get_active_server(container_name)
+        if not active:
+            return
+        try:
+            import docker
+            container_id = docker.from_env().containers.get(container_name).id
+        except Exception:
+            container_id = ''
+
+        previous = get_setting('last_observed_active_server', '').strip()
+        previous_id = get_setting('last_observed_gluetun_id', '').strip()
+        if not previous:
+            set_setting('last_observed_active_server', active)
+            set_setting('last_observed_gluetun_id', container_id)
+            return
+        if active == previous:
+            if container_id and container_id != previous_id:
+                set_setting('last_observed_gluetun_id', container_id)
+            return
+
+        def _bare(value: str | None) -> str:
+            return (value or '').split('=', 1)[-1].strip()
+
+        # Companion writes its switch row before the async reconnect completes.
+        # Reuse that row instead of creating a duplicate when its target matches.
+        with get_db() as db:
+            recent = db.execute(
+                '''SELECT to_server FROM switches
+                   WHERE success = 1
+                     AND switched_at >= datetime('now', '-10 minutes')
+                   ORDER BY id DESC LIMIT 20'''
+            ).fetchall()
+        already_recorded = any(_bare(row['to_server']) == active for row in recent)
+        if not already_recorded:
+            try:
+                ipv4, ipv6 = get_public_ips(
+                    app.config['GLUETUN_HOST'], app.config['GLUETUN_PROXY_PORT'],
+                    get_setting('proxy_username', '') or None,
+                    get_setting('proxy_password', '') or None,
+                )
+            except Exception:
+                ipv4 = ipv6 = None
+            reason = 'external_recreate' if previous_id and container_id != previous_id else 'vpn_reconnect'
+            _record_switch(
+                from_server=previous, to_server=active, reason=reason, success=True,
+                to_ipv4=ipv4, to_ipv6=ipv6,
+            )
+            logger.info(
+                'Observed real VPN server change: %s -> %s (%s)', previous, active, reason
+            )
+        set_setting('last_observed_active_server', active)
+        set_setting('last_observed_gluetun_id', container_id)
+
+
+def _repair_network_after_gluetun_start(app, container_name: str) -> None:
+    """Always reattach stale shared-network containers after any Gluetun start."""
+    time.sleep(3)
+    with app.app_context():
+        from .gluetun import list_orphaned_network_dependents, restart_network_dependents
+        try:
+            orphans = list_orphaned_network_dependents()
+            if not orphans:
+                return
+            restarted, _ = restart_network_dependents(
+                container_name,
+                app.config.get('COMPOSE_DIR', ''),
+                app.config.get('COMPOSE_PROJECT', ''),
+                explicit_list=orphans,
+            )
+            logger.info(
+                'Gluetun start network reconciliation: %d/%d reattached (%s)',
+                len(restarted), len(orphans), ', '.join(restarted) or 'none',
+            )
+        except Exception as exc:
+            logger.warning('Gluetun start network reconciliation failed: %s', exc)
 
 
 def _run_event_triggered_quick_check(app):
@@ -2988,6 +3134,14 @@ def _docker_event_loop(app, container_name: str) -> None:
         try:
             import docker as _docker
             client = _docker.from_env()
+            # Remember the currently live ID before waiting for events.  If an
+            # external updater replaces Gluetun, dependents will still point to
+            # this ID and can be identified reliably after the new start event.
+            try:
+                from .gluetun import record_gluetun_id
+                record_gluetun_id(client.containers.get(container_name).id)
+            except Exception:
+                pass
             logger.info(
                 'Docker event listener: watching container "%s" for restart events',
                 container_name,
@@ -3007,6 +3161,17 @@ def _docker_event_loop(app, container_name: str) -> None:
                     record_gluetun_id(event.get('id', ''))
                 except Exception:
                     pass
+
+                # Network repair is mandatory for every Gluetun start,
+                # including Companion-triggered switches and starts occurring
+                # during benchmarks.  Only the optional quick check is subject
+                # to the suppression/cooldown guards below.
+                threading.Thread(
+                    target=_repair_network_after_gluetun_start,
+                    args=(app, container_name),
+                    daemon=True,
+                    name='gluetun-network-repair',
+                ).start()
 
                 # Ignore restarts triggered by Companion itself (server switch)
                 if is_companion_restart():
@@ -3345,6 +3510,15 @@ def start_scheduler(app):
         misfire_grace_time=20,
         max_instances=1,
     )
+    _scheduler.add_job(
+        _check_active_server_history,
+        trigger=IntervalTrigger(seconds=30),
+        args=[app],
+        id='active_server_history',
+        replace_existing=True,
+        misfire_grace_time=20,
+        max_instances=1,
+    )
     _scheduler.start()
 
     # Docker event listener — watches Gluetun container for unexpected restarts
@@ -3400,7 +3574,7 @@ def trigger_observation_now(app):
 def run_quick_check_now(app):
     """Manual quick benchmark — proxy test of current server only, no VPN switch."""
     from .database import get_db, get_setting, set_setting
-    from .gluetun import get_current_filters, get_public_ips
+    from .gluetun import get_active_server, get_public_ips
 
     with _lock:
         _stop_event.clear()   # reset any leftover stop signal
@@ -3418,13 +3592,10 @@ def run_quick_check_now(app):
             warmup      = 2.0 if get_setting('speedtest_warmup', '1') == '1' else 0.0
             dl_streams  = int(get_setting('speedtest_streams', '4'))
 
-            filters = get_current_filters(container)
-            if not filters:
+            server_name = get_active_server(container)
+            if not server_name:
                 logger.warning('Quick benchmark now: cannot read current server from Gluetun')
                 return
-
-            filter_type = next(iter(filters))
-            server_name = filters[filter_type].split(',')[0].strip()
             set_setting('benchmark_current_server', server_name)
 
             # Fetch previous proxy_qc baseline for comparison in notification

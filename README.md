@@ -352,7 +352,7 @@ L'encart **Statut VPN** affiche l'intermédiaire et les opérateurs observés. D
 
 ### Gestion des containers Docker
 - **Containers réseau Gluetun (auto-gérés)** — les containers en cours d'exécution avec `network_mode: service:gluetun` sont détectés et recréés automatiquement après chaque bascule, y compris ceux déjà dans un namespace mort (suite à une bascule précédente ratée). Les containers volontairement stoppés restent stoppés. Les containers dans une **stack Compose différente** de Gluetun sont également gérés si leur répertoire est accessible depuis Companion ou si leurs labels `com.docker.compose` sont présents. La détection d'orphelins est limitée aux containers référençant un **ancien Gluetun connu** (historique d'IDs en base) — Companion ne touche jamais aux dépendants d'un autre VPN ou d'une stack étrangère
-- **Containers à redémarrer après bascule** — uniquement pour les containers utilisant le proxy HTTP/SOCKS5 de Gluetun ; liste ordonnée (glisser-déposer)
+- **Containers à redémarrer après bascule** — liste ordonnée (glisser-déposer), appliquée aux bascules manuelles, automatiques, aux pools et au failover ; les containers partageant directement le namespace réseau de Gluetun sont détectés, recréés et vérifiés automatiquement sans doublon
 - **Pause pendant le benchmark** — liste de containers (torrents, Usenet…) stoppés avant le début du benchmark et relancés automatiquement à la fin, même en cas d'erreur
 - **Mise à jour automatique des images Docker** *(option)* — au moment de la bascule, Companion peut mettre à jour les images avant de relancer les containers : Gluetun lui-même, les containers réseau auto-gérés, les containers à redémarrer après bascule et les containers en pause pendant le benchmark ; activable individuellement par container depuis les Paramètres
 
@@ -482,7 +482,11 @@ Activer via **Paramètres → Mesurer → Mode Sidecar → désactiver**.
 
 ### Containers à redémarrer après bascule
 
-Dans **Paramètres → Décider → Containers à redémarrer après bascule** : liste ordonnée de containers recréés après chaque bascule VPN. En mode Compose, Companion utilise `docker compose up -d --force-recreate` ; en mode Unraid/DockerMan, il recrée les containers via le Docker SDK pour les rattacher au namespace réseau Gluetun courant. Drag & drop pour réordonner. Utile pour `qbittorrent`, `radarr`, `sonarr`, ou tout service avec `network_mode: service:gluetun`.
+Dans **Paramètres → Décider → Containers à redémarrer après bascule** : liste ordonnée de containers recréés après chaque bascule VPN, quel que soit son déclencheur. En mode Compose, Companion utilise `docker compose up -d --force-recreate` ; en mode Unraid/DockerMan, il recrée les containers via le Docker SDK. Les services utilisant `network_mode: service:gluetun` sont détectés séparément, rattachés au nouvel identifiant de namespace puis vérifiés ; un événement Docker répare également ce rattachement après une recréation externe de Gluetun. Drag & drop pour réordonner.
+
+Le **serveur actif** affiché sur le tableau de bord et dans l’API est résolu depuis l’adresse du tunnel réellement sélectionnée par Gluetun et son catalogue de fournisseurs. Les variables `SERVER_*` restent affichées comme filtres de sélection, mais une liste de candidats n’est plus présentée comme s’il s’agissait du serveur connecté. Les changements réellement observés hors Companion sont ajoutés à l’historique des bascules.
+
+À la fin de chaque benchmark réussi, Companion calcule et conserve le meilleur serveur du profil actif, même lorsque la bascule automatique est désactivée. La notification de fin et l’historique ne laissent donc plus « Meilleur serveur » vide en mode mesure seule.
 
 ### Containers à stopper pendant le benchmark
 

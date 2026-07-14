@@ -547,6 +547,47 @@ def init_db(db_path: str):
                     ('sidecar_image', sidecar_image),
                 )
 
+        # Repair history produced by older versions: the continuous-observation
+        # watchdog inserted a cycle before discovering that its scope was empty,
+        # and measure-only cycles left best_server NULL when auto-switch was off.
+        history_repaired = db.execute(
+            "SELECT value FROM settings WHERE key='benchmark_history_repaired_v1'"
+        ).fetchone()
+        if not history_repaired:
+            db.execute('DELETE FROM benchmark_cycles WHERE finished_at IS NULL')
+            cycles = db.execute(
+                '''SELECT id, started_at, finished_at FROM benchmark_cycles
+                   WHERE finished_at IS NOT NULL
+                     AND (best_server IS NULL OR TRIM(best_server) = '')'''
+            ).fetchall()
+            filter_vars = {
+                'name': 'SERVER_NAMES', 'country': 'SERVER_COUNTRIES',
+                'region': 'SERVER_REGIONS', 'city': 'SERVER_CITIES',
+                'hostname': 'SERVER_HOSTNAMES',
+            }
+            for cycle in cycles:
+                best = db.execute(
+                    '''SELECT st.server_name, s.filter_type
+                       FROM speed_tests st
+                       LEFT JOIN servers s ON s.name = st.server_name
+                       WHERE st.success = 1
+                         AND st.tested_at BETWEEN ? AND ?
+                         AND st.test_method != 'proxy_qc'
+                       ORDER BY st.download_mbps DESC NULLS LAST, st.id DESC
+                       LIMIT 1''',
+                    (cycle['started_at'], cycle['finished_at']),
+                ).fetchone()
+                if best:
+                    prefix = filter_vars.get(best['filter_type'] or 'name', 'SERVER_NAMES')
+                    db.execute(
+                        'UPDATE benchmark_cycles SET best_server=? WHERE id=?',
+                        (f"{prefix}={best['server_name']}", cycle['id']),
+                    )
+            db.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES "
+                "('benchmark_history_repaired_v1', '1')"
+            )
+
 
 @contextmanager
 def get_db():
