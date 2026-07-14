@@ -8,6 +8,7 @@ from app.torrent_trackers import (
     check_enabled_trackers,
     tracker_display_name,
     tracker_status_for_server,
+    set_all_tracker_enabled,
 )
 
 
@@ -79,6 +80,31 @@ class TorrentTrackerScopeTest(unittest.TestCase):
             self.assertEqual(checked['total'], 1)
             self.assertEqual(all_trackers['success_pct'], 50.0)
             self.assertEqual(all_trackers['total'], 2)
+
+    def test_set_all_tracker_enabled_updates_every_discovered_tracker(self):
+        with TemporaryDirectory() as directory:
+            database.init_db(os.path.join(directory, 'test.db'))
+            with database.get_db() as db:
+                db.executemany(
+                    '''INSERT INTO tracker_urls
+                       (url, scheme, host, port, path, enabled)
+                       VALUES (?, 'https', ?, 443, '/announce', ?)''',
+                    [
+                        ('https://tracker.one/announce', 'tracker.one', 1),
+                        ('https://tracker.two/announce', 'tracker.two', 0),
+                    ],
+                )
+
+            self.assertEqual(set_all_tracker_enabled(False), 2)
+            with database.get_db() as db:
+                self.assertEqual(db.execute(
+                    'SELECT COUNT(*) AS n FROM tracker_urls WHERE enabled=0'
+                ).fetchone()['n'], 2)
+            self.assertEqual(set_all_tracker_enabled(True), 2)
+            with database.get_db() as db:
+                self.assertEqual(db.execute(
+                    'SELECT COUNT(*) AS n FROM tracker_urls WHERE enabled=1'
+                ).fetchone()['n'], 2)
 
 
 if __name__ == '__main__':

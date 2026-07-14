@@ -45,7 +45,8 @@ from .scheduler import (
 from .torrent_trackers import (
     check_enabled_trackers, delete_torrent_client, discover_trackers,
     list_torrent_clients, list_trackers, save_torrent_client,
-    save_tracker_settings, set_tracker_enabled, tracker_status_for_servers,
+    save_tracker_settings, set_all_tracker_enabled, set_tracker_enabled,
+    tracker_status_for_servers,
     tracker_summary,
 )
 from .port_forwarding import (
@@ -3164,6 +3165,20 @@ def api_trackers_check():
     result = check_enabled_trackers(ids, server_name=server_name)
     return jsonify({
         **result,
+        'trackers': list_trackers(),
+        'tracker_summary': tracker_summary(),
+    })
+
+
+@bp.route('/api/trackers/enabled', methods=['POST'])
+@login_required
+def api_trackers_enabled():
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get('enabled'))
+    count = set_all_tracker_enabled(enabled)
+    return jsonify({
+        'ok': True,
+        'updated': count,
         'trackers': list_trackers(),
         'tracker_summary': tracker_summary(),
     })

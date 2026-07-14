@@ -361,7 +361,7 @@ The **VPN Status** card displays the intermediary and observed operators. In tab
 - **Multiple clients** — configure one or more qBittorrent or rTorrent/ruTorrent clients in **Settings → BitTorrent**; each client can be a tracker source, even if its container is also stopped during benchmarks
 - **Persistent discovery** — Companion fetches tracker URLs from loaded torrents, deduplicates them, then displays a domain-derived name, source clients, torrent count, last check and success rate; sortable by name or result
 - **Passkeys hidden** — private passkeys and tokens are stripped from detected URLs before storage/display, including query-string keys and token-like path segments
-- **Per-URL control** — each tracker can be enabled or ignored individually for future checks
+- **Per-URL control** — each tracker can be enabled or ignored individually for future checks; the list also provides **Check all** and **Uncheck all** actions to quickly prepare a focused selection
 - **VPN compatibility score** — either every discovered URL or checked trackers only are checked through the VPN path; by default, 80% success is enough to consider the server compatible, avoiding false negatives when a single tracker is down
 - **Optional switch criterion** — when enabled, a benchmarked server below the tracker threshold is excluded from the auto-switch pick; pools ignore servers already known as tracker-incompatible
 - **Per-provider port forwarding** — declare AirVPN/manual, Gluetun-native (`/v1/portforward`) or custom rules in **Settings → Port Forwarding**; when automation is enabled, Companion applies the current provider's rules after every switch (manual, benchmark, pool rotation), resynchronizes qBittorrent or rTorrent *(beta)* and runs the configured `on_port_change` hooks; a periodic check also catches port renewals that happen without a container restart
@@ -528,7 +528,7 @@ Companion can manage multiple BitTorrent sources: for example one main qBittorre
 
 For qBittorrent, Companion uses the Web API: torrent list, then the trackers endpoint for each hash. For rTorrent/ruTorrent, Companion uses XML-RPC/RPC2 and fetches trackers per torrent.
 
-Discovery always runs **before** stopping containers configured in "Containers to pause during benchmark". So if `qbittorrent` or `rutorrent` is stopped during measurement, Companion uses the already cached tracker list. The UI derives a readable tracker name from each domain, shows its cumulative success rate, and supports sorting by name or result. URLs can be enabled or ignored one by one when the “checked trackers” scope is selected. URLs are normalized without passkeys (`?passkey=...`, `authkey`, `token`, private path segments, etc.) so secrets are not exposed in the interface.
+Discovery always runs **before** stopping containers configured in "Containers to pause during benchmark". So if `qbittorrent` or `rutorrent` is stopped during measurement, Companion uses the already cached tracker list. The UI derives a readable tracker name from each domain, shows its cumulative success rate, and supports sorting by name or result. URLs can be enabled or ignored one by one, or all at once with **Check all** / **Uncheck all**, when the “checked trackers” scope is selected. URLs are normalized without passkeys (`?passkey=...`, `authkey`, `token`, private path segments, etc.) so secrets are not exposed in the interface.
 
 ### VPN forwarded port inventory
 

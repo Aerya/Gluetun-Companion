@@ -2626,7 +2626,17 @@
           {{ 'En mode « trackers cochés », désactiver une URL la retire des tests et du taux de réussite. En mode « tous », les coches sont ignorées.' if lang == 'fr' else 'In “checked trackers” mode, disabling a URL removes it from checks and the success rate. In “all” mode, checkboxes are ignored.' }}
         </p>
       </div>
-      <span class="badge bg-secondary" id="tracker-total-badge">{{ trackers | length }}</span>
+      <div class="d-flex align-items-center gap-2">
+        <div class="btn-group btn-group-sm" role="group" aria-label="{{ 'Sélection des trackers' if lang == 'fr' else 'Tracker selection' }}">
+          <button type="button" class="btn btn-outline-success" onclick="trackerSetAll(true)">
+            {{ 'Tout cocher' if lang == 'fr' else 'Check all' }}
+          </button>
+          <button type="button" class="btn btn-outline-secondary" onclick="trackerSetAll(false)">
+            {{ 'Tout décocher' if lang == 'fr' else 'Uncheck all' }}
+          </button>
+        </div>
+        <span class="badge bg-secondary" id="tracker-total-badge">{{ trackers | length }}</span>
+      </div>
     </div>
 
     <div class="table-responsive" style="max-height:520px">
@@ -4223,6 +4233,28 @@ function trackerToggle(id, enabled) {
     _updateTrackerSummary(data.tracker_summary);
     _trackerMsg(enabled ? 'Tracker enabled' : 'Tracker ignored', 'text-muted');
   }).catch(() => _trackerMsg('Toggle failed', 'text-danger'));
+}
+function trackerSetAll(enabled) {
+  const buttons = document.querySelectorAll('#card-tracker-list button');
+  buttons.forEach(btn => { btn.disabled = true; });
+  _trackerMsg(enabled
+    ? '{{ "Activation de tous les trackers…" if lang == "fr" else "Enabling all trackers…" }}'
+    : '{{ "Désactivation de tous les trackers…" if lang == "fr" else "Disabling all trackers…" }}', 'text-info');
+  fetch('{{ url_for("main.api_trackers_enabled") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _trackerCsrf},
+    body: JSON.stringify({enabled}),
+  }).then(r => {
+    if (!r.ok) throw new Error('bulk toggle failed');
+    return r.json();
+  }).then(data => {
+    _renderTrackerRows(data.trackers || []);
+    _updateTrackerSummary(data.tracker_summary);
+    _trackerMsg(`${data.updated || 0} · ${enabled
+      ? '{{ "trackers activés" if lang == "fr" else "trackers enabled" }}'
+      : '{{ "trackers ignorés" if lang == "fr" else "trackers ignored" }}'}`, 'text-success');
+  }).catch(() => _trackerMsg('Bulk toggle failed', 'text-danger'))
+    .finally(() => buttons.forEach(btn => { btn.disabled = false; }));
 }
 _trackerSortIcons();
 
