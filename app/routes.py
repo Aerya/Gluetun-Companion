@@ -31,7 +31,7 @@ from .crypto import encrypt as crypto_encrypt, decrypt as crypto_decrypt, mask a
 from .profiles import PROFILES, score_servers as _score_servers, score_servers_detail as _score_servers_detail
 from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
-    get_current_filters, format_filters,
+    get_current_filters, get_active_server, format_filters,
     get_public_ip, get_public_ips, get_vpn_status, switch_server,
     apply_dns_filtering,
     wait_for_vpn, restart_network_dependents,
@@ -482,9 +482,9 @@ def dashboard():
 
     vpn_status        = get_vpn_status(proxy_host, proxy_port, px_user, px_pass)
     public_ip         = get_public_ip(proxy_host, proxy_port, px_user, px_pass) if vpn_status == 'running' else None
-    current_filters   = get_current_filters(container)
-    current_server    = format_filters(current_filters)
-    active_server_name = next(iter(current_filters.values()), '').split(',')[0].strip() if current_filters else ''
+    current_filters    = get_current_filters(container)
+    active_server_name = get_active_server(container) or ''
+    current_server     = active_server_name or format_filters(current_filters)
     benchmark_running = get_setting('benchmark_running', '0') == '1'
 
     _ALLOWED_LIMITS = {10, 20, 50}
@@ -888,8 +888,7 @@ def servers():
     # Current active server — read from Gluetun (best-effort, empty string on failure)
     try:
         _container = current_app.config['GLUETUN_CONTAINER']
-        _filters   = get_current_filters(_container)
-        active_server = next(iter(_filters.values())).split(',')[0].strip() if _filters else ''
+        active_server = get_active_server(_container) or ''
     except Exception:
         active_server = ''
 
@@ -1223,7 +1222,7 @@ def manual_switch(server_id):
     wait_secs   = int(get_setting('connection_wait_seconds', '45'))
     lang        = get_setting('ui_lang', 'fr')
 
-    from_label = format_filters(get_current_filters(container))
+    from_label = get_active_server(container) or format_filters(get_current_filters(container))
     from_provider = get_gluetun_provider(container)
 
     # Capture the old server's IP before switching
@@ -1268,7 +1267,12 @@ def manual_switch(server_id):
     # causing "recreated 0 network dependent(s)" even though qBittorrent /
     # Prowlarr / MeTube are up but connected to a dead namespace.
     from .gluetun import list_network_dependents_for_recreate as _list_deps
+    from .gluetun import (
+        pull_gluetun_before_switch as _pull_gluetun,
+        restart_configured_post_switch_containers as _restart_post_switch,
+    )
     pre_switch_deps = _list_deps(container)
+    pull_updated_images = _pull_gluetun(container)
 
     ok, err = switch_server(
         row['name'], row['filter_type'],
@@ -1318,6 +1322,14 @@ def manual_switch(server_id):
                         'Manual switch: %s is not running after %.0fs — '
                         'skipping network-dependent recreate',
                         container, elapsed,
+                    )
+                post_restarted, post_updated = _restart_post_switch(
+                    compose_dir, project, already_restarted=set(restarted),
+                )
+                if post_restarted:
+                    logger.info(
+                        'Manual switch: configured post-switch containers restarted: %s',
+                        ', '.join(post_restarted),
                     )
                 pf_result = apply_current_provider_port_forwards(
                     container, reason='manual_switch',
@@ -1371,6 +1383,7 @@ def manual_switch(server_id):
                         mention=get_setting('notify_mention', '').strip() or None,
                         mention_level=get_setting('notify_mention_level', 'critical'),
                         alert_type='manual_switch',
+                        updated_images=(pull_updated_images + post_updated) or None,
                     )
 
         threading.Thread(target=_bg_restart, daemon=True, name='manual-switch-net').start()
@@ -2452,12 +2465,11 @@ def settings():
         'map_points': [],
     }
     try:
-        _cur_filters = get_current_filters(current_app.config['GLUETUN_CONTAINER'])
-        settings_sidebar['active_server'] = format_filters(_cur_filters) if _cur_filters else ''
-        settings_sidebar['active_server_name'] = (
-            next(iter(_cur_filters.values()), '').split(',')[0].strip()
-            if _cur_filters else ''
-        )
+        _container = current_app.config['GLUETUN_CONTAINER']
+        _cur_filters = get_current_filters(_container)
+        _active = get_active_server(_container) or ''
+        settings_sidebar['active_server'] = _active or (format_filters(_cur_filters) if _cur_filters else '')
+        settings_sidebar['active_server_name'] = _active
     except Exception:
         settings_sidebar['active_server'] = ''
         settings_sidebar['active_server_name'] = ''
@@ -2812,8 +2824,7 @@ def metrics():
     # ── Active server (best-effort) ────────────────────────────────────────
     active_server = ''
     try:
-        _filters = get_current_filters(current_app.config['GLUETUN_CONTAINER'])
-        active_server = next(iter(_filters.values())).split(',')[0].strip() if _filters else ''
+        active_server = get_active_server(current_app.config['GLUETUN_CONTAINER']) or ''
     except Exception:
         pass
 
@@ -3124,8 +3135,7 @@ def api_trackers_check():
         except (TypeError, ValueError):
             ids = None
     try:
-        filters = get_current_filters(current_app.config['GLUETUN_CONTAINER'])
-        server_name = next(iter(filters.values()), '') if filters else ''
+        server_name = get_active_server(current_app.config['GLUETUN_CONTAINER']) or ''
     except Exception:
         server_name = ''
     result = check_enabled_trackers(ids, server_name=server_name)
@@ -3832,7 +3842,7 @@ def api_status():
     return jsonify({
         'vpn_status':             get_vpn_status(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
         'public_ip':              get_public_ip(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
-        'current_server':         format_filters(get_current_filters(cfg['GLUETUN_CONTAINER'])),
+        'current_server':         get_active_server(cfg['GLUETUN_CONTAINER']) or format_filters(get_current_filters(cfg['GLUETUN_CONTAINER'])),
         'benchmark_running':       get_setting('benchmark_running', '0') == '1',
         'benchmark_stop_requested':get_setting('benchmark_stop_requested', '0') == '1',
         'current_server_testing':  get_setting('benchmark_current_server', ''),

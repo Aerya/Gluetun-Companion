@@ -51,7 +51,7 @@ def _api_auth(f):
 @_api_auth
 def status():
     """Current VPN status, active server, benchmark state, next scheduled run."""
-    from .gluetun import get_current_filters, format_filters, get_vpn_status
+    from .gluetun import get_active_server, get_current_filters, format_filters, get_vpn_status
     from .scheduler import get_next_run
     from .dns_path import get_dns_path
 
@@ -70,9 +70,7 @@ def status():
         get_setting('ui_lang', 'fr'),
     )
 
-    active_server = None
-    if filters:
-        active_server = next(iter(filters.values()), None)
+    active_server = get_active_server(current_app.config['GLUETUN_CONTAINER'])
 
     try:
         benchmark_log = json.loads(get_setting('benchmark_log_lines', '[]') or '[]')
@@ -114,10 +112,9 @@ def status():
 def servers():
     """List all configured servers with aggregated stats."""
     from .database import compute_confidence_all, get_stability_all
-    from .gluetun import get_current_filters
+    from .gluetun import get_active_server
 
-    filters = get_current_filters(current_app.config['GLUETUN_CONTAINER'])
-    active_name = next(iter(filters.values()), '').split(',')[0].strip() if filters else ''
+    active_name = get_active_server(current_app.config['GLUETUN_CONTAINER']) or ''
 
     conf_map  = compute_confidence_all()
     stab_map  = get_stability_all()

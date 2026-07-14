@@ -353,7 +353,7 @@ The **VPN Status** card displays the intermediary and observed operators. In tab
 
 ### Docker container management
 - **Gluetun network containers (auto-managed)** — running containers using `network_mode: service:gluetun` are detected and recreated automatically after each switch, including those already stuck in a dead namespace (left over from a previously failed switch). Intentionally stopped containers stay stopped. Containers in a **different Compose stack** from Gluetun are also handled if their directory is accessible from Companion or if their `com.docker.compose` labels are present. Orphan detection is limited to containers referencing a **known former Gluetun** (ID history kept in the database) — Companion never touches dependents of another VPN or an unrelated stack
-- **Containers to restart after switch** — only for containers routing through Gluetun's HTTP/SOCKS5 proxy; ordered list (drag & drop)
+- **Containers to restart after switch** — ordered list (drag & drop), applied to manual and automatic switches, pools and failover; containers sharing Gluetun's network namespace are detected, recreated and verified automatically without duplicates
 - **Pause during benchmark** — list of containers (torrent, Usenet…) stopped before the benchmark starts and automatically restarted when it ends, even on error
 - **Automatic Docker image updates** *(option)* — at switch time, Companion can update images before restarting containers: Gluetun itself, auto-managed network containers, post-switch containers and benchmark-paused containers; togglable per container from Settings
 
@@ -483,7 +483,11 @@ Enable via **Settings → Measure → Sidecar Mode → toggle off**.
 
 ### Containers to restart after switch
 
-In **Settings → Decide → Containers to restart after switch**: ordered list of containers recreated after each VPN switch. In Compose mode, Companion uses `docker compose up -d --force-recreate`; in Unraid/DockerMan mode, it recreates containers through the Docker SDK so they rejoin the current Gluetun network namespace. Drag & drop to reorder. Useful for `qbittorrent`, `radarr`, `sonarr`, or any service with `network_mode: service:gluetun`.
+In **Settings → Decide → Containers to restart after switch**: ordered list of containers recreated after every VPN switch, whatever its trigger. In Compose mode, Companion uses `docker compose up -d --force-recreate`; in Unraid/DockerMan mode, it recreates containers through the Docker SDK. Services using `network_mode: service:gluetun` are detected separately, reattached to the new namespace ID and verified; a Docker event also repairs this attachment after an external Gluetun recreation. Drag & drop to reorder.
+
+The **active server** shown on the dashboard and returned by the API is resolved from the tunnel endpoint actually selected by Gluetun and its provider catalogue. `SERVER_*` variables remain selection filters, but a candidate list is no longer presented as the connected server. Changes observed outside Companion are added to switch history.
+
+After every successful benchmark, Companion computes and stores the best server for the active profile even when automatic switching is disabled. End-of-benchmark notifications and history therefore no longer leave “Best server” empty in measure-only mode.
 
 ### Containers to pause during benchmark
 

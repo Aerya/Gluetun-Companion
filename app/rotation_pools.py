@@ -326,9 +326,10 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
         set_pool_rotation_state, set_pool_last_error,
     )
     from .gluetun import (
-        switch_server, wait_for_vpn, get_public_ips, get_current_filters,
+        switch_server, wait_for_vpn, get_public_ips, get_active_server,
         list_network_dependents, list_network_dependents_for_recreate,
-        restart_network_dependents,
+        restart_network_dependents, pull_gluetun_before_switch,
+        restart_configured_post_switch_containers,
     )
     from .crypto import decrypt as crypto_decrypt, is_encrypted as is_enc
     from .wg_providers import WG_PROVIDERS
@@ -413,8 +414,7 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
             }
 
     # ── Snapshot current server + IPs + speed before switching ──────────────
-    _cur_filters  = get_current_filters(container)
-    from_server   = list(_cur_filters.values())[0].split(',')[0].strip() if _cur_filters else None
+    from_server   = get_active_server(container)
     pre_deps      = list_network_dependents_for_recreate(container)
 
     # Capture the outgoing VPN provider so port-forward rules can follow a
@@ -446,6 +446,7 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     set_setting('benchmark_current_server', f'pool:{pool_id}')
 
     # ── Switch Gluetun ────────────────────────────────────────────────────
+    pull_gluetun_before_switch(container)
     ok, err = switch_server(
         filter_value=server['name'],
         filter_type=server['filter_type'],
@@ -475,6 +476,14 @@ def do_pool_rotation(pool_id: int, app, manual: bool = False) -> dict:
     restarted, _ = restart_network_dependents(
         container, compose_dir, project, explicit_list=pre_deps,
     )
+    post_restarted, _ = restart_configured_post_switch_containers(
+        compose_dir, project, already_restarted=set(restarted),
+    )
+    if post_restarted:
+        logger.info(
+            'Pool rotation [%d]: configured post-switch containers restarted: %s',
+            pool_id, ', '.join(post_restarted),
+        )
     if vpn_up:
         logger.info(
             'Pool rotation [%d]: VPN up in %.0fs; recreated %d network dependent(s): %s',
