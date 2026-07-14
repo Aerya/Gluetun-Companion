@@ -1026,6 +1026,12 @@ def servers():
         new_airvpn_countries = ', '.join(sorted(cc_set))
 
     _all_vpn_profiles = get_vpn_profiles()
+    from .server_eligibility import available_countries, parse_excluded_countries
+    with get_db() as _countries_db:
+        _excluded_country_options = available_countries(_countries_db)
+    _excluded_countries = sorted(parse_excluded_countries(
+        get_setting('excluded_countries', '[]')
+    ))
 
     # Providers the user is allowed to add from the catalogue:
     # union of (configured vpn_profiles providers) + (active Gluetun provider).
@@ -1073,7 +1079,22 @@ def servers():
         top_n=top_n,
         airvpn_bw_min=airvpn_bw_min,
         wg_providers=WG_PROVIDERS,
+        excluded_country_options=_excluded_country_options,
+        excluded_countries=_excluded_countries,
     )
+
+
+@bp.route('/servers/excluded-countries', methods=['POST'])
+@login_required
+def save_server_excluded_countries():
+    country_codes = sorted({
+        code.strip().upper()
+        for code in request.form.getlist('excluded_countries')
+        if code.strip()
+    })
+    set_setting('excluded_countries', json.dumps(country_codes))
+    flash_t('flash_settings_saved', 'success')
+    return redirect(url_for('main.servers'))
 
 
 @bp.route('/servers/import', methods=['POST'])
@@ -2044,9 +2065,10 @@ def settings():
                     int(request.form.get('tracker_check_threshold_pct', '80') or '80'),
                     int(request.form.get('tracker_check_timeout_secs', '3') or '3'),
                     int(request.form.get('tracker_check_concurrency', '12') or '12'),
+                    request.form.get('tracker_check_scope', 'enabled'),
                 )
             except ValueError:
-                save_tracker_settings(80, 3, 12)
+                save_tracker_settings(80, 3, 12, 'enabled')
             flash_t('flash_settings_saved', 'success')
 
         elif action == 'dns_filtering':
@@ -2410,6 +2432,7 @@ def settings():
         'tracker_check_threshold_pct':    get_setting('tracker_check_threshold_pct', '80'),
         'tracker_check_timeout_secs':     get_setting('tracker_check_timeout_secs', '3'),
         'tracker_check_concurrency':      get_setting('tracker_check_concurrency', '12'),
+        'tracker_check_scope':            get_setting('tracker_check_scope', 'enabled'),
         'dns_block_malicious':            get_setting('dns_block_malicious', '1'),
         'dns_unblock_hostnames':          get_setting('dns_unblock_hostnames', ''),
         'port_forward_enabled':           get_setting('port_forward_enabled', '0'),

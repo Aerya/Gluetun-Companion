@@ -143,6 +143,34 @@
       <span class="badge bg-success ms-1">{{ '%02d'|format(adaptive_stats.best_hour) }}h</span>
     </button>
     {% endif %}
+    <div class="dropdown">
+      <button class="btn btn-sm {{ 'btn-warning' if excluded_countries else 'btn-outline-secondary' }}"
+              type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+        <i class="bi bi-globe-europe-africa"></i>
+        {{ 'Pays exclus' if lang == 'fr' else 'Excluded countries' }}
+        {% if excluded_countries %}<span class="badge text-bg-dark ms-1">{{ excluded_countries | length }}</span>{% endif %}
+      </button>
+      <form class="dropdown-menu dropdown-menu-end p-3" style="width:310px"
+            method="post" action="{{ url_for('main.save_server_excluded_countries') }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="fw-semibold mb-1">{{ 'Exclure de la sélection' if lang == 'fr' else 'Exclude from selection' }}</div>
+        <div class="small text-muted mb-2">
+          {{ 'Ces pays ne seront plus cochables dans les sélections AirVPN/catalogue et resteront exclus des choix automatiques.' if lang == 'fr' else 'These countries cannot be selected in AirVPN/catalogue pickers and remain excluded from automatic choices.' }}
+        </div>
+        <div class="d-flex flex-column gap-1 mb-2" style="max-height:260px;overflow-y:auto">
+          {% for country in excluded_country_options %}
+          <label class="form-check mb-0">
+            <input class="form-check-input" type="checkbox" name="excluded_countries"
+                   value="{{ country.code }}" {{ 'checked' if country.code in excluded_countries }}>
+            <span class="form-check-label">{{ country.name }} ({{ country.code }})</span>
+          </label>
+          {% endfor %}
+        </div>
+        <button class="btn btn-sm btn-primary w-100">
+          <i class="bi bi-save"></i> {{ 'Appliquer' if lang == 'fr' else 'Apply' }}
+        </button>
+      </form>
+    </div>
     <form method="post" action="{{ url_for('main.import_servers') }}">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-outline-info btn-sm fw-semibold">
@@ -1224,6 +1252,10 @@ function _esc(str) {
 
 const _existingServers = new Set({{ existing_names | tojson }});
 const _trackedNewNames = new Set({{ new_airvpn_names | tojson }});
+const _excludedCountryCodes = new Set({{ excluded_countries | tojson }});
+function _isExcludedCountry(item) {
+  return _excludedCountryCodes.has(String((item || {}).country_code || '').toUpperCase());
+}
 const _t = {
   best:              {{ t.srv_airvpn_best | tojson }},
   selected:          {{ t.srv_airvpn_selected | tojson }},
@@ -1234,6 +1266,7 @@ const _t = {
   healthErr:         {{ t.srv_airvpn_health_err | tojson }},
   newLabel:          {{ t.airvpn_new_label | tojson }},
   newEmpty:          {{ t.airvpn_new_empty | tojson }},
+  countryExcluded:   {{ ('Pays exclu' if lang == 'fr' else 'Excluded country') | tojson }},
   // Diff
   diffNoSnap:        {{ t.airvpn_diff_no_snap | tojson }},
   diffAppeared:      {{ t.airvpn_diff_appeared | tojson }},
@@ -1332,20 +1365,21 @@ function _renderServersTab(servers) {
   tbody.innerHTML = '';
   for (const s of servers) {
     const exists = _existingServers.has(s.name);
+    const excluded = _isExcludedCountry(s);
     const tr = document.createElement('tr');
     tr.dataset.name = s.name.toLowerCase();
     tr.dataset.country = s.country.toLowerCase();
     tr.dataset.bw = String(s.bw_max || 0);
-    if (exists) tr.classList.add('opacity-50');
+    if (exists || excluded) tr.classList.add('opacity-50');
     const tdCb = document.createElement('td');
     tdCb.className = 'ps-3';
     const cb = document.createElement('input');
     cb.type = 'checkbox'; cb.className = 'form-check-input airvpn-cb'; cb.value = s.name;
-    if (exists) { cb.disabled = true; cb.title = _t.alreadyAdded; }
+    if (exists || excluded) { cb.disabled = true; cb.title = excluded ? _t.countryExcluded : _t.alreadyAdded; }
     else cb.addEventListener('change', e => airvpnToggle(s.name, e.target.checked));
     tdCb.appendChild(cb); tr.appendChild(tdCb);
     tr.insertAdjacentHTML('beforeend', `
-      <td><code class="fw-semibold">${_esc(s.name)}</code>${exists ? '<span class="badge bg-secondary ms-1" style="font-size:.65rem">'+_esc(_t.alreadyAdded)+'</span>' : ''}</td>
+      <td><code class="fw-semibold">${_esc(s.name)}</code>${exists ? '<span class="badge bg-secondary ms-1" style="font-size:.65rem">'+_esc(_t.alreadyAdded)+'</span>' : ''}${excluded ? '<span class="badge bg-warning text-dark ms-1" style="font-size:.65rem">'+_esc(_t.countryExcluded)+'</span>' : ''}</td>
       <td><span title="${_esc(s.country)}">${_flag(s.country_code)} <small>${_esc(s.country)}</small></span></td>
       <td><small class="text-muted">${_esc(s.location)}</small></td>
       <td>${_loadBar(s.load, s.bw_max)}</td>
@@ -1353,7 +1387,7 @@ function _renderServersTab(servers) {
       <td><small class="text-muted">${_esc(String(s.users))}</small></td>
       <td>${s.health==='ok' ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-exclamation-triangle-fill text-warning" data-bs-toggle="tooltip" data-bs-title="'+_esc(_t.healthErr)+'"></i>'}</td>
     `);
-    if (!exists) {
+    if (!exists && !excluded) {
       tr.style.cursor = 'pointer';
       tr.addEventListener('click', e => { if (e.target.closest('input')) return; const c=tr.querySelector('input'); c.checked=!c.checked; airvpnToggle(s.name,c.checked); });
     }
@@ -1366,35 +1400,37 @@ function _renderCountriesTab(countries) {
   const container = document.getElementById('airvpn-countries-list');
   container.innerHTML = '';
   for (const c of countries) {
+    const countryExcluded = _isExcludedCountry(c);
     const wrap = document.createElement('details');
     wrap.className = 'border-bottom'; wrap.dataset.country = c.country.toLowerCase();
     const summary = document.createElement('summary');
     summary.className = 'px-3 py-2 d-flex align-items-center gap-2 user-select-none';
     summary.style.cursor = 'pointer';
-    summary.innerHTML = `<span class="fw-semibold">${_flag(c.country_code)} ${_esc(c.country)}</span><span class="badge bg-secondary">${c.server_count}</span>${c.best ? `<span class="ms-auto text-muted small"><i class="bi bi-trophy-fill text-warning me-1"></i>${_esc(_t.best)}: <code>${_esc(c.best)}</code></span>` : ''}`;
+    summary.innerHTML = `<span class="fw-semibold">${_flag(c.country_code)} ${_esc(c.country)}</span><span class="badge bg-secondary">${c.server_count}</span>${countryExcluded ? `<span class="badge bg-warning text-dark">${_esc(_t.countryExcluded)}</span>` : ''}${c.best ? `<span class="ms-auto text-muted small"><i class="bi bi-trophy-fill text-warning me-1"></i>${_esc(_t.best)}: <code>${_esc(c.best)}</code></span>` : ''}`;
     wrap.appendChild(summary);
     const body = document.createElement('div');
     body.className = 'px-4 pb-3';
     for (const s of c.servers) {
       const exists = _existingServers.has(s.name);
       const row = document.createElement('div');
-      row.className = 'country-server-row d-flex align-items-center gap-2 py-1' + (exists ? ' opacity-50' : '');
+      row.className = 'country-server-row d-flex align-items-center gap-2 py-1' + (exists || countryExcluded ? ' opacity-50' : '');
       row.dataset.name = s.name.toLowerCase(); row.dataset.country = c.country.toLowerCase();
       row.dataset.bw = String(s.bw_max || 0);
-      if (!exists) row.style.cursor = 'pointer';
+      if (!exists && !countryExcluded) row.style.cursor = 'pointer';
       const cb = document.createElement('input');
       cb.type='checkbox'; cb.className='form-check-input airvpn-cb flex-shrink-0'; cb.value=s.name;
-      if (exists) cb.disabled=true;
+      if (exists || countryExcluded) { cb.disabled=true; cb.title=countryExcluded ? _t.countryExcluded : _t.alreadyAdded; }
       else cb.addEventListener('change', e => airvpnToggle(s.name, e.target.checked));
       row.appendChild(cb);
       row.insertAdjacentHTML('beforeend', `<code class="flex-shrink-0">${_esc(s.name)}</code>${s.name===c.best?`<span class="badge bg-warning text-dark flex-shrink-0"><i class="bi bi-trophy-fill me-1"></i>${_esc(_t.best)}</span>`:''} ${exists?`<span class="badge bg-secondary flex-shrink-0" style="font-size:.65rem">${_esc(_t.alreadyAdded)}</span>`:''}<div class="flex-grow-1">${_loadBar(s.load, s.bw_max)}</div><small class="text-muted flex-shrink-0">${s.users} users</small>`);
-      if (!exists) { row.addEventListener('click', e => { if(e.target.closest('input'))return; const c=row.querySelector('input'); c.checked=!c.checked; airvpnToggle(s.name,c.checked); }); }
+      if (!exists && !countryExcluded) { row.addEventListener('click', e => { if(e.target.closest('input'))return; const c=row.querySelector('input'); c.checked=!c.checked; airvpnToggle(s.name,c.checked); }); }
       body.appendChild(row);
     }
     const selBtn = document.createElement('button');
     selBtn.type='button'; selBtn.className='btn btn-outline-secondary btn-sm mt-2';
     selBtn.textContent=_t.selectCountry;
-    selBtn.addEventListener('click', e => { e.preventDefault(); c.servers.forEach(s => { if(!_existingServers.has(s.name)) airvpnToggle(s.name,true); }); });
+    selBtn.disabled=countryExcluded;
+    selBtn.addEventListener('click', e => { e.preventDefault(); c.servers.forEach(s => { if(!_existingServers.has(s.name) && !_isExcludedCountry(s)) airvpnToggle(s.name,true); }); });
     body.appendChild(selBtn);
     wrap.appendChild(body); container.appendChild(wrap);
   }
@@ -1416,17 +1452,18 @@ function _renderRecTab(allServers) {
   }
   for (const s of recServers) {
     const exists = _existingServers.has(s.name);
+    const excluded = _isExcludedCountry(s);
     const tr = document.createElement('tr');
     tr.dataset.name = s.name.toLowerCase(); tr.dataset.country = s.country.toLowerCase();
     tr.dataset.bw = String(s.bw_max || 0);
-    if (exists) tr.classList.add('opacity-50'); else tr.style.cursor = 'pointer';
+    if (exists || excluded) tr.classList.add('opacity-50'); else tr.style.cursor = 'pointer';
     const tdCb = document.createElement('td'); tdCb.className = 'ps-3';
     const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'form-check-input airvpn-cb'; cb.value = s.name;
-    if (exists) { cb.disabled = true; cb.title = _t.alreadyAdded; }
+    if (exists || excluded) { cb.disabled = true; cb.title = excluded ? _t.countryExcluded : _t.alreadyAdded; }
     else cb.addEventListener('change', e => airvpnToggle(s.name, e.target.checked));
     tdCb.appendChild(cb); tr.appendChild(tdCb);
     tr.insertAdjacentHTML('beforeend', `
-      <td><code class="fw-semibold">${_esc(s.name)}</code>${exists ? '<span class="badge bg-secondary ms-1" style="font-size:.65rem">'+_esc(_t.alreadyAdded)+'</span>' : ''}</td>
+      <td><code class="fw-semibold">${_esc(s.name)}</code>${exists ? '<span class="badge bg-secondary ms-1" style="font-size:.65rem">'+_esc(_t.alreadyAdded)+'</span>' : ''}${excluded ? '<span class="badge bg-warning text-dark ms-1" style="font-size:.65rem">'+_esc(_t.countryExcluded)+'</span>' : ''}</td>
       <td><span title="${_esc(s.country)}">${_flag(s.country_code)} <small>${_esc(s.country)}</small></span></td>
       <td><small class="text-muted">${_esc(s.location)}</small></td>
       <td>${_loadBar(s.load, s.bw_max)}</td>
@@ -1434,7 +1471,7 @@ function _renderRecTab(allServers) {
       <td><small class="text-muted">${_esc(String(s.users))}</small></td>
       <td><i class="bi bi-check-circle-fill text-success"></i></td>
     `);
-    if (!exists) {
+    if (!exists && !excluded) {
       tr.addEventListener('click', e => { if (e.target.closest('input')) return; const c = tr.querySelector('input'); c.checked = !c.checked; airvpnToggle(s.name, c.checked); });
     }
     tbody.appendChild(tr);
@@ -1479,17 +1516,18 @@ function _renderDiffTab(allServers, diff) {
       const ul = document.createElement('div');
       for (const s of items) {
         const exists = _existingServers.has(s.name);
+        const excluded = _isExcludedCountry(s);
         const row = document.createElement('div');
-        row.className = 'd-flex align-items-center gap-2 py-1' + (exists ? ' opacity-50' : '');
+        row.className = 'd-flex align-items-center gap-2 py-1' + (exists || excluded ? ' opacity-50' : '');
         row.dataset.name = s.name.toLowerCase(); row.dataset.country = s.country.toLowerCase();
         row.dataset.bw = String(s.bw_max || 0);
-        if (!exists) row.style.cursor = 'pointer';
+        if (!exists && !excluded) row.style.cursor = 'pointer';
         const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'form-check-input airvpn-cb flex-shrink-0'; cb.value = s.name;
-        if (exists) cb.disabled = true;
+        if (exists || excluded) { cb.disabled = true; cb.title = excluded ? _t.countryExcluded : _t.alreadyAdded; }
         else cb.addEventListener('change', e => airvpnToggle(s.name, e.target.checked));
         row.appendChild(cb);
-        row.insertAdjacentHTML('beforeend', `<code class="flex-shrink-0">${_esc(s.name)}</code> <span class="badge bg-success flex-shrink-0" style="font-size:.65rem">${_esc(_t.newLabel)}</span> <span class="text-muted small flex-shrink-0">${_flag(s.country_code)} ${_esc(s.country)}</span><div class="flex-grow-1">${_loadBar(s.load, s.bw_max)}</div>`);
-        if (!exists) row.addEventListener('click', e => { if(e.target.closest('input'))return; const c=row.querySelector('input'); c.checked=!c.checked; airvpnToggle(s.name,c.checked); });
+        row.insertAdjacentHTML('beforeend', `<code class="flex-shrink-0">${_esc(s.name)}</code> <span class="badge bg-success flex-shrink-0" style="font-size:.65rem">${_esc(_t.newLabel)}</span>${excluded ? `<span class="badge bg-warning text-dark flex-shrink-0" style="font-size:.65rem">${_esc(_t.countryExcluded)}</span>` : ''} <span class="text-muted small flex-shrink-0">${_flag(s.country_code)} ${_esc(s.country)}</span><div class="flex-grow-1">${_loadBar(s.load, s.bw_max)}</div>`);
+        if (!exists && !excluded) row.addEventListener('click', e => { if(e.target.closest('input'))return; const c=row.querySelector('input'); c.checked=!c.checked; airvpnToggle(s.name,c.checked); });
         ul.appendChild(row);
       }
       sec.appendChild(ul);
@@ -1783,8 +1821,10 @@ function _renderCatalogueTable(entries) {
 
   entries.forEach(e => {
     const exists  = _catExisting.has(e.value);
-    const canAdd  = !exists && _catCanAdd(e.provider);
+    const excluded = _isExcludedCountry(e);
+    const canAdd  = !exists && !excluded && _catCanAdd(e.provider);
     const noAccTip = _catT.noAccount.replace('{provider}', e.provider || '?');
+    const lockedTip = excluded ? _t.countryExcluded : noAccTip;
 
     const tr = document.createElement('tr');
     tr.dataset.value      = (e.value || '').toLowerCase();
@@ -1827,10 +1867,10 @@ function _renderCatalogueTable(entries) {
                        title="${_esc(_catT.switchBtn)}">
                  <i class="bi bi-lightning-fill"></i>
                </button>`
-            : `<button class="btn btn-outline-secondary btn-sm me-1" disabled title="${_esc(noAccTip)}">
+            : `<button class="btn btn-outline-secondary btn-sm me-1" disabled title="${_esc(lockedTip)}">
                  <i class="bi bi-plus-lg"></i>
                </button>
-               <button class="btn btn-outline-secondary btn-sm" disabled title="${_esc(noAccTip)}">
+               <button class="btn btn-outline-secondary btn-sm" disabled title="${_esc(lockedTip)}">
                  <i class="bi bi-lightning-fill"></i>
                </button>`
         }
