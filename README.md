@@ -1,6 +1,6 @@
 # Gluetun Companion
 
-> 🇬🇧 [English version](README.en.md)
+🇬🇧 [English version](README.en.md)
 
 [![Build](https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml/badge.svg?branch=main)](https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml)
 [![Trivy CVE scan](https://img.shields.io/badge/Trivy-enabled-1904DA?logo=aquasecurity&logoColor=white)](https://github.com/Aerya/Gluetun-Companion/blob/main/.github/workflows/trivy-scan.yml)
@@ -17,13 +17,13 @@
 
 > **Article lié** — Présentation et tour d'horizon illustré (captures d'écran de l'interface) sur le blog : **[Gluetun Companion : interface web pour piloter automatiquement vos serveurs VPN WireGuard et OpenVPN dans Gluetun](https://upandclear.org/2026/06/16/gluetun-companion-interface-web-pour-piloter-automatiquement-vos-serveurs-vpn-wireguard-et-openvpn-dans-gluetun/)**.
 
-> **Vous l'utilisez ? Vous l'aimez ? [⭐ Ajouter une étoile !](https://github.com/Aerya/Gluetun-Companion/stargazers)** — ça prend deux secondes.
+**Vous l'utilisez ? Vous l'aimez ? [⭐ Ajouter une étoile !](https://github.com/Aerya/Gluetun-Companion/stargazers)** — ça prend deux secondes.
 
 Gluetun Companion est une interface Web pour piloter un container [Gluetun](https://github.com/qdm12/gluetun) existant : benchmarks VPN, sélection automatique, bascules, gestion des containers dépendants, trackers BitTorrent, port forwarding et métriques.
 
-> **Documentation complète : [ouvrir le Wiki français](https://github.com/Aerya/Gluetun-Companion/wiki/Accueil)** · [Wiki English](https://github.com/Aerya/Gluetun-Companion/wiki/Home)
+**Documentation complète : [ouvrir le Wiki français](https://github.com/Aerya/Gluetun-Companion/wiki/Accueil)** · [Wiki English](https://github.com/Aerya/Gluetun-Companion/wiki/Home)
 
-> **Vous voulez aller à l’essentiel ?** Consultez la [compatibilité](#compatibilité), passez directement au [démarrage rapide](#démarrage-rapide), puis revenez aux [fonctionnalités](#fonctionnalités) et au [fonctionnement détaillé](https://github.com/Aerya/Gluetun-Companion/wiki/Fonctionnement) selon vos besoins. La maintenance du projet est décrite dans le Wiki, notamment les [workflows automatisés](https://github.com/Aerya/Gluetun-Companion/wiki/Workflows-automatisés) et la [sécurité](https://github.com/Aerya/Gluetun-Companion/wiki/Sécurité).
+**Vous voulez aller à l’essentiel ?** Consultez la [compatibilité](#compatibilité), passez directement au [démarrage rapide](#démarrage-rapide), puis revenez aux [fonctionnalités](#fonctionnalités) et au [fonctionnement détaillé](https://github.com/Aerya/Gluetun-Companion/wiki/Fonctionnement) selon vos besoins. La maintenance du projet est décrite dans le Wiki, notamment les [workflows automatisés](https://github.com/Aerya/Gluetun-Companion/wiki/Workflows-automatisés) et la [sécurité](https://github.com/Aerya/Gluetun-Companion/wiki/Sécurité).
 
 Gluetun Companion est une interface Web pour piloter automatiquement vos serveurs VPN WireGuard et OpenVPN dans [Gluetun](https://github.com/qdm12/gluetun) :
 
