@@ -3162,23 +3162,27 @@ def _docker_event_loop(app, container_name: str) -> None:
                 except Exception:
                     pass
 
-                # Network repair is mandatory for every Gluetun start,
-                # including Companion-triggered switches and starts occurring
-                # during benchmarks.  Only the optional quick check is subject
-                # to the suppression/cooldown guards below.
+                # Companion-triggered switches already recreate the captured
+                # network dependents in their own synchronous switch flow.
+                # Starting the generic repair thread as well races two
+                # ``docker compose up --force-recreate`` calls for the same
+                # service and can leave a temporary ``<id>_<service>``
+                # container behind after a name conflict.
+                if is_companion_restart():
+                    logger.info(
+                        'Docker event: Gluetun start detected — Companion-triggered, ignoring'
+                    )
+                    continue
+
+                # External Gluetun starts do not have a switch flow available
+                # to reattach stale shared-network dependents, so repair them
+                # independently before scheduling the optional quick check.
                 threading.Thread(
                     target=_repair_network_after_gluetun_start,
                     args=(app, container_name),
                     daemon=True,
                     name='gluetun-network-repair',
                 ).start()
-
-                # Ignore restarts triggered by Companion itself (server switch)
-                if is_companion_restart():
-                    logger.info(
-                        'Docker event: Gluetun start detected — Companion-triggered, ignoring'
-                    )
-                    continue
 
                 # Cooldown guard
                 now     = time.time()

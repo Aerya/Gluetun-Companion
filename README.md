@@ -79,6 +79,16 @@ Gluetun doit exposer son proxy HTTP, et Companion doit pouvoir accéder au socke
 
 ```yaml
 services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      CONTAINERS: 1
+      EVENTS: 1
+      POST: 1
+
   gluetun-companion:
     image: ghcr.io/aerya/gluetun-companion:latest
     container_name: gluetun-companion
@@ -95,7 +105,12 @@ services:
       - GLUETUN_PROXY_PORT=8887
       - GLUETUN_CONTAINER=gluetun
       - COMPOSE_DIR=/compose
+      - DOCKER_HOST=tcp://socket-proxy:2375
+    depends_on:
+      - socket-proxy
 ```
+
+`EVENTS=1` est nécessaire pour détecter immédiatement les redémarrages de Gluetun. Le dossier monté sur `/compose` doit être celui qui contient le fichier Compose de la stack Gluetun ; Companion l'utilise pour recréer les services partageant son réseau après une bascule.
 
 ```bash
 docker compose up -d

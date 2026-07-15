@@ -8,6 +8,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       CONTAINERS: 1
+      EVENTS: 1
       IMAGES: 1
       NETWORKS: 1
       VOLUMES: 1
@@ -23,9 +24,9 @@ services:
     ports:
       - 8765:8765
     volumes:
-      - /home/aerya/docker/gluetun-companion:/data
-      - /home/aerya/docker/dockge-enhanced/stacks/airvpn:/compose   # <-- adapter
-      - /home/aerya/docker/gluetun/openvpn:/openvpn
+      - ${COMPANION_DATA_PATH:-./data}:/data
+      - ${GLUETUN_COMPOSE_PATH:-../gluetun}:/compose:rw
+      - ${GLUETUN_OPENVPN_PATH:-../gluetun/openvpn}:/openvpn
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
