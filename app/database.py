@@ -65,6 +65,14 @@ def init_db(db_path: str):
                 test_trigger     TEXT
             );
 
+            -- /servers joins and aggregates this history for every configured
+            -- server.  These indexes also make the "last successful IP"
+            -- lookups ordered by tested_at inexpensive.
+            CREATE INDEX IF NOT EXISTS idx_speed_tests_server_tested
+                ON speed_tests(server_name, tested_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_speed_tests_server_success_tested
+                ON speed_tests(server_name, success, tested_at DESC);
+
             CREATE TABLE IF NOT EXISTS switches (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 from_server  TEXT,
@@ -142,6 +150,8 @@ def init_db(db_path: str):
 
             CREATE INDEX IF NOT EXISTS idx_catalogue_provider
                 ON gluetun_catalogue(provider);
+            CREATE INDEX IF NOT EXISTS idx_catalogue_name
+                ON gluetun_catalogue(name);
 
             CREATE TABLE IF NOT EXISTS airvpn_new_servers (
                 name          TEXT PRIMARY KEY,
@@ -301,6 +311,8 @@ def init_db(db_path: str):
                 ON tracker_sources(tracker_id);
             CREATE INDEX IF NOT EXISTS idx_tracker_checks_tracker
                 ON tracker_checks(tracker_id);
+            CREATE INDEX IF NOT EXISTS idx_tracker_checks_latest_server
+                ON tracker_checks(tracker_id, server_name, checked_at DESC);
             CREATE INDEX IF NOT EXISTS idx_port_forwards_client
                 ON port_forwards(torrent_client_id);
 
