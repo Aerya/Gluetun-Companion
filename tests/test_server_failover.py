@@ -30,6 +30,32 @@ class ServerEligibilityTest(unittest.TestCase):
                     excluded_server_names(db, {'FR', 'GB'}), {'Paris', 'London'}
                 )
 
+    def test_country_resolution_can_filter_configured_servers_for_display(self):
+        with TemporaryDirectory() as directory:
+            database.init_db(os.path.join(directory, 'test.db'))
+            with database.get_db() as db:
+                db.executemany(
+                    'INSERT INTO servers (name) VALUES (?)',
+                    [('London',), ('Amsterdam',), ('Unmapped',)],
+                )
+                db.executemany(
+                    "INSERT INTO gluetun_catalogue (provider, name, country, country_code) "
+                    "VALUES ('airvpn', ?, ?, ?)",
+                    [
+                        ('London', 'United Kingdom', 'GB'),
+                        ('Amsterdam', 'Netherlands', 'NL'),
+                    ],
+                )
+                excluded = excluded_server_names(db, {'GB'})
+                visible = [
+                    row['name'] for row in db.execute(
+                        'SELECT name FROM servers WHERE name NOT IN (?) ORDER BY name',
+                        tuple(excluded),
+                    )
+                ]
+
+            self.assertEqual(visible, ['Amsterdam', 'Unmapped'])
+
     def test_failover_candidate_stays_in_profile_and_excludes_countries(self):
         with TemporaryDirectory() as directory:
             database.init_db(os.path.join(directory, 'test.db'))

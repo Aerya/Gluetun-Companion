@@ -759,6 +759,9 @@ def _normalize_catalogue_server_type(mode: str, provider: str, server_type: str,
 @login_required
 def servers():
     from .database import get_hourly_benchmark_stats
+    from .server_eligibility import (
+        available_countries, excluded_server_names, parse_excluded_countries,
+    )
     sort           = request.args.get('sort', 'avg_dl')
     type_filter    = request.args.get('type', '').strip()
     q              = request.args.get('q',    '').strip()
@@ -798,6 +801,23 @@ def servers():
     if airvpn_bw_min > 0:
         where_parts.append('COALESCE(av.bw_max_mbps, 0) >= ?')
         params.append(airvpn_bw_min)
+
+    # Country exclusions are a /servers filter too: excluded servers must not
+    # remain available for manual browsing, sorting, or switching from this
+    # page.  Keep configured_server_count below unfiltered so the UI can tell
+    # the user how many configured servers are currently hidden.
+    _excluded_countries = parse_excluded_countries(
+        get_setting('excluded_countries', '[]')
+    )
+    if _excluded_countries:
+        with get_db() as _eligibility_db:
+            _excluded_server_names = excluded_server_names(
+                _eligibility_db, _excluded_countries
+            )
+        if _excluded_server_names:
+            _placeholders = ','.join('?' for _ in _excluded_server_names)
+            where_parts.append(f's.name NOT IN ({_placeholders})')
+            params.extend(sorted(_excluded_server_names))
 
     having_params: list = []
     if from_date:
@@ -1027,12 +1047,9 @@ def servers():
         new_airvpn_countries = ', '.join(sorted(cc_set))
 
     _all_vpn_profiles = get_vpn_profiles()
-    from .server_eligibility import available_countries, parse_excluded_countries
     with get_db() as _countries_db:
         _excluded_country_options = available_countries(_countries_db)
-    _excluded_countries = sorted(parse_excluded_countries(
-        get_setting('excluded_countries', '[]')
-    ))
+    _excluded_countries = sorted(_excluded_countries)
 
     # Providers the user is allowed to add from the catalogue:
     # union of (configured vpn_profiles providers) + (active Gluetun provider).
