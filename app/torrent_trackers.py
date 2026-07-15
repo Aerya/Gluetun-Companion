@@ -574,6 +574,13 @@ def set_tracker_enabled(tracker_id: int, enabled: bool) -> bool:
         return cur.rowcount > 0
 
 
+def set_all_tracker_enabled(enabled: bool) -> int:
+    """Enable or disable every discovered tracker URL and return its count."""
+    with get_db() as db:
+        cur = db.execute('UPDATE tracker_urls SET enabled=?', (1 if enabled else 0,))
+        return cur.rowcount
+
+
 def save_tracker_settings(threshold: int, timeout: int, concurrency: int, scope: str = 'enabled') -> None:
     set_setting('tracker_check_threshold_pct', str(max(1, min(int(threshold), 100))))
     set_setting('tracker_check_timeout_secs', str(max(1, min(int(timeout), 15))))
