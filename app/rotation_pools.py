@@ -33,10 +33,13 @@ def resolve_pool_servers(pool_id: int, automatic: bool = True) -> list[dict]:
     download speed (proxy_qc excluded, same window as scoring).
 
     Explicit per-pool exclusions are applied after criteria and before top_n.
-    Global country exclusions apply to automatic rotations, while a manual
-    pool rotation can still be used as an explicit override.
+    Global country exclusions apply to every pool rotation, whether it was
+    scheduled or triggered manually.
 
     Each returned dict: {id, name, filter_type, vpn_profile_id, avg_dl}
+
+    ``automatic`` is retained for callers that need to label their operation;
+    it no longer changes country-exclusion behavior.
     """
     from .database import get_db
 
@@ -199,11 +202,10 @@ def resolve_pool_servers(pool_id: int, automatic: bool = True) -> list[dict]:
         }
         candidate_names -= excluded_names
 
-        if automatic:
-            from .database import get_setting
-            from .server_eligibility import parse_excluded_countries, excluded_server_names
-            country_codes = parse_excluded_countries(get_setting('excluded_countries', '[]'))
-            candidate_names -= excluded_server_names(db, country_codes)
+        from .database import get_setting
+        from .server_eligibility import parse_excluded_countries, excluded_server_names
+        country_codes = parse_excluded_countries(get_setting('excluded_countries', '[]'))
+        candidate_names -= excluded_server_names(db, country_codes)
 
         if not candidate_names:
             return []
