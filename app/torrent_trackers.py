@@ -488,13 +488,16 @@ def tracker_status_for_servers(server_names: list[str] | None = None) -> dict[st
             return {}
 
         params: list = []
-        server_filter = ''
+        latest_server_filter = ''
         if server_names:
             names = [str(n) for n in server_names if n]
             if not names:
                 return {}
             placeholders = ','.join('?' for _ in names)
-            server_filter = f'AND tc.server_name IN ({placeholders})'
+            # Restrict the expensive latest-per-tracker aggregation itself.
+            # Filtering only the outer query still groups the full tracker
+            # history for every server before discarding most of it.
+            latest_server_filter = f'AND server_name IN ({placeholders})'
             params.extend(names)
 
         rows = db.execute(f'''
@@ -506,13 +509,13 @@ def tracker_status_for_servers(server_names: list[str] | None = None) -> dict[st
                     SELECT tracker_id, server_name, MAX(checked_at) AS checked_at
                     FROM tracker_checks
                     WHERE server_name != ''
+                    {latest_server_filter}
                     GROUP BY tracker_id, server_name
                 ) lx
                   ON lx.tracker_id = tc.tracker_id
                  AND lx.server_name = tc.server_name
                  AND lx.checked_at = tc.checked_at
                 WHERE tc.server_name != ''
-                {server_filter}
             )
             SELECT server_name,
                    COUNT(*) AS tested,
