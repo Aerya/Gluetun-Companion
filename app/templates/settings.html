@@ -3641,10 +3641,20 @@ document.addEventListener('DOMContentLoaded', loadNetworkContainers);
 
 // ── Auto benchmark toggle ─────────────────────────────────────────────────
 function toggleAutoBenchmark(enabled) {
+  const autoToggle = document.getElementById('auto_benchmark');
+  const observationToggle = document.getElementById('continuous_observation');
+  const automaticCyclesAvailable = enabled || (autoToggle && autoToggle.disabled);
   const group = document.getElementById('interval-group');
   if (group) {
     group.style.opacity       = enabled ? '' : '0.45';
     group.style.pointerEvents = enabled ? '' : 'none';
+  }
+  if (observationToggle) {
+    observationToggle.disabled = !automaticCyclesAvailable;
+    if (!automaticCyclesAvailable) {
+      observationToggle.checked = false;
+      toggleObservation(false);
+    }
   }
 }
 toggleAutoBenchmark(document.getElementById('auto_benchmark').checked && !document.getElementById('auto_benchmark').disabled);
