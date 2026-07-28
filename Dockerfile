@@ -19,15 +19,19 @@ RUN DOCKER_CLI_VERSION="$(/tmp/docker-reference --version | awk '{gsub(",", "", 
        https://github.com/docker/cli.git /src
 
 WORKDIR /src
-RUN CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH:-amd64}" \
+RUN cp vendor.mod go.mod \
+    && cp vendor.sum go.sum \
+    && go mod edit -require=google.golang.org/grpc@v1.82.1 \
+    && go mod tidy \
+    && GOFLAGS=-mod=mod CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH:-amd64}" \
       GO_STRIP=1 TARGET=/out \
-      ./scripts/with-go-mod.sh ./scripts/build/binary \
+      ./scripts/build/binary \
     && cp "$(readlink -f /out/docker)" /out/docker-cli
 
 # Stage 3 — compile docker compose avec les dépendances Go patchées.
 # docker/compose v5.1.4 est la dernière release upstream disponible, mais son
-# binaire précompilé embarque encore containerd v2.2.3 et Go 1.26.3. On garde
-# donc la même version fonctionnelle de Compose, recompilée avec les versions
+# binaire précompilé embarque encore des dépendances vulnérables. On garde donc
+# la même version fonctionnelle de Compose, recompilée avec les versions
 # corrigées signalées par Trivy.
 FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine AS compose-bin
 
@@ -40,6 +44,7 @@ RUN apk add --no-cache git \
 
 WORKDIR /src
 RUN go mod edit -require=github.com/containerd/containerd/v2@v2.2.5 \
+    && go mod edit -require=google.golang.org/grpc@v1.82.1 \
     && go mod tidy \
     && CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH:-amd64}" \
        go build -trimpath -tags e2e \
