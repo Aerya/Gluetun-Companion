@@ -50,6 +50,15 @@ FILTER_LABELS: dict[str, str] = {
 }
 
 
+def _compose_override_path(compose_dir: str) -> str:
+    """Return the override filename Docker Compose will load automatically."""
+    if os.path.exists(os.path.join(compose_dir, 'compose.yaml')):
+        return os.path.join(compose_dir, 'compose.override.yaml')
+    if os.path.exists(os.path.join(compose_dir, 'compose.yml')):
+        return os.path.join(compose_dir, 'compose.override.yml')
+    return os.path.join(compose_dir, 'docker-compose.override.yml')
+
+
 # ---------------------------------------------------------------------------
 # Companion-triggered restart suppression
 # ---------------------------------------------------------------------------
@@ -498,9 +507,9 @@ def switch_server(
     wg_profile: 'dict | None' = None,
 ) -> tuple[bool, str | None]:
     """
-    Write a docker-compose.override.yml that sets the correct Gluetun filter
-    variable to `filter_value` and clears all other filter variables (so they
-    don't conflict with values from the main compose file).
+    Write the override file matching the stack's Compose manifest, set the
+    correct Gluetun filter variable to `filter_value`, and clear all other
+    filter variables so they don't conflict with the main compose file.
 
     If *wg_profile* is provided, it must be a dict with:
         compose_provider : str   — value of VPN_SERVICE_PROVIDER (e.g. "airvpn")
@@ -560,7 +569,7 @@ def switch_server(
         f'    environment:\n'
         f'{env_lines}'
     )
-    override_path = os.path.join(compose_dir, 'docker-compose.override.yml')
+    override_path = _compose_override_path(compose_dir)
     try:
         with open(override_path, 'w') as fh:
             fh.write(override)
@@ -631,7 +640,7 @@ def apply_dns_filtering(
 
     service = _detect_compose_service(container_name)
     project = compose_project or _detect_compose_project(container_name)
-    override_path = os.path.join(compose_dir, 'docker-compose.override.yml')
+    override_path = _compose_override_path(compose_dir)
 
     def _safe(raw: str) -> str:
         return raw.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '').replace('\r', '')

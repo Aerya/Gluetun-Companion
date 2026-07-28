@@ -3,10 +3,27 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from app.gluetun import apply_dns_filtering, switch_server
+from app.gluetun import _compose_override_path, apply_dns_filtering, switch_server
 
 
 class SwitchServerOverrideTest(TestCase):
+    def test_uses_override_matching_compose_yaml(self) -> None:
+        with TemporaryDirectory() as directory:
+            compose_dir = Path(directory)
+            (compose_dir / 'compose.yaml').write_text('services: {}\n')
+
+            self.assertEqual(
+                Path(_compose_override_path(directory)).name,
+                'compose.override.yaml',
+            )
+
+    def test_falls_back_to_legacy_override_name(self) -> None:
+        with TemporaryDirectory() as directory:
+            self.assertEqual(
+                Path(_compose_override_path(directory)).name,
+                'docker-compose.override.yml',
+            )
+
     def test_deduplicates_managed_profile_variables(self) -> None:
         profile = {
             'compose_provider': 'airvpn',

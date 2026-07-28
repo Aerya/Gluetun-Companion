@@ -150,6 +150,19 @@ def _active_auto_pool_count() -> int:
         ).fetchone()['n']
 
 
+def _planning_modes(
+    auto_requested: bool,
+    observation_requested: bool,
+    active_auto_pools: int,
+) -> tuple[bool, bool]:
+    """Resolve the effective automatic-cycle switches saved by the settings form."""
+    auto_enabled = auto_requested and not active_auto_pools
+    observation_enabled = observation_requested and (
+        auto_requested or bool(active_auto_pools)
+    )
+    return auto_enabled, observation_enabled
+
+
 def _standby_benchmark_cycle_for_pools() -> None:
     set_setting('auto_benchmark', '0')
     try:
@@ -1852,7 +1865,12 @@ def settings():
             active_auto_pools = _active_auto_pool_count()
             set_setting('test_interval_hours', request.form.get('interval', '6'))
             auto_bm = bool(request.form.get('auto_benchmark'))
-            set_setting('auto_benchmark', '0' if active_auto_pools else ('1' if auto_bm else '0'))
+            auto_enabled, observation_enabled = _planning_modes(
+                auto_bm,
+                bool(request.form.get('continuous_observation')),
+                active_auto_pools,
+            )
+            set_setting('auto_benchmark', '1' if auto_enabled else '0')
             set_setting('quick_check_mode',    '1' if request.form.get('quick_check_mode') else '0')
             try:
                 qct = float(request.form.get('quick_check_threshold', '15'))
@@ -1881,7 +1899,6 @@ def settings():
                     set_setting(_key, str(max(_min_v, min(_v, _max_v))))
                 except ValueError:
                     set_setting(_key, _default)
-            observation_enabled = bool(request.form.get('continuous_observation'))
             set_setting('continuous_observation', '1' if observation_enabled else '0')
             # If the user just disabled a mode whose cycle is currently running,
             # abort it now so "disabled" halts the current activity instead of
@@ -1889,7 +1906,7 @@ def settings():
             # restores the original server (proxy-fallback revert at cycle end).
             if get_setting('benchmark_running', '0') == '1':
                 _run_mode = get_setting('benchmark_mode', '')
-                _eff_auto_bm = auto_bm and not active_auto_pools
+                _eff_auto_bm = auto_enabled
                 if ((_run_mode == 'observation' and not observation_enabled)
                         or (_run_mode == 'benchmark' and not _eff_auto_bm)):
                     from .scheduler import request_stop
@@ -1913,7 +1930,7 @@ def settings():
                 set_setting('airvpn_bench_max_users', str(max(0, _max_users)))
             except ValueError:
                 pass
-            reschedule(float(request.form.get('interval', '6')), enabled=(auto_bm and not active_auto_pools))
+            reschedule(float(request.form.get('interval', '6')), enabled=auto_enabled)
             if observation_enabled:
                 trigger_observation_now(current_app._get_current_object())
             if active_auto_pools and auto_bm:

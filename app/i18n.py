@@ -568,7 +568,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_notif_test_fail':     'Échec',
         'set_docker_title':        'Configuration Docker requise',
         'set_docker_hint':         'Pour que le companion puisse contrôler Gluetun, vérifiez que votre <code>docker-compose.yml</code> du companion contient :',
-        'set_docker_note':         'Le companion écrira un <code>docker-compose.override.yml</code> dans ce dossier pour changer <code>SERVER_NAMES</code> et relancera le service avec <code>docker compose up -d</code>.',
+        'set_docker_note':         'Le companion écrira l’override correspondant au manifeste Compose de ce dossier pour changer <code>SERVER_NAMES</code>, puis relancera le service avec <code>docker compose up -d</code>.',
 
         # ── Flash messages ──
         'flash_account_created':    'Compte créé avec succès.',
@@ -1611,7 +1611,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_notif_test_fail':     'Failed',
         'set_docker_title':        'Required Docker configuration',
         'set_docker_hint':         'For the companion to control Gluetun, check that your companion\'s <code>docker-compose.yml</code> contains:',
-        'set_docker_note':         'The companion will write a <code>docker-compose.override.yml</code> in this folder to change <code>SERVER_NAMES</code> and restart the service with <code>docker compose up -d</code>.',
+        'set_docker_note':         'The companion will write the override matching this folder’s Compose manifest to change <code>SERVER_NAMES</code>, then restart the service with <code>docker compose up -d</code>.',
 
         # ── Flash messages ──
         'flash_account_created':    'Account created successfully.',
