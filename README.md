@@ -125,4 +125,4 @@ Ouvrir ensuite [http://localhost:8765](http://localhost:8765). Pour le Compose c
 
 ## Applications tierces
 
-- [Tableau de bord AirVPN natif non officiel pour iPhone et iPad](https://github.com/zlimteck/AirDash)
+- [AirDash](https://github.com/zlimteck/AirDash) — tableau de bord AirVPN natif et non officiel pour iPhone et iPad.
