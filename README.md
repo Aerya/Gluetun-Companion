@@ -118,7 +118,6 @@ docker compose up -d
 
 Ouvrir ensuite [http://localhost:8765](http://localhost:8765). Pour le Compose complet, Unraid, les profils, les trackers, les variables et le dépannage, consulter le [Wiki français](https://github.com/Aerya/Gluetun-Companion/wiki/Accueil).
 
-## Liens
+## Applications tierces
 
-- [Wiki français](https://github.com/Aerya/Gluetun-Companion/wiki/Accueil) · [Wiki anglais](https://github.com/Aerya/Gluetun-Companion/wiki/Home)
-- [Issues](https://github.com/Aerya/Gluetun-Companion/issues) · [Releases](https://github.com/Aerya/Gluetun-Companion/releases) · [Licence](LICENSE)
+- [Tableau de bord AirVPN natif non officiel pour iPhone et iPad](https://github.com/zlimteck/AirDash)
