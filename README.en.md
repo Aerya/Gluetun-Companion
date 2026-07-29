@@ -124,4 +124,4 @@ Then open [http://localhost:8765](http://localhost:8765). For the complete Compo
 
 ## Third-party apps
 
-- [Unofficial native AirVPN dashboard for iPhone and iPad](https://github.com/zlimteck/AirDash)
+- [AirDash](https://github.com/zlimteck/AirDash) — an unofficial native AirVPN dashboard for iPhone and iPad.
