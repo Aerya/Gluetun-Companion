@@ -21,7 +21,12 @@
 
 Gluetun Companion est une interface Web pour piloter un container [Gluetun](https://github.com/qdm12/gluetun) existant : benchmarks VPN, sélection automatique, bascules, gestion des containers dépendants, trackers BitTorrent, port forwarding et métriques.
 
-**Documentation complète : [ouvrir le Wiki français](https://github.com/Aerya/Gluetun-Companion/wiki/Accueil)** · [Wiki English](https://github.com/Aerya/Gluetun-Companion/wiki/Home)
+> [!IMPORTANT]
+> ## 📚 Documentation complète
+>
+> 🇫🇷 **[Ouvrir le Wiki français](https://github.com/Aerya/Gluetun-Companion/wiki)**
+> &nbsp;·&nbsp;
+> 🇬🇧 **[Open the English Wiki](https://github.com/Aerya/Gluetun-Companion/wiki/English)**
 
 **Vous voulez aller à l’essentiel ?** Consultez la [compatibilité](#compatibilité), passez directement au [démarrage rapide](#démarrage-rapide), puis revenez aux [fonctionnalités](#fonctionnalités) et au [fonctionnement détaillé](https://github.com/Aerya/Gluetun-Companion/wiki/Fonctionnement) selon vos besoins. La maintenance du projet est décrite dans le Wiki, notamment les [workflows automatisés](https://github.com/Aerya/Gluetun-Companion/wiki/Workflows-automatisés) et la [sécurité](https://github.com/Aerya/Gluetun-Companion/wiki/Sécurité).
 
