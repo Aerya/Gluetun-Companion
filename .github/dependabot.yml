@@ -1,101 +1,107 @@
-# Dependabot — automatic dependency update PRs
-# Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-#
-# Behaviour:
-#   - Scans every Monday at 06:00 UTC
-#   - Opens one PR per outdated package (grouped by ecosystem when possible)
-#   - PATCH updates → auto-merged by .github/workflows/dependabot-automerge.yml
-#   - MINOR updates → manual review
-#   - MAJOR updates → ignored (handle manually)
-#   - Python base image → only patch updates (3.12.X), no Python version bumps
-#
 version: 2
 updates:
-
-  # ── Companion app — Python deps ──────────────────────────────────────────
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "06:00"
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: "deps"
-      include: "scope"
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 10
+    rebase-strategy: "auto"
+    labels:
+      - "dependencies"
+      - "python"
     groups:
-      python-minor-and-patch:
+      minor-and-patch:
         update-types:
           - "minor"
           - "patch"
-
-  # ── Sidecar — Python deps ────────────────────────────────────────────────
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
   - package-ecosystem: "pip"
     directory: "/sidecar"
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "06:00"
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: "deps(sidecar)"
-      include: "scope"
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+      time: "06:05"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 10
+    rebase-strategy: "auto"
+    labels:
+      - "dependencies"
+      - "python"
     groups:
-      sidecar-minor-and-patch:
+      minor-and-patch:
         update-types:
           - "minor"
           - "patch"
-
-  # ── GitHub Actions workflows ─────────────────────────────────────────────
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:10"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 10
+    rebase-strategy: "auto"
+    labels:
+      - "dependencies"
+      - "docker"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+  - package-ecosystem: "docker"
+    directory: "/sidecar"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:15"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 10
+    rebase-strategy: "auto"
+    labels:
+      - "dependencies"
+      - "docker"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "06:00"
-    open-pull-requests-limit: 3
-    commit-message:
-      prefix: "ci"
+      time: "07:30"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 10
+    rebase-strategy: "auto"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
     ignore:
       - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-
-  # ── Docker base image — Companion ────────────────────────────────────────
-  # python:3.12-slim: ignore minor+major (3.12→3.13 would be a Python version
-  # bump, not just a security rebuild — keep locked on 3.12.X patches).
-  # docker:XX-cli: allow ALL updates including major (27→28 is often the only
-  # way to get a patched Go stdlib — blocking major would leave CVEs open).
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-    commit-message:
-      prefix: "docker"
-    ignore:
-      - dependency-name: "python"
         update-types:
           - "version-update:semver-major"
-          - "version-update:semver-minor"
-
-  # ── Docker base image — Sidecar ──────────────────────────────────────────
-  - package-ecosystem: "docker"
-    directory: "/sidecar"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-    commit-message:
-      prefix: "docker(sidecar)"
-    ignore:
-      - dependency-name: "python"
-        update-types:
-          - "version-update:semver-major"
-          - "version-update:semver-minor"
