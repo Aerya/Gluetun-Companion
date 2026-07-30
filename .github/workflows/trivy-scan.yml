@@ -53,7 +53,7 @@ jobs:
           trivyignores: .trivyignore.yaml
 
       - name: Upload SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v3.37.3
         with:
           sarif_file: '.'
         continue-on-error: true
