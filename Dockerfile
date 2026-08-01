@@ -52,7 +52,7 @@ RUN go mod edit -require=github.com/containerd/containerd/v2@v2.2.5 \
          -o /out/docker-compose ./cmd
 
 # Stage 4 — image finale
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # Copie uniquement le Docker CLI recompilé (pas de daemon, containerd ou runc).
 COPY --from=docker-bin /out/docker-cli /usr/local/bin/docker
