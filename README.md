@@ -117,6 +117,12 @@ services:
 
 `EVENTS=1` est nécessaire pour détecter immédiatement les redémarrages de Gluetun. Le dossier monté sur `/compose` doit être celui qui contient le fichier Compose de la stack Gluetun ; Companion l'utilise pour recréer les services partageant son réseau après une bascule.
 
+### WireGuard : configuration pilotée par Companion
+
+Pour permettre à Companion de sélectionner et de basculer les serveurs d'un fournisseur pris en charge nativement (notamment ProtonVPN), ne montez pas de fichier `wg0.conf` dans `/gluetun/wireguard/wg0.conf`. Gluetun donne priorité à ce fichier et à son endpoint WireGuard, ce qui est incompatible avec les variables `SERVER_*` écrites par Companion. Configurez plutôt le fournisseur et les identifiants WireGuard via un profil VPN dans Companion.
+
+Un `wg0.conf` reste adapté à une configuration WireGuard custom et figée, mais Companion refuse alors toute bascule gérée afin de ne pas appliquer un override qui arrêterait Gluetun.
+
 ```bash
 docker compose up -d
 ```

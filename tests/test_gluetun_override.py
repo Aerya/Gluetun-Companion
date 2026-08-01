@@ -1,7 +1,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from app.gluetun import _compose_override_path, apply_dns_filtering, switch_server
 
@@ -89,6 +89,35 @@ class SwitchServerOverrideTest(TestCase):
         self.assertIsNone(error)
         self.assertIn('BLOCK_MALICIOUS: "off"', override)
         self.assertIn('DNS_UNBLOCK_HOSTNAMES: "tracker.example.org"', override)
+
+    def test_refuses_switch_when_gluetun_mounts_wg0_conf(self) -> None:
+        container = MagicMock()
+        container.attrs = {
+            'Mounts': [
+                {'Destination': '/gluetun/wireguard/wg0.conf'},
+            ],
+        }
+        client = MagicMock()
+        client.containers.get.return_value = container
+
+        with TemporaryDirectory() as directory:
+            with (
+                patch('app.gluetun.docker.from_env', return_value=client),
+                patch('app.gluetun.subprocess.run') as run,
+            ):
+                success, error = switch_server(
+                    'FR#132', 'name', 'gluetun', directory,
+                    wg_profile={
+                        'compose_provider': 'protonvpn',
+                        'vpn_type': 'wireguard',
+                        'vars': {'WIREGUARD_PRIVATE_KEY': 'private-key'},
+                    },
+                )
+
+                self.assertFalse(success)
+                self.assertIn('wg0.conf', error or '')
+                self.assertFalse((Path(directory) / 'docker-compose.override.yml').exists())
+                run.assert_not_called()
 
     def test_apply_dns_filtering_updates_existing_override(self) -> None:
         with TemporaryDirectory() as directory:

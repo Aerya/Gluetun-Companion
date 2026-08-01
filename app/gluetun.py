@@ -49,6 +49,14 @@ FILTER_LABELS: dict[str, str] = {
     'hostname': 'Hostname',
 }
 
+_WIREGUARD_CONFIG_PATH = '/gluetun/wireguard/wg0.conf'
+_WIREGUARD_CONFIG_SWITCH_ERROR = (
+    'Gluetun has /gluetun/wireguard/wg0.conf. Companion cannot safely '
+    'switch servers while this file controls the WireGuard endpoint. Remove the '
+    'file or mount and use a native VPN profile, or keep this custom configuration out '
+    'of Companion-managed switching.'
+)
+
 
 def _compose_override_path(compose_dir: str) -> str:
     """Return the override filename Docker Compose will load automatically."""
@@ -121,6 +129,35 @@ def _container_env(container_name: str) -> dict[str, str]:
 def get_container_env(container_name: str) -> dict[str, str]:
     """Public, read-only access to a container's environment variables."""
     return _container_env(container_name)
+
+
+def has_wireguard_config_file(container_name: str) -> bool:
+    """Return whether Gluetun loads a ``wg0.conf`` outside Companion's control.
+
+    Gluetun gives this file precedence over environment variables.  In
+    particular, its ``Endpoint`` conflicts with the ``SERVER_*`` selector that
+    Companion writes when switching a native provider such as ProtonVPN.  A
+    switch must therefore be rejected before writing an override or restarting
+    Gluetun.
+    """
+    try:
+        container = docker.from_env().containers.get(container_name)
+        for mount in container.attrs.get('Mounts') or []:
+            destination = (mount.get('Destination') or '').rstrip('/')
+            if destination == _WIREGUARD_CONFIG_PATH:
+                return True
+
+        # ``wg0.conf`` can also live in a volume mounted at ``/gluetun``.  The
+        # direct mount check above catches the common case without exec'ing;
+        # this fallback protects volume-backed installations as well.
+        result = container.exec_run(['test', '-f', _WIREGUARD_CONFIG_PATH])
+        return getattr(result, 'exit_code', 1) == 0
+    except Exception as exc:
+        # Do not turn a temporary Docker inspection issue into a false claim
+        # that the file exists. Normal switch error handling will still report
+        # an actual Docker/Compose failure below.
+        logger.debug('Cannot inspect WireGuard configuration for %s: %s', container_name, exc)
+        return False
 
 
 def _detect_compose_project(container_name: str) -> str:
@@ -529,6 +566,13 @@ def switch_server(
 
     Returns (success, error_message).
     """
+    if has_wireguard_config_file(container_name):
+        logger.warning(
+            'Refusing Companion-managed switch for %s: %s exists',
+            container_name, _WIREGUARD_CONFIG_PATH,
+        )
+        return False, _WIREGUARD_CONFIG_SWITCH_ERROR
+
     # Unraid (Docker Manager) hosts have no Compose project: persist the managed
     # env into the container's template and recreate it via the Docker SDK.
     if _management_mode(container_name) == CONTROL_BACKEND_UNRAID:
