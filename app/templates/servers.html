@@ -720,10 +720,10 @@
               {%- if not _trk.known -%}
                 <span class="text-muted" style="font-size:.75rem"
                       data-bs-toggle="tooltip" data-bs-placement="top"
-                      title="{{ 'Aucun test tracker pour ce serveur' if lang == 'fr' else 'No tracker check for this server' }}">—</span>
+                      title="{{ t.srv_trk_none }}">—</span>
               {%- else -%}
                 {%- set _trk_cls = 'bg-success' if _trk.ok else 'bg-danger' -%}
-                {%- set _trk_tip = (_trk.success_pct|string ~ '% · ' ~ _trk.passed|string ~ '/' ~ _trk.tested|string ~ ' · seuil ' ~ _trk.threshold|string ~ '%') -%}
+                {%- set _trk_tip = (_trk.success_pct|string ~ '% · ' ~ _trk.passed|string ~ '/' ~ _trk.tested|string ~ ' · ' ~ t.srv_trk_threshold ~ ' ' ~ _trk.threshold|string ~ '%') -%}
                 <span class="badge {{ _trk_cls }}" style="font-size:.68rem"
                       data-bs-toggle="tooltip" data-bs-placement="top"
                       title="{{ _trk_tip }}">
