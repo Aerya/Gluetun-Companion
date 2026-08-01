@@ -10,6 +10,7 @@ from datetime import datetime
 
 from flask import Flask, session
 from markupsafe import Markup
+from .caching import CACHE_CONFIG, cache, register_http_cache
 from .database import init_db
 from .i18n import get_translations, get_lang
 
@@ -101,6 +102,11 @@ def create_app():
     app.config['MAX_CONTENT_LENGTH'] = 3 * 1024 * 1024
     # Optional Bearer token for /metrics — leave empty to allow open access (standard Prometheus)
     app.config['METRICS_TOKEN']    = os.environ.get('METRICS_TOKEN', '')
+    # Static assets are unversioned, so cap the cache at an hour — an upgrade
+    # must not leave users on the old files indefinitely.
+    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 3600
+
+    cache.init_app(app, config=CACHE_CONFIG)
 
     os.makedirs(app.config['DATA_DIR'], exist_ok=True)
     init_db(app.config['DB_PATH'])
@@ -484,5 +490,7 @@ def create_app():
 
     from .scheduler import start_scheduler
     start_scheduler(app)
+
+    register_http_cache(app)
 
     return app

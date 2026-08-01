@@ -1,4 +1,4 @@
-﻿﻿{% extends 'base.html' %}
+﻿{% extends 'base.html' %}
 {% import '_server_map.html' as smap with context %}
 {% block title %}{{ t.nav_dashboard }} - Gluetun Companion{% endblock %}
 
@@ -894,6 +894,9 @@
 </div>
 {% endblock %}
 
+{% block chartjs %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+{% endblock %}
 {% block scripts %}
 {{ smap.server_map_assets() }}
 {% set _bench_method = 'sidecar' if sidecar_mode == '1' else 'proxy' %}

@@ -29,10 +29,11 @@ from .database import (
 from .wg_providers import WG_PROVIDERS, get_all_providers, get_fields, get_secret_field_keys
 from .crypto import encrypt as crypto_encrypt, decrypt as crypto_decrypt, mask as crypto_mask
 from .profiles import PROFILES, score_servers as _score_servers, score_servers_detail as _score_servers_detail
+from .caching import cache
 from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
     get_current_filters, get_active_server, format_filters,
-    get_public_ip, get_public_ips, get_vpn_status, switch_server,
+    get_public_ip, get_public_ips, probe_status, switch_server,
     has_wireguard_config_file,
     apply_dns_filtering,
     wait_for_vpn, restart_network_dependents,
@@ -92,6 +93,13 @@ PROVIDER_FAVICON_DOMAINS: dict[str, str] = {
 
 # Negative cache: provider → unix ts of last failed fetch (retry after 1 h)
 _favicon_fetch_failures: dict[str, float] = {}
+
+# Live VPN facts shared by the dashboard and /api/status.  Each miss costs a
+# proxy round-trip plus a Docker API call, and the browser polls every 3 s from
+# two independent timers, so cache the snapshot for one poll interval.
+# Benchmark progress is deliberately excluded — it must never be stale.
+_VPN_SNAPSHOT_KEY = 'vpn_snapshot'
+_VPN_SNAPSHOT_TTL = 3
 
 _FAVICON_PLACEHOLDER_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
@@ -319,6 +327,33 @@ def _server_map_points(db, active_server_name: str = '') -> list[dict]:
     return points
 
 
+@cache.cached(timeout=_VPN_SNAPSHOT_TTL, key_prefix=_VPN_SNAPSHOT_KEY)
+def _vpn_snapshot() -> dict:
+    """Current VPN status, public IP and active server — one probe, one lookup.
+
+    Fixed key rather than @cache.memoize, so the proxy password never lands in
+    a cache key.
+    """
+    cfg = current_app.config
+    px_user = get_setting('proxy_username') or None
+    px_pass = get_setting('proxy_password') or None
+    container = cfg['GLUETUN_CONTAINER']
+
+    vpn_status, public_ip = probe_status(
+        cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass,
+    )
+    return {
+        'vpn_status':     vpn_status,
+        'public_ip':      public_ip,
+        'current_server': get_active_server(container) or format_filters(get_current_filters(container)),
+    }
+
+
+def _invalidate_vpn_snapshot() -> None:
+    """Drop the cached snapshot so the next poll reflects a just-made change."""
+    cache.delete(_VPN_SNAPSHOT_KEY)
+
+
 def _benchmark_progress() -> dict:
     started = get_setting('benchmark_started_at', '')
     total = int(get_setting('benchmark_total_servers', '0') or '0')
@@ -495,8 +530,7 @@ def dashboard():
     px_user    = get_setting('proxy_username') or None
     px_pass    = get_setting('proxy_password') or None
 
-    vpn_status        = get_vpn_status(proxy_host, proxy_port, px_user, px_pass)
-    public_ip         = get_public_ip(proxy_host, proxy_port, px_user, px_pass) if vpn_status == 'running' else None
+    vpn_status, public_ip = probe_status(proxy_host, proxy_port, px_user, px_pass)
     current_filters    = get_current_filters(container)
     active_server_name = get_active_server(container) or ''
     current_server     = active_server_name or format_filters(current_filters)
@@ -1336,6 +1370,7 @@ def manual_switch(server_id):
         container, compose_dir, project,
         wg_profile=_manual_wg_profile,
     )
+    _invalidate_vpn_snapshot()
     to_label = f"{FILTER_VARS[row['filter_type']]}={row['name']}"
     with get_db() as db:
         switch_id = db.execute(
@@ -3910,17 +3945,16 @@ def _maybe_schedule_next(pool_id: int, interval_h: float | None, auto_rotate: bo
 @bp.route('/api/status')
 @login_required
 def api_status():
-    cfg     = current_app.config
-    px_user = get_setting('proxy_username') or None
-    px_pass = get_setting('proxy_password') or None
+    snapshot = _vpn_snapshot()
     progress = _benchmark_progress()
     live_est = _bench_estimate(_progress_estimated_count(progress))
+
     history_counts = _server_history_counts()
-    return jsonify({
-        'vpn_status':             get_vpn_status(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
-        'public_ip':              get_public_ip(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
-        'current_server':         get_active_server(cfg['GLUETUN_CONTAINER']) or format_filters(get_current_filters(cfg['GLUETUN_CONTAINER'])),
-        'benchmark_running':       get_setting('benchmark_running', '0') == '1',
+    result = {
+        'vpn_status':             snapshot['vpn_status'],
+        'public_ip':              snapshot['public_ip'],
+        'current_server':         snapshot['current_server'],
+        'benchmark_running':       progress['running'],
         'benchmark_stop_requested':get_setting('benchmark_stop_requested', '0') == '1',
         'current_server_testing':  get_setting('benchmark_current_server', ''),
         'benchmark_mode':         progress['mode'],
@@ -3938,4 +3972,5 @@ def api_status():
         'tested_servers':          history_counts['tested'],
         'untested_servers':        history_counts['untested'],
         'next_run':               str(get_next_run()) if (get_next_run() and get_setting('auto_benchmark', '1') == '1') else None,
-    })
+    }
+    return jsonify(result)

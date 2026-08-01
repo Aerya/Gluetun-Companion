@@ -1443,19 +1443,36 @@ def restart_containers_in_order(
 # Proxy-based VPN status / IP helpers
 # ---------------------------------------------------------------------------
 
+def probe_status(
+    proxy_host: str,
+    proxy_port: int,
+    proxy_user: str | None = None,
+    proxy_password: str | None = None,
+) -> tuple[str, str | None]:
+    """Return ``(vpn_status, public_ip)`` from a single proxy round-trip.
+
+    The probe reports both facts in one body, so callers needing both should
+    use this rather than pairing get_vpn_status() with get_public_ip().
+    """
+    try:
+        resp = _probe(proxy_host, proxy_port, proxy_user, proxy_password)
+        if resp.status_code != 200:
+            return 'stopped', None
+        for line in resp.text.splitlines():
+            if line.startswith('ip='):
+                return 'running', line[3:].strip()
+        return 'running', None
+    except Exception:
+        return 'stopped', None
+
+
 def get_vpn_status(
     proxy_host: str,
     proxy_port: int,
     proxy_user: str | None = None,
     proxy_password: str | None = None,
 ) -> str:
-    try:
-        resp = _probe(proxy_host, proxy_port, proxy_user, proxy_password)
-        if resp.status_code == 200:
-            return 'running'
-    except Exception:
-        pass
-    return 'stopped'
+    return probe_status(proxy_host, proxy_port, proxy_user, proxy_password)[0]
 
 
 def get_public_ip(
@@ -1464,14 +1481,7 @@ def get_public_ip(
     proxy_user: str | None = None,
     proxy_password: str | None = None,
 ) -> str | None:
-    try:
-        resp = _probe(proxy_host, proxy_port, proxy_user, proxy_password)
-        for line in resp.text.splitlines():
-            if line.startswith('ip='):
-                return line[3:].strip()
-    except Exception:
-        pass
-    return None
+    return probe_status(proxy_host, proxy_port, proxy_user, proxy_password)[1]
 
 
 def get_public_ips(
