@@ -33,6 +33,7 @@ from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
     get_current_filters, get_active_server, format_filters,
     get_public_ip, get_public_ips, get_vpn_status, switch_server,
+    has_wireguard_config_file,
     apply_dns_filtering,
     wait_for_vpn, restart_network_dependents,
     list_docker_containers,
@@ -1076,6 +1077,9 @@ def servers():
     except Exception:
         pass
     _catalogue_allowed_providers = sorted(_configured_providers)
+    _has_wireguard_config_file = has_wireguard_config_file(
+        current_app.config['GLUETUN_CONTAINER']
+    )
 
     return render_template(
         'servers.html', servers=page_rows,
@@ -1112,6 +1116,7 @@ def servers():
         wg_providers=WG_PROVIDERS,
         excluded_country_options=_excluded_country_options,
         excluded_countries=_excluded_countries,
+        has_wireguard_config_file=_has_wireguard_config_file,
     )
 
 

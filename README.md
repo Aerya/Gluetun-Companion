@@ -119,9 +119,9 @@ services:
 
 ### WireGuard : configuration pilotée par Companion
 
-Pour permettre à Companion de sélectionner et de basculer les serveurs d'un fournisseur pris en charge nativement (notamment ProtonVPN), ne montez pas de fichier `wg0.conf` dans `/gluetun/wireguard/wg0.conf`. Gluetun donne priorité à ce fichier et à son endpoint WireGuard, ce qui est incompatible avec les variables `SERVER_*` écrites par Companion. Configurez plutôt le fournisseur et les identifiants WireGuard via un profil VPN dans Companion.
+Pour permettre à Companion de benchmarker les serveurs puis de sélectionner et basculer automatiquement vers le meilleur d'un fournisseur pris en charge nativement (notamment ProtonVPN), ne montez pas de fichier `wg0.conf` dans `/gluetun/wireguard/wg0.conf`. Gluetun donne priorité à ce fichier et à son endpoint WireGuard, ce qui est incompatible avec les variables `SERVER_*` écrites par Companion. Configurez plutôt le fournisseur et les identifiants WireGuard via un profil VPN dans Companion.
 
-Un `wg0.conf` reste adapté à une configuration WireGuard custom et figée, mais Companion refuse alors toute bascule gérée afin de ne pas appliquer un override qui arrêterait Gluetun.
+Un `wg0.conf` reste adapté à une configuration WireGuard custom et figée. Dans ce mode, Companion ne peut ni benchmarker les serveurs en basculant le Gluetun principal, ni appliquer automatiquement le meilleur résultat. Des benchmarks isolés par sidecar restent possibles avec un profil VPN compatible, mais Companion refuse toute bascule gérée afin de ne pas appliquer un override qui arrêterait Gluetun.
 
 ```bash
 docker compose up -d
