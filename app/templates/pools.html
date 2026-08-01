@@ -56,7 +56,7 @@
             <div class="text-muted" style="font-size:.8rem">
               {% for c in p.criteria %}
                 {% if c.crit_type == 'all' %}
-                  <span class="me-2">🌐 Tous</span>
+                  <span class="me-2">🌐 {{ t.pools_crit_all }}</span>
                 {% elif c.crit_type == 'server' %}
                   <span class="me-2">📍 {{ c.crit_value }}</span>
                 {% elif c.crit_type == 'filter' %}
