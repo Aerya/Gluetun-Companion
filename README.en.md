@@ -116,6 +116,12 @@ services:
 
 `EVENTS=1` is required to detect Gluetun restarts immediately. The directory mounted at `/compose` must contain the Gluetun stack's Compose file; Companion uses it to recreate services sharing Gluetun's network after a switch.
 
+### WireGuard: Companion-managed configuration
+
+To let Companion benchmark servers and then select and switch automatically to the best one for a natively supported provider (including ProtonVPN), do not mount a `wg0.conf` file at `/gluetun/wireguard/wg0.conf`. Gluetun gives that file and its WireGuard endpoint priority, which conflicts with the `SERVER_*` variables written by Companion. Configure the provider and WireGuard credentials through a VPN profile in Companion instead.
+
+A `wg0.conf` is still suitable for a fixed custom WireGuard configuration. In this mode, Companion cannot benchmark servers by switching the main Gluetun container or automatically apply the best result. Isolated sidecar benchmarks remain possible with a compatible VPN profile, but Companion refuses managed switches so it cannot apply an override that would stop Gluetun.
+
 ```bash
 docker compose up -d
 ```
