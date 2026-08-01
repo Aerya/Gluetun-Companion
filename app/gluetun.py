@@ -1511,6 +1511,22 @@ _SIDECAR_NAME           = 'gluetun-companion-sidecar'
 _CATALOGUE_SIDECAR_NAME = 'gluetun-companion-catalogue'
 _CATALOGUE_SIDECAR_PORT = 8767
 
+# Port-forwarding env neutralized in every benchmark clone: a clone only measures
+# throughput, and the inherited VPN_PORT_FORWARDING_UP_COMMAND targets a torrent
+# client in the *real* Gluetun's namespace ("up command: failed: Connection
+# refused", retried for the whole test).  A per-server NAT-PMP request would also
+# churn the mapping production is using.
+#
+# PORT_FORWARD_ONLY is deliberately kept: it is a server *selection* filter, so it
+# keeps benchmarks representative of the servers production connects to.
+_CLONE_PF_ENV_OFF: dict[str, str] = {
+    'VPN_PORT_FORWARDING':                'off',
+    'VPN_PORT_FORWARDING_PROVIDER':       '',
+    'VPN_PORT_FORWARDING_UP_COMMAND':     '',
+    'VPN_PORT_FORWARDING_DOWN_COMMAND':   '',
+    'VPN_PORT_FORWARDING_LISTENING_PORT': '',
+}
+
 
 def _remove_container(client, name: str, kill_first: bool = False) -> None:
     """Stop and remove a container by name, ignoring NotFound."""
@@ -1579,6 +1595,10 @@ def create_test_gluetun(
                 for k in all_credential_keys():
                     env.pop(k, None)
             env.update(extra_env)
+
+        # Applied last so it overrides both the inherited env and the managed
+        # profile env (which turns port forwarding on for real switches).
+        env.update(_CLONE_PF_ENV_OFF)
 
         image    = attrs['Config']['Image']
         cap_add  = attrs['HostConfig'].get('CapAdd') or []
