@@ -29,6 +29,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Télécharger Trivy avec reprise
+        run: |
+          for attempt in 1 2 3; do
+            if docker pull "$TRIVY_IMAGE"; then
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 10))
+            fi
+          done
+
+          echo "Impossible de récupérer $TRIVY_IMAGE après 3 tentatives." >&2
+          exit 1
+
       - name: Analyser la révision courante
         run: |
           docker run --rm -v "$PWD:/work" "$TRIVY_IMAGE" fs \
