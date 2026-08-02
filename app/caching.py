@@ -58,7 +58,10 @@ def register_http_cache(app) -> None:
 
         if (
             response.mimetype in _COMPRESSIBLE_MIMETYPES
-            and 'gzip' in request.headers.get('Accept-Encoding', '')
+            # ``gzip;q=0`` explicitly forbids gzip.  Use Werkzeug's parsed
+            # quality value instead of a substring check so such clients keep
+            # receiving the identity representation.
+            and request.accept_encodings['gzip'] > 0
             and 'Content-Encoding' not in response.headers
             and response.content_length is not None
             and response.content_length > _MIN_COMPRESS_BYTES

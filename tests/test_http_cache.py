@@ -88,6 +88,12 @@ class HttpCacheTest(unittest.TestCase):
         self.assertIsNone(resp.headers.get('Content-Encoding'))
         self.assertIn(_LONG_BODY, resp.get_data().decode())
 
+    def test_client_explicitly_forbidding_gzip_gets_plain_bytes(self):
+        client = self._app().test_client()
+        resp = client.get('/page', headers={'Accept-Encoding': 'gzip;q=0, identity'})
+        self.assertIsNone(resp.headers.get('Content-Encoding'))
+        self.assertIn(_LONG_BODY, resp.get_data().decode())
+
     # ── headers ───────────────────────────────────────────────────────────
 
     def test_existing_vary_is_preserved(self):
