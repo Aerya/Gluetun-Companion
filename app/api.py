@@ -16,6 +16,7 @@ from functools import wraps
 from flask import Blueprint, current_app, jsonify, request
 
 from .database import get_db, get_setting
+from .i18n import get_translations, translate_progress_lines
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,7 @@ def status():
             benchmark_log = []
     except Exception:
         benchmark_log = []
+    benchmark_log = translate_progress_lines(benchmark_log, get_translations(get_setting('ui_lang', 'fr')))
 
     return jsonify({
         'benchmark_running':    get_setting('benchmark_running',    '0') == '1',

@@ -39,7 +39,7 @@ from .gluetun import (
     wait_for_vpn, restart_network_dependents,
     list_docker_containers,
 )
-from .i18n import flash_t, get_t
+from .i18n import flash_t, get_t, translate_progress_lines
 from .scheduler import (
     get_next_run, reschedule, trigger_now, trigger_quick_now,
     trigger_single_server, trigger_observation_now, request_stop, _lock as scheduler_lock,
@@ -365,6 +365,7 @@ def _benchmark_progress() -> dict:
             log_lines = []
     except Exception:
         log_lines = []
+    log_lines = translate_progress_lines(log_lines, get_t())
     elapsed = 0
     try:
         elapsed = max(0, int(time.time() - float(started))) if started else 0
