@@ -52,6 +52,9 @@ def register_http_cache(app) -> None:
 
         # vary.add, not assignment: an existing "Vary: Cookie" must survive.
         response.vary.add('Accept-Encoding')
+        # Without a stored ui_lang the UI language is negotiated from the
+        # browser, so the same URL can render FR or EN.
+        response.vary.add('Accept-Language')
 
         if (
             response.mimetype in _COMPRESSIBLE_MIMETYPES

@@ -2,6 +2,9 @@
 FR / EN translations for all UI strings and notifications.
 """
 
+SUPPORTED_LANGS = ('fr', 'en')
+DEFAULT_LANG = 'fr'
+
 TRANSLATIONS: dict[str, dict[str, str]] = {
     'fr': {
         # ── Navbar ──
@@ -2152,33 +2155,79 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
 
 def get_translations(lang: str) -> dict[str, str]:
-    return TRANSLATIONS.get(lang, TRANSLATIONS['fr'])
+    return TRANSLATIONS.get(lang, TRANSLATIONS[DEFAULT_LANG])
+
+
+def negotiate_lang(header: str | None) -> str:
+    """Pick a supported language from an ``Accept-Language`` header.
+
+    Sub-tags are folded onto their primary tag (``en-GB`` → ``en``) and entries
+    are ranked by quality, then by the order the browser sent them.  Anything we
+    do not speak — including a missing or unparsable header — falls back to
+    French.
+    """
+    if not header:
+        return DEFAULT_LANG
+
+    ranked: list[tuple[float, int, str]] = []
+    for position, entry in enumerate(header.split(',')):
+        tag, _, params = entry.strip().partition(';')
+        tag = tag.strip().lower().replace('_', '-')
+        if not tag:
+            continue
+
+        quality = 1.0
+        for param in params.split(';'):
+            key, _, value = param.partition('=')
+            if key.strip().lower() == 'q':
+                try:
+                    quality = float(value.strip())
+                except ValueError:
+                    quality = 0.0
+        if quality <= 0:
+            continue
+
+        primary = tag.split('-')[0]
+        if primary in SUPPORTED_LANGS:
+            ranked.append((-quality, position, primary))
+        elif tag == '*':
+            # "any language" — give them the house default rather than nothing.
+            ranked.append((-quality, position, DEFAULT_LANG))
+
+    if not ranked:
+        return DEFAULT_LANG
+
+    ranked.sort()
+    return ranked[0][2]
 
 
 def get_lang() -> str:
     """Resolve the active UI language.
 
-    The persisted ``ui_lang`` setting is the source of truth.  Browser
-    sessions can survive image updates, so an old cookie carrying ``en`` must
-    not override a saved French preference after a restart.
+    An explicit choice wins: the navbar switch persists ``ui_lang``, and browser
+    sessions can survive image updates, so an old cookie carrying ``en`` must not
+    override a saved French preference after a restart.  Until someone picks a
+    language, the browser's ``Accept-Language`` decides, defaulting to French.
     """
-    lang = 'fr'
+    lang = ''
     try:
         from .database import get_setting
-        lang = get_setting('ui_lang', 'fr')
-        if lang not in ('fr', 'en'):
-            lang = 'fr'
+        lang = get_setting('ui_lang', '')
     except Exception:
-        lang = 'fr'
+        lang = ''
+    if lang not in SUPPORTED_LANGS:
+        lang = ''
 
     try:
-        from flask import has_request_context, session
+        from flask import has_request_context, request, session
         if has_request_context():
+            if not lang:
+                lang = negotiate_lang(request.headers.get('Accept-Language'))
             session['lang'] = lang
     except Exception:
         pass
 
-    return lang
+    return lang or DEFAULT_LANG
 
 
 def get_t() -> dict[str, str]:
