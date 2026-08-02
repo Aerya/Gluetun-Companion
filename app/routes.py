@@ -29,16 +29,17 @@ from .database import (
 from .wg_providers import WG_PROVIDERS, get_all_providers, get_fields, get_secret_field_keys
 from .crypto import encrypt as crypto_encrypt, decrypt as crypto_decrypt, mask as crypto_mask
 from .profiles import PROFILES, score_servers as _score_servers, score_servers_detail as _score_servers_detail
+from .caching import cache
 from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
     get_current_filters, get_active_server, format_filters,
-    get_public_ip, get_public_ips, get_vpn_status, switch_server,
+    get_public_ip, get_public_ips, probe_status, switch_server,
     has_wireguard_config_file,
     apply_dns_filtering,
     wait_for_vpn, restart_network_dependents,
     list_docker_containers,
 )
-from .i18n import flash_t, get_t
+from .i18n import flash_t, get_t, translate_progress_lines
 from .scheduler import (
     get_next_run, reschedule, trigger_now, trigger_quick_now,
     trigger_single_server, trigger_observation_now, request_stop, _lock as scheduler_lock,
@@ -92,6 +93,13 @@ PROVIDER_FAVICON_DOMAINS: dict[str, str] = {
 
 # Negative cache: provider → unix ts of last failed fetch (retry after 1 h)
 _favicon_fetch_failures: dict[str, float] = {}
+
+# Live VPN facts shared by the dashboard and /api/status.  Each miss costs a
+# proxy round-trip plus a Docker API call, and the browser polls every 3 s from
+# two independent timers, so cache the snapshot for one poll interval.
+# Benchmark progress is deliberately excluded — it must never be stale.
+_VPN_SNAPSHOT_KEY = 'vpn_snapshot'
+_VPN_SNAPSHOT_TTL = 3
 
 _FAVICON_PLACEHOLDER_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
@@ -319,6 +327,33 @@ def _server_map_points(db, active_server_name: str = '') -> list[dict]:
     return points
 
 
+@cache.cached(timeout=_VPN_SNAPSHOT_TTL, key_prefix=_VPN_SNAPSHOT_KEY)
+def _vpn_snapshot() -> dict:
+    """Current VPN status, public IP and active server — one probe, one lookup.
+
+    Fixed key rather than @cache.memoize, so the proxy password never lands in
+    a cache key.
+    """
+    cfg = current_app.config
+    px_user = get_setting('proxy_username') or None
+    px_pass = get_setting('proxy_password') or None
+    container = cfg['GLUETUN_CONTAINER']
+
+    vpn_status, public_ip = probe_status(
+        cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass,
+    )
+    return {
+        'vpn_status':     vpn_status,
+        'public_ip':      public_ip,
+        'current_server': get_active_server(container) or format_filters(get_current_filters(container)),
+    }
+
+
+def _invalidate_vpn_snapshot() -> None:
+    """Drop the cached snapshot so the next poll reflects a just-made change."""
+    cache.delete(_VPN_SNAPSHOT_KEY)
+
+
 def _benchmark_progress() -> dict:
     started = get_setting('benchmark_started_at', '')
     total = int(get_setting('benchmark_total_servers', '0') or '0')
@@ -330,6 +365,7 @@ def _benchmark_progress() -> dict:
             log_lines = []
     except Exception:
         log_lines = []
+    log_lines = translate_progress_lines(log_lines, get_t())
     elapsed = 0
     try:
         elapsed = max(0, int(time.time() - float(started))) if started else 0
@@ -495,8 +531,7 @@ def dashboard():
     px_user    = get_setting('proxy_username') or None
     px_pass    = get_setting('proxy_password') or None
 
-    vpn_status        = get_vpn_status(proxy_host, proxy_port, px_user, px_pass)
-    public_ip         = get_public_ip(proxy_host, proxy_port, px_user, px_pass) if vpn_status == 'running' else None
+    vpn_status, public_ip = probe_status(proxy_host, proxy_port, px_user, px_pass)
     current_filters    = get_current_filters(container)
     active_server_name = get_active_server(container) or ''
     current_server     = active_server_name or format_filters(current_filters)
@@ -1236,20 +1271,20 @@ def bulk_assign_server_profile():
         if pid <= 0:
             raise ValueError
     except ValueError:
-        flash('Profil invalide.', 'danger')
+        flash_t('flash_profile_invalid', 'danger')
         return redirect(url_for('main.settings'))
     with get_db() as db:
         # Verify the profile exists
         row = db.execute('SELECT id FROM vpn_profiles WHERE id = ?', (pid,)).fetchone()
         if not row:
-            flash('Profil introuvable.', 'danger')
+            flash_t('flash_profile_not_found', 'danger')
             return redirect(url_for('main.settings'))
         cur = db.execute(
             'UPDATE servers SET vpn_profile_id = ? WHERE vpn_profile_id IS NULL',
             (pid,),
         )
         count = cur.rowcount
-    flash(f'{count} serveur(s) assigné(s) au profil.', 'success')
+    flash_t('flash_profile_assigned', 'success', **{'count': count})
     return redirect(url_for('main.settings'))
 
 
@@ -1266,7 +1301,7 @@ def manual_switch(server_id):
             'WHERE s.id = ?', (server_id,)
         ).fetchone()
     if not row:
-        flash('Serveur introuvable.', 'danger')
+        flash_t('flash_server_not_found', 'danger')
         return redirect(url_for('main.servers'))
 
     container   = cfg['GLUETUN_CONTAINER']
@@ -1336,6 +1371,7 @@ def manual_switch(server_id):
         container, compose_dir, project,
         wg_profile=_manual_wg_profile,
     )
+    _invalidate_vpn_snapshot()
     to_label = f"{FILTER_VARS[row['filter_type']]}={row['name']}"
     with get_db() as db:
         switch_id = db.execute(
@@ -2154,7 +2190,7 @@ def settings():
         elif action == 'torrent_client_save':
             _base_url = request.form.get('base_url', '').strip()
             if not _base_url:
-                flash('URL du client BitTorrent obligatoire.', 'danger')
+                flash_t('flash_torrent_url_required', 'danger')
             else:
                 save_torrent_client({
                     'id': request.form.get('client_id', '').strip(),
@@ -2177,7 +2213,7 @@ def settings():
                 delete_torrent_client(int(request.form.get('client_id', '0') or '0'))
                 flash_t('flash_settings_saved', 'success')
             except ValueError:
-                flash('Client BitTorrent introuvable.', 'danger')
+                flash_t('flash_torrent_client_not_found', 'danger')
 
         # ── WireGuard profiles ──────────────────────────────────────────────
         elif action == 'port_forward_save':
@@ -2203,7 +2239,7 @@ def settings():
                 delete_port_forward(int(request.form.get('port_forward_id', '0') or '0'))
                 flash_t('flash_settings_saved', 'success')
             except ValueError:
-                flash('Port forward introuvable.', 'danger')
+                flash_t('flash_pf_not_found', 'danger')
 
         elif action == 'wg_profile_save':
             _provider = request.form.get('wg_provider', '').strip()
@@ -2225,7 +2261,7 @@ def settings():
                 _priority = 0
 
             if _provider not in WG_PROVIDERS or not _name:
-                flash('Fournisseur ou nom de profil invalide.', 'danger')
+                flash_t('flash_provider_invalid', 'danger')
             else:
                 from .wg_providers import get_vpn_types, default_vpn_type
                 if _vpn_type not in get_vpn_types(_provider):
@@ -2281,7 +2317,7 @@ def settings():
                     ):
                         flash_t('flash_settings_saved', 'success')
                     else:
-                        flash('Profil introuvable.', 'danger')
+                        flash_t('flash_profile_not_found', 'danger')
                 else:
                     # Create new profile
                     create_vpn_profile(
@@ -2310,25 +2346,25 @@ def settings():
             if _pid and delete_vpn_profile(_pid):
                 flash_t('flash_settings_saved', 'success')
             else:
-                flash('Profil introuvable.', 'danger')
+                flash_t('flash_profile_not_found', 'danger')
 
         elif action == 'openvpn_upload':
             try:
                 uploaded = request.files.get('openvpn_file')
                 if not uploaded:
-                    raise ValueError('Sélectionnez un fichier .ovpn ou .conf.')
+                    raise ValueError(get_t().get('flash_ovpn_select_file', 'Sélectionnez un fichier .ovpn ou .conf.'))
                 name = save_uploaded_config(uploaded, current_app.config['OPENVPN_CONFIG_DIR'])
-                flash(f'Configuration OpenVPN téléversée : {name}', 'success')
+                flash_t('flash_ovpn_uploaded', 'success', **{'name': name})
             except (OSError, ValueError) as exc:
                 flash(str(exc), 'danger')
 
         elif action == 'openvpn_scan':
             try:
                 found = scan_gluetun_configs(current_app.config['GLUETUN_CONTAINER'])
-                flash(f'{len(found)} configuration(s) OpenVPN détectée(s) dans Gluetun.', 'success')
+                flash_t('flash_ovpn_scanned', 'success', **{'count': len(found)})
             except Exception as exc:
                 logger.warning('OpenVPN configuration scan failed: %s', exc)
-                flash(f'Détection OpenVPN impossible : {exc}', 'danger')
+                flash_t('flash_ovpn_scan_failed', 'danger', **{'exc': str(exc)})
 
         elif action == 'openvpn_import':
             try:
@@ -3910,17 +3946,16 @@ def _maybe_schedule_next(pool_id: int, interval_h: float | None, auto_rotate: bo
 @bp.route('/api/status')
 @login_required
 def api_status():
-    cfg     = current_app.config
-    px_user = get_setting('proxy_username') or None
-    px_pass = get_setting('proxy_password') or None
+    snapshot = _vpn_snapshot()
     progress = _benchmark_progress()
     live_est = _bench_estimate(_progress_estimated_count(progress))
+
     history_counts = _server_history_counts()
-    return jsonify({
-        'vpn_status':             get_vpn_status(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
-        'public_ip':              get_public_ip(cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass),
-        'current_server':         get_active_server(cfg['GLUETUN_CONTAINER']) or format_filters(get_current_filters(cfg['GLUETUN_CONTAINER'])),
-        'benchmark_running':       get_setting('benchmark_running', '0') == '1',
+    result = {
+        'vpn_status':             snapshot['vpn_status'],
+        'public_ip':              snapshot['public_ip'],
+        'current_server':         snapshot['current_server'],
+        'benchmark_running':       progress['running'],
         'benchmark_stop_requested':get_setting('benchmark_stop_requested', '0') == '1',
         'current_server_testing':  get_setting('benchmark_current_server', ''),
         'benchmark_mode':         progress['mode'],
@@ -3938,4 +3973,5 @@ def api_status():
         'tested_servers':          history_counts['tested'],
         'untested_servers':        history_counts['untested'],
         'next_run':               str(get_next_run()) if (get_next_run() and get_setting('auto_benchmark', '1') == '1') else None,
-    })
+    }
+    return jsonify(result)

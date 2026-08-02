@@ -34,8 +34,14 @@ def _clear_benchmark_running() -> None:
     set_setting('benchmark_stop_requested', '0')
 
 
-def _progress_log(message: str) -> None:
-    """Keep a tiny user-facing live log for dashboard observation status."""
+def _progress_log(key: str, **params) -> None:
+    """Keep a tiny live log for dashboard observation status.
+
+    Stores a translation key + format params rather than a rendered string:
+    this runs from a background thread with no request context, so the
+    actual language is resolved later, at serve time, from each viewer's
+    own request (see ``i18n.translate_progress_lines``).
+    """
     import json
     from datetime import datetime
     from .database import get_setting, set_setting
@@ -49,7 +55,8 @@ def _progress_log(message: str) -> None:
 
     lines.append({
         'ts': datetime.now().strftime('%H:%M:%S'),
-        'msg': str(message),
+        'key': key,
+        'params': params,
     })
     set_setting('benchmark_log_lines', json.dumps(lines[-5:], ensure_ascii=False))
 
@@ -926,7 +933,7 @@ def run_benchmark(app):
         and get_setting('benchmark_mode', '') == 'observation'
     ):
         logger.info('Scheduled benchmark due — pausing continuous observation first')
-        _progress_log('Observation continue mise en pause : cycle planifie prioritaire')
+        _progress_log('progress_observation_paused_scheduled')
         _stop_event.set()
 
     with _lock:
@@ -1179,7 +1186,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
     set_setting('benchmark_done_servers', '0')
     set_setting('benchmark_next_server', '')
     set_setting('benchmark_log_lines', '[]')
-    _progress_log('Observation continue demarree' if observation else 'Benchmark demarre')
+    _progress_log('progress_observation_started' if observation else 'progress_benchmark_started')
 
     # ── Catalogue refresh ───────────────────────────────────────────────────
     # Prefer mounted Gluetun JSON files because they are the exact catalogue
@@ -1300,7 +1307,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             set_setting('benchmark_mode', '')
             set_setting('benchmark_total_servers', '0')
             set_setting('benchmark_done_servers', '0')
-            _progress_log('Quick check OK - benchmark complet ignore')
+            _progress_log('progress_quick_check_ok')
             return 0
         elif qc_dl is not None and qc_last_dl:
             # Quick check ran but deviation too large → full benchmark triggered
@@ -1339,7 +1346,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
     if tracker_checks_enabled and not observation:
         try:
             from .torrent_trackers import discover_trackers
-            _progress_log('Decouverte trackers BitTorrent')
+            _progress_log('progress_tracker_discovery')
             _td = discover_trackers()
             logger.info(
                 'Tracker discovery before benchmark: %d found, %d new, %d error(s)',
@@ -1380,7 +1387,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
 
         if not servers:
             logger.info('No enabled servers — skipping benchmark')
-            _progress_log('Aucun serveur actif a tester')
+            _progress_log('progress_no_active_server')
             return 0
 
         # Global country exclusions apply only to automatic choices. Manual
@@ -1472,7 +1479,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
 
         if not servers:
             logger.info('No servers left after pre-filters — skipping benchmark')
-            _progress_log('Aucun serveur restant dans le perimetre')
+            _progress_log('progress_no_server_in_scope')
             return 0
         with get_db() as db:
             cycle_id = db.execute(
@@ -1480,7 +1487,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             ).lastrowid
         set_setting('benchmark_total_servers', str(len(servers)))
         set_setting('benchmark_done_servers', '0')
-        _progress_log(f'{len(servers)} serveur(s) selectionne(s)')
+        _progress_log('progress_servers_selected', count=len(servers))
 
         # ── Load WireGuard profile vars for each distinct vpn_profile_id ─────
         # Decrypts secrets once per profile and builds a lookup table so each
@@ -1600,7 +1607,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             set_setting('benchmark_done_servers', str(idx - 1))
             next_server = servers[idx]['name'] if idx < len(servers) else ''
             set_setting('benchmark_next_server', next_server)
-            _progress_log(f'Test {idx}/{len(servers)} : {row["name"]}')
+            _progress_log('progress_test_progress', idx=idx, total=len(servers), name=row['name'])
 
             # Resolve VPN profile extra_env for this server (None if no profile)
             _pid = row['vpn_profile_id']
@@ -1638,7 +1645,10 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                             row['name'], _skip_reason,
                         )
                         set_setting('benchmark_done_servers', str(idx))
-                        _progress_log(f'Ignore {row["name"]} : {_skip_reason}')
+                        if _pid:
+                            _progress_log('progress_skip_no_sidecar_key', name=row['name'], profile_id=_pid)
+                        else:
+                            _progress_log('progress_skip_no_profile', name=row['name'])
                         continue   # not a failure — just untestable in this mode
                 else:
                     _sidecar_env = _sidecar_extra_env(
@@ -1672,7 +1682,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                 )
             if result:
                 results.append(result)
-                _progress_log(f'OK {row["name"]} - {float(result.get("dl", 0) or 0):.1f} Mbps')
+                _progress_log('progress_server_ok', name=row['name'], dl=f'{float(result.get("dl", 0) or 0):.1f}')
                 if tracker_checks_enabled and not observation:
                     try:
                         from .torrent_trackers import check_enabled_trackers
@@ -1685,8 +1695,11 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                             _tc.get('passed', 0), _tc.get('total', 0), _tc.get('threshold', 80),
                         )
                         _progress_log(
-                            f'Trackers {row["name"]}: {_tc.get("success_pct", 0)}% '
-                            f'({_tc.get("passed", 0)}/{_tc.get("total", 0)})'
+                            'progress_tracker_result',
+                            name=row['name'],
+                            pct=_tc.get('success_pct', 0),
+                            passed=_tc.get('passed', 0),
+                            total=_tc.get('total', 0),
                         )
                     except Exception as exc:
                         result['tracker_ok'] = False
@@ -1699,9 +1712,9 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                         'Benchmark interrupted during %s — not counting it as a server failure',
                         row['name'],
                     )
-                    _progress_log(f'Interrompu {row["name"]} - cycle prioritaire')
+                    _progress_log('progress_interrupted', name=row['name'])
                     break
-                _progress_log(f'Echec {row["name"]}')
+                _progress_log('progress_server_failed', name=row['name'])
                 _excluded_failures = _update_consecutive_failures(
                     row['name'], success=False, threshold=auto_exclude
                 )
@@ -1749,7 +1762,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                 logger.warning(
                     'Tracker eligibility: no benchmark result passed tracker threshold; auto-switch skipped'
                 )
-                _progress_log('Auto-switch ignore : aucun serveur compatible trackers')
+                _progress_log('progress_autoswitch_skip_trackers')
 
         # A completed benchmark always has a best result.  Previously this was
         # calculated only inside the auto-switch branch, leaving
@@ -2103,7 +2116,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
 
         duration_secs = round(time.time() - cycle_start, 1)
         logger.info('=== Benchmark cycle finished in %.0fs ===', duration_secs)
-        _progress_log(f'Cycle termine - {len(results)} resultat(s)')
+        _progress_log('progress_cycle_done', count=len(results))
 
         with get_db() as db:
             db.execute(
@@ -3323,7 +3336,7 @@ def _check_rotation_pools(app):
                         'Pool rotation [%d] "%s": due — pausing continuous observation first',
                         row['id'], row['name'],
                     )
-                    _progress_log('Observation continue mise en pause : rotation de pool prioritaire')
+                    _progress_log('progress_pool_paused')
                     _stop_event.set()
                     wait_for_observation = True
                 else:
@@ -3378,13 +3391,13 @@ def _check_continuous_observation(app):
     global _observation_watchdog_state
 
     with app.app_context():
-        def _state_once(state: str, message: str, level: str = 'info') -> None:
+        def _state_once(state: str, log_message: str, progress_key: str, level: str = 'info', **params) -> None:
             global _observation_watchdog_state
             if _observation_watchdog_state == state:
                 return
             _observation_watchdog_state = state
-            getattr(logger, level)(message)
-            _progress_log(message)
+            getattr(logger, level)(log_message)
+            _progress_log(progress_key, **params)
 
         if get_setting('continuous_observation', '0') != '1':
             _observation_watchdog_state = None
@@ -3396,6 +3409,7 @@ def _check_continuous_observation(app):
             _state_once(
                 'busy',
                 'Continuous observation watchdog: scheduler lock busy — waiting',
+                'progress_watchdog_busy',
             )
             return
         try:
@@ -3404,18 +3418,21 @@ def _check_continuous_observation(app):
             _state_once(
                 'error',
                 f'Continuous observation watchdog: cannot evaluate work left — {exc}',
+                'progress_watchdog_error',
                 level='warning',
+                error=str(exc),
             )
             return
         if not has_work:
             _state_once(
                 'complete',
                 'Continuous observation watchdog: enabled, but target is already reached',
+                'progress_watchdog_complete',
             )
             return
         _observation_watchdog_state = 'starting'
         logger.info('Continuous observation watchdog: work detected — starting/resuming now')
-        _progress_log('Observation continue : reprise automatique')
+        _progress_log('progress_observation_resumed')
         trigger_observation_now(app)
 
 

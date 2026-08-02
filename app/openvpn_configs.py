@@ -11,6 +11,7 @@ import docker
 from werkzeug.utils import secure_filename
 
 from .database import get_setting, set_setting
+from .i18n import get_t
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,10 @@ _MAX_FILE_SIZE = 2 * 1024 * 1024
 def _safe_name(filename: str) -> str:
     name = secure_filename(filename or '')
     if not name or Path(name).suffix.lower() not in _ALLOWED_SUFFIXES:
-        raise ValueError('Le fichier doit utiliser l’extension .ovpn ou .conf.')
+        raise ValueError(get_t().get(
+            'ovpn_bad_extension',
+            'Le fichier doit utiliser l’extension .ovpn ou .conf.',
+        ))
     return name
 
 
@@ -31,15 +35,16 @@ def save_uploaded_config(file_storage, config_dir: str) -> str:
     """Validate and save an uploaded OpenVPN configuration."""
     name = _safe_name(file_storage.filename)
     data = file_storage.stream.read(_MAX_FILE_SIZE + 1)
+    t = get_t()
     if not data:
-        raise ValueError('Le fichier OpenVPN est vide.')
+        raise ValueError(t.get('ovpn_empty', 'Le fichier OpenVPN est vide.'))
     if len(data) > _MAX_FILE_SIZE:
-        raise ValueError('Le fichier OpenVPN dépasse la limite de 2 Mio.')
+        raise ValueError(t.get('ovpn_too_large', 'Le fichier OpenVPN dépasse la limite de 2 Mio.'))
     target_dir = Path(config_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / name
     if target.is_symlink():
-        raise ValueError('Le fichier cible ne peut pas être un lien symbolique.')
+        raise ValueError(t.get('ovpn_symlink', 'Le fichier cible ne peut pas être un lien symbolique.'))
     target.write_bytes(data)
     try:
         target.chmod(0o600)
@@ -135,5 +140,5 @@ def list_openvpn_configs(config_dir: str, container_dir: str) -> list[dict[str, 
 def validate_import_path(path: str, configs: list[dict[str, object]]) -> str:
     allowed = {str(config['path']) for config in configs}
     if path not in allowed:
-        raise ValueError('Configuration OpenVPN introuvable. Relancez la détection.')
+        raise ValueError(get_t().get('ovpn_not_found', 'Configuration OpenVPN introuvable. Relancez la détection.'))
     return path

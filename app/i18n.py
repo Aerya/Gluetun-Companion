@@ -2,6 +2,9 @@
 FR / EN translations for all UI strings and notifications.
 """
 
+SUPPORTED_LANGS = ('fr', 'en')
+DEFAULT_LANG = 'fr'
+
 TRANSLATIONS: dict[str, dict[str, str]] = {
     'fr': {
         # ── Navbar ──
@@ -627,6 +630,30 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'flash_dns_filter_invalid': 'La liste des domaines contient des caractères invalides.',
         'flash_dns_filter_restart_failed': 'Réglage enregistré, mais Gluetun n’a pas pu être recréé : {err}',
 
+        # ── Progress log (dashboard live journal, scheduler.py) ──
+        'progress_observation_paused_scheduled': 'Observation continue mise en pause : cycle planifié prioritaire',
+        'progress_observation_started':    'Observation continue démarrée',
+        'progress_benchmark_started':      'Benchmark démarré',
+        'progress_quick_check_ok':         'Quick check OK - benchmark complet ignoré',
+        'progress_tracker_discovery':      'Découverte trackers BitTorrent',
+        'progress_no_active_server':       'Aucun serveur actif à tester',
+        'progress_no_server_in_scope':     'Aucun serveur restant dans le périmètre',
+        'progress_servers_selected':       '{count} serveur(s) sélectionné(s)',
+        'progress_test_progress':          'Test {idx}/{total} : {name}',
+        'progress_skip_no_profile':        'Ignoré {name} : serveur sans profil VPN',
+        'progress_skip_no_sidecar_key':    'Ignoré {name} : pas de clé sidecar ni d’option de réutilisation pour le profil #{profile_id}',
+        'progress_server_ok':              'OK {name} - {dl} Mbps',
+        'progress_tracker_result':         'Trackers {name}: {pct}% ({passed}/{total})',
+        'progress_interrupted':            'Interrompu {name} - cycle prioritaire',
+        'progress_server_failed':          'Échec {name}',
+        'progress_autoswitch_skip_trackers': 'Auto-switch ignoré : aucun serveur compatible trackers',
+        'progress_cycle_done':             'Cycle terminé - {count} résultat(s)',
+        'progress_pool_paused':            'Observation continue mise en pause : rotation de pool prioritaire',
+        'progress_watchdog_busy':          'Observation continue : file d’attente du planificateur occupée — en attente',
+        'progress_watchdog_error':         'Observation continue : impossible d’évaluer le travail restant — {error}',
+        'progress_watchdog_complete':      'Observation continue : objectif déjà atteint',
+        'progress_observation_resumed':    'Observation continue : reprise automatique',
+
         # ── Sidecar ──
         'set_sidecar_title':              'Mode Sidecar (défaut)',
         'set_sidecar_warning':            '<strong>⚠ Connexion simultanée :</strong> le mode sidecar crée un container Gluetun supplémentaire pour chaque test. Cela compte comme une connexion VPN supplémentaire auprès de votre fournisseur. Si celui-ci limite le nombre de connexions simultanées (ex. AirVPN : 3–5 selon l\'abonnement), cette option consomme un slot de plus pendant toute la durée du benchmark. Planifiez en conséquence.',
@@ -1067,6 +1094,59 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_airvpn_mention_label':'Mention Discord (optionnel)',
         'set_airvpn_mention_hint': 'ID Discord à mentionner dans la notification (ex. <code>&lt;@123456789&gt;</code> ou <code>&lt;@&amp;ROLE_ID&gt;</code>). Laisser vide pour ne pas mentionner.',
         'flash_airvpn_dismissed':  'Nouveaux serveurs ignorés.',
+
+        # ── Port forwarding ──
+        'pf_port_invalid':              'Port invalide.',
+        'pf_missing':                   'manquant',
+        'pf_unknown':                   'inconnu',
+        'pf_no_native_port':            'Aucun port retourné.',
+        'pf_disabled_gluetun':          'Port forwarding désactivé côté Gluetun (VPN_PORT_FORWARDING absent ou ≠ on).',
+        'pf_provider_no_pf':            'Le fournisseur « {provider} » ne fait pas de port forwarding natif Gluetun.',
+        'pf_no_port_yet':               'Aucun port encore attribué (serveur P2P / port forwarding requis, ou connexion en cours).',
+        'pf_no_api_url':                'URL Control Server Gluetun absente.',
+        'pf_native_unavailable':        'Port natif Gluetun indisponible.',
+        'pf_manual_invalid':            'Port manuel invalide.',
+        'pf_not_found':                 'Port forward introuvable.',
+        'pf_no_torrent_client':         'Aucun client BitTorrent lié.',
+        'pf_qbit_only':                 'Synchronisation disponible uniquement pour qBittorrent.',
+        'pf_no_public_ip':              'IP publique VPN inconnue — Gluetun est-il connecté ?',
+        'pf_timeout':                   'timeout — port fermé ou filtré',
+        'pf_rtorrent_only':             'Cette synchronisation est réservée à rTorrent.',
+        'pf_no_syncable_client':        'Aucun client synchronisable lié (qBittorrent ou rTorrent).',
+        'pf_no_client_linked':          'Aucun client lié.',
+        'pf_client_not_syncable':       'Client non synchronisable automatiquement.',
+        'pf_unlinked':                  'non lié',
+        'pf_different':                 'différent',
+        'pf_read_unsupported':          'lecture non supportée',
+        'pf_unavailable':               'indisponible',
+        'pf_ok':                        'OK',
+        'pf_native_ok':                 'Natif OK',
+        'pf_managed_by_gluetun':        'géré par Gluetun',
+        'pf_not_required':              'non requis',
+        'pf_to_fix':                    'À corriger',
+        'pf_to_check':                  'À vérifier',
+        'pf_rtorrent_wrong_port':       'rTorrent a renvoyé "{current}" au lieu de "{rng}".',
+
+        # ── OpenVPN configs ──
+        'ovpn_bad_extension':     'Le fichier doit utiliser l’extension .ovpn ou .conf.',
+        'ovpn_empty':             'Le fichier OpenVPN est vide.',
+        'ovpn_too_large':         'Le fichier OpenVPN dépasse la limite de 2 Mio.',
+        'ovpn_symlink':           'Le fichier cible ne peut pas être un lien symbolique.',
+        'ovpn_not_found':         'Configuration OpenVPN introuvable. Relancez la détection.',
+
+        # ── Routes flash messages ──
+        'flash_profile_invalid':          'Profil invalide.',
+        'flash_profile_not_found':        'Profil introuvable.',
+        'flash_profile_assigned':         '{count} serveur(s) assigné(s) au profil.',
+        'flash_server_not_found':         'Serveur introuvable.',
+        'flash_torrent_url_required':     'URL du client BitTorrent obligatoire.',
+        'flash_torrent_client_not_found': 'Client BitTorrent introuvable.',
+        'flash_pf_not_found':             'Port forward introuvable.',
+        'flash_provider_invalid':         'Fournisseur ou nom de profil invalide.',
+        'flash_ovpn_select_file':         'Sélectionnez un fichier .ovpn ou .conf.',
+        'flash_ovpn_uploaded':            'Configuration OpenVPN téléversée : {name}',
+        'flash_ovpn_scanned':             '{count} configuration(s) OpenVPN détectée(s) dans Gluetun.',
+        'flash_ovpn_scan_failed':         'Détection OpenVPN impossible : {exc}',
 
         # ── Grafana ──
         'set_grafana_title':       'Dashboard Grafana',
@@ -1699,6 +1779,30 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'flash_dns_filter_invalid': 'The domain list contains invalid characters.',
         'flash_dns_filter_restart_failed': 'Setting saved, but Gluetun could not be recreated: {err}',
 
+        # ── Progress log (dashboard live journal, scheduler.py) ──
+        'progress_observation_paused_scheduled': 'Continuous observation paused: priority scheduled cycle',
+        'progress_observation_started':    'Continuous observation started',
+        'progress_benchmark_started':      'Benchmark started',
+        'progress_quick_check_ok':         'Quick check OK - full benchmark skipped',
+        'progress_tracker_discovery':      'BitTorrent tracker discovery',
+        'progress_no_active_server':       'No active server to test',
+        'progress_no_server_in_scope':     'No server left in scope',
+        'progress_servers_selected':       '{count} server(s) selected',
+        'progress_test_progress':          'Test {idx}/{total}: {name}',
+        'progress_skip_no_profile':        'Skipped {name}: server has no VPN profile',
+        'progress_skip_no_sidecar_key':    'Skipped {name}: no sidecar key or reuse option for profile #{profile_id}',
+        'progress_server_ok':              'OK {name} - {dl} Mbps',
+        'progress_tracker_result':         'Trackers {name}: {pct}% ({passed}/{total})',
+        'progress_interrupted':            'Interrupted {name} - priority cycle',
+        'progress_server_failed':          'Failed {name}',
+        'progress_autoswitch_skip_trackers': 'Auto-switch skipped: no server passed the tracker check',
+        'progress_cycle_done':             'Cycle finished - {count} result(s)',
+        'progress_pool_paused':            'Continuous observation paused: priority pool rotation',
+        'progress_watchdog_busy':          'Continuous observation: scheduler lock busy — waiting',
+        'progress_watchdog_error':         'Continuous observation: cannot evaluate work left — {error}',
+        'progress_watchdog_complete':      'Continuous observation: target already reached',
+        'progress_observation_resumed':    'Continuous observation: automatic resume',
+
         # ── Sidecar ──
         'set_sidecar_title':              'Sidecar Mode (default)',
         'set_sidecar_warning':            '<strong>⚠ Simultaneous connection:</strong> sidecar mode creates an extra Gluetun container for each server test. This counts as one additional VPN connection at your provider. If your provider limits simultaneous connections (e.g. AirVPN: 3–5 depending on plan), this option uses one extra slot for the entire benchmark duration. Plan accordingly.',
@@ -2142,6 +2246,59 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'set_airvpn_mention_hint': 'Discord ID to mention in the notification (e.g. <code>&lt;@123456789&gt;</code> or <code>&lt;@&amp;ROLE_ID&gt;</code>). Leave blank to skip.',
         'flash_airvpn_dismissed':  'New servers dismissed.',
 
+        # ── Port forwarding ──
+        'pf_port_invalid':              'Invalid port.',
+        'pf_missing':                   'missing',
+        'pf_unknown':                   'unknown',
+        'pf_no_native_port':            'No port returned.',
+        'pf_disabled_gluetun':          'Port forwarding disabled on Gluetun side (VPN_PORT_FORWARDING missing or ≠ on).',
+        'pf_provider_no_pf':            'Provider "{provider}" does not support native Gluetun port forwarding.',
+        'pf_no_port_yet':               'No port assigned yet (P2P server / port forwarding required, or connection in progress).',
+        'pf_no_api_url':                'Gluetun Control Server URL missing.',
+        'pf_native_unavailable':        'Native Gluetun port unavailable.',
+        'pf_manual_invalid':            'Invalid manual port.',
+        'pf_not_found':                 'Port forward not found.',
+        'pf_no_torrent_client':         'No BitTorrent client linked.',
+        'pf_qbit_only':                 'Sync only available for qBittorrent.',
+        'pf_no_public_ip':              'VPN public IP unknown — is Gluetun connected?',
+        'pf_timeout':                   'timeout — port closed or filtered',
+        'pf_rtorrent_only':             'This sync is reserved for rTorrent.',
+        'pf_no_syncable_client':        'No syncable client linked (qBittorrent or rTorrent).',
+        'pf_no_client_linked':          'No client linked.',
+        'pf_client_not_syncable':       'Client cannot be synced automatically.',
+        'pf_unlinked':                  'unlinked',
+        'pf_different':                 'different',
+        'pf_read_unsupported':          'read not supported',
+        'pf_unavailable':               'unavailable',
+        'pf_ok':                        'OK',
+        'pf_native_ok':                 'Native OK',
+        'pf_managed_by_gluetun':        'managed by Gluetun',
+        'pf_not_required':              'not required',
+        'pf_to_fix':                    'Needs fixing',
+        'pf_to_check':                  'Needs checking',
+        'pf_rtorrent_wrong_port':       'rTorrent returned "{current}" instead of "{rng}".',
+
+        # ── OpenVPN configs ──
+        'ovpn_bad_extension':     'File must use .ovpn or .conf extension.',
+        'ovpn_empty':             'OpenVPN file is empty.',
+        'ovpn_too_large':         'OpenVPN file exceeds 2 MiB limit.',
+        'ovpn_symlink':           'Target file cannot be a symbolic link.',
+        'ovpn_not_found':         'OpenVPN configuration not found. Re-run detection.',
+
+        # ── Routes flash messages ──
+        'flash_profile_invalid':          'Invalid profile.',
+        'flash_profile_not_found':        'Profile not found.',
+        'flash_profile_assigned':         '{count} server(s) assigned to profile.',
+        'flash_server_not_found':         'Server not found.',
+        'flash_torrent_url_required':     'BitTorrent client URL is required.',
+        'flash_torrent_client_not_found': 'BitTorrent client not found.',
+        'flash_pf_not_found':             'Port forward not found.',
+        'flash_provider_invalid':         'Invalid provider or profile name.',
+        'flash_ovpn_select_file':         'Select a .ovpn or .conf file.',
+        'flash_ovpn_uploaded':            'OpenVPN configuration uploaded: {name}',
+        'flash_ovpn_scanned':             '{count} OpenVPN configuration(s) detected in Gluetun.',
+        'flash_ovpn_scan_failed':         'OpenVPN detection failed: {exc}',
+
         # ── Grafana ──
         'set_grafana_title':       'Grafana dashboard',
         'set_grafana_subtitle':    'Download the Grafana dashboard pre-wired to Companion\'s Prometheus metrics.',
@@ -2152,33 +2309,79 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
 
 def get_translations(lang: str) -> dict[str, str]:
-    return TRANSLATIONS.get(lang, TRANSLATIONS['fr'])
+    return TRANSLATIONS.get(lang, TRANSLATIONS[DEFAULT_LANG])
+
+
+def negotiate_lang(header: str | None) -> str:
+    """Pick a supported language from an ``Accept-Language`` header.
+
+    Sub-tags are folded onto their primary tag (``en-GB`` → ``en``) and entries
+    are ranked by quality, then by the order the browser sent them.  Anything we
+    do not speak — including a missing or unparsable header — falls back to
+    French.
+    """
+    if not header:
+        return DEFAULT_LANG
+
+    ranked: list[tuple[float, int, str]] = []
+    for position, entry in enumerate(header.split(',')):
+        tag, _, params = entry.strip().partition(';')
+        tag = tag.strip().lower().replace('_', '-')
+        if not tag:
+            continue
+
+        quality = 1.0
+        for param in params.split(';'):
+            key, _, value = param.partition('=')
+            if key.strip().lower() == 'q':
+                try:
+                    quality = float(value.strip())
+                except ValueError:
+                    quality = 0.0
+        if quality <= 0:
+            continue
+
+        primary = tag.split('-')[0]
+        if primary in SUPPORTED_LANGS:
+            ranked.append((-quality, position, primary))
+        elif tag == '*':
+            # "any language" — give them the house default rather than nothing.
+            ranked.append((-quality, position, DEFAULT_LANG))
+
+    if not ranked:
+        return DEFAULT_LANG
+
+    ranked.sort()
+    return ranked[0][2]
 
 
 def get_lang() -> str:
     """Resolve the active UI language.
 
-    The persisted ``ui_lang`` setting is the source of truth.  Browser
-    sessions can survive image updates, so an old cookie carrying ``en`` must
-    not override a saved French preference after a restart.
+    An explicit choice wins: the navbar switch persists ``ui_lang``, and browser
+    sessions can survive image updates, so an old cookie carrying ``en`` must not
+    override a saved French preference after a restart.  Until someone picks a
+    language, the browser's ``Accept-Language`` decides, defaulting to French.
     """
-    lang = 'fr'
+    lang = ''
     try:
         from .database import get_setting
-        lang = get_setting('ui_lang', 'fr')
-        if lang not in ('fr', 'en'):
-            lang = 'fr'
+        lang = get_setting('ui_lang', '')
     except Exception:
-        lang = 'fr'
+        lang = ''
+    if lang not in SUPPORTED_LANGS:
+        lang = ''
 
     try:
-        from flask import has_request_context, session
+        from flask import has_request_context, request, session
         if has_request_context():
+            if not lang:
+                lang = negotiate_lang(request.headers.get('Accept-Language'))
             session['lang'] = lang
     except Exception:
         pass
 
-    return lang
+    return lang or DEFAULT_LANG
 
 
 def get_t() -> dict[str, str]:
@@ -2193,3 +2396,26 @@ def flash_t(key: str, category: str = 'info', **kwargs) -> None:
     if kwargs:
         msg = msg.format(**kwargs)
     flash(msg, category)
+
+
+def translate_progress_lines(lines: list, t: dict[str, str]) -> list[dict[str, str]]:
+    """Render stored {ts, key, params} scheduler progress entries for the UI.
+
+    Entries are written by ``_progress_log()`` from a background thread with no
+    request context, so translation happens here instead, at serve time, using
+    the caller's own language.
+    """
+    out = []
+    for line in lines:
+        if not isinstance(line, dict):
+            continue
+        key = line.get('key')
+        if key is None:
+            continue
+        msg = t.get(key, key)
+        try:
+            msg = msg.format(**(line.get('params') or {}))
+        except (KeyError, IndexError):
+            pass
+        out.append({'ts': line.get('ts', ''), 'msg': msg})
+    return out
