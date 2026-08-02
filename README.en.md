@@ -1,6 +1,7 @@
 # Gluetun Companion
 
-🇫🇷 [Version française](README.md)
+[![fr](https://img.shields.io/badge/lang-fr-blue)](README.md)
+[![en](https://img.shields.io/badge/lang-en-red)](README.en.md)
 
 [![Build](https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml/badge.svg?branch=main)](https://github.com/Aerya/Gluetun-Companion/actions/workflows/docker-publish.yml)
 [![Trivy CVE scan](https://img.shields.io/badge/Trivy-enabled-1904DA?logo=aquasecurity&logoColor=white)](https://github.com/Aerya/Gluetun-Companion/blob/main/.github/workflows/trivy-scan.yml)

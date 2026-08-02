@@ -10,9 +10,15 @@ import requests
 
 from .database import get_db, get_setting, set_setting
 from .gluetun import _container_env
+from .i18n import get_lang, get_t
 from .torrent_trackers import get_torrent_client, _qbit_session
 
 logger = logging.getLogger(__name__)
+
+
+def _pf_t():
+    """Get translations for port forwarding error strings (works outside request context)."""
+    return get_t()
 
 
 SUPPORTED_MODES = {'manual', 'native'}
@@ -57,11 +63,16 @@ def _parse_port_list(value: str) -> set[int]:
 
 
 def _status(ok: bool | None, label_ok='OK', label_bad='manquant') -> dict:
+    t = get_t()
+    if label_ok == 'OK':
+        label_ok = t.get('pf_ok', 'OK')
+    if label_bad == 'manquant':
+        label_bad = t.get('pf_missing', 'manquant')
     if ok is True:
         return {'state': 'ok', 'label': label_ok}
     if ok is False:
         return {'state': 'bad', 'label': label_bad}
-    return {'state': 'unknown', 'label': 'inconnu'}
+    return {'state': 'unknown', 'label': t.get('pf_unknown', 'inconnu')}
 
 
 def list_port_forwards() -> list[dict]:
@@ -90,7 +101,7 @@ def save_port_forward(data: dict) -> int:
         mode = 'manual'
     port = int(data.get('port') or 0)
     if mode == 'manual' and not (1 <= port <= 65535):
-        raise ValueError('Port invalide.')
+        raise ValueError(get_t().get('pf_port_invalid', 'Port invalide.'))
     if mode == 'native':
         port = port if 1 <= port <= 65535 else 0
     protocols = _clean_protocols(data.get('protocols'))
@@ -249,19 +260,27 @@ def _gluetun_control_url_candidates(api_url: str | None, container_name: str = '
 
 def _diagnose_no_native_port(container_name: str, base_error: str) -> str:
     """Turn a generic 'no port' result into a specific, actionable message."""
+    t = _pf_t()
+    default = base_error or t.get('pf_no_native_port', 'Aucun port retourné.')
     if not container_name:
-        return base_error or 'Aucun port retourné.'
+        return default
     try:
         env = _container_env(container_name)
     except Exception:
-        return base_error or 'Aucun port retourné.'
+        return default
     if (env.get('VPN_PORT_FORWARDING') or '').strip().lower() != 'on':
-        return 'Port forwarding désactivé côté Gluetun (VPN_PORT_FORWARDING absent ou ≠ on).'
+        return t.get(
+            'pf_disabled_gluetun',
+            'Port forwarding désactivé côté Gluetun (VPN_PORT_FORWARDING absent ou ≠ on).',
+        )
     provider = (env.get('VPN_SERVICE_PROVIDER') or '').strip().lower()
     from .wg_providers import supports_native_port_forwarding
     if provider and not supports_native_port_forwarding(provider):
-        return f'Le fournisseur « {provider} » ne fait pas de port forwarding natif Gluetun.'
-    return 'Aucun port encore attribué (serveur P2P / port forwarding requis, ou connexion en cours).'
+        return t.get('pf_provider_no_pf', 'Le fournisseur « {provider} » ne fait pas de port forwarding natif Gluetun.').replace('{provider}', provider)
+    return t.get(
+        'pf_no_port_yet',
+        'Aucun port encore attribué (serveur P2P / port forwarding requis, ou connexion en cours).',
+    )
 
 
 def read_gluetun_native_ports(
@@ -278,7 +297,7 @@ def read_gluetun_native_ports(
     """
     bases = _gluetun_control_url_candidates(api_url, container_name)
     if not bases:
-        return {'ok': False, 'ports': [], 'error': 'URL Control Server Gluetun absente.'}
+        return {'ok': False, 'ports': [], 'error': get_t().get('pf_no_api_url', 'URL Control Server Gluetun absente.')}
     last_error = ''
     actual_container = (container_name or os.environ.get('GLUETUN_CONTAINER', '') or 'gluetun').strip()
     try:
@@ -321,13 +340,14 @@ def get_gluetun_provider(container_name: str) -> str:
 
 
 def _effective_port(pf: dict, native_ports: list[int]) -> tuple[int | None, str]:
+    t = _pf_t()
     mode = (pf.get('mode') or 'manual').strip().lower()
     if mode == 'native':
         if native_ports:
             return int(native_ports[0]), ''
-        return None, 'Port natif Gluetun indisponible.'
+        return None, t.get('pf_native_unavailable', 'Port natif Gluetun indisponible.')
     port = int(pf.get('port') or 0)
-    return (port, '') if 1 <= port <= 65535 else (None, 'Port manuel invalide.')
+    return (port, '') if 1 <= port <= 65535 else (None, t.get('pf_manual_invalid', 'Port manuel invalide.'))
 
 
 def _set_last_applied_port(port_forward_id: int, port: int) -> None:
@@ -375,20 +395,21 @@ def _run_port_hook(pf: dict, port: int) -> dict:
 
 def sync_qbit_listen_port(port_forward_id: int, timeout: float = 6.0, port_override: int | None = None) -> dict:
     pf = get_port_forward(port_forward_id)
+    t = _pf_t()
     if not pf:
-        return {'ok': False, 'error': 'Port forward introuvable.'}
+        return {'ok': False, 'error': t.get('pf_not_found', 'Port forward introuvable.')}
     if port_override is None and (pf.get('mode') or 'manual') == 'native':
         native = read_gluetun_native_ports()
         ports = native.get('ports') or []
         if not ports:
-            return {'ok': False, 'error': native.get('error') or 'Port natif Gluetun indisponible.'}
+            return {'ok': False, 'error': native.get('error') or t.get('pf_native_unavailable', 'Port natif Gluetun indisponible.')}
         port_override = int(ports[0])
     client_id = int(pf.get('torrent_client_id') or 0)
     client = get_torrent_client(client_id) if client_id else None
     if not client:
-        return {'ok': False, 'error': 'Aucun client BitTorrent lié.'}
+        return {'ok': False, 'error': t.get('pf_no_torrent_client', 'Aucun client BitTorrent lié.')}
     if client.get('client_type') != 'qbittorrent':
-        return {'ok': False, 'error': 'Synchronisation disponible uniquement pour qBittorrent.'}
+        return {'ok': False, 'error': t.get('pf_qbit_only', 'Synchronisation disponible uniquement pour qBittorrent.')}
     try:
         sess = _qbit_session(client, timeout=timeout)
         base_url = (client.get('base_url') or '').rstrip('/')
@@ -410,12 +431,13 @@ def sync_qbit_listen_port(port_forward_id: int, timeout: float = 6.0, port_overr
 
 def resolve_effective_port(pf: dict) -> tuple[int | None, str]:
     """Resolve the port a rule currently applies: manual value or live native port."""
+    t = _pf_t()
     native_ports: list[int] = []
     if (pf.get('mode') or 'manual') == 'native':
         native = read_gluetun_native_ports()
         native_ports = native.get('ports') or []
         if not native_ports:
-            return None, native.get('error') or 'Port natif Gluetun indisponible.'
+            return None, native.get('error') or t.get('pf_native_unavailable', 'Port natif Gluetun indisponible.')
     return _effective_port(pf, native_ports)
 
 
@@ -433,11 +455,12 @@ def check_port_reachability(port_forward_id: int, public_ip: str, timeout: float
     """
     import socket
 
+    t = _pf_t()
     pf = get_port_forward(port_forward_id)
     if not pf:
-        return {'ok': False, 'error': 'Port forward introuvable.'}
+        return {'ok': False, 'error': t.get('pf_not_found', 'Port forward introuvable.')}
     if not public_ip:
-        return {'ok': False, 'error': 'IP publique VPN inconnue — Gluetun est-il connecté ?'}
+        return {'ok': False, 'error': t.get('pf_no_public_ip', 'IP publique VPN inconnue — Gluetun est-il connecté ?')}
     port, port_error = resolve_effective_port(pf)
     if not port:
         return {'ok': False, 'error': port_error}
@@ -450,7 +473,7 @@ def check_port_reachability(port_forward_id: int, public_ip: str, timeout: float
                 'elapsed_ms': elapsed_ms, 'tcp_only': True, 'error': ''}
     except (TimeoutError, socket.timeout):
         return {'ok': True, 'open': False, 'ip': public_ip, 'port': int(port),
-                'tcp_only': True, 'error': 'timeout — port fermé ou filtré'}
+                'tcp_only': True, 'error': t.get('pf_timeout', 'timeout — port fermé ou filtré')}
     except OSError as exc:
         return {'ok': True, 'open': False, 'ip': public_ip, 'port': int(port),
                 'tcp_only': True, 'error': str(exc)}
@@ -464,24 +487,25 @@ def sync_rtorrent_listen_port(port_forward_id: int, timeout: float = 8.0, port_o
     rTorrent instance.  The custom on_port_change hook remains available as
     a fallback.
     """
+    t = _pf_t()
     pf = get_port_forward(port_forward_id)
     if not pf:
-        return {'ok': False, 'error': 'Port forward introuvable.'}
+        return {'ok': False, 'error': t.get('pf_not_found', 'Port forward introuvable.')}
     if port_override is None and (pf.get('mode') or 'manual') == 'native':
         native = read_gluetun_native_ports()
         ports = native.get('ports') or []
         if not ports:
-            return {'ok': False, 'error': native.get('error') or 'Port natif Gluetun indisponible.'}
+            return {'ok': False, 'error': native.get('error') or t.get('pf_native_unavailable', 'Port natif Gluetun indisponible.')}
         port_override = int(ports[0])
     client_id = int(pf.get('torrent_client_id') or 0)
     client = get_torrent_client(client_id) if client_id else None
     if not client:
-        return {'ok': False, 'error': 'Aucun client BitTorrent lié.'}
+        return {'ok': False, 'error': t.get('pf_no_torrent_client', 'Aucun client BitTorrent lié.')}
     if client.get('client_type') != 'rtorrent':
-        return {'ok': False, 'error': 'Cette synchronisation est réservée à rTorrent.'}
+        return {'ok': False, 'error': t.get('pf_rtorrent_only', 'Cette synchronisation est réservée à rTorrent.')}
     port = int(port_override or pf.get('port') or 0)
     if not (1 <= port <= 65535):
-        return {'ok': False, 'error': 'Port invalide.'}
+        return {'ok': False, 'error': t.get('pf_port_invalid', 'Port invalide.')}
     try:
         from .torrent_trackers import rtorrent_proxy
         proxy = rtorrent_proxy(client, timeout=timeout)
@@ -497,7 +521,7 @@ def sync_rtorrent_listen_port(port_forward_id: int, timeout: float = 8.0, port_o
                 current = None
         if current is not None and str(port) not in str(current):
             return {'ok': False, 'listen_port': str(current),
-                    'error': f'rTorrent a renvoyé "{current}" au lieu de "{rng}".'}
+                    'error': t.get('pf_rtorrent_wrong_port', 'rTorrent a renvoyé "{current}" au lieu de "{rng}".').replace('{current}', str(current)).replace('{rng}', rng)}
         _set_last_applied_port(int(pf['id']), port)
         return {'ok': True, 'listen_port': port, 'error': ''}
     except Exception as exc:
@@ -506,9 +530,10 @@ def sync_rtorrent_listen_port(port_forward_id: int, timeout: float = 8.0, port_o
 
 def sync_client_listen_port(port_forward_id: int, timeout: float = 8.0, port_override: int | None = None) -> dict:
     """Dispatch port sync to the right adapter based on the linked client type."""
+    t = _pf_t()
     pf = get_port_forward(port_forward_id)
     if not pf:
-        return {'ok': False, 'error': 'Port forward introuvable.'}
+        return {'ok': False, 'error': t.get('pf_not_found', 'Port forward introuvable.')}
     client_id = int(pf.get('torrent_client_id') or 0)
     client = get_torrent_client(client_id) if client_id else None
     ctype = (client or {}).get('client_type') or ''
@@ -516,7 +541,10 @@ def sync_client_listen_port(port_forward_id: int, timeout: float = 8.0, port_ove
         return sync_qbit_listen_port(port_forward_id, timeout=timeout, port_override=port_override)
     if ctype == 'rtorrent':
         return sync_rtorrent_listen_port(port_forward_id, timeout=timeout, port_override=port_override)
-    return {'ok': False, 'error': 'Aucun client synchronisable lié (qBittorrent ou rTorrent).'}
+    return {'ok': False, 'error': t.get(
+        'pf_no_syncable_client',
+        'Aucun client synchronisable lié (qBittorrent ou rTorrent).',
+    )}
 
 
 def apply_provider_port_forwards(
@@ -527,6 +555,7 @@ def apply_provider_port_forwards(
     retry_delay: float = 3.0,
 ) -> dict:
     """Apply enabled qBittorrent port rules for a provider after a VPN switch."""
+    t = _pf_t()
     provider = (provider or '').strip().lower()
     result = {
         'ok': True,
@@ -580,7 +609,7 @@ def apply_provider_port_forwards(
 
         if not pf.get('torrent_client_id'):
             if hook.get('skipped'):
-                detail.update({'skipped': True, 'error': 'Aucun client lié.'})
+                detail.update({'skipped': True, 'error': t.get('pf_no_client_linked', 'Aucun client lié.')})
                 result['skipped'] += 1
             else:
                 detail['ok'] = bool(hook.get('ok'))
@@ -593,7 +622,7 @@ def apply_provider_port_forwards(
             continue
         if pf.get('client_type') not in ('qbittorrent', 'rtorrent'):
             if hook.get('skipped'):
-                detail.update({'skipped': True, 'error': 'Client non synchronisable automatiquement.'})
+                detail.update({'skipped': True, 'error': t.get('pf_client_not_syncable', 'Client non synchronisable automatiquement.')})
                 result['skipped'] += 1
             else:
                 detail['ok'] = bool(hook.get('ok'))
@@ -681,6 +710,7 @@ def inspect_port_forward(
     gluetun_container: str,
     native_status: dict | None = None,
 ) -> dict:
+    t = _pf_t()
     item = dict(pf)
     protocols = _clean_protocols(item.get('protocols')).split(',')
     native_mode = (item.get('mode') or 'manual') == 'native'
@@ -705,25 +735,33 @@ def inspect_port_forward(
         if native_mode else _docker_published_ports(gluetun_container, port, protocols)
     )
 
-    client_status = {'state': 'unknown', 'label': 'non lié'}
+    client_status = {'state': 'unknown', 'label': t.get('pf_unlinked', 'non lié')}
     client_listen_port = None
     client_error = ''
     if item.get('torrent_client_id'):
         client = get_torrent_client(int(item['torrent_client_id']))
         if client and client.get('client_type') == 'qbittorrent':
             client_listen_port, client_error = _qbit_listen_port(client)
-            client_status = _status(client_listen_port == port if client_listen_port else False, 'OK', 'différent')
+            client_status = _status(
+                client_listen_port == port if client_listen_port else False,
+                t.get('pf_ok', 'OK'),
+                t.get('pf_different', 'différent'),
+            )
         elif client:
-            client_status = {'state': 'unknown', 'label': 'lecture non supportée'}
+            client_status = {'state': 'unknown', 'label': t.get('pf_read_unsupported', 'lecture non supportée')}
 
     item['protocol_list'] = protocols
     item['effective_port'] = port or None
     if native_mode:
         native_ok = bool(native_status and native_status.get('ok') and port)
-        item['gluetun_vpn_input'] = _status(native_ok, 'Natif OK', 'indisponible')
-        item['gluetun_input'] = {'state': 'ok', 'label': 'géré par Gluetun'}
+        item['gluetun_vpn_input'] = _status(
+            native_ok,
+            t.get('pf_native_ok', 'Natif OK'),
+            t.get('pf_unavailable', 'indisponible'),
+        )
+        item['gluetun_input'] = {'state': 'ok', 'label': t.get('pf_managed_by_gluetun', 'géré par Gluetun')}
         item['docker_ports'] = {
-            proto: {'state': 'ok', 'label': 'non requis'} for proto in protocols
+            proto: {'state': 'ok', 'label': t.get('pf_not_required', 'non requis')} for proto in protocols
         }
     else:
         item['gluetun_vpn_input'] = _status(port in fw_vpn_ports if env else None)
@@ -746,13 +784,13 @@ def inspect_port_forward(
         checks.append(client_status['state'])
     if 'bad' in checks:
         item['overall_state'] = 'bad'
-        item['overall_label'] = 'À corriger'
+        item['overall_label'] = t.get('pf_to_fix', 'À corriger')
     elif 'unknown' in checks:
         item['overall_state'] = 'unknown'
-        item['overall_label'] = 'À vérifier'
+        item['overall_label'] = t.get('pf_to_check', 'À vérifier')
     else:
         item['overall_state'] = 'ok'
-        item['overall_label'] = 'OK'
+        item['overall_label'] = t.get('pf_ok', 'OK')
     return item
 
 

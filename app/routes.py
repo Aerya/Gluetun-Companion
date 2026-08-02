@@ -1270,20 +1270,20 @@ def bulk_assign_server_profile():
         if pid <= 0:
             raise ValueError
     except ValueError:
-        flash('Profil invalide.', 'danger')
+        flash_t('flash_profile_invalid', 'danger')
         return redirect(url_for('main.settings'))
     with get_db() as db:
         # Verify the profile exists
         row = db.execute('SELECT id FROM vpn_profiles WHERE id = ?', (pid,)).fetchone()
         if not row:
-            flash('Profil introuvable.', 'danger')
+            flash_t('flash_profile_not_found', 'danger')
             return redirect(url_for('main.settings'))
         cur = db.execute(
             'UPDATE servers SET vpn_profile_id = ? WHERE vpn_profile_id IS NULL',
             (pid,),
         )
         count = cur.rowcount
-    flash(f'{count} serveur(s) assigné(s) au profil.', 'success')
+    flash_t('flash_profile_assigned', 'success', **{'count': count})
     return redirect(url_for('main.settings'))
 
 
@@ -1300,7 +1300,7 @@ def manual_switch(server_id):
             'WHERE s.id = ?', (server_id,)
         ).fetchone()
     if not row:
-        flash('Serveur introuvable.', 'danger')
+        flash_t('flash_server_not_found', 'danger')
         return redirect(url_for('main.servers'))
 
     container   = cfg['GLUETUN_CONTAINER']
@@ -2189,7 +2189,7 @@ def settings():
         elif action == 'torrent_client_save':
             _base_url = request.form.get('base_url', '').strip()
             if not _base_url:
-                flash('URL du client BitTorrent obligatoire.', 'danger')
+                flash_t('flash_torrent_url_required', 'danger')
             else:
                 save_torrent_client({
                     'id': request.form.get('client_id', '').strip(),
@@ -2212,7 +2212,7 @@ def settings():
                 delete_torrent_client(int(request.form.get('client_id', '0') or '0'))
                 flash_t('flash_settings_saved', 'success')
             except ValueError:
-                flash('Client BitTorrent introuvable.', 'danger')
+                flash_t('flash_torrent_client_not_found', 'danger')
 
         # ── WireGuard profiles ──────────────────────────────────────────────
         elif action == 'port_forward_save':
@@ -2238,7 +2238,7 @@ def settings():
                 delete_port_forward(int(request.form.get('port_forward_id', '0') or '0'))
                 flash_t('flash_settings_saved', 'success')
             except ValueError:
-                flash('Port forward introuvable.', 'danger')
+                flash_t('flash_pf_not_found', 'danger')
 
         elif action == 'wg_profile_save':
             _provider = request.form.get('wg_provider', '').strip()
@@ -2260,7 +2260,7 @@ def settings():
                 _priority = 0
 
             if _provider not in WG_PROVIDERS or not _name:
-                flash('Fournisseur ou nom de profil invalide.', 'danger')
+                flash_t('flash_provider_invalid', 'danger')
             else:
                 from .wg_providers import get_vpn_types, default_vpn_type
                 if _vpn_type not in get_vpn_types(_provider):
@@ -2316,7 +2316,7 @@ def settings():
                     ):
                         flash_t('flash_settings_saved', 'success')
                     else:
-                        flash('Profil introuvable.', 'danger')
+                        flash_t('flash_profile_not_found', 'danger')
                 else:
                     # Create new profile
                     create_vpn_profile(
@@ -2345,25 +2345,25 @@ def settings():
             if _pid and delete_vpn_profile(_pid):
                 flash_t('flash_settings_saved', 'success')
             else:
-                flash('Profil introuvable.', 'danger')
+                flash_t('flash_profile_not_found', 'danger')
 
         elif action == 'openvpn_upload':
             try:
                 uploaded = request.files.get('openvpn_file')
                 if not uploaded:
-                    raise ValueError('Sélectionnez un fichier .ovpn ou .conf.')
+                    raise ValueError(get_t().get('flash_ovpn_select_file', 'Sélectionnez un fichier .ovpn ou .conf.'))
                 name = save_uploaded_config(uploaded, current_app.config['OPENVPN_CONFIG_DIR'])
-                flash(f'Configuration OpenVPN téléversée : {name}', 'success')
+                flash_t('flash_ovpn_uploaded', 'success', **{'name': name})
             except (OSError, ValueError) as exc:
                 flash(str(exc), 'danger')
 
         elif action == 'openvpn_scan':
             try:
                 found = scan_gluetun_configs(current_app.config['GLUETUN_CONTAINER'])
-                flash(f'{len(found)} configuration(s) OpenVPN détectée(s) dans Gluetun.', 'success')
+                flash_t('flash_ovpn_scanned', 'success', **{'count': len(found)})
             except Exception as exc:
                 logger.warning('OpenVPN configuration scan failed: %s', exc)
-                flash(f'Détection OpenVPN impossible : {exc}', 'danger')
+                flash_t('flash_ovpn_scan_failed', 'danger', **{'exc': str(exc)})
 
         elif action == 'openvpn_import':
             try:
