@@ -144,15 +144,14 @@
         <i class="bi bi-wifi"></i> {{ t.dash_vpn_status }}
       </div>
       <div class="d-flex align-items-center gap-2 mb-2">
-        <span class="dot dot-{{ vpn_status }}" style="width:12px;height:12px;flex-shrink:0"></span>
-        <span class="fw-semibold" style="font-size:1rem">{{ t.dash_status_running if vpn_status == 'running' else t.dash_status_stopped }}</span>
+        <span id="vpnStatusDot" class="dot dot-{{ vpn_status }}" style="width:12px;height:12px;flex-shrink:0"></span>
+        <span id="vpnStatusLabel" class="fw-semibold" style="font-size:1rem">{{ t.dash_status_running if vpn_status == 'running' else t.dash_status_stopped }}</span>
       </div>
-      {% if public_ip %}
-      <div class="d-flex align-items-center gap-2 mb-2">
+      {# Always rendered so the 3s poll can reveal/hide it without a page reload. #}
+      <div id="vpnIpRow" class="d-flex align-items-center gap-2 mb-2 {{ '' if public_ip else 'd-none' }}">
         <i class="bi bi-globe2 text-muted" style="font-size:.85rem"></i>
-        {{ server_flag(current_server) }}{{ server_provider_icon(current_server) | safe }} <code style="font-size:.85rem">{{ public_ip }}</code>
+        {{ server_flag(current_server) }}{{ server_provider_icon(current_server) | safe }} <code id="vpnPublicIp" style="font-size:.85rem">{{ public_ip or '' }}</code>
       </div>
-      {% endif %}
       <div class="d-flex align-items-center gap-2 mb-1" style="font-size:.8rem;color:var(--muted)">
         <i class="bi bi-list-check"></i>
         <span>{{ server_count }} {{ t.dash_active_servers }}</span>
@@ -207,8 +206,9 @@
             <i class="bi bi-server"></i> {{ t.dash_active_server }}
           </div>
           {{ server_flag(current_server) }}{{ server_provider_icon(current_server) | safe }} <code style="font-size:1rem;font-weight:600">{{ current_server | strip_prefix or '—' }}</code>
-          {% if vpn_status != 'running' and current_server %}
-          <span class="badge bg-warning text-dark ms-1" style="font-size:.65rem;vertical-align:middle">
+          {% if current_server %}
+          <span id="serverOfflineBadge" class="badge bg-warning text-dark ms-1 {{ '' if vpn_status != 'running' else 'd-none' }}"
+                style="font-size:.65rem;vertical-align:middle">
             <i class="bi bi-wifi-off"></i> {{ t.dash_vpn_not_connected }}
           </span>
           {% endif %}
@@ -938,6 +938,25 @@ const _chartUl = '#fbbf24';
 })();
 {% endif %}
 
+// ── Page hook: keep the VPN status card live between page loads ─────────
+// The card is server-rendered on load; without this the dot, the public IP
+// and the "not connected" badge stay frozen until a manual refresh.
+const _vpnUpLabel   = '{{ t.dash_status_running }}';
+const _vpnDownLabel = '{{ t.dash_status_stopped }}';
+window._onVpnStatus = function (d) {
+  const up      = d.vpn_status === 'running';
+  const dot     = document.getElementById('vpnStatusDot');
+  const label   = document.getElementById('vpnStatusLabel');
+  const ipRow   = document.getElementById('vpnIpRow');
+  const ipEl    = document.getElementById('vpnPublicIp');
+  const offline = document.getElementById('serverOfflineBadge');
+  if (dot)     dot.className = 'dot dot-' + (up ? 'running' : 'stopped');
+  if (label)   label.textContent = up ? _vpnUpLabel : _vpnDownLabel;
+  if (ipEl && d.public_ip) ipEl.textContent = d.public_ip;
+  if (ipRow)   ipRow.classList.toggle('d-none', !(up && d.public_ip));
+  if (offline) offline.classList.toggle('d-none', up);
+};
+
 // ── Page hook: update trigger buttons from global benchmark poller ───────
 window._onBenchmarkStatus = function(d) {
   const btn      = document.getElementById('btn-trigger');
@@ -959,8 +978,11 @@ window._onBenchmarkStatus = function(d) {
     if (btn)      { btn.disabled = true;      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning; }
     if (btnQuick) { btnQuick.disabled = true; btnQuick.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ' + _msgRunning; }
   } else {
-    if (btn)      { btn.disabled = false;      btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow; }
-    if (btnQuick) { btnQuick.disabled = false; btnQuick.innerHTML = '<i class="bi bi-speedometer"></i> ' + _msgRunQuick; }
+    // The server also renders these disabled while the VPN is down; don't let
+    // the poller re-enable them behind a "stopped" status card.
+    const vpnUp = d.vpn_status === 'running';
+    if (btn)      { btn.disabled = !vpnUp;      btn.innerHTML = '<i class="bi bi-play-fill"></i> ' + _msgRunNow; }
+    if (btnQuick) { btnQuick.disabled = !vpnUp; btnQuick.innerHTML = '<i class="bi bi-speedometer"></i> ' + _msgRunQuick; }
   }
   if (obsBadge) {
     const isObs = d.benchmark_running && d.benchmark_mode === 'observation';
