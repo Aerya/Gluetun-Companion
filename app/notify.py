@@ -472,7 +472,8 @@ def send_benchmark_failure_notification(
             lines = [
                 t.get('notif_benchmark_failure_hint',
                       'Gluetun injoignable ou tous les serveurs en échec'),
-                f'{n_servers} serveurs · {dur_str}',
+                t.get('notif_benchmark_failure_summary', '{n} serveurs · {duration}')
+                 .replace('{n}', str(n_servers)).replace('{duration}', dur_str),
             ]
             if companion_url:
                 lines.append(companion_url)
@@ -589,7 +590,8 @@ def send_benchmark_end_notification(
 
     if apprise_urls:
         try:
-            lines = [f'{n_tested} serveurs testés']
+            lines = [t.get('notif_benchmark_end_summary', '{n} serveurs testés')
+                      .replace('{n}', str(n_tested))]
             if best_server:
                 speed_str = f' ({best_dl:.1f} Mbps)' if best_dl else ''
                 lines.append(f'{t.get("notif_benchmark_end_best", "Meilleur")} : {best_label}{speed_str}')

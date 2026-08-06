@@ -398,32 +398,26 @@ function cycleTheme() {
 // legacy alias kept for any inline onclick="toggleTheme()" references
 function toggleTheme() { cycleTheme(); }
 
-// ── VPN down alert (polls every 30s, badge appears after 2 consecutive failures) ──
+// ── VPN down alert (fed by the 3s status poll, after 2 consecutive failures) ──
 (function () {
   let downCount = 0;
-  function checkVpn() {
-    fetch('{{ url_for("main.api_status") }}')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (!d) return;
-        const badge = document.getElementById('vpn-down-badge');
-        if (!badge) return;
-        if (d.vpn_status !== 'running') {
-          downCount++;
-          if (downCount >= 2) badge.classList.remove('d-none');
-        } else {
-          downCount = 0;
-          badge.classList.add('d-none');
-        }
-      })
-      .catch(() => {});
-  }
-  setInterval(checkVpn, 30000);
+  window._updateVpnBadge = function (d) {
+    const badge = document.getElementById('vpn-down-badge');
+    if (!badge) return;
+    if (d.vpn_status !== 'running') {
+      downCount++;
+      if (downCount >= 2) badge.classList.remove('d-none');
+    } else {
+      downCount = 0;
+      badge.classList.add('d-none');
+    }
+  };
 })();
 </script>
 <script>
 // ── Global benchmark banner poller ───────────────────────────────────────
 window._onBenchmarkStatus = function(d) {};   // page-level hook (no-op default)
+window._onVpnStatus       = function(d) {};   // page-level hook (no-op default)
 (function () {
   const _stopLabel    = '{{ t.dash_stop_bench }}';
   const _stopReqLabel = '{{ t.dash_stop_requested }}';
@@ -510,7 +504,9 @@ window._onBenchmarkStatus = function(d) {};   // page-level hook (no-op default)
             stopBtn.innerHTML = '<i class="bi bi-stop-fill"></i> ' + _stopLabel;
           }
         }
+        window._updateVpnBadge(d);
         window._onBenchmarkStatus(d);
+        window._onVpnStatus(d);
       })
       .catch(() => {});
   }
