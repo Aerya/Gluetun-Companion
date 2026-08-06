@@ -3822,6 +3822,8 @@ function _wgShowFields(providerKey, vpnType, existingVars) {
              autocomplete="off" placeholder="${placeholder}">
       ${isSet ? '<div class="form-text text-success" style="font-size:.72rem"><i class="bi bi-check-circle-fill me-1"></i>{{ t.set_wg_secret_set }}</div>' : ''}
     `;
+    const input = div.querySelector('input');
+    if (input && !f.secret) input.value = existingVal;
     container.appendChild(div);
   });
 }
