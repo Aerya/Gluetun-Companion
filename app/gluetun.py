@@ -1454,13 +1454,16 @@ def list_orphaned_network_dependents() -> list[str]:
     Gluetun ID**, or when its **name** was previously observed attached to
     Gluetun (see ``record_dependent_names``, which covers IDs the capped history
     has evicted).  A dead reference matching neither key — a second VPN stack,
-    say — is not Companion's to fix.  Exception: the first scan after upgrading
-    to this version adopts all dead-ref orphans once, since pre-existing broken
-    dependents predate both keys.
+    say — is not Companion's to fix, and no later scan ever widens that rule:
+    the only blanket adoption is the original one-time legacy pass, which runs
+    on a database that has never had an ID history at all.
 
     Returns the sorted list of container names that need to be recreated.
     """
     result: list[str] = []
+    # Only orphans matched by a positive key are worth remembering; a legacy-pass
+    # guess must not be promoted into permanent name memory (see below).
+    confirmed: list[str] = []
     try:
         from .database import get_setting, set_setting
 
@@ -1474,13 +1477,13 @@ def list_orphaned_network_dependents() -> list[str]:
 
         gluetun_ids   = _known_gluetun_ids()
         known_deps    = _known_dependent_names()
-        # One-time passes, each adopting any dead-ref orphan once: the original
-        # (orphans predating the ID history) and the rescan (orphans the capped
-        # history rolled past, absent from the initially-empty name memory).
-        legacy_pass = (
-            get_setting('orphan_legacy_adoption_done', '0') != '1'
-            or get_setting('orphan_rescan_after_name_memory', '0') != '1'
-        )
+        # The single one-time pass that adopts any dead-ref orphan: it exists
+        # only for databases predating the ID history, where no orphan could
+        # possibly match a key.  It is never re-armed — a database that has
+        # already run it stays restricted to the two keys above, so widening
+        # the memory (names, a larger ID cap) can never retroactively adopt
+        # containers belonging to an unrelated VPN stack.
+        legacy_pass = get_setting('orphan_legacy_adoption_done', '0') != '1'
 
         for c in all_containers:
             if not (c.attrs.get('State') or {}).get('Running'):
@@ -1501,6 +1504,7 @@ def list_orphaned_network_dependents() -> list[str]:
                     '(former Gluetun ID)', c.name, mode,
                 )
                 result.append(c.name)
+                confirmed.append(c.name)
             elif c.name in known_deps:
                 logger.info(
                     'list_orphaned_network_dependents: %s has stale NetworkMode %r — '
@@ -1508,6 +1512,7 @@ def list_orphaned_network_dependents() -> list[str]:
                     'to Gluetun; adopting', c.name, mode,
                 )
                 result.append(c.name)
+                confirmed.append(c.name)
             elif legacy_pass:
                 logger.info(
                     'list_orphaned_network_dependents: %s has stale NetworkMode %r — '
@@ -1523,10 +1528,13 @@ def list_orphaned_network_dependents() -> list[str]:
 
         if legacy_pass:
             set_setting('orphan_legacy_adoption_done', '1')
-            set_setting('orphan_rescan_after_name_memory', '1')
-        # Adopted orphans are dependents by definition — remember them so a
-        # future ID rollover cannot strand them again.
-        record_dependent_names(result)
+        # Remember only the orphans a key actually identified, so a future ID
+        # rollover cannot strand them again.  Legacy-pass adoptions are
+        # deliberately excluded: recording a guess would turn the one-time pass
+        # into a permanent claim over containers that may not be ours at all.
+        # A genuine dependent adopted that way is recorded anyway once the
+        # recreate reattaches it and the next scan sees it attached.
+        record_dependent_names(confirmed)
     except Exception as exc:
         logger.warning('list_orphaned_network_dependents: %s', exc)
     return sorted(result)

@@ -135,6 +135,84 @@ class NetworkDependentsTest(unittest.TestCase):
         self.assertEqual(list_orphaned_network_dependents(), [])
 
 
+class OrphanAdoptionScopeTest(unittest.TestCase):
+    """The blanket adoption pass must stay a *one-time, pre-history* migration.
+
+    Widening what Companion remembers (name memory, a larger ID cap) must never
+    re-open it, or an upgrade would adopt — and recreate — containers belonging
+    to an unrelated VPN stack that merely reference a dead container.
+    """
+
+    CONTAINERS = [
+        _container('gluetun', 'current-gluetun-id', 'bridge'),
+        # Ours: the Gluetun ID it points at aged out of the capped history.
+        _container('qbittorrent', 'qbit-id', 'container:evicted-gluetun-id'),
+        # Someone else's VPN stack, equally dead reference.
+        _container('other-vpn-app', 'other-id', 'container:unrelated-dead-id'),
+    ]
+
+    def _scan(self, store):
+        def _get(key, default=''):
+            return store.get(key, default)
+
+        def _set(key, value):
+            store[key] = value
+
+        with patch('app.database.get_setting', _get), \
+             patch('app.database.set_setting', _set), \
+             patch('docker.from_env', return_value=_client_with(self.CONTAINERS)):
+            return list_orphaned_network_dependents()
+
+    def test_upgrade_with_migration_done_does_not_rescan_unrelated_stack(self):
+        """The reported risk: a database whose legacy migration already ran, on
+        the first scan of the new (name-memory) version.  Only keyed orphans."""
+        store = {
+            'orphan_legacy_adoption_done': '1',
+            'gluetun_id_history':          json.dumps(['some-other-gluetun-id']),
+            'gluetun_dependent_names':     json.dumps(['qbittorrent']),
+        }
+
+        self.assertEqual(self._scan(store), ['qbittorrent'])
+
+    def test_upgrade_with_migration_done_and_empty_name_memory_adopts_nothing(self):
+        """Same upgrade, before anything has been recorded under the new key:
+        an unmatched dead reference stays untouched rather than being swept up."""
+        store = {
+            'orphan_legacy_adoption_done': '1',
+            'gluetun_id_history':          '[]',
+            'gluetun_dependent_names':     '[]',
+        }
+
+        self.assertEqual(self._scan(store), [])
+
+    def test_legacy_pass_runs_once_then_stops_adopting_unknowns(self):
+        """A pre-history database still gets its one blanket pass — and only one;
+        the unrelated container it swept up is not remembered as a dependent."""
+        store = {}
+
+        first = self._scan(store)
+        self.assertEqual(first, ['other-vpn-app', 'qbittorrent'])
+        self.assertEqual(store['orphan_legacy_adoption_done'], '1')
+        self.assertEqual(
+            json.loads(store.get('gluetun_dependent_names', '[]')), [],
+            'legacy-pass guesses must not be promoted into name memory',
+        )
+
+        self.assertEqual(self._scan(store), [])
+
+    def test_keyed_orphans_are_remembered_for_the_next_rollover(self):
+        store = {
+            'orphan_legacy_adoption_done': '1',
+            'gluetun_id_history':          json.dumps(['evicted-gluetun-id']),
+            'gluetun_dependent_names':     '[]',
+        }
+
+        self.assertEqual(self._scan(store), ['qbittorrent'])
+        self.assertEqual(
+            json.loads(store['gluetun_dependent_names']), ['qbittorrent'],
+        )
+
+
 class GluetunIdHistoryTest(unittest.TestCase):
     def test_history_survives_a_full_benchmark_worth_of_recreates(self):
         """One Gluetun recreate per tested server must not evict the IDs that

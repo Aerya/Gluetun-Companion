@@ -383,7 +383,6 @@ def init_db(db_path: str):
                 ('gluetun_id_history',          '[]'),
                 ('gluetun_dependent_names',     '[]'),
                 ('orphan_legacy_adoption_done', '0'),
-                ('orphan_rescan_after_name_memory', '0'),
                 ('notif_auto_switch',           '1'),
                 ('notif_failover',              '1'),
                 ('notif_manual_switch',         '0'),

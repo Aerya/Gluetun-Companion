@@ -3033,8 +3033,18 @@ def _repair_network_after_gluetun_start(
             pass
         time.sleep(3)
     with app.app_context():
-        from .gluetun import list_orphaned_network_dependents, restart_network_dependents
+        from .gluetun import (
+            list_network_dependents,
+            list_orphaned_network_dependents,
+            restart_network_dependents,
+        )
         try:
+            # Record whoever is attached right now *before* looking for orphans.
+            # A dependent is only adoptable later — once the Gluetun ID it points
+            # at has aged out of the capped history — if its name was observed
+            # while it was still healthy, and a host that never switches servers
+            # would otherwise never record one.
+            list_network_dependents(container_name)
             orphans = list_orphaned_network_dependents()
             if not orphans:
                 return
