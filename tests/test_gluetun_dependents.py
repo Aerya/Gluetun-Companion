@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from app.gluetun import (
+    _compose_recreate,
     _verify_attached,
     list_network_dependents,
     list_orphaned_network_dependents,
@@ -295,6 +296,83 @@ class DependentRecreateBackendTest(unittest.TestCase):
         self.assertEqual(restarted, [])
         self.assertEqual(sdk_recreate.call_count, 2)     # initial + retry
         compose_recreate.assert_not_called()
+
+
+class ComposeReplacementRecoveryTest(unittest.TestCase):
+    @patch('app.gluetun.os.path.isdir', return_value=True)
+    @patch('app.gluetun.subprocess.run')
+    @patch('docker.from_env')
+    def test_created_replacement_is_removed_without_volumes_then_retried(
+        self, from_env, run, _isdir,
+    ):
+        current = MagicMock()
+        current.labels = {
+            'com.docker.compose.service': 'qbittorrentvpn1',
+            'com.docker.compose.project': 'airvpn',
+            'com.docker.compose.project.working_dir': '/compose',
+        }
+        client = MagicMock()
+        client.containers.get.return_value = current
+        client.api.containers.return_value = [{
+            'Id': 'created-id',
+            'Names': ['/7cebe17ebeda_qbittorrentvpn1'],
+            'Labels': {
+                'com.docker.compose.replace': 'qbittorrentvpn1',
+                'com.docker.compose.service': 'qbittorrentvpn1',
+                'com.docker.compose.project': 'airvpn',
+            },
+        }]
+        from_env.return_value = client
+        run.side_effect = [
+            MagicMock(
+                returncode=1,
+                stderr='Error response from daemon: No such container: old_qbittorrentvpn1',
+                stdout='',
+            ),
+            MagicMock(returncode=0, stderr='', stdout=''),
+        ]
+
+        _compose_recreate('qbittorrentvpn1', '/compose', 'airvpn')
+
+        self.assertEqual(run.call_count, 2)
+        client.api.remove_container.assert_called_once_with(
+            'created-id', v=False, force=False,
+        )
+
+    @patch('app.gluetun.os.path.isdir', return_value=True)
+    @patch('app.gluetun.subprocess.run')
+    @patch('docker.from_env')
+    def test_unrelated_created_container_is_never_removed(
+        self, from_env, run, _isdir,
+    ):
+        current = MagicMock()
+        current.labels = {
+            'com.docker.compose.service': 'qbittorrentvpn1',
+            'com.docker.compose.project': 'airvpn',
+            'com.docker.compose.project.working_dir': '/compose',
+        }
+        client = MagicMock()
+        client.containers.get.return_value = current
+        client.api.containers.return_value = [{
+            'Id': 'unrelated-id',
+            'Names': ['/temporary_other_service'],
+            'Labels': {
+                'com.docker.compose.replace': 'other-service',
+                'com.docker.compose.service': 'other-service',
+                'com.docker.compose.project': 'airvpn',
+            },
+        }]
+        from_env.return_value = client
+        run.return_value = MagicMock(
+            returncode=1,
+            stderr='Error response from daemon: No such container: missing',
+            stdout='',
+        )
+
+        with self.assertRaises(RuntimeError):
+            _compose_recreate('qbittorrentvpn1', '/compose', 'airvpn')
+
+        client.api.remove_container.assert_not_called()
 
 
 if __name__ == '__main__':

@@ -775,6 +775,58 @@ def apply_dns_filtering(
 # Dependent-container restart
 # ---------------------------------------------------------------------------
 
+def _cleanup_failed_compose_replacements(
+    client,
+    container_name: str,
+    service: str,
+    project: str,
+) -> list[str]:
+    """Remove abandoned ``Created`` containers from a failed Compose replace.
+
+    Compose temporarily renames the old container while ``--force-recreate``
+    installs its replacement.  If that transaction loses track of the renamed
+    container, it can fail with ``No such container: <id>_<name>`` and leave a
+    different ``<id>_<name>`` replacement in ``Created``.  A later recreate is
+    then blocked until that intermediate is removed.
+
+    Only containers carrying Compose's explicit replacement label for this
+    service and project are eligible.  Volumes are never removed.
+    """
+    removed: list[str] = []
+    try:
+        entries = client.api.containers(all=True, filters={'status': ['created']})
+    except Exception as exc:
+        logger.warning('Cannot inspect failed Compose replacements: %s', exc)
+        return removed
+
+    for entry in entries or []:
+        labels = (entry or {}).get('Labels') or {}
+        if labels.get('com.docker.compose.replace') != container_name:
+            continue
+        if labels.get('com.docker.compose.service') != service:
+            continue
+        if project and labels.get('com.docker.compose.project') != project:
+            continue
+        cid = (entry or {}).get('Id', '')
+        names = [str(n).lstrip('/') for n in ((entry or {}).get('Names') or [])]
+        if not cid or container_name in names:
+            continue
+        label = names[0] if names else cid[:12]
+        try:
+            client.api.remove_container(cid, v=False, force=False)
+            removed.append(label)
+            logger.warning(
+                'Removed abandoned Compose replacement %s for %s; retrying recreate',
+                label, container_name,
+            )
+        except Exception as exc:
+            logger.warning(
+                'Cannot remove abandoned Compose replacement %s for %s: %s',
+                label, container_name, exc,
+            )
+    return removed
+
+
 def _compose_recreate(
     container_name: str,
     compose_dir: str = '',
@@ -861,6 +913,23 @@ def _compose_recreate(
         if result.returncode == 0:
             return   # success
         last_err = (result.stderr or result.stdout or 'unknown error').strip()
+        # Compose can abandon an intermediate replacement in ``Created`` while
+        # reporting a different, already-gone temporary name.  Clean up only a
+        # positively labelled replacement for this service, then retry once.
+        if ('No such container:' in last_err and
+                _cleanup_failed_compose_replacements(
+                    client, container_name, service, project,
+                )):
+            retry = subprocess.run(
+                cmd,
+                cwd=work_dir,
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            if retry.returncode == 0:
+                return
+            last_err = (retry.stderr or retry.stdout or 'unknown error').strip()
         logger.warning(
             'Compose recreate attempt failed for %s (cwd=%s): %s — trying next candidate',
             container_name, work_dir, last_err,
