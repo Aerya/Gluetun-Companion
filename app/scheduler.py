@@ -3013,9 +3013,25 @@ def _check_active_server_history(app) -> None:
         set_setting('last_observed_gluetun_id', container_id)
 
 
-def _repair_network_after_gluetun_start(app, container_name: str) -> None:
-    """Always reattach stale shared-network containers after any Gluetun start."""
-    time.sleep(3)
+def _repair_network_after_gluetun_start(
+    app, container_name: str, wait_secs: float = 3.0,
+) -> None:
+    """Always reattach stale shared-network containers after any Gluetun start.
+
+    *wait_secs* is how long to give Gluetun to come up.  A start event needs
+    only a moment; the boot scan may race a host still starting containers, and
+    ``restart_network_dependents`` refuses to run while Gluetun is down.
+    """
+    deadline = time.time() + max(wait_secs, 0)
+    time.sleep(min(wait_secs, 3.0))
+    while time.time() < deadline:
+        try:
+            import docker as _docker
+            if _docker.from_env().containers.get(container_name).status == 'running':
+                break
+        except Exception:
+            pass
+        time.sleep(3)
     with app.app_context():
         from .gluetun import list_orphaned_network_dependents, restart_network_dependents
         try:
@@ -3139,9 +3155,22 @@ def _docker_event_loop(app, container_name: str) -> None:
       - is_companion_restart()  → ignore (Companion itself triggered this restart)
       - _DOCKER_EVENT_COOLDOWN  → ignore if a check fired recently
       - benchmark_running       → ignore if a benchmark is already in progress
+
+    A reconciliation pass also runs once at startup: a Gluetun recreated while
+    Companion was down (host reboot, Unraid or Companion image update) produces
+    no event here, and nothing else scans at boot, so its dependents would stay
+    stranded until some later switch noticed them.
     """
     global _last_docker_event_ts
     from .gluetun import is_companion_restart
+
+    threading.Thread(
+        target=_repair_network_after_gluetun_start,
+        args=(app, container_name),
+        kwargs={'wait_secs': 120.0},
+        daemon=True,
+        name='gluetun-network-repair-boot',
+    ).start()
 
     while True:
         try:
