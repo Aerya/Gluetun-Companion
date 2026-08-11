@@ -381,6 +381,7 @@ def init_db(db_path: str):
                 ('adaptive_auto_shift',         '0'),
                 ('pending_optimal_hour',        ''),
                 ('gluetun_id_history',          '[]'),
+                ('gluetun_dependent_names',     '[]'),
                 ('orphan_legacy_adoption_done', '0'),
                 ('notif_auto_switch',           '1'),
                 ('notif_failover',              '1'),

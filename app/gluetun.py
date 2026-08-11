@@ -916,6 +916,25 @@ def restart_network_dependents(
     updated_imgs: list[str] = []
     exclude_set = set(exclude) if exclude else set()
 
+    # With Gluetun down, both the recreate and sdk_recreate's rollback fail on
+    # ``container:<gluetun>`` — deleting the dependent instead of detaching it.
+    try:
+        gluetun_state = docker.from_env().containers.get(container_name)
+        gluetun_state.reload()
+        if not (gluetun_state.attrs.get('State') or {}).get('Running'):
+            logger.error(
+                'Refusing to recreate network dependents: %s is %s, not running — '
+                'the recreate would delete them instead of reattaching them',
+                container_name, gluetun_state.status,
+            )
+            return restarted, updated_imgs
+    except Exception as exc:
+        logger.error(
+            'Refusing to recreate network dependents: cannot confirm %s is running (%s)',
+            container_name, exc,
+        )
+        return restarted, updated_imgs
+
     # Build the list of container names to restart
     if explicit_list is not None:
         # Use the pre-captured list (avoids missing containers with stale Gluetun IDs)
@@ -939,7 +958,7 @@ def restart_network_dependents(
                 gluetun_id = ''
             name_target = f'container:{container_name}'
             id_target   = f'container:{gluetun_id}' if gluetun_id else None
-            for c in client.containers.list(all=True):
+            for c in _list_containers_safe(client):
                 mode = c.attrs['HostConfig'].get('NetworkMode', '')
                 if mode == name_target or (id_target and mode == id_target):
                     if c.name in exclude_set:
@@ -953,9 +972,17 @@ def restart_network_dependents(
             logger.warning('restart_network_dependents (detect): %s', exc)
 
     try:
-        current_gluetun_id = docker.from_env().containers.get(container_name).id
+        current_gluetun_id = docker.from_env().containers.get(container_name).id or ''
     except Exception:
         current_gluetun_id = ''
+
+    def _do_recreate(name: str) -> None:
+        """Recreate *name* using whichever control backend owns it."""
+        if _management_mode(name) == CONTROL_BACKEND_UNRAID:
+            from . import unraid
+            unraid.sdk_recreate(name, network_mode=f'container:{container_name}')
+        else:
+            _compose_recreate(name, compose_dir, compose_project)
 
     # Restart each container and verify that Docker resolved the current
     # Gluetun namespace, rather than accepting a successful Compose exit code
@@ -968,42 +995,81 @@ def restart_network_dependents(
                 logger.info('  pull %s: %s%s', img, 'updated' if updated else 'up to date', '' if ok else ' (failed)')
                 if updated:
                     updated_imgs.append(img)
-            if _management_mode(name) == CONTROL_BACKEND_UNRAID:
-                from . import unraid
-                unraid.sdk_recreate(name, network_mode=f'container:{container_name}')
-            else:
-                _compose_recreate(name, compose_dir, compose_project)
+            before = _dependent_state(name)
+            _do_recreate(name)
             attached = False
             for attempt in range(2):
-                try:
-                    dependent = docker.from_env().containers.get(name)
-                    dependent.reload()
-                    mode = dependent.attrs.get('HostConfig', {}).get('NetworkMode', '')
-                    attached = mode in {
-                        f'container:{container_name}',
-                        f'container:{current_gluetun_id}',
-                    }
-                except Exception as inspect_exc:
-                    logger.warning('Cannot verify network namespace for %s: %s', name, inspect_exc)
+                attached, why = _verify_attached(
+                    name, container_name, current_gluetun_id, before
+                )
                 if attached:
                     break
                 if attempt == 0:
                     logger.warning(
-                        '%s is still not attached to current Gluetun; retrying recreate', name
+                        '%s is still not attached to current Gluetun (%s); retrying recreate',
+                        name, why,
                     )
-                    _compose_recreate(name, compose_dir, compose_project)
+                    _do_recreate(name)
                     time.sleep(1)
             if attached:
                 restarted.append(name)
             else:
                 logger.error(
-                    'Network-dependent %s could not be attached to current Gluetun %s',
-                    name, current_gluetun_id[:12] or '?',
+                    'Network-dependent %s could not be attached to current Gluetun %s: %s',
+                    name, current_gluetun_id[:12] or '?', why,
                 )
         except Exception as exc:
             logger.warning('Failed to recreate %s: %s', name, exc)
 
     return restarted, updated_imgs
+
+
+def _dependent_state(name: str) -> 'dict | None':
+    """Return ``{'id', 'started', 'running', 'mode'}`` for *name*, or None."""
+    try:
+        c = docker.from_env().containers.get(name)
+        c.reload()
+        state = c.attrs.get('State') or {}
+        return {
+            'id': c.id,
+            'started': state.get('StartedAt', ''),
+            'running': bool(state.get('Running')),
+            'mode': (c.attrs.get('HostConfig') or {}).get('NetworkMode', ''),
+        }
+    except Exception as exc:
+        logger.debug('_dependent_state(%s): %s', name, exc)
+        return None
+
+
+def _verify_attached(
+    name: str,
+    container_name: str,
+    current_gluetun_id: str,
+    before: 'dict | None',
+) -> tuple[bool, str]:
+    """Return ``(attached, reason)`` for a dependent after a recreate attempt.
+
+    All three checks are needed: running (a recreate can succeed and the
+    container exit straight away), StartedAt changed (proof it was restarted at
+    all), and a NetworkMode resolving to the *current* Gluetun rather than a
+    dead ID.
+    """
+    after = _dependent_state(name)
+    if after is None:
+        return False, 'cannot inspect container'
+    if not after['running']:
+        return False, 'container is not running'
+    if before and before['started'] and after['started'] == before['started']:
+        return False, 'container was never restarted (StartedAt unchanged)'
+    mode = after['mode']
+    if not mode.startswith('container:'):
+        return False, f'NetworkMode is {mode!r}, not a shared namespace'
+    ref = mode[len('container:'):]
+    if ref == container_name:
+        return True, ''
+    if current_gluetun_id and ref in (current_gluetun_id, current_gluetun_id[:12]):
+        return True, ''
+    return False, f'NetworkMode references {ref[:12]!r}, not the current Gluetun'
 
 
 def pull_gluetun_before_switch(container_name: str) -> list[str]:
@@ -1206,6 +1272,38 @@ def pull_image(container_name: str) -> tuple[bool, bool, str]:
         return False, False, str(exc)
 
 
+def _list_containers_safe(client, all_containers: bool = True) -> list:
+    """Enumerate containers, skipping any the daemon refuses to inspect.
+
+    docker-py's ``containers.list()`` tolerates only ``NotFound``, so one broken
+    container (e.g. "RWLayer … is unexpectedly nil" after an unclean shutdown)
+    makes every enumeration raise and every caller fall back to an empty list —
+    silently disabling dependent detection host-wide.  Such a container cannot
+    be repaired anyway, so it is named in the log and skipped.
+    """
+    result: list = []
+    try:
+        raw = client.api.containers(all=all_containers)
+    except Exception as exc:
+        logger.warning('Cannot list containers: %s', exc)
+        return result
+    for entry in raw or []:
+        cid = (entry or {}).get('Id', '')
+        if not cid:
+            continue
+        try:
+            result.append(client.containers.get(cid))
+        except Exception as exc:
+            label = ', '.join(
+                str(n).lstrip('/') for n in ((entry or {}).get('Names') or [])
+            ) or cid[:12]
+            logger.warning(
+                'Skipping container %s (%s) — the daemon cannot inspect it: %s',
+                label, cid[:12], exc,
+            )
+    return result
+
+
 def record_gluetun_id(container_id: str) -> None:
     """Remember a Gluetun container ID in the persistent history.
 
@@ -1214,7 +1312,10 @@ def record_gluetun_id(container_id: str) -> None:
     container" (e.g. a second VPN stack the user runs) — Companion must never
     adopt and recreate containers outside its own scope.
 
-    Capped at the 25 most recent IDs.  No-op if the ID is already recorded.
+    Capped at the 500 most recent IDs.  No-op if the ID is already recorded.
+    The cap must stay well above one benchmark's recreate count (one per tested
+    server) or orphans lose their reference before adoption; see
+    ``record_dependent_names`` for the name-based safety net.
     """
     if not container_id:
         return
@@ -1226,9 +1327,43 @@ def record_gluetun_id(container_id: str) -> None:
         if container_id in history:
             return
         history.append(container_id)
-        set_setting('gluetun_id_history', json.dumps(history[-25:]))
+        set_setting('gluetun_id_history', json.dumps(history[-500:]))
     except Exception as exc:
         logger.debug('record_gluetun_id: %s', exc)
+
+
+def record_dependent_names(names: 'list[str] | set[str]') -> None:
+    """Remember the names of containers seen sharing Gluetun's namespace.
+
+    The Gluetun ID history is lossy (a long benchmark rolls old IDs out), which
+    strands any dependent broken before the rollover.  Names do not churn, so
+    they give ``list_orphaned_network_dependents`` a stable second key: a
+    dead-ref orphan with a remembered name is ours whatever ID it points at,
+    while one never seen attached (another VPN stack) is still left alone.
+    """
+    names = [str(n) for n in (names or []) if n]
+    if not names:
+        return
+    try:
+        from .database import get_setting, set_setting
+        known = json.loads(get_setting('gluetun_dependent_names', '[]') or '[]')
+        if not isinstance(known, list):
+            known = []
+        merged = sorted(set(known) | set(names))
+        if merged != sorted(set(known)):
+            set_setting('gluetun_dependent_names', json.dumps(merged))
+    except Exception as exc:
+        logger.debug('record_dependent_names: %s', exc)
+
+
+def _known_dependent_names() -> set[str]:
+    """Return the names of containers ever observed attached to Gluetun."""
+    try:
+        from .database import get_setting
+        known = json.loads(get_setting('gluetun_dependent_names', '[]') or '[]')
+        return {str(n) for n in known if n} if isinstance(known, list) else set()
+    except Exception:
+        return set()
 
 
 def _known_gluetun_ids() -> set[str]:
@@ -1261,12 +1396,15 @@ def list_network_dependents(container_name: str) -> list[str]:
             gluetun_id = ''
         name_target = f'container:{container_name}'
         id_target   = f'container:{gluetun_id}' if gluetun_id else None
-        for c in client.containers.list(all=True):
+        for c in _list_containers_safe(client):
             if not (c.attrs.get('State') or {}).get('Running'):
                 continue
             mode = c.attrs['HostConfig'].get('NetworkMode', '')
             if mode == name_target or (id_target and mode == id_target):
                 result.append(c.name)
+        # Remember the names so they stay repairable after the ID they
+        # reference ages out of the Gluetun ID history.
+        record_dependent_names(result)
     except Exception as exc:
         logger.warning('list_network_dependents: %s', exc)
     return sorted(result)
@@ -1312,30 +1450,39 @@ def list_orphaned_network_dependents() -> list[str]:
     references a container ID that no longer exists — meaning the network
     namespace it was sharing has been destroyed.
 
-    Only containers whose stale reference matches a **recorded former Gluetun
-    ID** are adopted — a dead reference to some unrelated container (e.g. a
-    second VPN stack the user runs) is not Companion's to fix.  Exception:
-    the first scan after upgrading to this version adopts all dead-ref
-    orphans once (the ID history did not exist before, so pre-existing broken
-    dependents would otherwise never be repaired).
+    A container is adopted when its stale reference matches a **recorded former
+    Gluetun ID**, or when its **name** was previously observed attached to
+    Gluetun (see ``record_dependent_names``, which covers IDs the capped history
+    has evicted).  A dead reference matching neither key — a second VPN stack,
+    say — is not Companion's to fix, and no later scan ever widens that rule:
+    the only blanket adoption is the original one-time legacy pass, which runs
+    on a database that has never had an ID history at all.
 
     Returns the sorted list of container names that need to be recreated.
     """
     result: list[str] = []
+    # Only orphans matched by a positive key are worth remembering; a legacy-pass
+    # guess must not be promoted into permanent name memory (see below).
+    confirmed: list[str] = []
     try:
         from .database import get_setting, set_setting
 
         client = docker.from_env()
         # Build the set of all currently-known container IDs and names
-        all_containers  = client.containers.list(all=True)
+        all_containers  = _list_containers_safe(client)
         known_ids       = {c.id for c in all_containers}
         # Also include short IDs (first 12 chars) as Docker stores them
         known_short_ids = {c.id[:12] for c in all_containers}
         known_names     = {c.name for c in all_containers}
 
-        gluetun_ids = _known_gluetun_ids()
-        # One-time legacy pass: before this version no ID history existed, so
-        # orphans created earlier reference IDs we never recorded.
+        gluetun_ids   = _known_gluetun_ids()
+        known_deps    = _known_dependent_names()
+        # The single one-time pass that adopts any dead-ref orphan: it exists
+        # only for databases predating the ID history, where no orphan could
+        # possibly match a key.  It is never re-armed — a database that has
+        # already run it stays restricted to the two keys above, so widening
+        # the memory (names, a larger ID cap) can never retroactively adopt
+        # containers belonging to an unrelated VPN stack.
         legacy_pass = get_setting('orphan_legacy_adoption_done', '0') != '1'
 
         for c in all_containers:
@@ -1348,13 +1495,24 @@ def list_orphaned_network_dependents() -> list[str]:
             # Reference still resolves → not orphaned
             if ref in known_ids or ref in known_short_ids or ref in known_names:
                 continue
-            # Dead reference — only adopt if it was one of *our* Gluetun IDs
+            # Dead reference — adopt if it was one of *our* Gluetun IDs, or if
+            # we have seen this container attached before (the capped ID history
+            # may have rolled past its reference).
             if ref in gluetun_ids or ref[:12] in gluetun_ids:
                 logger.debug(
                     'list_orphaned_network_dependents: %s has stale NetworkMode %r '
                     '(former Gluetun ID)', c.name, mode,
                 )
                 result.append(c.name)
+                confirmed.append(c.name)
+            elif c.name in known_deps:
+                logger.info(
+                    'list_orphaned_network_dependents: %s has stale NetworkMode %r — '
+                    'ID not in history, but this container was previously attached '
+                    'to Gluetun; adopting', c.name, mode,
+                )
+                result.append(c.name)
+                confirmed.append(c.name)
             elif legacy_pass:
                 logger.info(
                     'list_orphaned_network_dependents: %s has stale NetworkMode %r — '
@@ -1370,6 +1528,13 @@ def list_orphaned_network_dependents() -> list[str]:
 
         if legacy_pass:
             set_setting('orphan_legacy_adoption_done', '1')
+        # Remember only the orphans a key actually identified, so a future ID
+        # rollover cannot strand them again.  Legacy-pass adoptions are
+        # deliberately excluded: recording a guess would turn the one-time pass
+        # into a permanent claim over containers that may not be ours at all.
+        # A genuine dependent adopted that way is recorded anyway once the
+        # recreate reattaches it and the next scan sees it attached.
+        record_dependent_names(confirmed)
     except Exception as exc:
         logger.warning('list_orphaned_network_dependents: %s', exc)
     return sorted(result)
@@ -1379,7 +1544,7 @@ def list_docker_containers() -> list[str]:
     """Return the names of all currently running Docker containers, sorted."""
     try:
         client = docker.from_env()
-        return sorted(c.name for c in client.containers.list())
+        return sorted(c.name for c in _list_containers_safe(client, all_containers=False))
     except Exception as exc:
         logger.warning('list_docker_containers: %s', exc)
         return []
