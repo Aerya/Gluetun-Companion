@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% block title %}{{ t.start_title }} - Gluetun Companion{% endblock %}
+
+{% block content %}
+<div class="mx-auto" style="max-width:1050px">
+  <div class="text-center mb-4">
+    <div class="display-6 mb-2">👋</div>
+    <h1 class="h3 fw-bold">{{ t.start_title }}</h1>
+    <p class="text-muted mb-0">{{ t.start_intro }}</p>
+  </div>
+
+  <div class="alert alert-info d-flex gap-3 align-items-start">
+    <i class="bi bi-car-front-fill fs-3"></i>
+    <div><strong>{{ t.start_simple_title }}</strong><br>{{ t.start_simple_body }}</div>
+  </div>
+
+  <section class="card p-4 mb-3">
+    <div class="d-flex gap-3 align-items-start">
+      <span class="badge rounded-pill bg-primary fs-6">1</span>
+      <div class="flex-grow-1">
+        <h2 class="h5 fw-bold">{{ t.start_step1_title }}</h2>
+        <p>{{ t.start_step1_body }}</p>
+        <div class="border rounded p-3 mb-3">
+          <h3 class="h6 fw-bold">{{ t.start_gluetun_compose_title }}</h3>
+          <p class="small">{{ t.start_gluetun_compose_body }}</p>
+          <pre class="small mb-2"><code>services:
+  gluetun:
+    ports:
+      - "8888:8888/tcp"
+      - "8000:8000/tcp"
+    environment:
+      - HTTPPROXY=on
+      - HTTPPROXY_LISTENING_ADDRESS=:8888
+      - HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE={"auth":"apikey","apikey":"{{ 'VOTRE_CLE_API' if lang == 'fr' else 'YOUR_API_KEY' }}"}</code></pre>
+          <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-sm btn-outline-secondary" href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/options/http-proxy.md" target="_blank" rel="noopener">{{ t.start_proxy_wiki }}</a>
+            <a class="btn btn-sm btn-outline-secondary" href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md" target="_blank" rel="noopener">{{ t.start_control_wiki }}</a>
+          </div>
+        </div>
+        <div class="border rounded p-3 mb-3">
+          <h3 class="h6 fw-bold">{{ t.start_companion_compose_title }}</h3>
+          <p class="small">{{ t.start_companion_compose_body | safe }}</p>
+          <pre class="small mb-2"><code>services:
+  gluetun-companion:
+    volumes:
+      - /chemin/stack/gluetun:/compose:rw
+      - /chemin/volume/gluetun:/gluetun:ro
+    environment:
+      - DOCKER_HOST=tcp://socket-proxy:2375
+    depends_on:
+      - socket-proxy</code></pre>
+          <div class="alert alert-info py-2 small mb-0">{{ t.start_companion_already_done }}</div>
+        </div>
+        <div class="alert alert-warning py-2 mb-2">{{ t.start_restart_warning }}</div>
+        <a class="btn btn-sm btn-outline-primary" href="{{ 'https://github.com/Aerya/Gluetun-Companion#d%C3%A9marrage-rapide' if lang == 'fr' else 'https://github.com/Aerya/Gluetun-Companion/blob/main/README.en.md#quick-start' }}" target="_blank" rel="noopener">
+          <i class="bi bi-file-earmark-code"></i> {{ t.start_compose_example }}
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="card p-4 mb-3">
+    <div class="d-flex gap-3 align-items-start">
+      <span class="badge rounded-pill bg-primary fs-6">2</span>
+      <div class="flex-grow-1">
+        <h2 class="h5 fw-bold">{{ t.start_step2_title }}</h2>
+        <p>{{ t.start_step2_body }}</p>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="border rounded p-3 h-100">
+              <h3 class="h6 fw-bold"><i class="bi bi-box-arrow-in-down text-success"></i> {{ t.start_path_existing_title }}</h3>
+              <p class="small">{{ t.start_path_existing_body }}</p>
+              <ol class="small mb-3">
+                <li>{{ t.start_existing_two }}</li>
+                <li>{{ t.start_existing_three }}</li>
+              </ol>
+              <div class="alert alert-secondary py-2 small">{{ t.start_filter_explanation | safe }}</div>
+              <form method="post" action="{{ url_for('main.getting_started_import_active_profile') }}" class="mb-2">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-box-arrow-in-down"></i> {{ t.start_import_active }}</button>
+              </form>
+              <p class="small text-muted mb-2">{{ t.start_import_active_hint }}</p>
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.settings') }}#wireguard">{{ t.start_create_profile_manual }}</a>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="border rounded p-3 h-100">
+              <h3 class="h6 fw-bold"><i class="bi bi-list-stars text-info"></i> {{ t.start_path_catalogue_title }}</h3>
+              <p class="small">{{ t.start_path_catalogue_body }}</p>
+              <ol class="small mb-3">
+                <li>{{ t.start_catalogue_one }}</li>
+                <li>{{ t.start_catalogue_two }}</li>
+                <li>{{ t.start_catalogue_three }}</li>
+              </ol>
+              <div class="alert alert-warning py-2 small">{{ t.start_catalogue_tradeoff }}</div>
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.servers') }}">{{ t.start_open_catalogue }}</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card p-4 mb-3">
+    <div class="d-flex gap-3 align-items-start">
+      <span class="badge rounded-pill bg-primary fs-6">3</span>
+      <div class="flex-grow-1">
+        <h2 class="h5 fw-bold">{{ t.start_step3_title }}</h2>
+        <p>{{ t.start_step3_body }}</p>
+        <ol>
+          <li>{{ t.start_check_vpn }}</li>
+          <li>{{ t.start_check_servers }}</li>
+          <li>{{ t.start_check_benchmark }}</li>
+        </ol>
+        <a class="btn btn-success" href="{{ url_for('main.dashboard') }}"><i class="bi bi-speedometer2"></i> {{ t.start_go_dashboard }}</a>
+      </div>
+    </div>
+  </section>
+
+  <p class="text-muted small text-center">{{ t.start_reopen_hint }}</p>
+</div>
+{% endblock %}

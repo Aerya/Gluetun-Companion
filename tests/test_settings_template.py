@@ -5,6 +5,8 @@ from pathlib import Path
 SETTINGS_TEMPLATE = (
     Path(__file__).resolve().parents[1] / 'app' / 'templates' / 'settings.html'
 )
+TEMPLATES_DIR = Path(__file__).resolve().parents[1] / 'app' / 'templates'
+ROUTES_FILE = Path(__file__).resolve().parents[1] / 'app' / 'routes.py'
 
 
 class SettingsTemplateTest(unittest.TestCase):
@@ -26,6 +28,20 @@ class SettingsTemplateTest(unittest.TestCase):
         self.assertIn('id="port-forward-action-result"', template)
         self.assertIn("function _portForwardMsg(text, cls)", template)
         self.assertIn(".catch(err => _portForwardMsg(err.message", template)
+
+    def test_first_account_opens_getting_started_guide(self):
+        routes = ROUTES_FILE.read_text(encoding='utf-8')
+        guide = (TEMPLATES_DIR / 'getting_started.html').read_text(encoding='utf-8')
+        base = (TEMPLATES_DIR / 'base.html').read_text(encoding='utf-8')
+
+        self.assertIn("return redirect(url_for('main.getting_started'))", routes)
+        self.assertIn("@bp.route('/getting-started')", routes)
+        self.assertIn('start_path_existing_title', guide)
+        self.assertIn('start_path_catalogue_title', guide)
+        self.assertIn('getting_started_import_active_profile', guide)
+        self.assertIn('setup/options/http-proxy.md', guide)
+        self.assertIn('setup/advanced/control-server.md', guide)
+        self.assertIn("url_for('main.getting_started')", base)
 
 
 if __name__ == '__main__':

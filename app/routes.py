@@ -38,6 +38,7 @@ from .gluetun import (
     apply_dns_filtering,
     wait_for_vpn, restart_network_dependents,
     list_docker_containers,
+    get_container_env,
 )
 from .i18n import flash_t, get_t, translate_progress_lines
 from .scheduler import (
@@ -487,7 +488,7 @@ def login():
             session['logged_in'] = True
             session['username'] = username
             flash_t('flash_account_created', 'success')
-            return redirect(url_for('main.dashboard'))
+            return redirect(url_for('main.getting_started'))
 
         if username == stored_user and check_password_hash(stored_hash, password):
             _rl_reset(ip)
@@ -514,6 +515,65 @@ def set_lang(code):
         session['lang'] = code
         set_setting('ui_lang', code)
     return redirect(request.referrer or url_for('main.dashboard'))
+
+
+@bp.route('/getting-started')
+@login_required
+def getting_started():
+    """A plain-language setup path, also used immediately after account creation."""
+    return render_template('getting_started.html')
+
+
+@bp.route('/getting-started/import-active-profile', methods=['POST'])
+@login_required
+def getting_started_import_active_profile():
+    """Create an encrypted VPN profile from the active container environment."""
+    from .onboarding import active_profile_values
+
+    container = current_app.config['GLUETUN_CONTAINER']
+    try:
+        container_env = get_container_env(container)
+        imported = active_profile_values(container_env)
+    except Exception as exc:
+        logger.warning('Active Gluetun profile import failed: %s', exc)
+        flash_t('flash_start_import_unreachable', 'danger')
+        return redirect(url_for('main.getting_started'))
+
+    if imported.get('error') == 'unsupported_provider':
+        flash_t('flash_start_import_unsupported', 'danger')
+        return redirect(url_for('main.getting_started'))
+    if imported.get('missing'):
+        msg = get_t().get('flash_start_import_missing', 'Champs obligatoires introuvables : {fields}.')
+        flash(msg.replace('{fields}', ', '.join(imported['missing'])), 'danger')
+        return redirect(url_for('main.getting_started'))
+
+    provider = imported['provider']
+    vpn_type = imported['vpn_type']
+    if any(
+        p.get('provider') == provider and p.get('vpn_type') == vpn_type
+        for p in get_vpn_profiles()
+    ):
+        flash_t('flash_start_import_exists', 'warning')
+        return redirect(url_for('main.getting_started'))
+
+    secret_keys = get_secret_field_keys(provider, vpn_type)
+    values = {
+        key: crypto_encrypt(value) if key in secret_keys else value
+        for key, value in imported['values'].items()
+    }
+    label = WG_PROVIDERS[provider]['label']
+    create_vpn_profile(
+        name=f'{label} — Gluetun actif',
+        provider=provider,
+        vpn_type=vpn_type,
+        vars=values,
+        enabled=True,
+        port_forwarding=(
+            (container_env.get('VPN_PORT_FORWARDING') or '').lower() == 'on'
+        ),
+    )
+    flash_t('flash_start_import_ok', 'success')
+    return redirect(url_for('main.getting_started'))
 
 
 # ---------------------------------------------------------------------------

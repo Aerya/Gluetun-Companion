@@ -165,6 +165,13 @@
       </ul>
       <ul class="navbar-nav align-items-center gap-1">
         <li class="nav-item">
+          <a class="btn btn-link nav-link px-2 {{ 'active' if request.endpoint == 'main.getting_started' }}"
+             href="{{ url_for('main.getting_started') }}" title="{{ t.nav_getting_started }}">
+            <i class="bi bi-question-circle"></i>
+            <span class="d-lg-none ms-1">{{ t.nav_getting_started }}</span>
+          </a>
+        </li>
+        <li class="nav-item">
           <span id="vpn-down-badge" class="badge bg-danger d-none" style="animation:vpnBlink 1s step-start infinite">
             <i class="bi bi-exclamation-triangle-fill"></i> VPN down
           </span>
@@ -236,7 +243,7 @@
    at least one profile is configured.
    Not shown on /settings — the user is already where the link points to.
    ────────────────────────────────────────────────────────────────────────── #}
-{% if not _g_has_wg_profiles and request.endpoint != 'main.settings' %}
+{% if not _g_has_wg_profiles and request.endpoint not in ('main.settings', 'main.getting_started') %}
 <div class="modal fade" id="noticeWgSetupModal" tabindex="-1"
      aria-labelledby="noticeWgSetupLabel" aria-modal="true" role="dialog">
   <div class="modal-dialog modal-dialog-centered">
@@ -248,9 +255,9 @@
       </div>
       <div class="modal-body pt-1" style="font-size:.9rem">
         <p class="mb-3">{{ t.notice_wg_setup_body }}</p>
-        <a href="{{ url_for('main.settings') }}#wireguard"
+        <a href="{{ url_for('main.getting_started') }}"
            class="btn btn-primary fw-semibold w-100">
-          <i class="bi bi-shield-lock me-1"></i> {{ t.notice_wg_setup_link }}
+          <i class="bi bi-signpost-split me-1"></i> {{ t.notice_wg_setup_link }}
         </a>
       </div>
       <div class="modal-footer border-0 pt-0 justify-content-end">

@@ -152,6 +152,8 @@ docker compose up -d
 
 Then open [http://localhost:8765](http://localhost:8765). For the complete Compose setup, Unraid, profiles, trackers, variables and troubleshooting, see the [English Wiki](https://github.com/Aerya/Gluetun-Companion/wiki/Home).
 
+After the first account is created, Companion automatically opens a **three-step getting started guide**: prepare the Compose connections, choose between keeping the current Gluetun configuration or importing servers from a catalogue, then run a first benchmark. Use the **?** button in the navigation bar to reopen the guide at any time.
+
 ## Third-party apps
 
 - [AirDash](https://github.com/zlimteck/AirDash) — an unofficial native AirVPN dashboard for iPhone and iPad.
