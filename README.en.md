@@ -117,6 +117,29 @@ services:
 
 `EVENTS=1` is required to detect Gluetun restarts immediately. The directory mounted at `/compose` must contain the Gluetun stack's Compose file; Companion uses it to recreate services sharing Gluetun's network after a switch.
 
+### Gluetun Control Server: access and authentication
+
+Companion reads the VPN state and forwarded port through the [official Gluetun Control Server](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md). Routes are private by default in recent Gluetun releases: publishing the port is therefore not enough, and authentication must also be configured.
+
+The recommended method with Companion is an API key:
+
+1. Generate a key with `docker run --rm qmcgaw/gluetun genkey`.
+2. Add the port and role to the Gluetun service. The host port may differ when `8000` is already in use:
+
+```yaml
+services:
+  gluetun:
+    ports:
+      - "8043:8000/tcp"
+    environment:
+      - HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE={"auth":"apikey","apikey":"YOUR_API_KEY"}
+```
+
+3. In **Companion → Settings → VPN forwarded ports**, enter the URL reachable from the Companion container, for example `http://host.docker.internal:8043`, then enter the same key in **X-API-Key**.
+4. Recreate Gluetun after changing the configuration and confirm Companion displays its state without a `401` or `403` error.
+
+`HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE='{"auth":"none"}'` disables authentication, but the Gluetun documentation strongly discourages it. Never expose the Control Server directly to the Internet; if remote access is unavoidable, protect it with TLS and a reverse proxy.
+
 ### WireGuard: Companion-managed configuration
 
 To let Companion benchmark servers and then select and switch automatically to the best one for a natively supported provider (including ProtonVPN), do not mount a `wg0.conf` file at `/gluetun/wireguard/wg0.conf`. Gluetun gives that file and its WireGuard endpoint priority, which conflicts with the `SERVER_*` variables written by Companion. Configure the provider and WireGuard credentials through a VPN profile in Companion instead.

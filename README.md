@@ -118,6 +118,29 @@ services:
 
 `EVENTS=1` est nécessaire pour détecter immédiatement les redémarrages de Gluetun. Le dossier monté sur `/compose` doit être celui qui contient le fichier Compose de la stack Gluetun ; Companion l'utilise pour recréer les services partageant son réseau après une bascule.
 
+### Control Server Gluetun : accès et authentification
+
+Companion lit l’état du VPN et le port forwardé avec le [Control Server officiel de Gluetun](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md). Les routes sont privées par défaut dans les versions récentes de Gluetun : publier le port ne suffit donc pas, il faut aussi choisir une authentification.
+
+La méthode recommandée avec Companion est une clé API :
+
+1. Générez une clé avec `docker run --rm qmcgaw/gluetun genkey`.
+2. Ajoutez le port et le rôle au service Gluetun. Le port hôte peut être différent si `8000` est déjà utilisé :
+
+```yaml
+services:
+  gluetun:
+    ports:
+      - "8043:8000/tcp"
+    environment:
+      - HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE={"auth":"apikey","apikey":"VOTRE_CLE_API"}
+```
+
+3. Dans **Companion → Paramètres → Ports forwardés VPN**, indiquez l’URL accessible depuis le container Companion, par exemple `http://host.docker.internal:8043`, puis saisissez la même clé dans **X-API-Key**.
+4. Recréez Gluetun après la modification et vérifiez que Companion affiche son état sans erreur `401` ou `403`.
+
+`HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE='{"auth":"none"}'` désactive l’authentification, mais la documentation Gluetun le déconseille fortement. N’exposez jamais le Control Server directement sur Internet ; si un accès distant est indispensable, protégez-le avec TLS et un reverse proxy.
+
 ### WireGuard : configuration pilotée par Companion
 
 Pour permettre à Companion de benchmarker les serveurs puis de sélectionner et basculer automatiquement vers le meilleur d'un fournisseur pris en charge nativement (notamment ProtonVPN), ne montez pas de fichier `wg0.conf` dans `/gluetun/wireguard/wg0.conf`. Gluetun donne priorité à ce fichier et à son endpoint WireGuard, ce qui est incompatible avec les variables `SERVER_*` écrites par Companion. Configurez plutôt le fournisseur et les identifiants WireGuard via un profil VPN dans Companion.
