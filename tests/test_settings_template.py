@@ -28,6 +28,7 @@ class SettingsTemplateTest(unittest.TestCase):
         self.assertIn('id="port-forward-action-result"', template)
         self.assertIn("function _portForwardMsg(text, cls)", template)
         self.assertIn(".catch(err => _portForwardMsg(err.message", template)
+        self.assertIn('data.listen_port || data.expected_port', template)
 
     def test_first_account_opens_getting_started_guide(self):
         routes = ROUTES_FILE.read_text(encoding='utf-8')

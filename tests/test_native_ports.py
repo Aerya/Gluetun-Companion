@@ -16,6 +16,51 @@ def _resp(status, payload=None, text=''):
 
 
 class ReadGluetunNativePortsTest(unittest.TestCase):
+    @patch('app.port_forwarding._gluetun_control_url_candidates', return_value=[
+        'http://host.docker.internal:8000',
+        'http://host.docker.internal:8043',
+    ])
+    @patch('app.port_forwarding.get_setting', return_value='')
+    @patch('app.port_forwarding.requests.get')
+    def test_bad_explicit_url_falls_back_to_docker_mapping(self, rget, _gs, _candidates):
+        def _get(url, headers=None, timeout=None):
+            if url.startswith('http://host.docker.internal:8000'):
+                return _resp(200, {})
+            if url == 'http://host.docker.internal:8043/v1/portforward':
+                return _resp(200, {'port': 47987})
+            raise AssertionError(url)
+
+        rget.side_effect = _get
+
+        res = read_gluetun_native_ports(api_url='http://host.docker.internal:8000')
+
+        self.assertTrue(res['ok'])
+        self.assertEqual(res['ports'], [47987])
+        self.assertEqual(res['api_url'], 'http://host.docker.internal:8043')
+
+    @patch('app.port_forwarding._gluetun_control_url_candidates', return_value=[
+        'http://host.docker.internal:8000',
+        'http://host.docker.internal:8043',
+    ])
+    @patch('app.port_forwarding.get_setting', return_value='')
+    @patch('app.port_forwarding.requests.get')
+    def test_auth_failure_on_explicit_url_does_not_block_next_candidate(
+        self, rget, _gs, _candidates,
+    ):
+        def _get(url, headers=None, timeout=None):
+            if url.startswith('http://host.docker.internal:8000'):
+                return _resp(401, text='Unauthorized')
+            if url == 'http://host.docker.internal:8043/v1/portforward':
+                return _resp(200, {'port': 47987})
+            raise AssertionError(url)
+
+        rget.side_effect = _get
+
+        res = read_gluetun_native_ports(api_url='http://host.docker.internal:8000')
+
+        self.assertTrue(res['ok'])
+        self.assertEqual(res['api_url'], 'http://host.docker.internal:8043')
+
     @patch('app.port_forwarding._container_env',
            return_value={'VPN_PORT_FORWARDING': 'on', 'VPN_SERVICE_PROVIDER': 'protonvpn'})
     @patch('app.port_forwarding.get_setting', return_value='')
