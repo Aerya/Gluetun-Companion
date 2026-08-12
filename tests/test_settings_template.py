@@ -42,7 +42,15 @@ class SettingsTemplateTest(unittest.TestCase):
         self.assertIn('getting_started_import_active_profile', guide)
         self.assertIn('setup/options/http-proxy.md', guide)
         self.assertIn('setup/advanced/control-server.md', guide)
+        self.assertIn('8043:8000', guide)
+        self.assertIn('/v1/portforward', guide)
         self.assertIn("url_for('main.getting_started')", base)
+
+    def test_control_server_help_covers_custom_host_mapping(self):
+        template = SETTINGS_TEMPLATE.read_text(encoding='utf-8')
+
+        self.assertIn('http://host.docker.internal:8043', template)
+        self.assertIn('autodétection Docker', template)
 
 
 if __name__ == '__main__':

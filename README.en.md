@@ -138,11 +138,36 @@ services:
 3. In **Companion → Settings → VPN forwarded ports**, enter the URL reachable from the Companion container, for example `http://host.docker.internal:8043`, then enter the same key in **X-API-Key**.
 4. Recreate Gluetun after changing the configuration and confirm Companion displays its state without a `401` or `403` error.
 
-`HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE='{"auth":"none"}'` disables authentication, but the Gluetun documentation strongly discourages it. Never expose the Control Server directly to the Internet; if remote access is unavoidable, protect it with TLS and a reverse proxy.
+In `8043:8000`, `8000` is Gluetun's internal port and `8043` is the port published on the host. If your setup requires adding the Control Server to `FIREWALL_INPUT_PORTS`, use `8000`, never `8043`. You may leave the URL field empty when Docker autodetection works; with a remapped port, Portainer or Synology, enter the URL explicitly. It must be reachable **from the Companion container**, not only from the host or your browser.
+
+Quick diagnostics:
+
+```bash
+# From the Docker host — replace 8043 with the selected host port
+curl -i http://127.0.0.1:8043/v1/portforward
+
+# From the Gluetun container — the internal port is always 8000
+docker exec gluetun wget -S -O- http://127.0.0.1:8000/v1/portforward
+```
+
+The expected response is `HTTP/1.1 200 OK` with content such as `{"port":47987,"ports":[47987]}`. A `401` or `403` means the API key is not configured identically in Gluetun and Companion.
+
+On a fully trusted LAN only, the following Compose form disables authentication:
+
+```yaml
+environment:
+  - HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE={"auth":"none"}
+```
+
+The Gluetun documentation strongly discourages this option. Never expose the Control Server directly to the Internet; if remote access is unavoidable, protect it with TLS and a reverse proxy.
+
+With ProtonVPN, enable `VPN_PORT_FORWARDING=on` and use a **Gluetun native** rule without a fixed port. Gluetun obtains the dynamic port; Companion reads it and then synchronizes qBittorrent. Do not add this dynamic port to `FIREWALL_VPN_INPUT_PORTS`, `FIREWALL_INPUT_PORTS`, or Docker port mappings.
 
 ### WireGuard: Companion-managed configuration
 
 To let Companion benchmark servers and then select and switch automatically to the best one for a natively supported provider (including ProtonVPN), do not mount a `wg0.conf` file at `/gluetun/wireguard/wg0.conf`. Gluetun gives that file and its WireGuard endpoint priority, which conflicts with the `SERVER_*` variables written by Companion. Configure the provider and WireGuard credentials through a VPN profile in Companion instead.
+
+The main profile **WireGuard private key** is required for Gluetun switches. The **Sidecar private key** is a second identity reserved for benchmark containers: it never replaces the main key.
 
 A `wg0.conf` is still suitable for a fixed custom WireGuard configuration. In this mode, Companion cannot benchmark servers by switching the main Gluetun container or automatically apply the best result. Isolated sidecar benchmarks remain possible with a compatible VPN profile, but Companion refuses managed switches so it cannot apply an override that would stop Gluetun.
 

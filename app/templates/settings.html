@@ -2389,6 +2389,9 @@
           <input name="port_forward_gluetun_api_url" class="form-control form-control-sm font-monospace"
                  value="{{ cfg.port_forward_gluetun_api_url }}" placeholder="http://host.docker.internal:8000">
           <div class="form-text">
+            {{ 'Laissez vide pour l’autodétection Docker. Avec un port hôte remappé, indiquez l’URL joignable depuis Companion, par exemple http://host.docker.internal:8043.' if lang == 'fr' else 'Leave empty for Docker autodetection. With a remapped host port, enter the URL reachable from Companion, for example http://host.docker.internal:8043.' }}
+          </div>
+          <div class="form-text">
             {% if gluetun_native_portforward.ok %}
             {{ 'Port natif détecté' if lang == 'fr' else 'Native port detected' }} :
             <code>{{ gluetun_native_portforward.ports | join(', ') }}</code>
