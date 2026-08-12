@@ -262,6 +262,11 @@ def _diagnose_no_native_port(container_name: str, base_error: str) -> str:
     """Turn a generic 'no port' result into a specific, actionable message."""
     t = _pf_t()
     default = base_error or t.get('pf_no_native_port', 'Aucun port retourné.')
+    if 'HTTP 401' in base_error or 'HTTP 403' in base_error:
+        return t.get(
+            'pf_control_auth_required',
+            'Le Control Server Gluetun exige une authentification. Configurez une clé API dans Companion.',
+        )
     if not container_name:
         return default
     try:
@@ -308,10 +313,13 @@ def read_gluetun_native_ports(
                 status, ports, payload, error = _fetch_portforward(base, '/v1/portforward', headers, timeout)
                 source = 'v1/portforward'
                 if not ports and status in (401, 403, 404):
+                    primary_error = error
                     _ls, l_ports, l_payload, l_error = _fetch_portforward(
                         base, '/v1/openvpn/portforwarded', headers, timeout)
                     if l_ports:
                         ports, payload, error, source = l_ports, l_payload, '', 'legacy'
+                    elif status in (401, 403):
+                        error = primary_error
                     elif not error:
                         error = l_error
                 if ports:
