@@ -27,11 +27,15 @@
   gluetun:
     ports:
       - "8888:8888/tcp"
-      - "8000:8000/tcp"
+      - "8043:8000/tcp"
     environment:
       - HTTPPROXY=on
       - HTTPPROXY_LISTENING_ADDRESS=:8888
       - HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE={"auth":"apikey","apikey":"{{ 'VOTRE_CLE_API' if lang == 'fr' else 'YOUR_API_KEY' }}"}</code></pre>
+          <p class="small mb-2">{{ t.start_control_port_mapping | safe }}</p>
+          <pre class="small mb-2"><code>curl -i http://127.0.0.1:8043/v1/portforward
+docker exec gluetun wget -S -O- http://127.0.0.1:8000/v1/portforward</code></pre>
+          <p class="small text-muted">{{ t.start_control_diagnostic }}</p>
           <div class="d-flex flex-wrap gap-2">
             <a class="btn btn-sm btn-outline-secondary" href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/options/http-proxy.md" target="_blank" rel="noopener">{{ t.start_proxy_wiki }}</a>
             <a class="btn btn-sm btn-outline-secondary" href="https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md" target="_blank" rel="noopener">{{ t.start_control_wiki }}</a>

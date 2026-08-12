@@ -56,6 +56,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'start_step1_body':      'Avant d’utiliser les boutons, Companion doit pouvoir parler à Gluetun et à Docker. Vérifiez ces quatre branchements dans vos fichiers Compose :',
         'start_gluetun_compose_title': 'Dans le Compose de Gluetun',
         'start_gluetun_compose_body':  'Ajoutez le proxy HTTP et le Control Server au service Gluetun. Générez d’abord une clé avec docker run --rm qmcgaw/gluetun genkey, puis remplacez VOTRE_CLE_API.',
+        'start_control_port_mapping':  'Dans <code>8043:8000</code>, <code>8043</code> est le port de l’hôte et <code>8000</code> le port interne de Gluetun. Dans Companion, saisissez <code>http://host.docker.internal:8043</code> et la même clé dans <strong>X-API-Key</strong>. Laissez le champ URL vide seulement si l’autodétection fonctionne. Si vous ajoutez ce service à <code>FIREWALL_INPUT_PORTS</code>, utilisez le port interne <code>8000</code>.',
+        'start_control_diagnostic':    'La première commande teste depuis l’hôte ; la seconde depuis Gluetun. Vous devez obtenir HTTP 200 et un port. HTTP 401/403 signifie que la clé API ne correspond pas.',
         'start_proxy_wiki':      'Documentation officielle du proxy HTTP',
         'start_control_wiki':    'Documentation officielle du Control Server',
         'start_companion_compose_title': 'Dans le Compose de Companion',
@@ -1042,7 +1044,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Per-profile sidecar key ──
         'set_wg_profile_sidecar_title': 'Clé sidecar dédiée (recommandée en mode sidecar)',
-        'set_wg_profile_sidecar_hint':  'Pour un sidecar isolé, créez un deuxième device/peer WireGuard chez le fournisseur et renseignez ses valeurs ici. Chez AirVPN, réexporter le même device redonne logiquement le même triplet PrivateKey/PresharedKey/Address.',
+        'set_wg_profile_sidecar_hint':  'Cette seconde identité sert uniquement aux benchmarks et ne remplace jamais la clé WireGuard principale du profil, obligatoire pour basculer Gluetun. Pour un sidecar isolé, créez un deuxième device/peer WireGuard chez le fournisseur et renseignez ses valeurs ici. Chez AirVPN, réexporter le même device redonne logiquement le même triplet PrivateKey/PresharedKey/Address.',
         'set_wg_profile_sidecar_reuse': 'Réutiliser la configuration WireGuard du profil principal',
         'set_wg_profile_sidecar_reuse_hint': 'Option avancée : autorise le sidecar à utiliser les mêmes identifiants WireGuard que Gluetun principal. Selon le fournisseur, deux tunnels simultanés avec le même peer peuvent couper ou perturber le tunnel principal.',
         'set_wg_profile_sidecar_pk':    'Clé privée sidecar',
@@ -1278,6 +1280,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         'start_step1_body':      'Before using the buttons, Companion must be able to talk to Gluetun and Docker. Check these four connections in your Compose files:',
         'start_gluetun_compose_title': 'In the Gluetun Compose file',
         'start_gluetun_compose_body':  'Add the HTTP proxy and Control Server to the Gluetun service. First generate a key with docker run --rm qmcgaw/gluetun genkey, then replace YOUR_API_KEY.',
+        'start_control_port_mapping':  'In <code>8043:8000</code>, <code>8043</code> is the host port and <code>8000</code> is Gluetun’s internal port. In Companion, enter <code>http://host.docker.internal:8043</code> and the same key in <strong>X-API-Key</strong>. Leave the URL field empty only when autodetection works. If you add this service to <code>FIREWALL_INPUT_PORTS</code>, use the internal port <code>8000</code>.',
+        'start_control_diagnostic':    'The first command tests from the host; the second tests from Gluetun. Expect HTTP 200 and a port. HTTP 401/403 means the API key does not match.',
         'start_proxy_wiki':      'Official HTTP proxy documentation',
         'start_control_wiki':    'Official Control Server documentation',
         'start_companion_compose_title': 'In the Companion Compose file',
@@ -2264,7 +2268,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ── Per-profile sidecar key ──
         'set_wg_profile_sidecar_title': 'Dedicated sidecar key (recommended in sidecar mode)',
-        'set_wg_profile_sidecar_hint':  'For an isolated sidecar, create a second WireGuard device/peer at the provider and enter its values here. With AirVPN, exporting the same device again will logically return the same PrivateKey/PresharedKey/Address triplet.',
+        'set_wg_profile_sidecar_hint':  'This second identity is only used for benchmarks and never replaces the main profile WireGuard key, which is required to switch Gluetun. For an isolated sidecar, create a second WireGuard device/peer at the provider and enter its values here. With AirVPN, exporting the same device again will logically return the same PrivateKey/PresharedKey/Address triplet.',
         'set_wg_profile_sidecar_reuse': 'Reuse the main profile WireGuard configuration',
         'set_wg_profile_sidecar_reuse_hint': 'Advanced option: lets the sidecar use the same WireGuard identity as the main Gluetun instance. Depending on the provider, two simultaneous tunnels with the same peer may drop or disturb the main tunnel.',
         'set_wg_profile_sidecar_pk':    'Sidecar private key',
