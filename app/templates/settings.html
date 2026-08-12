@@ -2346,6 +2346,7 @@
             <i class="bi bi-question-circle"></i>
           </span>
         </p>
+        <p class="small mb-0 mt-2" id="port-forward-action-result" aria-live="polite"></p>
       </div>
       <span class="badge bg-secondary">{{ port_forwards | length }}</span>
     </div>
@@ -2458,8 +2459,8 @@
             </thead>
             <tbody>
               <tr>
-                <td><span class="badge {{ 'bg-success' if pf.gluetun_vpn_input.state == 'ok' else ('bg-danger' if pf.gluetun_vpn_input.state == 'bad' else 'bg-secondary') }}">{{ pf.gluetun_vpn_input.label }}</span> <code class="small">FIREWALL_VPN_INPUT_PORTS</code></td>
-                <td><span class="badge {{ 'bg-success' if pf.gluetun_input.state == 'ok' else ('bg-danger' if pf.gluetun_input.state == 'bad' else 'bg-secondary') }}">{{ pf.gluetun_input.label }}</span> <code class="small">FIREWALL_INPUT_PORTS</code></td>
+                <td><span class="badge {{ 'bg-success' if pf.gluetun_vpn_input.state == 'ok' else ('bg-danger' if pf.gluetun_vpn_input.state == 'bad' else 'bg-secondary') }}">{{ pf.gluetun_vpn_input.label }}</span> <code class="small">{{ ('Port natif Gluetun' if lang == 'fr' else 'Gluetun native port') if pf.mode == 'native' else 'FIREWALL_VPN_INPUT_PORTS' }}</code></td>
+                <td><span class="badge {{ 'bg-success' if pf.gluetun_input.state == 'ok' else ('bg-danger' if pf.gluetun_input.state == 'bad' else 'bg-secondary') }}">{{ pf.gluetun_input.label }}</span> <code class="small">{{ 'Control Server' if pf.mode == 'native' else 'FIREWALL_INPUT_PORTS' }}</code></td>
                 <td>
                   {% for proto, st in pf.docker_ports.items() %}
                   <span class="badge {{ 'bg-success' if st.state == 'ok' else ('bg-danger' if st.state == 'bad' else 'bg-secondary') }}">{{ st.label }}</span>
@@ -4104,6 +4105,13 @@ function _trackerMsg(text, cls) {
   el.textContent = text || '';
   el.className = 'small align-self-center ' + (cls || 'text-muted');
 }
+function _portForwardMsg(text, cls) {
+  const el = document.getElementById('port-forward-action-result');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'small mb-0 mt-2 ' + (cls || 'text-muted');
+  el.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
 function _trackerBadge(status) {
   if (status === 'ok') return '<span class="badge bg-success">OK</span>';
   if (!status || status === 'unknown') return '<span class="badge bg-secondary">unknown</span>';
@@ -4333,10 +4341,10 @@ function portForwardSyncQbit(id, btn) {
     .then(async response => {
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.ok) throw new Error(data.error || 'sync failed');
-      _trackerMsg('{{ "Port qBittorrent synchronisé." if lang == 'fr' else "qBittorrent port synchronized." }}', 'text-success');
+      _portForwardMsg('{{ "Port qBittorrent synchronisé." if lang == 'fr' else "qBittorrent port synchronized." }}', 'text-success');
       window.setTimeout(() => window.location.reload(), 650);
     })
-    .catch(err => _trackerMsg(err.message || 'Sync failed', 'text-danger'))
+    .catch(err => _portForwardMsg(err.message || 'Sync failed', 'text-danger'))
     .finally(() => {
       if (btn) {
         btn.disabled = false;

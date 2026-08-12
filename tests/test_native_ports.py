@@ -16,6 +16,23 @@ def _resp(status, payload=None, text=''):
 
 
 class ReadGluetunNativePortsTest(unittest.TestCase):
+    @patch('app.port_forwarding._container_env',
+           return_value={'VPN_PORT_FORWARDING': 'on', 'VPN_SERVICE_PROVIDER': 'protonvpn'})
+    @patch('app.port_forwarding.get_setting', return_value='')
+    @patch('app.port_forwarding.requests.get')
+    def test_control_server_auth_error_is_actionable(self, rget, _gs, _env):
+        rget.side_effect = [
+            _resp(401, text='Unauthorized'),
+            _resp(404, text='Not found'),
+        ]
+
+        res = read_gluetun_native_ports(
+            api_url='http://gluetun:8000', container_name='gluetun')
+
+        self.assertFalse(res['ok'])
+        self.assertIn('authentification', res['error'])
+        self.assertIn('API', res['error'])
+
     @patch('app.port_forwarding.get_setting', return_value='')
     @patch('app.port_forwarding.requests.get')
     def test_primary_endpoint(self, rget, _gs):
