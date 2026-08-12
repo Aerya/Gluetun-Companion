@@ -4341,7 +4341,11 @@ function portForwardSyncQbit(id, btn) {
     .then(async response => {
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.ok) throw new Error(data.error || 'sync failed');
-      _portForwardMsg('{{ "Port qBittorrent synchronisé." if lang == 'fr' else "qBittorrent port synchronized." }}', 'text-success');
+      const port = data.listen_port || data.expected_port;
+      _portForwardMsg(
+        `{{ "Port qBittorrent synchronisé :" if lang == 'fr' else "qBittorrent port synchronized:" }} ${port}`,
+        'text-success'
+      );
       window.setTimeout(() => window.location.reload(), 650);
     })
     .catch(err => _portForwardMsg(err.message || 'Sync failed', 'text-danger'))

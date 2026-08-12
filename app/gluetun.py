@@ -25,6 +25,7 @@ import docker
 import requests
 
 from .database import get_setting
+from .i18n import get_t
 
 logger = logging.getLogger(__name__)
 
@@ -566,6 +567,15 @@ def switch_server(
 
     Returns (success, error_message).
     """
+    if wg_profile and (wg_profile.get('vpn_type') or 'wireguard') == 'wireguard':
+        profile_vars = wg_profile.get('vars') or {}
+        if not str(profile_vars.get('WIREGUARD_PRIVATE_KEY') or '').strip():
+            return False, get_t().get(
+                'switch_missing_wireguard_private_key',
+                'Bascule refusée : la clé privée WireGuard principale du profil est manquante. '
+                'La clé privée Sidecar ne la remplace pas.',
+            )
+
     if has_wireguard_config_file(container_name):
         logger.warning(
             'Refusing Companion-managed switch for %s: %s exists',

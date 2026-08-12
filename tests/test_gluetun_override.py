@@ -7,6 +7,24 @@ from app.gluetun import _compose_override_path, apply_dns_filtering, switch_serv
 
 
 class SwitchServerOverrideTest(TestCase):
+    def test_refuses_wireguard_switch_without_main_private_key(self) -> None:
+        with TemporaryDirectory() as directory:
+            with patch('app.gluetun.subprocess.run') as run:
+                success, error = switch_server(
+                    'CH#1', 'name', 'gluetun', directory,
+                    wg_profile={
+                        'compose_provider': 'protonvpn',
+                        'vpn_type': 'wireguard',
+                        'vars': {},
+                        'sidecar_private_key': 'sidecar-only',
+                    },
+                )
+
+        self.assertFalse(success)
+        self.assertIn('WireGuard', error or '')
+        self.assertIn('Sidecar', error or '')
+        run.assert_not_called()
+
     def test_uses_override_matching_compose_yaml(self) -> None:
         with TemporaryDirectory() as directory:
             compose_dir = Path(directory)

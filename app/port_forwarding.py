@@ -303,7 +303,7 @@ def read_gluetun_native_ports(
     bases = _gluetun_control_url_candidates(api_url, container_name)
     if not bases:
         return {'ok': False, 'ports': [], 'error': get_t().get('pf_no_api_url', 'URL Control Server Gluetun absente.')}
-    last_error = ''
+    errors: list[str] = []
     actual_container = (container_name or os.environ.get('GLUETUN_CONTAINER', '') or 'gluetun').strip()
     try:
         api_key = (get_setting('port_forward_gluetun_api_key', '') or '').strip()
@@ -327,12 +327,18 @@ def read_gluetun_native_ports(
                         'ok': True, 'ports': ports, 'raw': payload,
                         'error': '', 'source': source, 'api_url': base,
                     }
-                last_error = error
-                break
+                if error:
+                    errors.append(f'{base}: {error}')
+                continue
             except Exception as exc:
-                last_error = str(exc)
+                errors.append(f'{base}: {exc}')
                 logger.debug('Gluetun Control Server %s failed: %s', base, exc)
                 continue
+        auth_error = next(
+            (error for error in errors if 'HTTP 401' in error or 'HTTP 403' in error),
+            '',
+        )
+        last_error = auth_error or (errors[-1] if errors else '')
         return {'ok': False, 'ports': [],
                 'error': _diagnose_no_native_port(actual_container, last_error)}
     except Exception as exc:
@@ -432,7 +438,17 @@ def sync_qbit_listen_port(port_forward_id: int, timeout: float = 6.0, port_overr
         expected = int(port_override or pf['port'])
         if listen_port == expected:
             _set_last_applied_port(int(pf['id']), expected)
-        return {'ok': listen_port == expected, 'listen_port': listen_port, 'error': err}
+            return {'ok': True, 'listen_port': listen_port, 'expected_port': expected, 'error': ''}
+        mismatch = t.get(
+            'pf_qbit_port_mismatch',
+            'qBittorrent utilise encore le port {actual} après la synchronisation ; port attendu : {expected}.',
+        ).replace('{actual}', str(listen_port or '—')).replace('{expected}', str(expected))
+        return {
+            'ok': False,
+            'listen_port': listen_port,
+            'expected_port': expected,
+            'error': err or mismatch,
+        }
     except Exception as exc:
         return {'ok': False, 'error': str(exc)}
 

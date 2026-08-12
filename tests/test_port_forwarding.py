@@ -69,6 +69,35 @@ class ProtonPortForwardingTest(unittest.TestCase):
         self.assertIn('5914', post.call_args.kwargs['data']['json'])
         remember_port.assert_called_once_with(7, 5914)
 
+    @patch('app.port_forwarding._set_last_applied_port')
+    @patch('app.port_forwarding._qbit_listen_port', return_value=(45433, ''))
+    @patch('app.port_forwarding._qbit_session')
+    @patch('app.port_forwarding.get_torrent_client', return_value={
+        'id': 4,
+        'client_type': 'qbittorrent',
+        'base_url': 'http://qbittorrent:8080',
+    })
+    @patch('app.port_forwarding.get_port_forward', return_value={
+        'id': 7,
+        'provider': 'protonvpn',
+        'mode': 'native',
+        'port': 0,
+        'torrent_client_id': 4,
+    })
+    def test_qbittorrent_readback_mismatch_reports_both_ports(
+        self, _rule, _client, qbit_session, _listen_port, remember_port,
+    ):
+        qbit_session.return_value.post.return_value = MagicMock(status_code=200)
+
+        result = sync_qbit_listen_port(7, port_override=47987)
+
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['listen_port'], 45433)
+        self.assertEqual(result['expected_port'], 47987)
+        self.assertIn('45433', result['error'])
+        self.assertIn('47987', result['error'])
+        remember_port.assert_not_called()
+
     @patch('app.port_forwarding.apply_provider_port_forwards')
     @patch('app.port_forwarding.get_gluetun_provider', return_value='protonvpn')
     @patch('app.port_forwarding.get_setting')
