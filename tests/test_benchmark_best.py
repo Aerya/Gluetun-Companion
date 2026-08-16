@@ -1,8 +1,9 @@
+import sqlite3
 import unittest
 from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 
-from app.scheduler import _best_result_for_active_profile
+from app.scheduler import _best_result_for_active_profile, _build_server_profile_map
 
 
 class BenchmarkBestTest(unittest.TestCase):
@@ -34,6 +35,31 @@ class BenchmarkBestTest(unittest.TestCase):
 
         self.assertEqual(best['server'], 'Fast')
         self.assertEqual(scores['Fast'], 0.9)
+
+    def test_build_server_profile_map_accepts_sqlite_rows(self):
+        conn = sqlite3.connect(':memory:')
+        conn.row_factory = sqlite3.Row
+        try:
+            conn.execute(
+                'CREATE TABLE servers ('
+                'name TEXT, vpn_profile_id INTEGER, vp_rotation_allowed INTEGER)'
+            )
+            conn.executemany(
+                'INSERT INTO servers VALUES (?, ?, ?)',
+                [('Ceibo', 1, 0), ('Germany', 2, 1)],
+            )
+            rows = conn.execute(
+                'SELECT name, vpn_profile_id, vp_rotation_allowed FROM servers'
+            ).fetchall()
+
+            profile_map = _build_server_profile_map(rows)
+
+            self.assertEqual(
+                profile_map,
+                {'Ceibo': (1, False), 'Germany': (2, True)},
+            )
+        finally:
+            conn.close()
 
 
 if __name__ == '__main__':
