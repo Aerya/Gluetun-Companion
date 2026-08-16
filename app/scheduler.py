@@ -167,6 +167,14 @@ def _weighted_score(
     return base * confidence_factor * effective_stab
 
 
+def _build_server_profile_map(servers):
+    """Map server names to VPN profile metadata from sqlite3.Row records."""
+    return {
+        row['name']: (row['vpn_profile_id'], bool(row['vp_rotation_allowed']))
+        for row in servers
+    }
+
+
 def _best_result_for_active_profile(results: list[dict]) -> tuple[dict | None, dict[str, float]]:
     """Rank successful benchmark results even when auto-switch is disabled."""
     if not results:
@@ -1833,10 +1841,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                 )
 
                 # Build lookup helpers: profile id and rotation_allowed flag per server name
-                _srv_profile_map = {
-                    row['name']: (row['vpn_profile_id'], bool(row.get('vp_rotation_allowed', False)))
-                    for row in servers
-                }
+                _srv_profile_map = _build_server_profile_map(servers)
 
                 def _row_profile(name):
                     return _srv_profile_map.get(name, ('X', False))[0]
