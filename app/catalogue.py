@@ -556,6 +556,26 @@ def _compute_catalogue_diff(
     return diff
 
 
+def _compute_refresh_diff(
+    before: dict[str, set[str]],
+    providers_data: dict[str, list[dict]],
+) -> dict[str, dict[str, list[str]]]:
+    """Diff only providers actually returned by a catalogue refresh.
+
+    Sidecar catalogue sources may temporarily omit a provider.  Rows for an
+    omitted provider are intentionally preserved in the database, so treating
+    the omission as a removal would emit the same false removal notification on
+    every refresh.
+    """
+    refreshed = set(providers_data)
+    before_refreshed = {p: names for p, names in before.items() if p in refreshed}
+    after = {
+        p: {str(row.get('name') or '') for row in rows if row.get('name')}
+        for p, rows in providers_data.items()
+    }
+    return _compute_catalogue_diff(before_refreshed, after)
+
+
 def _auto_add_matched_servers(
     new_entries: list[dict],
     db,
@@ -737,12 +757,12 @@ def refresh_catalogue_from_sidecar(
                     total += 1
                 provider_counts[provider] = len(servers)
 
-            # Compute diff (after snapshot → what changed)
-            after_snap: dict[str, set[str]] = {
-                p: {s['name'] for s in srvs}
-                for p, srvs in providers_data.items()
-            }
-            diff = _compute_catalogue_diff(before_snap, after_snap)
+            # Compute the diff only for providers returned by this refresh.
+            # A sidecar source can legitimately omit a provider temporarily;
+            # comparing its partial response against the entire cached catalogue
+            # would report that provider as removed on every cycle while its rows
+            # remain in the database, causing repeated Discord notifications.
+            diff = _compute_refresh_diff(before_snap, providers_data)
 
             # Auto-add new servers that match user's country/region/city filters
             if auto_add and diff:

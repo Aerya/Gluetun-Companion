@@ -40,5 +40,18 @@ class CatalogueOptionsTest(unittest.TestCase):
         )
 
 
+class CataloguePartialRefreshDiffTest(unittest.TestCase):
+    def test_partial_refresh_does_not_repeat_missing_provider_removal(self):
+        from app.catalogue import _compute_refresh_diff
+
+        before = {
+            'airvpn': {'Alpheratz'},
+            'perfect privacy': {'amsterdam'},
+        }
+        providers_data = {'airvpn': [{'name': 'Alpheratz'}]}
+
+        self.assertEqual(_compute_refresh_diff(before, providers_data), {})
+
+
 if __name__ == '__main__':
     unittest.main()
