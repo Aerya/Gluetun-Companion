@@ -128,7 +128,7 @@ def _notify_apprise(urls: str, title: str, body: str) -> None:
 def _switch_discord_payload(
     from_server, to_server, from_mbps, to_mbps,
     connect_secs, to_ipv4, to_ipv6, t,
-    companion_url=None, updated_images=None, qc_info=None,
+    companion_url=None, updated_images=None, recreated_containers=None, qc_info=None,
     from_ipv4=None, from_ipv6=None,
 ) -> dict:
     gain  = (to_mbps - from_mbps) if (from_mbps and to_mbps) else None
@@ -179,6 +179,13 @@ def _switch_discord_payload(
             'inline': False,
         })
 
+    if recreated_containers:
+        fields.append({
+            'name': t.get('notif_recreated_containers', 'Conteneurs recréés — réseau Gluetun'),
+            'value': '\n'.join(f'`{name}`' for name in recreated_containers),
+            'inline': False,
+        })
+
     if updated_images:
         fields.append({
             'name':   t.get('notif_updated_images', 'Images mises à jour'),
@@ -192,7 +199,7 @@ def _switch_discord_payload(
 def _switch_text_body(
     from_server, to_server, from_mbps, to_mbps,
     connect_secs, to_ipv4, to_ipv6, t,
-    companion_url=None, updated_images=None, qc_info=None,
+    companion_url=None, updated_images=None, recreated_containers=None, qc_info=None,
     from_ipv4=None, from_ipv6=None,
 ) -> str:
     gain     = (to_mbps - from_mbps) if (from_mbps and to_mbps) else None
@@ -218,6 +225,11 @@ def _switch_text_body(
             f'{t.get("notif_qc_triggered_field", "Dérive")} : '
             f'{qc_server} {sign}{qc_info["diff_pct"]:.0f}% '
             f'({qc_info["current_dl"]:.0f}→{qc_info["last_dl"]:.0f} Mbps)'
+        )
+    if recreated_containers:
+        lines.append(
+            f'{t.get("notif_recreated_containers", "Conteneurs recréés — réseau Gluetun")} : '
+            + ', '.join(recreated_containers)
         )
     if updated_images:
         lines.append(
@@ -245,6 +257,7 @@ def send_switch_notification(
     lang: str = 'fr',
     companion_url: str | None = None,
     updated_images: list[str] | None = None,
+    recreated_containers: list[str] | None = None,
     qc_info: dict | None = None,
     from_ipv4: str | None = None,
     from_ipv6: str | None = None,
@@ -267,7 +280,7 @@ def send_switch_notification(
                 from_server, to_server, from_mbps, to_mbps,
                 connect_secs, to_ipv4, to_ipv6, t,
                 companion_url=companion_url, updated_images=updated_images,
-                qc_info=qc_info, from_ipv4=from_ipv4, from_ipv6=from_ipv6,
+                recreated_containers=recreated_containers, qc_info=qc_info, from_ipv4=from_ipv4, from_ipv6=from_ipv6,
             )
             _post_discord(discord_url, payload, mention, alert_type, mention_level)
             logger.info('Discord switch notification sent (%s)', alert_type)
@@ -280,7 +293,7 @@ def send_switch_notification(
                 from_server, to_server, from_mbps, to_mbps,
                 connect_secs, to_ipv4, to_ipv6, t,
                 companion_url=companion_url, updated_images=updated_images,
-                qc_info=qc_info, from_ipv4=from_ipv4, from_ipv6=from_ipv6,
+                recreated_containers=recreated_containers, qc_info=qc_info, from_ipv4=from_ipv4, from_ipv6=from_ipv6,
             )
             _notify_apprise(apprise_urls, t['notif_apprise_title'], body)
             logger.info('Apprise switch notification sent (%s)', alert_type)

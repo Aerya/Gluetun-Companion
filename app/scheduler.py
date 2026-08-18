@@ -2027,6 +2027,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                         lang=_notif_lang,
                         companion_url=_companion_url,
                         updated_images=updated_images or None,
+                        recreated_containers=restarted or None,
                         qc_info=qc_info,
                         mention=_mention,
                         mention_level=_mention_level,
