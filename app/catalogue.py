@@ -316,6 +316,7 @@ def refresh_catalogue_from_local(servers_dir: str | None = None) -> dict:
         if result.get('ok'):
             result['source'] = 'local'
             result['servers_dir'] = candidate
+            set_setting('catalogue_last_source', 'local')
             return result
         last_error = result.get('error', '')
 
@@ -556,6 +557,24 @@ def _compute_catalogue_diff(
     return diff
 
 
+def catalogue_change_fingerprint(diff: dict, auto_added: list[str] | None = None) -> str:
+    # Stable SHA-256 fingerprint for one catalogue change event.
+    import hashlib
+
+    canonical = {
+        'diff': {
+            str(provider): {
+                'added': sorted(str(name) for name in changes.get('added', [])),
+                'removed': sorted(str(name) for name in changes.get('removed', [])),
+            }
+            for provider, changes in sorted((diff or {}).items())
+        },
+        'auto_added': sorted(str(name) for name in (auto_added or [])),
+    }
+    raw = json.dumps(canonical, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
+    return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+
+
 def _compute_refresh_diff(
     before: dict[str, set[str]],
     providers_data: dict[str, list[dict]],
@@ -726,6 +745,7 @@ def refresh_catalogue_from_sidecar(
         provider_counts: dict[str, int] = {}
         diff: dict[str, dict[str, list[str]]] = {}
         auto_added_names: list[str] = []
+        previous_source = get_setting('catalogue_last_source', '')
 
         with get_db() as db:
             # Snapshot before overwrite so we can compute the diff
@@ -764,6 +784,18 @@ def refresh_catalogue_from_sidecar(
             # remain in the database, causing repeated Discord notifications.
             diff = _compute_refresh_diff(before_snap, providers_data)
 
+            # Never diff two different catalogue representations. The mounted
+            # Gluetun catalogue and the sidecar/public catalogue can differ
+            # slightly; comparing them caused repeated "-1" notifications.
+            if previous_source and previous_source != 'sidecar':
+                if diff:
+                    logger.info(
+                        'catalogue source changed %s -> sidecar: using refresh as '
+                        'new baseline and suppressing cross-source diff',
+                        previous_source,
+                    )
+                diff = {}
+
             # Auto-add new servers that match user's country/region/city filters
             if auto_add and diff:
                 new_entries: list[dict] = []
@@ -776,6 +808,7 @@ def refresh_catalogue_from_sidecar(
                     auto_added_names = _auto_add_matched_servers(new_entries, db)
 
         set_setting('catalogue_last_refresh', datetime.utcnow().isoformat())
+        set_setting('catalogue_last_source', 'sidecar')
 
         if diff:
             change_summary = ', '.join(

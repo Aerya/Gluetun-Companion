@@ -1201,7 +1201,11 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
     # loaded by the user's Gluetun container; fall back to the public sidecar
     # refresh for installs without that volume.
     try:
-        from .catalogue import refresh_catalogue_from_local, refresh_catalogue_from_sidecar
+        from .catalogue import (
+            catalogue_change_fingerprint,
+            refresh_catalogue_from_local,
+            refresh_catalogue_from_sidecar,
+        )
         _sidecar_img       = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
         _sidecar_host      = app.config['GLUETUN_HOST']
         _cat_auto_add      = get_setting('catalogue_auto_add', '0') == '1'
@@ -1222,23 +1226,43 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             _cat_diff       = _cat.get('diff', {})
             _cat_auto_added = _cat.get('auto_added', [])
             if _notif_cat_changes and (_cat_diff or _cat_auto_added):
-                _c_discord_url  = get_setting('discord_webhook_url') or None
-                _c_apprise_urls = get_setting('apprise_urls') or None
-                _c_lang         = get_setting('ui_lang', 'fr')
-                _c_companion    = get_setting('companion_url') or None
-                _c_mention      = get_setting('notify_mention', '').strip() or None
-                _c_mention_lvl  = get_setting('notify_mention_level', 'critical')
-                from .notify import send_catalogue_changes_notification
-                send_catalogue_changes_notification(
-                    diff=_cat_diff,
-                    auto_added=_cat_auto_added,
-                    discord_url=_c_discord_url,
-                    apprise_urls=_c_apprise_urls,
-                    lang=_c_lang,
-                    companion_url=_c_companion,
-                    mention=_c_mention,
-                    mention_level=_c_mention_lvl,
-                )
+                _cat_fp = catalogue_change_fingerprint(_cat_diff, _cat_auto_added)
+                _last_fp = get_setting('catalogue_last_notified_fingerprint', '')
+                try:
+                    _last_fp_ts = float(
+                        get_setting('catalogue_last_notified_at', '0') or '0'
+                    )
+                except (TypeError, ValueError):
+                    _last_fp_ts = 0.0
+                _cat_now = time.time()
+                _cat_dedupe_seconds = 24 * 60 * 60
+
+                if _cat_fp == _last_fp and (_cat_now - _last_fp_ts) < _cat_dedupe_seconds:
+                    logger.info(
+                        'catalogue: duplicate notification suppressed '
+                        '(same change already sent %.0f min ago)',
+                        max(0.0, (_cat_now - _last_fp_ts) / 60.0),
+                    )
+                else:
+                    _c_discord_url  = get_setting('discord_webhook_url') or None
+                    _c_apprise_urls = get_setting('apprise_urls') or None
+                    _c_lang         = get_setting('ui_lang', 'fr')
+                    _c_companion    = get_setting('companion_url') or None
+                    _c_mention      = get_setting('notify_mention', '').strip() or None
+                    _c_mention_lvl  = get_setting('notify_mention_level', 'critical')
+                    from .notify import send_catalogue_changes_notification
+                    send_catalogue_changes_notification(
+                        diff=_cat_diff,
+                        auto_added=_cat_auto_added,
+                        discord_url=_c_discord_url,
+                        apprise_urls=_c_apprise_urls,
+                        lang=_c_lang,
+                        companion_url=_c_companion,
+                        mention=_c_mention,
+                        mention_level=_c_mention_lvl,
+                    )
+                    set_setting('catalogue_last_notified_fingerprint', _cat_fp)
+                    set_setting('catalogue_last_notified_at', str(_cat_now))
         else:
             logger.warning('catalogue: refresh failed — %s', _cat.get('error', '?'))
     except Exception as _cat_exc:
