@@ -336,7 +336,7 @@ class ComposeReplacementRecoveryTest(unittest.TestCase):
 
         self.assertEqual(run.call_count, 2)
         client.api.remove_container.assert_called_once_with(
-            'created-id', v=False, force=False,
+            'created-id', v=False, force=True,
         )
 
     @patch('app.gluetun.os.path.isdir', return_value=True)
@@ -374,6 +374,46 @@ class ComposeReplacementRecoveryTest(unittest.TestCase):
 
         client.api.remove_container.assert_not_called()
 
+
+    @patch('app.gluetun.os.path.isdir', return_value=True)
+    @patch('app.gluetun.subprocess.run')
+    @patch('docker.from_env')
+    def test_name_conflict_cleans_labelled_replacement_then_retries(
+        self, from_env, run, _isdir,
+    ):
+        current = MagicMock()
+        current.labels = {
+            'com.docker.compose.service': 'prowlarr',
+            'com.docker.compose.project': 'airvpn',
+            'com.docker.compose.project.working_dir': '/compose',
+        }
+        client = MagicMock()
+        client.containers.get.return_value = current
+        client.api.containers.return_value = [{
+            'Id': 'replacement-id',
+            'Names': ['/b1f54429e6bf_prowlarr'],
+            'Labels': {
+                'com.docker.compose.replace': 'prowlarr',
+                'com.docker.compose.service': 'prowlarr',
+                'com.docker.compose.project': 'airvpn',
+            },
+        }]
+        from_env.return_value = client
+        run.side_effect = [
+            MagicMock(
+                returncode=1,
+                stderr='Error response from daemon: Conflict. The container name "/b1f54429e6bf_prowlarr" is already in use',
+                stdout='',
+            ),
+            MagicMock(returncode=0, stderr='', stdout=''),
+        ]
+
+        _compose_recreate('prowlarr', '/compose', 'airvpn')
+
+        self.assertEqual(run.call_count, 2)
+        client.api.remove_container.assert_called_once_with(
+            'replacement-id', v=False, force=True,
+        )
 
 if __name__ == '__main__':
     unittest.main()
