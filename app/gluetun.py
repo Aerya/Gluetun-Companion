@@ -78,6 +78,12 @@ def _compose_override_path(compose_dir: str) -> str:
 _companion_lock            = threading.Lock()
 _companion_restart_until: float = 0.0
 
+# Serialize dependent-container reconciliation. Docker Compose recreates are
+# transactional (rename old container -> create replacement -> rename back), so
+# two concurrent reconciliation paths can otherwise collide on temporary names
+# and leave services stranded on a dead Gluetun namespace.
+_dependent_recreate_lock = threading.Lock()
+
 
 def mark_companion_restart(suppress_secs: float = 180.0) -> None:
     """
@@ -804,7 +810,7 @@ def _cleanup_failed_compose_replacements(
     """
     removed: list[str] = []
     try:
-        entries = client.api.containers(all=True, filters={'status': ['created']})
+        entries = client.api.containers(all=True)
     except Exception as exc:
         logger.warning('Cannot inspect failed Compose replacements: %s', exc)
         return removed
@@ -823,7 +829,7 @@ def _cleanup_failed_compose_replacements(
             continue
         label = names[0] if names else cid[:12]
         try:
-            client.api.remove_container(cid, v=False, force=False)
+            client.api.remove_container(cid, v=False, force=True)
             removed.append(label)
             logger.warning(
                 'Removed abandoned Compose replacement %s for %s; retrying recreate',
@@ -926,7 +932,12 @@ def _compose_recreate(
         # Compose can abandon an intermediate replacement in ``Created`` while
         # reporting a different, already-gone temporary name.  Clean up only a
         # positively labelled replacement for this service, then retry once.
-        if ('No such container:' in last_err and
+        recoverable_compose_race = (
+            'No such container:' in last_err
+            or 'Conflict. The container name' in last_err
+            or 'Error when allocating new name: Conflict' in last_err
+        )
+        if (recoverable_compose_race and
                 _cleanup_failed_compose_replacements(
                     client, container_name, service, project,
                 )):
@@ -959,7 +970,7 @@ def _compose_recreate(
     c.restart(timeout=15)
 
 
-def restart_network_dependents(
+def _restart_network_dependents_unlocked(
     container_name: str,
     compose_dir: str = '',
     compose_project: str = '',
@@ -1067,6 +1078,26 @@ def restart_network_dependents(
     # Gluetun namespace, rather than accepting a successful Compose exit code
     # while the dependent still references the previous container ID.
     for name in names_to_restart:
+        # A second reconciliation may have captured the same stale list while
+        # waiting for the lock. If the first pass already attached this service
+        # to the current Gluetun, do not force-recreate it again.
+        current_state = _dependent_state(name)
+        if current_state and current_state.get('running'):
+            mode = current_state.get('mode', '')
+            current_refs = {f'container:{container_name}'}
+            if current_gluetun_id:
+                current_refs.update({
+                    f'container:{current_gluetun_id}',
+                    f'container:{current_gluetun_id[:12]}',
+                })
+            if mode in current_refs:
+                logger.info(
+                    'Network-dependent %s already attached to current Gluetun — skipping duplicate recreate',
+                    name,
+                )
+                restarted.append(name)
+                continue
+
         logger.info('Recreating network-dependent container: %s', name)
         try:
             if pull_set and name in pull_set:
@@ -1101,6 +1132,27 @@ def restart_network_dependents(
             logger.warning('Failed to recreate %s: %s', name, exc)
 
     return restarted, updated_imgs
+
+
+def restart_network_dependents(
+    container_name: str,
+    compose_dir: str = '',
+    compose_project: str = '',
+    exclude: set[str] | None = None,
+    pull_set: set[str] | None = None,
+    explicit_list: list[str] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Serialize dependent reconciliation across switch/event/failover paths.
+
+    Multiple background paths can notice the same Gluetun recreation.  Running
+    ``docker compose --force-recreate`` for the same dependent concurrently
+    causes Compose temporary-name conflicts and can strand the service.
+    """
+    with _dependent_recreate_lock:
+        return _restart_network_dependents_unlocked(
+            container_name, compose_dir, compose_project,
+            exclude=exclude, pull_set=pull_set, explicit_list=explicit_list,
+        )
 
 
 def _dependent_state(name: str) -> 'dict | None':
