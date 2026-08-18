@@ -1424,6 +1424,10 @@ def manual_switch(server_id):
         restart_configured_post_switch_containers as _restart_post_switch,
     )
     pre_switch_deps = _list_deps(container)
+    try:
+        pull_network_set = set(json.loads(get_setting('pull_network_containers', '[]') or '[]'))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pull_network_set = set()
     pull_updated_images = _pull_gluetun(container)
 
     ok, err = switch_server(
@@ -1462,12 +1466,14 @@ def manual_switch(server_id):
                     logger.warning('Manual switch: cannot inspect %s status: %s', container, exc)
 
                 restarted = []
+                network_updated = []
                 if gluetun_running:
                     # The VPN may still be settling, but the namespace exists.
                     # Reattach dependents so they do not stay bound to the old
                     # Gluetun container ID after a successful recreate.
-                    restarted, _ = restart_network_dependents(
+                    restarted, network_updated = restart_network_dependents(
                         container, compose_dir, project,
+                        pull_set=pull_network_set,
                         explicit_list=pre_switch_deps,
                     )
                 else:
@@ -1536,7 +1542,8 @@ def manual_switch(server_id):
                         mention=get_setting('notify_mention', '').strip() or None,
                         mention_level=get_setting('notify_mention_level', 'critical'),
                         alert_type='manual_switch',
-                        updated_images=(pull_updated_images + post_updated) or None,
+                        recreated_containers=restarted or None,
+                        updated_images=(pull_updated_images + network_updated + post_updated) or None,
                     )
 
         threading.Thread(target=_bg_restart, daemon=True, name='manual-switch-net').start()
