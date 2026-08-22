@@ -52,6 +52,23 @@ class SettingsTemplateTest(unittest.TestCase):
         self.assertIn('http://host.docker.internal:8043', template)
         self.assertIn('autodétection Docker', template)
 
+    def test_settings_help_links_use_current_bilingual_wiki(self):
+        template = SETTINGS_TEMPLATE.read_text(encoding='utf-8')
+
+        self.assertNotIn('README.md#', template)
+        self.assertNotIn('README.en.md#', template)
+        self.assertNotIn('{% set readme_url', template)
+        self.assertNotIn('{% set readme_links', template)
+        self.assertIn("{% set wiki_url = 'https://github.com/Aerya/Gluetun-Companion/wiki' %}", template)
+        self.assertEqual(template.count('(wiki_url ~ ('), 16)
+        self.assertIn('/Fonctionnement#notifications-contextuelles', template)
+        self.assertIn('/How-it-works#contextual-notifications', template)
+        self.assertIn('/Fonctionnalit%C3%A9s#multi-provider-wireguard--openvpn', template)
+        self.assertIn('/Features#multi-provider-wireguard--openvpn', template)
+        self.assertIn("'/Dashboard-Grafana' if lang == 'fr' else '/Grafana-dashboard'", template)
+        self.assertIn('/Fonctionnement#custom-wireguard--serveur-personnel-unique', template)
+        self.assertIn('/How-it-works#custom-wireguard-personal-single-server', template)
+
 
 if __name__ == '__main__':
     unittest.main()

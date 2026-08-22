@@ -359,37 +359,37 @@
   </div>
   {% endmacro %}
 
-  {% set readme_url = 'https://github.com/Aerya/Gluetun-Companion/blob/main/README.md' if lang == 'fr' else 'https://github.com/Aerya/Gluetun-Companion/blob/main/README.en.md' %}
-  {% set readme_links = {
+  {% set wiki_url = 'https://github.com/Aerya/Gluetun-Companion/wiki' %}
+  {% set wiki_links = {
     'measure': [
-      (readme_url ~ ('#sélection-intelligente-du-benchmark-recommandée-pour-les-gros-catalogues' if lang == 'fr' else '#smart-benchmark-selection-recommended-for-large-catalogues'), t.set_cycle_how_many_title),
-      (readme_url ~ ('#observation-continue-pyramidale' if lang == 'fr' else '#pyramidal-continuous-observation'), t.set_observation_label)
+      (wiki_url ~ ('/Fonctionnement#s%C3%A9lection-intelligente-du-benchmark-recommand%C3%A9e-pour-les-gros-catalogues' if lang == 'fr' else '/How-it-works#smart-benchmark-selection-recommended-for-large-catalogues'), t.set_cycle_how_many_title),
+      (wiki_url ~ ('/Fonctionnement#observation-continue-pyramidale' if lang == 'fr' else '/How-it-works#pyramidal-continuous-observation'), t.set_observation_label)
     ],
     'decide': [
-      (readme_url ~ ('#profils-dusage' if lang == 'fr' else '#usage-profiles'), t.set_profile_label),
-      (readme_url ~ ('#score-de-sélection--composantes-de-stabilité' if lang == 'fr' else '#selection-score--stability-components'), t.set_stability_weight_label)
+      (wiki_url ~ ('/Fonctionnement#profils-dusage' if lang == 'fr' else '/How-it-works#usage-profiles'), t.set_profile_label),
+      (wiki_url ~ ('/Fonctionnement#score-de-s%C3%A9lection--composantes-de-stabilit%C3%A9' if lang == 'fr' else '/How-it-works#selection-score--stability-components'), t.set_stability_weight_label)
     ],
     'wireguard': [
-      (readme_url ~ ('#profils-vpn-wireguard--openvpn' if lang == 'fr' else '#vpn-profiles-wireguard--openvpn'), t.set_tab_wireguard),
-      (readme_url ~ ('#profils-openvpn' if lang == 'fr' else '#openvpn-profiles'), 'Profils OpenVPN' if lang == 'fr' else 'OpenVPN profiles'),
-      (readme_url ~ ('#multi-provider-wireguard--openvpn' if lang == 'fr' else '#multi-provider-wireguard--openvpn'), 'Fournisseurs intégrés' if lang == 'fr' else 'Integrated providers'),
-      (readme_url ~ ('#-clé-wireguard-sidecar-par-profil-recommandée' if lang == 'fr' else '#-per-profile-wireguard-sidecar-key-recommended'), t.set_wg_profile_sidecar_title)
+      (wiki_url ~ ('/Fonctionnement#profils-vpn-wireguard--openvpn' if lang == 'fr' else '/How-it-works#vpn-profiles-wireguard--openvpn'), t.set_tab_wireguard),
+      (wiki_url ~ ('/Fonctionnement#profils-openvpn' if lang == 'fr' else '/How-it-works#openvpn-profiles'), 'Profils OpenVPN' if lang == 'fr' else 'OpenVPN profiles'),
+      (wiki_url ~ ('/Fonctionnalit%C3%A9s#multi-provider-wireguard--openvpn' if lang == 'fr' else '/Features#multi-provider-wireguard--openvpn'), 'Fournisseurs intégrés' if lang == 'fr' else 'Integrated providers'),
+      (wiki_url ~ ('/Fonctionnement#%EF%B8%8F-cl%C3%A9-wireguard-sidecar-par-profil-recommand%C3%A9e' if lang == 'fr' else '/How-it-works#%EF%B8%8F-per-profile-wireguard-sidecar-key-recommended'), t.set_wg_profile_sidecar_title)
     ],
     'notifications': [
-      (readme_url ~ ('#notifications-contextuelles' if lang == 'fr' else '#contextual-notifications'), t.set_tab_notifications),
-      (readme_url ~ ('#notifications-de-rotation-de-pool' if lang == 'fr' else '#pool-rotation-notifications'), t.pools_notify_label)
+      (wiki_url ~ ('/Fonctionnement#notifications-contextuelles' if lang == 'fr' else '/How-it-works#contextual-notifications'), t.set_tab_notifications),
+      (wiki_url ~ ('/Fonctionnement#notifications-de-rotation-de-pool' if lang == 'fr' else '/How-it-works#pool-rotation-notifications'), t.pools_notify_label)
     ],
     'trackers': [
-      (readme_url ~ ('#contrôle-des-trackers-bittorrent-via-le-vpn' if lang == 'fr' else '#bittorrent-tracker-checks-through-the-vpn'), 'Contrôle trackers' if lang == 'fr' else 'Tracker checks'),
-      (readme_url ~ ('#clients-bittorrent-et-découverte-des-trackers' if lang == 'fr' else '#bittorrent-clients-and-tracker-discovery'), 'Clients BitTorrent' if lang == 'fr' else 'BitTorrent clients')
+      (wiki_url ~ ('/Fonctionnement#contr%C3%B4le-des-trackers-bittorrent-via-le-vpn' if lang == 'fr' else '/How-it-works#bittorrent-tracker-checks-through-the-vpn'), 'Contrôle trackers' if lang == 'fr' else 'Tracker checks'),
+      (wiki_url ~ ('/Fonctionnement#clients-bittorrent-et-d%C3%A9couverte-des-trackers' if lang == 'fr' else '/How-it-works#bittorrent-clients-and-tracker-discovery'), 'Clients BitTorrent' if lang == 'fr' else 'BitTorrent clients')
     ],
     'port_forwarding': [
-      (readme_url ~ ('#inventaire-des-ports-forwardés-vpn' if lang == 'fr' else '#vpn-forwarded-port-inventory'), 'Ports forwardés' if lang == 'fr' else 'Forwarded ports')
+      (wiki_url ~ ('/Fonctionnement#inventaire-des-ports-forward%C3%A9s-vpn' if lang == 'fr' else '/How-it-works#vpn-forwarded-port-inventory'), 'Ports forwardés' if lang == 'fr' else 'Forwarded ports')
     ],
     'maintenance': [
-      (readme_url ~ ('#endpoint-prometheus-metrics' if lang == 'fr' else '#prometheus-metrics-endpoint'), 'Prometheus /metrics'),
-      (readme_url ~ ('#rest-api' if lang == 'fr' else '#rest-api'), t.set_api_title),
-      (readme_url ~ ('#dashboard-grafana' if lang == 'fr' else '#grafana-dashboard'), t.set_grafana_title)
+      (wiki_url ~ ('/Fonctionnement#endpoint-prometheus-metrics' if lang == 'fr' else '/How-it-works#prometheus-metrics-endpoint'), 'Prometheus /metrics'),
+      (wiki_url ~ ('/Fonctionnement#rest-api' if lang == 'fr' else '/How-it-works#rest-api'), t.set_api_title),
+      (wiki_url ~ ('/Dashboard-Grafana' if lang == 'fr' else '/Grafana-dashboard'), t.set_grafana_title)
     ]
   } %}
 
@@ -533,7 +533,7 @@
             <div class="metric"><span>{{ t.dash_bench_est_total }}</span><strong>~{{ bench_est.total_min_s }}–{{ bench_est.total_max_s }}</strong></div>
           </div>
           {% endif %}
-          {{ readme_card(t.set_side_readme, t.set_side_readme_measure_full, readme_links.measure) }}
+          {{ readme_card(t.set_side_readme, t.set_side_readme_measure_full, wiki_links.measure) }}
         </aside>
       </div>
     </div>
@@ -549,7 +549,7 @@
             <div class="metric"><span>{{ t.set_switch_title }}</span><strong>{{ 'ON' if cfg.auto_sw == '1' else 'OFF' }}</strong></div>
             <div class="metric"><span>{{ t.set_stability_weight_label }}</span><strong>{{ cfg.stability_weight }}%</strong></div>
           </div>
-          {{ readme_card(t.set_side_readme, t.set_side_readme_decide_full, readme_links.decide) }}
+          {{ readme_card(t.set_side_readme, t.set_side_readme_decide_full, wiki_links.decide) }}
         </aside>
       </div>
     </div>
@@ -564,7 +564,7 @@
             <div class="metric"><span>{{ t.set_side_orphans }}</span><strong class="{{ 'text-warning' if wg_orphan_count else 'text-success' }}">{{ wg_orphan_count }}</strong></div>
             <div class="metric"><span>{{ t.set_wg_rotation_mode_label }}</span><strong>{{ cfg.wg_rotation_mode }}</strong></div>
           </div>
-          {{ readme_card(t.set_side_readme, t.set_side_readme_wireguard_full, readme_links.wireguard) }}
+          {{ readme_card(t.set_side_readme, t.set_side_readme_wireguard_full, wiki_links.wireguard) }}
         </aside>
       </div>
     </div>
@@ -579,7 +579,7 @@
             <div class="metric"><span>Apprise</span><strong>{{ 'OK' if cfg.apprise_urls else 'OFF' }}</strong></div>
             <div class="metric"><span>{{ t.set_side_mentions }}</span><strong>{{ cfg.notify_mention_level }}</strong></div>
           </div>
-          {{ readme_card(t.set_side_readme, t.set_side_readme_notifications_full, readme_links.notifications) }}
+          {{ readme_card(t.set_side_readme, t.set_side_readme_notifications_full, wiki_links.notifications) }}
         </aside>
       </div>
     </div>
@@ -598,7 +598,7 @@
           {{ readme_card(t.set_side_readme,
             'Companion récupère les trackers depuis vos clients BitTorrent avant de stopper les containers, puis teste les URLs activées depuis le chemin VPN.' if lang == 'fr' else
             'Companion discovers trackers from your BitTorrent clients before stopping containers, then checks enabled URLs through the VPN path.',
-            readme_links.trackers) }}
+            wiki_links.trackers) }}
         </aside>
       </div>
     </div>
@@ -617,7 +617,7 @@
           {{ readme_card(t.set_side_readme,
             'Companion applique les règles de port forwarding par fournisseur VPN et peut synchroniser qBittorrent ou exécuter une commande on_port_change.' if lang == 'fr' else
             'Companion applies VPN-provider port forwarding rules and can synchronize qBittorrent or run an on_port_change command.',
-            readme_links.port_forwarding) }}
+            wiki_links.port_forwarding) }}
         </aside>
       </div>
     </div>
@@ -632,7 +632,7 @@
             <div class="metric"><span>{{ t.set_retention_label }}</span><strong>{% if cfg.db_retention_days | int == 0 %}{{ t.set_retention_unlimited }}{% else %}{{ cfg.db_retention_days }} {{ t.cmn_days }}{% endif %}</strong></div>
             <div class="metric"><span>{{ t.set_catalogue_title }}</span><strong>{{ catalogue_stats.total if catalogue_stats else 0 }}</strong></div>
           </div>
-          {{ readme_card(t.set_side_readme, t.set_side_readme_maintenance_full, readme_links.maintenance) }}
+          {{ readme_card(t.set_side_readme, t.set_side_readme_maintenance_full, wiki_links.maintenance) }}
         </aside>
       </div>
     </div>
@@ -3793,8 +3793,8 @@ function _wgShowFields(providerKey, vpnType, existingVars) {
   // Help link
   if (p.help_url) {
     const customDocUrl = _lang === 'fr'
-      ? '{{ readme_url }}#custom-wireguard--serveur-personnel-unique'
-      : '{{ readme_url }}#custom-wireguard-personal-single-server';
+      ? '{{ wiki_url }}/Fonctionnement#custom-wireguard--serveur-personnel-unique'
+      : '{{ wiki_url }}/How-it-works#custom-wireguard-personal-single-server';
     const helpUrl = providerKey === 'custom' ? customDocUrl : p.help_url;
     const helpText = providerKey === 'custom'
       ? '{{ t.set_wg_custom_help_link }}'
