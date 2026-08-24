@@ -7,7 +7,7 @@ FROM --platform=$BUILDPLATFORM docker:29.7.2-cli AS docker-release
 # Stage 2 — recompile la même version du Docker CLI avec la stdlib Go corrigée.
 # L'image officielle 29.6.1-cli embarque Go 1.26.4 (CVE-2026-39822). La version
 # exacte du CLI est lue depuis l'image officielle pour éviter un second pin.
-FROM --platform=$BUILDPLATFORM golang:1.26.6-alpine AS docker-bin
+FROM --platform=$BUILDPLATFORM golang:1.27.0-alpine AS docker-bin
 
 ARG TARGETOS=linux
 ARG TARGETARCH
@@ -33,7 +33,7 @@ RUN cp vendor.mod go.mod \
 # binaire précompilé embarque encore des dépendances vulnérables. On garde donc
 # la même version fonctionnelle de Compose, recompilée avec les versions
 # corrigées signalées par Trivy.
-FROM --platform=$BUILDPLATFORM golang:1.26.6-alpine AS compose-bin
+FROM --platform=$BUILDPLATFORM golang:1.27.0-alpine AS compose-bin
 
 ARG TARGETOS=linux
 ARG TARGETARCH
