@@ -3300,6 +3300,12 @@ if (document.readyState === 'loading') {
     rememberActiveTab();
 
     const submitter = event.submitter;
+    const formData = new FormData(form);
+    // FormData(form) excludes submit buttons. Preserve the clicked button so
+    // actions such as API token generation/clearing reach the backend.
+    if (submitter && submitter.name) {
+      formData.append(submitter.name, submitter.value);
+    }
     const oldHtml = submitter ? submitter.innerHTML : '';
     if (submitter) {
       submitter.disabled = true;
@@ -3309,7 +3315,7 @@ if (document.readyState === 'loading') {
     try {
       const response = await fetch(formAction.href, {
         method: 'POST',
-        body: new FormData(form),
+        body: formData,
         headers: {
           'Accept': 'application/json',
           'X-Requested-With': 'XMLHttpRequest',
