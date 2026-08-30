@@ -69,6 +69,15 @@ class SettingsTemplateTest(unittest.TestCase):
         self.assertIn('/Fonctionnement#custom-wireguard--serveur-personnel-unique', template)
         self.assertIn('/How-it-works#custom-wireguard-personal-single-server', template)
 
+    def test_ajax_submission_includes_clicked_button_action(self):
+        template = SETTINGS_TEMPLATE.read_text(encoding='utf-8')
+
+        self.assertIn('const submitter = event.submitter;', template)
+        self.assertIn('const formData = new FormData(form);', template)
+        self.assertIn('formData.append(submitter.name, submitter.value);', template)
+        self.assertIn('body: formData,', template)
+        self.assertNotIn('body: new FormData(form),', template)
+
 
 if __name__ == '__main__':
     unittest.main()
