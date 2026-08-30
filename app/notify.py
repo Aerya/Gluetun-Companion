@@ -28,6 +28,7 @@ _SEVERITY: dict[str, str] = {
     'auto_exclude':       'critical',
     'benchmark_failure':  'critical',
     'auto_switch':        'medium',
+    'proxy_test_revert':  'medium',
     'airvpn':             'medium',
     'pool_rotation':      'medium',
     'manual_switch':      'info',

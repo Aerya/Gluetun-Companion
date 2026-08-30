@@ -2143,6 +2143,25 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                     success=_ok_r,
                     connect_secs=_r_connect if _ok_r else None,
                 )
+                if _ok_r and get_setting('notif_proxy_test_revert', '1') == '1':
+                    from .notify import send_switch_notification
+                    send_switch_notification(
+                        from_server=_drift_label,
+                        to_server=format_filters(_orig_prod_filters),
+                        from_mbps=None,
+                        to_mbps=None,
+                        connect_secs=_r_connect,
+                        to_ipv4=None,
+                        to_ipv6=None,
+                        reason='proxy_test_revert',
+                        discord_url=_discord_url,
+                        apprise_urls=_apprise_urls,
+                        lang=_notif_lang,
+                        companion_url=_companion_url,
+                        mention=_mention,
+                        mention_level=_mention_level,
+                        alert_type='proxy_test_revert',
+                    )
 
         duration_secs = round(time.time() - cycle_start, 1)
         logger.info('=== Benchmark cycle finished in %.0fs ===', duration_secs)
