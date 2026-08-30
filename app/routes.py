@@ -1351,6 +1351,14 @@ def bulk_assign_server_profile():
 @bp.route('/servers/switch/<int:server_id>', methods=['POST'])
 @login_required
 def manual_switch(server_id):
+    # A benchmark snapshots the production server at its start so it can restore
+    # it after a sidecar → proxy fallback. Letting a manual switch run while
+    # that snapshot is active would make the later restore overwrite the user's
+    # choice. Keep the two operations mutually exclusive.
+    if get_setting('benchmark_running', '0') == '1':
+        flash_t('flash_benchmark_running', 'warning')
+        return redirect(url_for('main.servers'))
+
     cfg = current_app.config
     with get_db() as db:
         row = db.execute(
@@ -2123,7 +2131,7 @@ def settings():
             set_setting('apprise_urls',           request.form.get('apprise_urls', '').strip())
             set_setting('airvpn_new_server_notif','1' if request.form.get('airvpn_new_server_notif') else '0')
             # Per-type toggles
-            for _k in ('notif_auto_switch', 'notif_manual_switch', 'notif_already_best',
+            for _k in ('notif_auto_switch', 'notif_manual_switch', 'notif_proxy_test_revert', 'notif_already_best',
                        'notif_failover',
                        'notif_auto_exclude', 'notif_benchmark_start', 'notif_benchmark_end', 'notif_benchmark_failure',
                        'notif_quick_check', 'notif_optimal_hour_change', 'notif_catalogue_changes'):
@@ -2514,6 +2522,7 @@ def settings():
         'notif_auto_switch':        get_setting('notif_auto_switch',    '1'),
         'notif_failover':           get_setting('notif_failover',       '1'),
         'notif_manual_switch':      get_setting('notif_manual_switch',  '0'),
+        'notif_proxy_test_revert':  get_setting('notif_proxy_test_revert', '1'),
         'notif_already_best':       get_setting('notif_already_best',   '0'),
         'notif_auto_exclude':       get_setting('notif_auto_exclude',   '1'),
         'notif_benchmark_start':    get_setting('notif_benchmark_start',    '0'),

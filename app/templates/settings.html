@@ -2810,6 +2810,12 @@ gotify://hostname/token">{{ cfg.apprise_urls }}</textarea>
               </div>
               <div class="form-check form-switch mb-0">
                 <input class="form-check-input" type="checkbox" role="switch"
+                       name="notif_proxy_test_revert" id="notif_proxy_test_revert"
+                       {{ 'checked' if cfg.notif_proxy_test_revert == '1' }}>
+                <label class="form-check-label small" for="notif_proxy_test_revert">{{ t.set_notif_proxy_test_revert }}</label>
+              </div>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch"
                        name="notif_benchmark_start" id="notif_benchmark_start"
                        {{ 'checked' if cfg.notif_benchmark_start == '1' }}>
                 <label class="form-check-label small" for="notif_benchmark_start">{{ t.set_notif_bench_start }}</label>
