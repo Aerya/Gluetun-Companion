@@ -5,5 +5,5 @@ docker==7.2.0
 requests==2.34.2
 Werkzeug==3.1.8
 gunicorn==26.2.0
-apprise==1.13.0
+apprise==1.13.1
 cryptography>=42.0.8
