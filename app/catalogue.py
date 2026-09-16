@@ -98,8 +98,11 @@ def _normalize_server_list(raw_servers: list[dict]) -> list[dict]:
         hostnames = s.get('hostnames') or []
         hostname = s.get('hostname') or (hostnames[0] if hostnames else '')
 
+        # Recent gluetun-servers records no longer expose a display name.  The
+        # hostname is stable and unique, unlike an empty name which creates a
+        # permanent false "removed server" diff on every refresh.
         entry = {
-            'name':         s.get('name') or s.get('server_name') or '',
+            'name':         s.get('name') or s.get('server_name') or hostname or '',
             'country':      s.get('country') or '',
             'country_code': (s.get('country_code') or s.get('countryCode') or '').lower(),
             'region':       s.get('region') or '',
@@ -538,6 +541,19 @@ def _snapshot_catalogue_names(db) -> dict[str, set[str]]:
     return snap
 
 
+def _providers_with_blank_catalogue_names(db) -> set[str]:
+    """Providers whose old rows cannot be compared to a named catalogue.
+
+    Versions which consumed the current public Gluetun schema stored an empty
+    ``name`` for every affected server.  Treating the first corrected refresh
+    as an addition would emit one misleading notification per server.
+    """
+    rows = db.execute(
+        "SELECT DISTINCT provider FROM gluetun_catalogue WHERE name = ''"
+    ).fetchall()
+    return {row['provider'] for row in rows}
+
+
 def _compute_catalogue_diff(
     before: dict[str, set[str]],
     after: dict[str, set[str]],
@@ -750,6 +766,7 @@ def refresh_catalogue_from_sidecar(
         with get_db() as db:
             # Snapshot before overwrite so we can compute the diff
             before_snap = _snapshot_catalogue_names(db)
+            malformed_name_providers = _providers_with_blank_catalogue_names(db)
 
             now_iso = datetime.utcnow().isoformat()
             for provider, servers in providers_data.items():
@@ -783,6 +800,16 @@ def refresh_catalogue_from_sidecar(
             # would report that provider as removed on every cycle while its rows
             # remain in the database, causing repeated Discord notifications.
             diff = _compute_refresh_diff(before_snap, providers_data)
+
+            if malformed_name_providers:
+                repaired = sorted(set(diff) & malformed_name_providers)
+                if repaired:
+                    logger.info(
+                        'catalogue: using corrected names as a new baseline for %s',
+                        ', '.join(repaired),
+                    )
+                    diff = {p: changes for p, changes in diff.items()
+                            if p not in malformed_name_providers}
 
             # Never diff two different catalogue representations. The mounted
             # Gluetun catalogue and the sidecar/public catalogue can differ
