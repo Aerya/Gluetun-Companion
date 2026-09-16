@@ -13,6 +13,26 @@ _spec.loader.exec_module(sidecar)
 
 
 class MountedCatalogueTest(unittest.TestCase):
+    def test_current_public_schema_uses_hostname_when_name_is_absent(self):
+        data = sidecar._normalize_server_list([
+            {
+                'country': 'Albania',
+                'city': 'Tirana',
+                'hostname': 'al-tia-wg-001',
+                'ips': ['103.124.165.2'],
+            },
+            {
+                'country': 'Albania',
+                'city': 'Tirana',
+                'hostname': 'al-tia-wg-002',
+                'ips': ['103.124.165.3'],
+            },
+        ])
+
+        self.assertEqual([server['name'] for server in data], [
+            'al-tia-wg-001', 'al-tia-wg-002',
+        ])
+
     def test_prefers_aggregate_servers_json_with_proton_premium_metadata(self):
         with TemporaryDirectory() as d:
             payload = {

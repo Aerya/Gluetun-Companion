@@ -141,8 +141,11 @@ def _normalize_server_list(raw_servers: list[dict]) -> list[dict]:
     for s in raw_servers:
         hostnames = s.get('hostnames') or []
         hostname = s.get('hostname') or (hostnames[0] if hostnames else '')
+        # The public gluetun-servers schema can omit a display name.  Preserve
+        # hostname as its stable catalogue identity rather than storing an
+        # empty name, which would look removed at every subsequent refresh.
         srv = {
-            'name':         s.get('name') or s.get('server_name') or '',
+            'name':         s.get('name') or s.get('server_name') or hostname or '',
             'country':      s.get('country') or '',
             'country_code': (s.get('country_code') or s.get('countryCode') or '').lower(),
             'region':       s.get('region') or '',
