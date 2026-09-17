@@ -2,6 +2,8 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
+import docker
+
 from app.gluetun import (
     _compose_recreate,
     _verify_attached,
@@ -299,6 +301,33 @@ class DependentRecreateBackendTest(unittest.TestCase):
 
 
 class ComposeReplacementRecoveryTest(unittest.TestCase):
+    @patch.dict('app.gluetun.os.environ', {'COMPOSE_STACKS_DIR': '/stacks'})
+    @patch('app.gluetun.os.path.isdir', side_effect=lambda path: path == '/stacks/plex')
+    @patch('app.gluetun.subprocess.run')
+    @patch('docker.from_env')
+    def test_cross_stack_dependent_uses_shared_stack_root(
+        self, from_env, run, _isdir,
+    ):
+        current = MagicMock()
+        current.labels = {
+            'com.docker.compose.service': 'radarr',
+            'com.docker.compose.project': 'plex',
+            'com.docker.compose.project.working_dir': '/host/stacks/plex',
+        }
+        client = MagicMock()
+        client.containers.get.return_value = current
+        from_env.return_value = client
+        run.return_value = MagicMock(returncode=0, stderr='', stdout='')
+
+        _compose_recreate('radarr', '/compose', 'airvpn')
+
+        run.assert_called_once()
+        self.assertEqual(run.call_args.kwargs['cwd'], '/stacks/plex')
+        self.assertEqual(
+            run.call_args.args[0],
+            ['docker', 'compose', '-p', 'plex', 'up', '-d', '--force-recreate', 'radarr'],
+        )
+
     @patch('app.gluetun.os.path.isdir', return_value=True)
     @patch('app.gluetun.subprocess.run')
     @patch('docker.from_env')
@@ -313,9 +342,11 @@ class ComposeReplacementRecoveryTest(unittest.TestCase):
         }
         client = MagicMock()
         client.containers.get.return_value = current
+        client.api.inspect_container.side_effect = docker.errors.NotFound('gone')
         client.api.containers.return_value = [{
             'Id': 'created-id',
             'Names': ['/7cebe17ebeda_qbittorrentvpn1'],
+            'State': 'created',
             'Labels': {
                 'com.docker.compose.replace': 'qbittorrentvpn1',
                 'com.docker.compose.service': 'qbittorrentvpn1',
@@ -353,9 +384,11 @@ class ComposeReplacementRecoveryTest(unittest.TestCase):
         }
         client = MagicMock()
         client.containers.get.return_value = current
+        client.api.inspect_container.side_effect = docker.errors.NotFound('gone')
         client.api.containers.return_value = [{
             'Id': 'unrelated-id',
             'Names': ['/temporary_other_service'],
+            'State': 'created',
             'Labels': {
                 'com.docker.compose.replace': 'other-service',
                 'com.docker.compose.service': 'other-service',
@@ -389,9 +422,11 @@ class ComposeReplacementRecoveryTest(unittest.TestCase):
         }
         client = MagicMock()
         client.containers.get.return_value = current
+        client.api.inspect_container.side_effect = docker.errors.NotFound('gone')
         client.api.containers.return_value = [{
             'Id': 'replacement-id',
             'Names': ['/b1f54429e6bf_prowlarr'],
+            'State': 'created',
             'Labels': {
                 'com.docker.compose.replace': 'prowlarr',
                 'com.docker.compose.service': 'prowlarr',
@@ -414,6 +449,48 @@ class ComposeReplacementRecoveryTest(unittest.TestCase):
         client.api.remove_container.assert_called_once_with(
             'replacement-id', v=False, force=True,
         )
+
+    @patch('app.gluetun.time.sleep')
+    @patch('app.gluetun.os.path.isdir', return_value=True)
+    @patch('app.gluetun.subprocess.run')
+    @patch('docker.from_env')
+    def test_retry_waits_until_docker_finishes_removal(
+        self, from_env, run, _isdir, sleep,
+    ):
+        current = MagicMock()
+        current.labels = {
+            'com.docker.compose.service': 'qbittorrentvpn1',
+            'com.docker.compose.project': 'airvpn',
+            'com.docker.compose.project.working_dir': '/compose',
+        }
+        client = MagicMock()
+        client.containers.get.return_value = current
+        client.api.containers.return_value = [{
+            'Id': 'created-id',
+            'Names': ['/temporary_qbittorrentvpn1'],
+            'State': 'created',
+            'Labels': {
+                'com.docker.compose.replace': 'qbittorrentvpn1',
+                'com.docker.compose.service': 'qbittorrentvpn1',
+                'com.docker.compose.project': 'airvpn',
+            },
+        }]
+        client.api.inspect_container.side_effect = [
+            {'State': {'Status': 'removing'}},
+            {'State': {'Status': 'removing'}},
+            docker.errors.NotFound('gone'),
+        ]
+        from_env.return_value = client
+        run.side_effect = [
+            MagicMock(returncode=1, stderr='No such container: old', stdout=''),
+            MagicMock(returncode=0, stderr='', stdout=''),
+        ]
+
+        _compose_recreate('qbittorrentvpn1', '/compose', 'airvpn')
+
+        self.assertEqual(client.api.inspect_container.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)
+        self.assertEqual(run.call_count, 2)
 
 if __name__ == '__main__':
     unittest.main()

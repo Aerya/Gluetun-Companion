@@ -65,7 +65,7 @@ Gluetun Companion est une interface Web pour piloter automatiquement vos serveur
 - pools de rotation, failover et sélection intelligente pour les gros catalogues ;
 - découverte et contrôle des trackers BitTorrent depuis qBittorrent ou rTorrent ;
 - port forwarding fournisseur, natif Gluetun ou custom, avec synchronisation client ;
-- gestion des containers Docker liés à Gluetun ;
+- gestion et recréation des containers Docker liés à Gluetun, y compris dans d’autres stacks Compose ;
 - notifications Discord/Apprise, API REST, Prometheus et Grafana ;
 - support Unraid/DockerMan.
 
@@ -104,6 +104,7 @@ services:
     volumes:
       - /chemin/vers/data:/data
       - /chemin/vers/stack/gluetun:/compose:rw
+      - /chemin/vers/stacks:/stacks:ro
     environment:
       - TZ=Europe/Paris
       - SECRET_KEY=remplacer-par-une-chaine-aleatoire
@@ -111,12 +112,13 @@ services:
       - GLUETUN_PROXY_PORT=8887
       - GLUETUN_CONTAINER=gluetun
       - COMPOSE_DIR=/compose
+      - COMPOSE_STACKS_DIR=/stacks
       - DOCKER_HOST=tcp://socket-proxy:2375
     depends_on:
       - socket-proxy
 ```
 
-`EVENTS=1` est nécessaire pour détecter immédiatement les redémarrages de Gluetun. Le dossier monté sur `/compose` doit être celui qui contient le fichier Compose de la stack Gluetun ; Companion l'utilise pour recréer les services partageant son réseau après une bascule.
+`EVENTS=1` est nécessaire pour détecter immédiatement les redémarrages de Gluetun. Le dossier monté sur `/compose` doit contenir le fichier Compose de la stack Gluetun. Pour recréer aussi les services d’autres projets Compose partageant son réseau, montez la racine de leurs stacks sur `/stacks` et définissez `COMPOSE_STACKS_DIR=/stacks`. Le sous-dossier doit porter le nom du projet Compose (`/stacks/plex` pour le projet `plex`). Companion attend également la fin effective d’une suppression Docker avant de retenter une recréation interrompue.
 
 ### Control Server Gluetun : accès et authentification
 

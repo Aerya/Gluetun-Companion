@@ -817,6 +817,8 @@ def _cleanup_failed_compose_replacements(
 
     for entry in entries or []:
         labels = (entry or {}).get('Labels') or {}
+        if str((entry or {}).get('State', '')).lower() != 'created':
+            continue
         if labels.get('com.docker.compose.replace') != container_name:
             continue
         if labels.get('com.docker.compose.service') != service:
@@ -830,6 +832,24 @@ def _cleanup_failed_compose_replacements(
         label = names[0] if names else cid[:12]
         try:
             client.api.remove_container(cid, v=False, force=True)
+            # Docker may acknowledge the removal before the container name is
+            # released.  Retrying Compose immediately then fails with
+            # "removal ... is already in progress" and strands the service.
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    client.api.inspect_container(cid)
+                except docker.errors.NotFound:
+                    break
+                except docker.errors.APIError as exc:
+                    if getattr(exc, 'status_code', None) == 404:
+                        break
+                    raise
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        f'timed out waiting for Docker to remove {label}'
+                    )
+                time.sleep(0.1)
             removed.append(label)
             logger.warning(
                 'Removed abandoned Compose replacement %s for %s; retrying recreate',
@@ -863,10 +883,12 @@ def _compose_recreate(
          correct for containers in a *different* Compose stack than Gluetun.
          Works when that stack's directory is mounted inside the Companion
          container, or when running Companion bare-metal.
-      2. Caller-supplied ``compose_dir`` — Gluetun's own compose directory,
+      2. ``COMPOSE_STACKS_DIR/<project>`` — optional shared stack root for
+         dependants managed by another Compose project (for example Dockge).
+      3. Caller-supplied ``compose_dir`` — Gluetun's own compose directory,
          which is always mounted inside the Companion container.  Correct for
          containers in the *same* stack as Gluetun.
-      3. Plain ``docker restart`` — last resort; may fail if the parent
+      4. Plain ``docker restart`` — last resort; may fail if the parent
          container was recreated (stale namespace reference).
     """
     client = docker.from_env()
@@ -876,11 +898,16 @@ def _compose_recreate(
 
     own_work_dir = labels.get('com.docker.compose.project.working_dir', '')
     own_project  = labels.get('com.docker.compose.project', '')
+    stacks_dir = os.environ.get('COMPOSE_STACKS_DIR', '').strip()
 
     # Build (work_dir, project) candidates in priority order.
     candidates: list[tuple[str, str]] = []
     if own_work_dir:
         candidates.append((own_work_dir, own_project or compose_project))
+    if stacks_dir and own_project:
+        project_dir = os.path.join(stacks_dir, own_project)
+        if project_dir not in {path for path, _ in candidates}:
+            candidates.append((project_dir, own_project))
     if compose_dir and compose_dir != own_work_dir:
         candidates.append((compose_dir, compose_project or own_project))
 

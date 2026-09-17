@@ -26,6 +26,9 @@ services:
     volumes:
       - ${COMPANION_DATA_PATH:-./data}:/data
       - ${GLUETUN_COMPOSE_PATH:-../gluetun}:/compose:rw
+      # Optionnel : racine des stacks Compose (Dockge, Portainer, etc.) pour
+      # recréer aussi les dépendants situés dans un autre projet.
+      - ${COMPOSE_STACKS_PATH:-../}:/stacks:ro
       - ${GLUETUN_OPENVPN_PATH:-../gluetun/openvpn}:/openvpn
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -37,6 +40,7 @@ services:
       - GLUETUN_PROXY_PORT=8887          # port du proxy HTTP Gluetun exposé sur l'hôte
       - GLUETUN_CONTAINER=gluetun-airvpn   # nom exact du container Gluetun (le service Compose est détecté automatiquement)
       - COMPOSE_DIR=/compose
+      - COMPOSE_STACKS_DIR=/stacks
       - OPENVPN_CONFIG_DIR=/openvpn
       - OPENVPN_CONTAINER_DIR=/gluetun/openvpn
       - DOCKER_HOST=tcp://socket-proxy:2375
