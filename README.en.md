@@ -64,7 +64,7 @@ Gluetun Companion is a Web UI for automatically managing WireGuard and OpenVPN s
 - rotation pools, failover and intelligent selection for large catalogues;
 - tracker discovery and control from qBittorrent or rTorrent;
 - provider, native Gluetun or custom port forwarding, with client synchronization;
-- management of Docker containers attached to Gluetun;
+- management and recreation of Docker containers attached to Gluetun, including services from other Compose stacks;
 - Discord/Apprise notifications, REST API, Prometheus and Grafana;
 - Unraid/DockerMan support.
 
@@ -103,6 +103,7 @@ services:
     volumes:
       - /path/to/data:/data
       - /path/to/gluetun/stack:/compose:rw
+      - /path/to/stacks:/stacks:ro
     environment:
       - TZ=Europe/Paris
       - SECRET_KEY=replace-with-a-random-string
@@ -110,12 +111,13 @@ services:
       - GLUETUN_PROXY_PORT=8887
       - GLUETUN_CONTAINER=gluetun
       - COMPOSE_DIR=/compose
+      - COMPOSE_STACKS_DIR=/stacks
       - DOCKER_HOST=tcp://socket-proxy:2375
     depends_on:
       - socket-proxy
 ```
 
-`EVENTS=1` is required to detect Gluetun restarts immediately. The directory mounted at `/compose` must contain the Gluetun stack's Compose file; Companion uses it to recreate services sharing Gluetun's network after a switch.
+`EVENTS=1` is required to detect Gluetun restarts immediately. The directory mounted at `/compose` must contain the Gluetun stack's Compose file. To recreate services from other Compose projects that share its network, mount their stack root at `/stacks` and set `COMPOSE_STACKS_DIR=/stacks`. Each subdirectory must match its Compose project name (`/stacks/plex` for the `plex` project). Companion also waits for Docker removal to finish before retrying an interrupted recreation.
 
 ### Gluetun Control Server: access and authentication
 
