@@ -1351,11 +1351,27 @@ def bulk_assign_server_profile():
 @bp.route('/servers/switch/<int:server_id>', methods=['POST'])
 @login_required
 def manual_switch(server_id):
-    # A benchmark snapshots the production server at its start so it can restore
-    # it after a sidecar → proxy fallback. Letting a manual switch run while
-    # that snapshot is active would make the later restore overwrite the user's
-    # choice. Keep the two operations mutually exclusive.
+    # Manual intent has priority over continuous observation.  Observation is a
+    # background data-collection task and must never make the UI unable to switch
+    # the production VPN.  Classic/explicit benchmarks remain protected because
+    # they may own production state that must be restored consistently.
     if get_setting('benchmark_running', '0') == '1':
+        if get_setting('benchmark_mode', '') == 'observation':
+            logger.info('Manual switch requested — stopping continuous observation first')
+            request_stop()
+        else:
+            flash_t('flash_benchmark_running', 'warning')
+            return redirect(url_for('main.servers'))
+
+    # Serialize with scheduler/failover/pool operations.  When observation was
+    # active this waits for its current server test + cleanup to finish, then the
+    # manual action takes ownership.
+    if not scheduler_lock.acquire(blocking=True, timeout=180):
+        flash_t('flash_benchmark_running', 'warning')
+        return redirect(url_for('main.servers'))
+
+    if get_setting('benchmark_running', '0') == '1':
+        scheduler_lock.release()
         flash_t('flash_benchmark_running', 'warning')
         return redirect(url_for('main.servers'))
 
@@ -1369,8 +1385,17 @@ def manual_switch(server_id):
             'WHERE s.id = ?', (server_id,)
         ).fetchone()
     if not row:
+        scheduler_lock.release()
         flash_t('flash_server_not_found', 'danger')
         return redirect(url_for('main.servers'))
+
+    # Mark the production switch as the active priority operation.  The lock is
+    # released after switch_server() returns, while benchmark_running stays set
+    # until the async reconnect/reconciliation work is complete.
+    set_setting('benchmark_running', '1')
+    set_setting('benchmark_mode', 'manual_switch')
+    set_setting('benchmark_current_server', row['name'])
+    set_setting('benchmark_stop_requested', '0')
 
     container   = cfg['GLUETUN_CONTAINER']
     compose_dir = cfg['COMPOSE_DIR']
@@ -1438,11 +1463,20 @@ def manual_switch(server_id):
         pull_network_set = set()
     pull_updated_images = _pull_gluetun(container)
 
-    ok, err = switch_server(
-        row['name'], row['filter_type'],
-        container, compose_dir, project,
-        wg_profile=_manual_wg_profile,
-    )
+    try:
+        ok, err = switch_server(
+            row['name'], row['filter_type'],
+            container, compose_dir, project,
+            wg_profile=_manual_wg_profile,
+        )
+    except Exception:
+        set_setting('benchmark_running', '0')
+        set_setting('benchmark_mode', '')
+        set_setting('benchmark_current_server', '')
+        set_setting('benchmark_stop_requested', '0')
+        raise
+    finally:
+        scheduler_lock.release()
     _invalidate_vpn_snapshot()
     to_label = f"{FILTER_VARS[row['filter_type']]}={row['name']}"
     with get_db() as db:
@@ -1554,8 +1588,23 @@ def manual_switch(server_id):
                         updated_images=(pull_updated_images + network_updated + post_updated) or None,
                     )
 
-        threading.Thread(target=_bg_restart, daemon=True, name='manual-switch-net').start()
+        def _bg_restart_guarded():
+            try:
+                _bg_restart()
+            finally:
+                set_setting('benchmark_running', '0')
+                set_setting('benchmark_mode', '')
+                set_setting('benchmark_current_server', '')
+                set_setting('benchmark_stop_requested', '0')
+
+        threading.Thread(
+            target=_bg_restart_guarded, daemon=True, name='manual-switch-net'
+        ).start()
     else:
+        set_setting('benchmark_running', '0')
+        set_setting('benchmark_mode', '')
+        set_setting('benchmark_current_server', '')
+        set_setting('benchmark_stop_requested', '0')
         flash_t('flash_switch_failed', 'danger', err=err)
     return redirect(url_for('main.servers'))
 

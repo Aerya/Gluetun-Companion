@@ -58,3 +58,20 @@ def excluded_server_names(db, country_codes: set[str]) -> set[str]:
         params,
     ).fetchall()
     return {row['name'] for row in rows}
+
+
+def is_server_excluded(db, server_name: str | None, country_codes: set[str] | None = None) -> bool:
+    """Return True when *server_name* belongs to a globally excluded country.
+
+    This is intentionally cheap and safe to call immediately before an automatic
+    switch so a country exclusion changed while a benchmark is running still wins.
+    """
+    name = (server_name or '').strip()
+    if not name:
+        return False
+    if country_codes is None:
+        from .database import get_setting
+        country_codes = parse_excluded_countries(get_setting('excluded_countries', '[]'))
+    if not country_codes:
+        return False
+    return name in excluded_server_names(db, country_codes)
