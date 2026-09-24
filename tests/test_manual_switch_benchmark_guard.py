@@ -6,15 +6,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ManualSwitchBenchmarkGuardTest(unittest.TestCase):
-    def test_manual_switch_is_blocked_before_it_reads_or_changes_gluetun(self):
+    def test_manual_switch_preempts_continuous_observation_but_not_other_benchmarks(self):
         routes = (ROOT / 'app' / 'routes.py').read_text(encoding='utf-8')
         start = routes.index('def manual_switch(server_id):')
         body = routes[start:routes.index("@bp.route('/servers/test/", start)]
 
-        guard = "if get_setting('benchmark_running', '0') == '1':"
-        self.assertIn(guard, body)
-        self.assertLess(body.index(guard), body.index('cfg = current_app.config'))
-        self.assertIn("flash_t('flash_benchmark_running', 'warning')", body)
+        self.assertIn("get_setting('benchmark_mode', '') == 'observation'", body)
+        self.assertIn('request_stop()', body)
+        self.assertIn('scheduler_lock.acquire(blocking=True, timeout=180)', body)
+        self.assertIn("set_setting('benchmark_mode', 'manual_switch')", body)
+        self.assertIn("set_setting('benchmark_running', '0')", body)
+        self.assertLess(body.index('request_stop()'), body.index('scheduler_lock.acquire'))
+        self.assertLess(body.index('scheduler_lock.acquire'), body.index('switch_server('))
 
     def test_proxy_restore_has_its_own_enabled_by_default_notification(self):
         scheduler = (ROOT / 'app' / 'scheduler.py').read_text(encoding='utf-8')

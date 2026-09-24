@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 from flask import Flask
 
 from app import database, scheduler
-from app.server_eligibility import excluded_server_names, parse_excluded_countries
+from app.server_eligibility import excluded_server_names, is_server_excluded, parse_excluded_countries
 
 
 class ServerEligibilityTest(unittest.TestCase):
@@ -29,6 +29,18 @@ class ServerEligibilityTest(unittest.TestCase):
                 self.assertEqual(
                     excluded_server_names(db, {'FR', 'GB'}), {'Paris', 'London'}
                 )
+
+    def test_late_eligibility_guard_detects_excluded_server(self):
+        with TemporaryDirectory() as directory:
+            database.init_db(os.path.join(directory, 'test.db'))
+            database.set_setting('excluded_countries', '["US"]')
+            with database.get_db() as db:
+                db.execute(
+                    "INSERT INTO airvpn_snapshot (name, country, country_code) "
+                    "VALUES ('Alruba', 'United States', 'US')"
+                )
+                self.assertTrue(is_server_excluded(db, 'Alruba'))
+                self.assertFalse(is_server_excluded(db, 'Dedalus'))
 
     def test_country_resolution_can_filter_configured_servers_for_display(self):
         with TemporaryDirectory() as directory:

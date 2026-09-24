@@ -1782,7 +1782,30 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
         best_server_label: str | None = None
         best_server_name: str | None = None
         decision_results = results
-        if auto_sw and results and tracker_required_for_switch and tracker_checks_enabled and not observation:
+
+        # Re-evaluate country exclusions at decision time.  A benchmark can run
+        # for many minutes; exclusions changed while it is running must take
+        # effect before any automatic switch, not only when the cycle started.
+        if auto_sw and decision_results and not observation:
+            from .server_eligibility import parse_excluded_countries, excluded_server_names
+            _live_excluded_countries = parse_excluded_countries(
+                get_setting('excluded_countries', '[]')
+            )
+            if _live_excluded_countries:
+                with get_db() as db:
+                    _live_excluded_names = excluded_server_names(db, _live_excluded_countries)
+                _before_live_exclusion = len(decision_results)
+                decision_results = [
+                    r for r in decision_results
+                    if r.get('server') not in _live_excluded_names
+                ]
+                if len(decision_results) != _before_live_exclusion:
+                    logger.info(
+                        'Live country exclusion: keeping %d/%d result(s) for auto-switch',
+                        len(decision_results), _before_live_exclusion,
+                    )
+
+        if auto_sw and decision_results and tracker_required_for_switch and tracker_checks_enabled and not observation:
             _before_tracker_filter = len(results)
             decision_results = [r for r in results if r.get('tracker_ok')]
             if decision_results:
@@ -1947,10 +1970,20 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             from_result = next((r for r in results if r['server'] == from_name), None)
             from_mbps = from_result['dl'] if from_result else None
 
-            if best_label != from_label:
-                # Capture network dependents BEFORE Gluetun is recreated — use
-                # the extended variant that also detects already-orphaned containers
-                # (stale NetworkMode from a previous failed switch).
+            # Last-line safety check. Never let an automatic path switch to a
+            # country that became excluded after candidate selection.
+            from .server_eligibility import is_server_excluded
+            with get_db() as db:
+                _best_is_excluded = is_server_excluded(db, best['server'])
+            if _best_is_excluded:
+                logger.warning(
+                    'Auto-switch cancelled: %s now belongs to an excluded country',
+                    best['server'],
+                )
+                best_server_label = None
+                best_server_name = None
+
+            if best_label != from_label and not _best_is_excluded:
                 pre_switch_net_deps = list_network_dependents_for_recreate(container)
                 try:
                     from .port_forwarding import get_gluetun_provider
@@ -2114,11 +2147,22 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                         'port_forward_only': _orig_penv.get('port_forward_only', True),
                         'server_types':      _orig_penv.get('server_types', []),
                     }
+                from .server_eligibility import is_server_excluded
+                with get_db() as db:
+                    _orig_is_excluded = is_server_excluded(db, _orig_sv)
                 _pre_deps = list_network_dependents_for_recreate(container)
-                _ok_r, _err_r = switch_server(
-                    _orig_sv, _orig_ft, container, compose_dir, project,
-                    wg_profile=_orig_wg,
-                )
+                if _orig_is_excluded:
+                    _ok_r = False
+                    _err_r = 'original server is now in an excluded country'
+                    logger.warning(
+                        'Proxy fallback restore skipped: %s is now country-excluded',
+                        _orig_sv,
+                    )
+                else:
+                    _ok_r, _err_r = switch_server(
+                        _orig_sv, _orig_ft, container, compose_dir, project,
+                        wg_profile=_orig_wg,
+                    )
                 _r_connect = 0.0
                 if _ok_r:
                     _r_conn, _r_connect = wait_for_vpn(
@@ -2875,12 +2919,25 @@ def _run_emergency_failover(app, health_status: str) -> bool:
                 wg_profile = None
                 error = f'VPN profile decryption failed: {exc}'
             if not error:
-                pull_gluetun_before_switch(container)
-                switched, switch_error = switch_server(
-                    candidate['name'], candidate['filter_type'], container,
-                    app.config['COMPOSE_DIR'], app.config.get('COMPOSE_PROJECT', ''),
-                    wg_profile=wg_profile,
-                )
+                from .server_eligibility import is_server_excluded
+                from .database import get_db
+                with get_db() as db:
+                    _candidate_is_excluded = is_server_excluded(db, candidate['name'])
+                if _candidate_is_excluded:
+                    error = 'selected failover candidate is in an excluded country'
+                    switched = False
+                    switch_error = error
+                    logger.error(
+                        'Emergency failover refused late candidate %s: country excluded',
+                        candidate['name'],
+                    )
+                else:
+                    pull_gluetun_before_switch(container)
+                    switched, switch_error = switch_server(
+                        candidate['name'], candidate['filter_type'], container,
+                        app.config['COMPOSE_DIR'], app.config.get('COMPOSE_PROJECT', ''),
+                        wg_profile=wg_profile,
+                    )
                 if not switched:
                     error = switch_error or 'server switch failed'
                 else:
