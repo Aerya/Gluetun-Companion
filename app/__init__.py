@@ -93,6 +93,10 @@ def create_app():
     app.config['DATA_DIR']         = os.environ.get('DATA_DIR', '/data')
     app.config['DB_PATH']          = os.path.join(app.config['DATA_DIR'], 'companion.db')
     app.config['GLUETUN_HOST']     = os.environ.get('GLUETUN_HOST', 'host.docker.internal')
+    # Test sidecars publish their HTTP API on the Docker host, which can be a
+    # different address from the Gluetun HTTP proxy on a shared Docker network.
+    # Keep the established single-host setup as the default.
+    app.config['SIDECAR_HOST']     = os.environ.get('SIDECAR_HOST', '').strip() or app.config['GLUETUN_HOST']
     app.config['GLUETUN_PROXY_PORT'] = int(os.environ.get('GLUETUN_PROXY_PORT', '8887'))
     app.config['GLUETUN_CONTAINER'] = os.environ.get('GLUETUN_CONTAINER', 'gluetun-airvpn')
     app.config['COMPOSE_DIR']      = os.environ.get('COMPOSE_DIR', '/compose')

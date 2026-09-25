@@ -3473,8 +3473,9 @@ def api_catalogue_refresh():
     if result.get('ok'):
         return jsonify(result), 200
 
+    from .gluetun import get_sidecar_host
     sidecar_image = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
-    sidecar_host  = current_app.config['GLUETUN_HOST']
+    sidecar_host  = get_sidecar_host(current_app.config)
     result = refresh_catalogue_from_sidecar(
         sidecar_image=sidecar_image,
         sidecar_host=sidecar_host,

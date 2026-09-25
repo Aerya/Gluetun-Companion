@@ -1207,7 +1207,8 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             refresh_catalogue_from_sidecar,
         )
         _sidecar_img       = get_setting('sidecar_image', 'ghcr.io/aerya/gluetun-companion-sidecar:latest')
-        _sidecar_host      = app.config['GLUETUN_HOST']
+        from .gluetun import get_sidecar_host
+        _sidecar_host      = get_sidecar_host(app.config)
         _cat_auto_add      = get_setting('catalogue_auto_add', '0') == '1'
         _notif_cat_changes = get_setting('notif_catalogue_changes', '0') == '1'
         _cat = refresh_catalogue_from_local()
@@ -1274,6 +1275,8 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
     project     = app.config.get('COMPOSE_PROJECT', '')
     proxy_host  = app.config['GLUETUN_HOST']
     proxy_port  = app.config['GLUETUN_PROXY_PORT']
+    from .gluetun import get_sidecar_host
+    sidecar_host = get_sidecar_host(app.config)
 
     # Read all benchmark settings up front (needed for quick check and main loop)
     wait_secs      = int(get_setting('connection_wait_seconds', '45'))
@@ -1688,7 +1691,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                     )
                     result = _test_server_sidecar_with_retry(
                         row['name'], row['filter_type'],
-                        container, sidecar_image, proxy_host, sidecar_port,
+                        container, sidecar_image, sidecar_host, sidecar_port,
                         wait_secs, dl_duration, dl_streams, max_retries, timeout_secs,
                         sidecar_method, sidecar_iperf_fallback,
                         extra_env=_sidecar_env,
@@ -2342,6 +2345,8 @@ def _do_single_server(app, server_name: str, filter_type: str):
         project     = app.config.get('COMPOSE_PROJECT', '')
         proxy_host  = app.config['GLUETUN_HOST']
         proxy_port  = app.config['GLUETUN_PROXY_PORT']
+        from .gluetun import get_sidecar_host
+        sidecar_host = get_sidecar_host(app.config)
         try:
             from .port_forwarding import get_gluetun_provider
             from_provider = get_gluetun_provider(container)
@@ -2441,7 +2446,7 @@ def _do_single_server(app, server_name: str, filter_type: str):
             else:
                 result = _test_server_sidecar_with_retry(
                     server_name, filter_type,
-                    container, sidecar_image, proxy_host, sidecar_port,
+                    container, sidecar_image, sidecar_host, sidecar_port,
                     wait_secs, dl_duration, dl_streams, max_retries, timeout_secs,
                     sidecar_method, sidecar_iperf_fallback,
                     extra_env=_ss_sidecar_env or None,
