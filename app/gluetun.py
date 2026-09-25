@@ -2089,6 +2089,15 @@ def wait_for_sidecar(
     return False, round(time.time() - start, 1)
 
 
+def get_sidecar_host(config: dict) -> str:
+    """Return the address used to poll temporary sidecar HTTP endpoints.
+
+    A sidecar is published on the Docker host, whereas GLUETUN_HOST can point
+    directly at the Gluetun container for proxy traffic.
+    """
+    return str(config.get('SIDECAR_HOST') or config['GLUETUN_HOST'])
+
+
 def run_sidecar_test(
     host: str,
     port: int,

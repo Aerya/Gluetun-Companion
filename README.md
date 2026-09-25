@@ -109,6 +109,8 @@ services:
       - TZ=Europe/Paris
       - SECRET_KEY=remplacer-par-une-chaine-aleatoire
       - GLUETUN_HOST=host.docker.internal
+      # Optionnel : définissez cette adresse sur host.docker.internal si GLUETUN_HOST est un nom de service Docker.
+      # - SIDECAR_HOST=host.docker.internal
       - GLUETUN_PROXY_PORT=8887
       - GLUETUN_CONTAINER=gluetun
       - COMPOSE_DIR=/compose
@@ -119,6 +121,8 @@ services:
 ```
 
 `EVENTS=1` est nécessaire pour détecter immédiatement les redémarrages de Gluetun. Le dossier monté sur `/compose` doit contenir le fichier Compose de la stack Gluetun. Pour recréer aussi les services d’autres projets Compose partageant son réseau, montez la racine de leurs stacks sur `/stacks` et définissez `COMPOSE_STACKS_DIR=/stacks`. Le sous-dossier doit porter le nom du projet Compose (`/stacks/plex` pour le projet `plex`). Companion attend également la fin effective d’une suppression Docker avant de retenter une recréation interrompue.
+
+Lorsque `GLUETUN_HOST` est un nom de service Docker, il convient aux requêtes proxy de Companion, mais pas aux sidecars temporaires de benchmark dont le port HTTP est publié sur l’hôte Docker. Définissez `SIDECAR_HOST=host.docker.internal` (en conservant le mapping `host-gateway`) pour interroger ces sidecars. S’il est absent, il reprend `GLUETUN_HOST` afin de conserver la compatibilité.
 
 ### Control Server Gluetun : accès et authentification
 
