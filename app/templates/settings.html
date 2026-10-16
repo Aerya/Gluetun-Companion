@@ -669,6 +669,11 @@
         </div>
 
         <div class="mb-3" id="interval-group">
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="radio" name="schedule_mode" id="schedule-interval" value="interval"
+                   {{ 'checked' if cfg.schedule_mode != 'calendar' }}>
+            <label class="form-check-label" for="schedule-interval">{{ t.set_schedule_interval }}</label>
+          </div>
           <label class="form-label">{{ t.set_interval_label }}</label>
           <div class="input-group">
             <input type="number" name="interval" class="form-control"
@@ -680,6 +685,28 @@
             {{ t.set_interval_next }} <strong>{{ next_run.strftime('%d/%m/%Y %H:%M:%S') }}</strong>
           </div>
           {% endif %}
+        </div>
+
+        <div class="mb-3" id="calendar-schedule-group">
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="radio" name="schedule_mode" id="schedule-calendar" value="calendar"
+                   {{ 'checked' if cfg.schedule_mode == 'calendar' }}>
+            <label class="form-check-label" for="schedule-calendar">{{ t.set_schedule_calendar }}</label>
+          </div>
+          <div class="row g-2 ms-2">
+            <div class="col-sm-6">
+              <label class="form-label small">{{ t.set_schedule_days }}</label>
+              <div class="input-group">
+                <input type="number" name="schedule_days" class="form-control" value="{{ cfg.schedule_days }}" min="1" max="365" step="1">
+                <span class="input-group-text text-muted">{{ t.cmn_days }}</span>
+              </div>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small">{{ t.set_schedule_time }}</label>
+              <input type="time" name="schedule_time" class="form-control" value="{{ cfg.schedule_time }}">
+            </div>
+          </div>
+          <div class="form-text text-muted ms-2">{{ t.set_schedule_calendar_hint }}</div>
         </div>
 
         <div class="mb-2 form-check form-switch">

@@ -318,6 +318,10 @@ def init_db(db_path: str):
 
             INSERT OR IGNORE INTO settings (key, value) VALUES
                 ('test_interval_hours',      '6'),
+                ('benchmark_schedule_mode',  'interval'),
+                ('benchmark_schedule_days',  '1'),
+                ('benchmark_schedule_time',  '03:00'),
+                ('benchmark_schedule_anchor',''),
                 ('admin_username',           'admin'),
                 ('admin_password_hash',      ''),
                 ('auto_switch',              '1'),

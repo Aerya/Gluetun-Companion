@@ -124,6 +124,10 @@ services:
 
 Lorsque `GLUETUN_HOST` est un nom de service Docker, il convient aux requêtes proxy de Companion, mais pas aux sidecars temporaires de benchmark dont le port HTTP est publié sur l’hôte Docker. Définissez `SIDECAR_HOST=host.docker.internal` (en conservant le mapping `host-gateway`) pour interroger ces sidecars. S’il est absent, il reprend `GLUETUN_HOST` afin de conserver la compatibilité.
 
+Le **port API sidecar** des paramètres est le port publié sur l’hôte Docker. Le sidecar écoute toujours sur son port interne `8766` : Companion publie automatiquement `8766/tcp` vers le port configuré, par exemple `8767`. Aucune modification du port interne ni de `catalogue_sidecar_port` n’est nécessaire. Lors d’un benchmark, `8766` est ajouté automatiquement à `FIREWALL_INPUT_PORTS` du clone temporaire, sans modifier le pare-feu du Gluetun de production.
+
+Dans **Paramètres → Planification & Cycle**, vous pouvez soit conserver un intervalle, soit lancer le benchmark à une heure précise tous les X jours. Cette planification calendaire conserve son rythme après le redémarrage de Companion.
+
 ### Control Server Gluetun : accès et authentification
 
 Companion lit l’état du VPN et le port forwardé avec le [Control Server officiel de Gluetun](https://github.com/qdm12/gluetun-wiki/blob/main/setup/advanced/control-server.md). Les routes sont privées par défaut dans les versions récentes de Gluetun : publier le port ne suffit donc pas, il faut aussi choisir une authentification.

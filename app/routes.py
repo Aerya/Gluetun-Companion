@@ -2029,6 +2029,23 @@ def settings():
         if action == 'save_planning':
             active_auto_pools = _active_auto_pool_count()
             set_setting('test_interval_hours', request.form.get('interval', '6'))
+            schedule_mode = request.form.get('schedule_mode', 'interval')
+            schedule_mode = schedule_mode if schedule_mode in ('interval', 'calendar') else 'interval'
+            previous_schedule_mode = get_setting('benchmark_schedule_mode', 'interval')
+            set_setting('benchmark_schedule_mode', schedule_mode)
+            try:
+                schedule_days = max(1, min(int(request.form.get('schedule_days', '1')), 365))
+            except ValueError:
+                schedule_days = 1
+            set_setting('benchmark_schedule_days', str(schedule_days))
+            try:
+                from datetime import datetime, date
+                schedule_time = datetime.strptime(request.form.get('schedule_time', '03:00'), '%H:%M').strftime('%H:%M')
+            except ValueError:
+                schedule_time = '03:00'
+            set_setting('benchmark_schedule_time', schedule_time)
+            if schedule_mode == 'calendar' and previous_schedule_mode != 'calendar':
+                set_setting('benchmark_schedule_anchor', date.today().isoformat())
             auto_bm = bool(request.form.get('auto_benchmark'))
             auto_enabled, observation_enabled = _planning_modes(
                 auto_bm,
@@ -2544,6 +2561,9 @@ def settings():
     from .server_eligibility import parse_excluded_countries
     cfg = {
         'interval':              get_setting('test_interval_hours', '6'),
+        'schedule_mode':         get_setting('benchmark_schedule_mode', 'interval'),
+        'schedule_days':         get_setting('benchmark_schedule_days', '1'),
+        'schedule_time':         get_setting('benchmark_schedule_time', '03:00'),
         'auto_benchmark':        get_setting('auto_benchmark', '1'),
         'auto_sw':               get_setting('auto_switch', '1'),
         'wait_secs':             get_setting('connection_wait_seconds', '45'),
