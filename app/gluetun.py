@@ -1842,6 +1842,7 @@ def get_public_ips(
 _TEST_GLUETUN_NAME      = 'gluetun-companion-test'
 _SIDECAR_NAME           = 'gluetun-companion-sidecar'
 _CATALOGUE_SIDECAR_NAME = 'gluetun-companion-catalogue'
+_SIDECAR_API_PORT       = 8766
 _CATALOGUE_SIDECAR_PORT = 8767
 
 # Port-forwarding env neutralized in every benchmark clone: a clone only measures
@@ -1929,6 +1930,14 @@ def create_test_gluetun(
                     env.pop(k, None)
             env.update(extra_env)
 
+        # The speed sidecar always listens on its fixed internal port.  The
+        # cloned Gluetun firewall is inherited from production, so explicitly
+        # allow that port without discarding the user's existing rules.
+        firewall_ports = [p.strip() for p in env.get('FIREWALL_INPUT_PORTS', '').split(',') if p.strip()]
+        if str(_SIDECAR_API_PORT) not in firewall_ports:
+            firewall_ports.append(str(_SIDECAR_API_PORT))
+        env['FIREWALL_INPUT_PORTS'] = ','.join(firewall_ports)
+
         # Applied last so it overrides both the inherited env and the managed
         # profile env (which turns port forwarding on for real switches).
         env.update(_CLONE_PF_ENV_OFF)
@@ -1951,12 +1960,15 @@ def create_test_gluetun(
             cap_add=cap_add,
             sysctls=sysctls,
             devices=devices,
-            ports={f'{sidecar_port}/tcp': sidecar_port},
+            # The configurable setting is the host port.  The sidecar shares
+            # this container's network namespace and always listens on 8766.
+            ports={f'{_SIDECAR_API_PORT}/tcp': sidecar_port},
             detach=True,
             remove=False,
         )
-        logger.info('Test Gluetun container started: %s → %s=%s',
-                    _TEST_GLUETUN_NAME, FILTER_VARS.get(filter_type, 'SERVER_NAMES'), filter_value)
+        logger.info('Test Gluetun container started: %s → %s=%s (host %d → sidecar %d)',
+                    _TEST_GLUETUN_NAME, FILTER_VARS.get(filter_type, 'SERVER_NAMES'), filter_value,
+                    sidecar_port, _SIDECAR_API_PORT)
         return True, None
     except Exception as exc:
         return False, str(exc)
@@ -2078,14 +2090,19 @@ def wait_for_sidecar(
     # Give sidecar a moment to boot
     time.sleep(5)
     deadline = start + timeout
+    last_error = ''
     while time.time() < deadline:
         try:
             resp = requests.get(url, headers=headers, timeout=5)
             if resp.status_code == 200 and resp.json().get('vpn'):
                 return True, round(time.time() - start, 1)
-        except Exception:
-            pass
+        except Exception as exc:
+            last_error = f'{type(exc).__name__}: {exc}'
         time.sleep(3)
+    if last_error:
+        logger.warning('Sidecar health endpoint %s stayed unreachable: %s', url, last_error)
+    else:
+        logger.warning('Sidecar health endpoint %s did not report VPN ready before timeout', url)
     return False, round(time.time() - start, 1)
 
 

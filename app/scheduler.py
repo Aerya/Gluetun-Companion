@@ -4,6 +4,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.calendarinterval import CalendarIntervalTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,29 @@ _observation_watchdog_state: str | None = None
 # Set via request_stop() from the REST API; cleared at the start of every
 # benchmark cycle so stale signals don't bleed into the next run.
 _stop_event = threading.Event()
+
+
+def _configured_benchmark_trigger():
+    """Build the persisted interval or calendar trigger for benchmark cycles."""
+    from datetime import date
+    from .database import get_setting
+
+    if get_setting('benchmark_schedule_mode', 'interval') == 'calendar':
+        try:
+            days = max(1, min(int(get_setting('benchmark_schedule_days', '1')), 365))
+            hour, minute = map(int, get_setting('benchmark_schedule_time', '03:00').split(':', 1))
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                raise ValueError('time out of range')
+            anchor = date.fromisoformat(get_setting('benchmark_schedule_anchor', '') or date.today().isoformat())
+            return CalendarIntervalTrigger(days=days, start_date=anchor, hour=hour, minute=minute)
+        except (TypeError, ValueError):
+            logger.warning('Invalid calendar benchmark schedule; falling back to interval')
+    return IntervalTrigger(hours=float(get_setting('test_interval_hours', '6')))
+
+
+def _is_already_active_server(current_server: str, best_server: str) -> bool:
+    """Compare server identities, never their differently formatted labels."""
+    return bool(current_server and best_server and current_server.strip() == best_server.strip())
 
 
 def request_stop() -> None:
@@ -871,8 +895,8 @@ def _compute_adaptive_delay() -> int | None:
     return None  # no good window within 3 h → run now
 
 
-def _restore_interval_trigger() -> None:
-    """Restore the benchmark job to its configured IntervalTrigger.
+def _restore_configured_trigger(app) -> None:
+    """Restore the benchmark job to its configured recurring trigger.
 
     Called after a benchmark completes when the job may have been switched to a
     one-shot DateTrigger by the adaptive-scheduling logic.
@@ -880,15 +904,21 @@ def _restore_interval_trigger() -> None:
     if not _scheduler:
         return
     job = _scheduler.get_job('benchmark')
-    if job is None:
-        return
     from apscheduler.triggers.date import DateTrigger
-    if isinstance(job.trigger, DateTrigger):
+    if job is None:
+        # APScheduler removes a one-shot job before invoking it.
+        _scheduler.add_job(
+            run_benchmark, trigger=_configured_benchmark_trigger(), args=[app],
+            id='benchmark', replace_existing=True, misfire_grace_time=300,
+        )
+        job = _scheduler.get_job('benchmark')
         from .database import get_setting
-        hours   = float(get_setting('test_interval_hours', '6'))
-        enabled = get_setting('auto_benchmark', '1') == '1'
-        reschedule(hours, enabled)
-        logger.info('Adaptive scheduling: interval trigger restored (every %.1f h)', hours)
+        if get_setting('auto_benchmark', '1') != '1':
+            _scheduler.pause_job('benchmark')
+    if job is not None and isinstance(job.trigger, DateTrigger):
+        from .database import get_setting
+        reschedule(float(get_setting('test_interval_hours', '6')), get_setting('auto_benchmark', '1') == '1')
+        logger.info('Adaptive scheduling: configured recurring trigger restored')
 
 
 def run_benchmark(app):
@@ -951,8 +981,8 @@ def run_benchmark(app):
         # watchdog if work remains.
         _do_benchmark(app, observation=False)
 
-    # Restore IntervalTrigger in case we were running from a one-shot DateTrigger
-    _restore_interval_trigger()
+    # Restore the configured recurring trigger after a one-shot adaptive run.
+    _restore_configured_trigger(app)
 
 
 def run_observation_now(app):
@@ -1986,7 +2016,11 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
                 best_server_label = None
                 best_server_name = None
 
-            if best_label != from_label and not _best_is_excluded:
+            # ``from_label`` is deliberately human-readable (without the
+            # SERVER_* prefix), whereas ``best_label`` includes it for audit
+            # logs.  Comparing the labels therefore caused a needless
+            # recreation even when the selected server was already active.
+            if not _is_already_active_server(from_name, best_server_name) and not _best_is_excluded:
                 pre_switch_net_deps = list_network_dependents_for_recreate(container)
                 try:
                     from .port_forwarding import get_gluetun_provider
@@ -3600,7 +3634,6 @@ def start_scheduler(app):
         _set('benchmark_current_server', '')
         _set('benchmark_next_server', '')
 
-        hours   = float(get_setting('test_interval_hours', '6'))
         enabled = get_setting('auto_benchmark', '1') == '1'
 
         # If any auto-rotating pool is active, the pool rotation manages the
@@ -3626,7 +3659,7 @@ def start_scheduler(app):
     _scheduler = BackgroundScheduler(daemon=True)
     _scheduler.add_job(
         run_benchmark,
-        trigger=IntervalTrigger(hours=hours),
+        trigger=_configured_benchmark_trigger(),
         args=[app],
         id='benchmark',
         replace_existing=True,
@@ -3711,7 +3744,7 @@ def start_scheduler(app):
         else:
             logger.info('Scheduler started — automatic benchmark DISABLED (manual trigger only)')
     else:
-        logger.info('Scheduler started — benchmark every %.1f hours', hours)
+        logger.info('Scheduler started — benchmark trigger: %s', _configured_benchmark_trigger())
         with app.app_context():
             if get_setting('continuous_observation', '0') == '1':
                 logger.info('Continuous observation enabled at startup — starting immediately')
@@ -3721,13 +3754,14 @@ def start_scheduler(app):
 def reschedule(hours: float, enabled: bool = True):
     if not _scheduler:
         return
-    _scheduler.reschedule_job('benchmark', trigger=IntervalTrigger(hours=hours))
+    trigger = _configured_benchmark_trigger()
+    _scheduler.reschedule_job('benchmark', trigger=trigger)
     if enabled:
         _scheduler.resume_job('benchmark')
-        logger.info('Benchmark rescheduled to every %.1f hours', hours)
+        logger.info('Benchmark rescheduled: %s', trigger)
     else:
         _scheduler.pause_job('benchmark')
-        logger.info('Automatic benchmark disabled — job paused (%.1f h interval kept)', hours)
+        logger.info('Automatic benchmark disabled — job paused (%s kept)', trigger)
 
 
 def trigger_now(app):

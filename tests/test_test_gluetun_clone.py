@@ -24,6 +24,7 @@ def _real_gluetun_attrs():
                 'VPN_PORT_FORWARDING_UP_COMMAND=/bin/sh -c "wget -O- '
                 'http://127.0.0.1:8080/api/v2/app/setPreferences?json=%7B%22listen_port%22%3A{{PORTS}}%7D"',
                 'VPN_PORT_FORWARDING_DOWN_COMMAND=/bin/sh -c "echo down"',
+                'FIREWALL_INPUT_PORTS=8081',
             ],
         },
         'HostConfig': {
@@ -83,6 +84,17 @@ class TestGluetunClonePortForwardingTest(unittest.TestCase):
 
         self.assertEqual(env['PORT_FORWARD_ONLY'], 'on')
         self.assertEqual(env['SERVER_COUNTRIES'], 'Netherlands')
+
+    def test_sidecar_api_uses_fixed_container_port_and_configured_host_port(self):
+        client = MagicMock()
+        client.containers.get.return_value.attrs = _real_gluetun_attrs()
+        with patch('app.gluetun.docker.from_env', return_value=client):
+            ok, err = create_test_gluetun('gluetun', 'country', 'Netherlands', 8767)
+
+        self.assertTrue(ok, err)
+        kwargs = client.containers.run.call_args.kwargs
+        self.assertEqual(kwargs['ports'], {'8766/tcp': 8767})
+        self.assertEqual(kwargs['environment']['FIREWALL_INPUT_PORTS'], '8081,8766')
 
 
 if __name__ == '__main__':
