@@ -7,3 +7,6 @@ Werkzeug==3.1.9
 gunicorn==26.2.0
 apprise==1.13.1
 cryptography>=42.0.8
+
+# eMudhra trust-store remediation
+certifi>=2026.10.19

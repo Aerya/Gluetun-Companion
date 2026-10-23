@@ -7,7 +7,11 @@ FROM --platform=$BUILDPLATFORM docker:29.9.0-cli AS docker-release
 # Stage 2 — recompile la même version du Docker CLI avec la stdlib Go corrigée.
 # L'image officielle 29.6.1-cli embarque Go 1.26.4 (CVE-2026-39822). La version
 # exacte du CLI est lue depuis l'image officielle pour éviter un second pin.
-FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine AS docker-bin
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS docker-bin
+
+# eMudhra: refresh both the CA sources and the generated bundle.
+RUN apk add --no-cache --upgrade ca-certificates ca-certificates-bundle \
+    && update-ca-certificates
 
 ARG TARGETOS=linux
 ARG TARGETARCH
@@ -33,7 +37,11 @@ RUN cp vendor.mod go.mod \
 # binaire précompilé embarque encore des dépendances vulnérables. On garde donc
 # la même version fonctionnelle de Compose, recompilée avec les versions
 # corrigées signalées par Trivy.
-FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine AS compose-bin
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS compose-bin
+
+# eMudhra: refresh both the CA sources and the generated bundle.
+RUN apk add --no-cache --upgrade ca-certificates ca-certificates-bundle \
+    && update-ca-certificates
 
 ARG TARGETOS=linux
 ARG TARGETARCH
@@ -53,6 +61,12 @@ RUN go mod edit -require=github.com/containerd/containerd/v2@v2.2.5 \
 
 # Stage 4 — image finale
 FROM python:3.14-slim
+
+# eMudhra: refresh the OS trust store for this security update.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copie uniquement le Docker CLI recompilé (pas de daemon, containerd ou runc).
 COPY --from=docker-bin /out/docker-cli /usr/local/bin/docker
