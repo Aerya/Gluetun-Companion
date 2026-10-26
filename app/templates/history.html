@@ -428,6 +428,9 @@
       <option value="observation" {{ 'selected' if trigger_filter == 'observation' }}>{{ t.hist_origin_observation }}</option>
       <option value="pool_rotation" {{ 'selected' if trigger_filter == 'pool_rotation' }}>{{ t.hist_origin_pool }}</option>
       <option value="docker_event" {{ 'selected' if trigger_filter == 'docker_event' }}>{{ t.hist_origin_docker }}</option>
+      <option value="scheduled" {{ 'selected' if trigger_filter == 'scheduled' }}>{{ t.hist_origin_scheduled }}</option>
+      <option value="api" {{ 'selected' if trigger_filter == 'api' }}>{{ t.hist_origin_api }}</option>
+      <option value="import" {{ 'selected' if trigger_filter == 'import' }}>{{ t.hist_origin_import }}</option>
     </select>
   </div>
   <input type="hidden" name="sort" id="hist-sort-val" value="{{ sort }}">
@@ -652,6 +655,24 @@
               <span class="badge bg-dark ms-1" style="font-size:.65rem;cursor:help"
                     data-bs-toggle="tooltip" title="{{ t.hist_trigger_docker }}">
                 <i class="bi bi-plugin"></i> auto
+              </span>
+            {% endif %}
+            {% if r.test_trigger == 'docker_event_benchmark' %}
+              <span class="badge bg-dark ms-1" style="font-size:.65rem;cursor:help"
+                    data-bs-toggle="tooltip" title="{{ t.hist_trigger_docker_benchmark }}">
+                <i class="bi bi-plugin"></i> auto
+              </span>
+            {% endif %}
+            {% if r.test_trigger == 'scheduled' %}
+              <span class="badge bg-secondary ms-1" style="font-size:.65rem;cursor:help"
+                    data-bs-toggle="tooltip" title="{{ t.hist_trigger_scheduled }}">
+                <i class="bi bi-calendar-event"></i> {{ t.hist_origin_scheduled }}
+              </span>
+            {% endif %}
+            {% if r.test_trigger in ('api', 'import') %}
+              <span class="badge bg-secondary ms-1" style="font-size:.65rem;cursor:help"
+                    data-bs-toggle="tooltip" title="{{ t.hist_trigger_api if r.test_trigger == 'api' else t.hist_trigger_import }}">
+                <i class="bi bi-{{ 'code-slash' if r.test_trigger == 'api' else 'box-arrow-in-down' }}"></i> {{ t.hist_origin_api if r.test_trigger == 'api' else t.hist_origin_import }}
               </span>
             {% endif %}
             {% if r.test_trigger == 'pool_rotation' %}

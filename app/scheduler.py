@@ -979,7 +979,7 @@ def run_benchmark(app):
         # configured containers and auto-switch to the best server. Continuous
         # observation is only background collection and resumes later via its
         # watchdog if work remains.
-        _do_benchmark(app, observation=False)
+        _do_benchmark(app, observation=False, trigger='scheduled')
 
     # Restore the configured recurring trigger after a one-shot adaptive run.
     _restore_configured_trigger(app)
@@ -1017,10 +1017,14 @@ def run_observation_now(app):
         _lock.release()
 
 
-def run_benchmark_now(app):
-    """Manual trigger — always runs, bypasses auto_benchmark + quick check."""
+def run_benchmark_now(app, trigger: str | None = None):
+    """Manual trigger — always runs, bypasses auto_benchmark + quick check.
+
+    ``trigger`` records where the request came from (``'api'``, ``'import'``);
+    ``None`` is the dashboard/settings button.
+    """
     with _lock:
-        _do_benchmark(app, skip_quick_check=True)
+        _do_benchmark(app, skip_quick_check=True, trigger=trigger)
 
 
 def _observation_candidate_servers() -> list:
@@ -1201,7 +1205,19 @@ def _apply_benchmark_scope(servers: list, observation: bool = False) -> list:
     return scoped
 
 
-def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False):
+def _do_benchmark(
+    app,
+    skip_quick_check: bool = False,
+    observation: bool = False,
+    trigger: str | None = None,
+):
+    """Run one benchmark cycle.
+
+    ``trigger`` is stored in ``speed_tests.test_trigger`` for every test of the
+    cycle so the history shows why it ran: ``'scheduled'``, ``'api'``,
+    ``'import'``, ``'docker_event_benchmark'`` or ``None`` (manual button).
+    Observation cycles always record ``'observation'``.
+    """
     global _current_test_trigger
     import json as _json
     from .database import get_db, get_setting, set_setting
@@ -1215,7 +1231,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
 
     _stop_event.clear()   # reset any leftover stop signal from a previous run
     set_setting('benchmark_stop_requested', '0')
-    _current_test_trigger = 'observation' if observation else None
+    _current_test_trigger = 'observation' if observation else trigger
     set_setting('benchmark_running', '1')
     cycle_start = time.time()
     set_setting('benchmark_started_at', str(cycle_start))
@@ -1434,7 +1450,7 @@ def _do_benchmark(app, skip_quick_check: bool = False, observation: bool = False
             '=== Continuous observation cycle started (no quick check, no paused containers, no auto-switch) ==='
         )
     else:
-        logger.info('=== Benchmark cycle started ===')
+        logger.info('=== Benchmark cycle started (origin: %s) ===', _current_test_trigger or 'manual')
 
     try:
         with get_db() as db:
@@ -3242,6 +3258,8 @@ def _run_event_triggered_quick_check(app):
         dl_streams  = int(get_setting('speedtest_streams', '4'))
         threshold   = float(get_setting('quick_check_threshold', '15'))
         auto_sw     = get_setting('auto_switch', '1') == '1'
+        auto_bm     = get_setting('auto_benchmark', '1') == '1'
+        calendar    = get_setting('benchmark_schedule_mode', 'interval') == 'calendar'
 
         set_setting('benchmark_running', '1')
         try:
@@ -3288,6 +3306,22 @@ def _run_event_triggered_quick_check(app):
                 server_name, current_dl, diff_pct,
             )
             return
+        if not auto_bm:
+            logger.info(
+                'Docker event QC: %s — %.1f Mbps (Δ%.1f%%) — drift detected '
+                'but automatic benchmark cycle disabled — no full benchmark',
+                server_name, current_dl, diff_pct,
+            )
+            return
+        # A fixed-time schedule means full cycles only run at that time;
+        # Gluetun restarts (e.g. image auto-updates) must not add extra ones.
+        if calendar:
+            logger.info(
+                'Docker event QC: %s — %.1f Mbps (Δ%.1f%%) — drift detected '
+                'but fixed-time schedule active — full benchmark left to the schedule',
+                server_name, current_dl, diff_pct,
+            )
+            return
 
         logger.info(
             'Docker event QC: %s — %.1f Mbps (Δ%.1f%%) — drift detected — '
@@ -3295,7 +3329,7 @@ def _run_event_triggered_quick_check(app):
             server_name, current_dl, diff_pct,
         )
         # We already hold _lock → call _do_benchmark directly (no deadlock risk)
-        _do_benchmark(app, skip_quick_check=True)
+        _do_benchmark(app, skip_quick_check=True, trigger='docker_event_benchmark')
 
 
 def _docker_event_loop(app, container_name: str) -> None:
@@ -3764,9 +3798,11 @@ def reschedule(hours: float, enabled: bool = True):
         logger.info('Automatic benchmark disabled — job paused (%s kept)', trigger)
 
 
-def trigger_now(app):
+def trigger_now(app, trigger: str | None = None):
     """Manual trigger: always runs full benchmark, ignores auto_benchmark + quick check."""
-    t = threading.Thread(target=run_benchmark_now, args=[app], daemon=True, name='benchmark-now')
+    t = threading.Thread(
+        target=run_benchmark_now, args=[app, trigger], daemon=True, name='benchmark-now',
+    )
     t.start()
 
 
