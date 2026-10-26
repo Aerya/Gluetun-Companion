@@ -307,7 +307,7 @@ def benchmark_trigger():
         }), 409
 
     from .scheduler import trigger_now
-    trigger_now(current_app._get_current_object())
+    trigger_now(current_app._get_current_object(), trigger='api')
     logger.info('REST API: full benchmark triggered')
     return jsonify({
         'status':  'triggered',

@@ -1785,7 +1785,9 @@ def history():
         params.append(method_filter)
     if trigger_filter == 'manual':
         where_parts.append('(test_trigger IS NULL OR test_trigger = "")')
-    elif trigger_filter in ('observation', 'pool_rotation', 'docker_event'):
+    elif trigger_filter == 'docker_event':
+        where_parts.append("test_trigger IN ('docker_event', 'docker_event_benchmark')")
+    elif trigger_filter in ('observation', 'pool_rotation', 'scheduled', 'api', 'import'):
         where_parts.append('test_trigger = ?')
         params.append(trigger_filter)
     if from_date:
@@ -3647,7 +3649,7 @@ def api_catalogue_import():
 
     if result.get('ok') and data.get('bench_on_import'):
         try:
-            trigger_now(current_app._get_current_object())
+            trigger_now(current_app._get_current_object(), trigger='import')
             result['bench_triggered'] = True
         except Exception as exc:
             result['bench_triggered'] = False

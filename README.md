@@ -132,7 +132,7 @@ Lorsque `GLUETUN_HOST` est un nom de service Docker, il convient aux requêtes p
 
 Le **port API sidecar** des paramètres est le port publié sur l’hôte Docker. Le sidecar écoute toujours sur son port interne `8766` : Companion publie automatiquement `8766/tcp` vers le port configuré, par exemple `8767`. Aucune modification du port interne ni de `catalogue_sidecar_port` n’est nécessaire. Lors d’un benchmark, `8766` est ajouté automatiquement à `FIREWALL_INPUT_PORTS` du clone temporaire, sans modifier le pare-feu du Gluetun de production.
 
-Dans **Paramètres → Planification & Cycle**, vous pouvez soit conserver un intervalle, soit lancer le benchmark à une heure précise tous les X jours. Cette planification calendaire conserve son rythme après le redémarrage de Companion.
+Dans **Paramètres → Planification & Cycle**, vous pouvez soit conserver un intervalle, soit lancer le benchmark à une heure précise tous les X jours. Cette planification calendaire conserve son rythme après le redémarrage de Companion. Avec elle, un redémarrage de Gluetun (mise à jour automatique de l’image, healthcheck…) déclenche seulement un test rapide, sans benchmark complet : les cycles complets ne tournent qu’à l’heure prévue. En mode intervalle, une dérive détectée après un redémarrage lance toujours un benchmark complet, sauf si le cycle automatique est désactivé. L’**Historique** indique l’origine de chaque benchmark (planifié, manuel, API, import ou redémarrage de Gluetun) et permet de filtrer dessus ; les tests enregistrés avant cette version restent classés « Manuel ».
 
 ### Control Server Gluetun : accès et authentification
 
