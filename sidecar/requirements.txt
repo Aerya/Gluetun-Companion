@@ -3,4 +3,4 @@ requests>=2.34.2
 gunicorn>=26.2.0
 
 # eMudhra trust-store remediation
-certifi>=2026.10.19
+certifi>=2026.10.23
