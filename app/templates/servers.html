@@ -1,7 +1,42 @@
-﻿{% extends 'base.html' %}
+{% extends 'base.html' %}
 {% block title %}{{ t.nav_servers }} - Gluetun Companion{% endblock %}
 
 {% block content %}
+<div id="manual-switch-status" class="alert alert-info d-none" role="status" aria-live="polite"></div>
+<script>
+(() => {
+  const box = document.getElementById('manual-switch-status');
+  const labels = {
+    queued: {{ t.manual_queued|tojson }},
+    switching: {{ t.manual_switching|tojson }},
+    reconnecting: {{ t.manual_reconnecting|tojson }},
+    connected: {{ t.manual_connected|tojson }},
+    failed: {{ t.manual_failed|tojson }},
+    reconnect_failed: {{ t.manual_reconnect_failed|tojson }},
+    timeout: {{ t.manual_timeout|tojson }},
+    interrupted: {{ t.manual_interrupted|tojson }}
+  };
+  async function poll() {
+    try {
+      const response = await fetch({{ url_for('main.manual_switch_status')|tojson }});
+      if (!response.ok) throw new Error('status');
+      const data = await response.json();
+      if (labels[data.state]) {
+        box.textContent = (data.server ? data.server + ' — ' : '') + labels[data.state];
+        box.className = 'alert alert-' + (data.state === 'connected' ? 'success' :
+          ['failed', 'reconnect_failed', 'timeout', 'interrupted'].includes(data.state) ? 'danger' : 'info');
+      }
+    } catch (_) {
+      box.textContent = {{ t.manual_status_unavailable|tojson }};
+      box.className = 'alert alert-warning';
+    } finally {
+      setTimeout(poll, 2000);
+    }
+  }
+  poll();
+})();
+</script>
+
 <style>
   /* ── Layout for the wide /servers table ───────────────────────────────────
      The table has many indicator columns. Two things make all of them fit at a

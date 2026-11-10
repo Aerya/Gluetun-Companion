@@ -199,3 +199,9 @@ Lors de la création du premier compte, Companion ouvre automatiquement un **gui
 ## Applications tierces
 
 - [AirDash](https://github.com/zlimteck/AirDash) — tableau de bord AirVPN natif et non officiel pour iPhone et iPad.
+
+### Changement manuel prioritaire
+
+Depuis **Serveurs**, une demande de changement est enregistrée immédiatement, même pendant un benchmark planifié ou une observation continue. Companion demande l’arrêt du test, attend son nettoyage, puis change le serveur et reconnecte les applications sous le même verrou. Le suivi sur la page indique l’attente, la bascule, la reconnexion ou l’échec ; un second clic ne remplace pas la demande en cours.
+
+Les tâches automatiques déjà en attente cèdent la priorité. Si le verrou reste occupé pendant dix minutes, la demande échoue explicitement sans forcer son déverrouillage. Après un redémarrage de Companion, une demande interrompue est signalée et n’est pas rejouée automatiquement : vérifiez le serveur actif avant de réessayer. Le fonctionnement automatique reprend ensuite selon les réglages existants.

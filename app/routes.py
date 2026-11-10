@@ -1351,30 +1351,28 @@ def bulk_assign_server_profile():
 @bp.route('/servers/switch/<int:server_id>', methods=['POST'])
 @login_required
 def manual_switch(server_id):
-    # Manual intent has priority over continuous observation.  Observation is a
-    # background data-collection task and must never make the UI unable to switch
-    # the production VPN.  Classic/explicit benchmarks remain protected because
-    # they may own production state that must be restored consistently.
-    if get_setting('benchmark_running', '0') == '1':
-        if get_setting('benchmark_mode', '') == 'observation':
-            logger.info('Manual switch requested — stopping continuous observation first')
-            request_stop()
-        else:
-            flash_t('flash_benchmark_running', 'warning')
-            return redirect(url_for('main.servers'))
+    from .manual_switch import submit_switch
+    with get_db() as db:
+        row = db.execute('SELECT name FROM servers WHERE id = ?', (server_id,)).fetchone()
+    if not row:
+        flash_t('flash_server_not_found', 'danger')
+    elif submit_switch(current_app._get_current_object(), server_id, row['name'],
+                       _execute_manual_switch):
+        flash_t('flash_manual_queued', 'info')
+    else:
+        flash_t('flash_manual_pending', 'warning')
+    return redirect(url_for('main.servers'))
 
-    # Serialize with scheduler/failover/pool operations.  When observation was
-    # active this waits for its current server test + cleanup to finish, then the
-    # manual action takes ownership.
-    if not scheduler_lock.acquire(blocking=True, timeout=180):
-        flash_t('flash_benchmark_running', 'warning')
-        return redirect(url_for('main.servers'))
 
-    if get_setting('benchmark_running', '0') == '1':
-        scheduler_lock.release()
-        flash_t('flash_benchmark_running', 'warning')
-        return redirect(url_for('main.servers'))
+@bp.route('/api/manual-switch/status')
+@login_required
+def manual_switch_status():
+    from .manual_switch import status
+    return jsonify(status())
 
+
+def _execute_manual_switch(server_id):
+    """Run under the coordinator lock, including reconnect and reconciliation."""
     cfg = current_app.config
     with get_db() as db:
         row = db.execute(
@@ -1385,13 +1383,10 @@ def manual_switch(server_id):
             'WHERE s.id = ?', (server_id,)
         ).fetchone()
     if not row:
-        scheduler_lock.release()
-        flash_t('flash_server_not_found', 'danger')
-        return redirect(url_for('main.servers'))
+        raise RuntimeError('Server no longer exists')
 
-    # Mark the production switch as the active priority operation.  The lock is
-    # released after switch_server() returns, while benchmark_running stays set
-    # until the async reconnect/reconciliation work is complete.
+    # The coordinator owns the scheduler lock through preparation, switch,
+    # reconnect and dependent reconciliation, and clears flags on every exit.
     set_setting('benchmark_running', '1')
     set_setting('benchmark_mode', 'manual_switch')
     set_setting('benchmark_current_server', row['name'])
@@ -1463,20 +1458,11 @@ def manual_switch(server_id):
         pull_network_set = set()
     pull_updated_images = _pull_gluetun(container)
 
-    try:
-        ok, err = switch_server(
-            row['name'], row['filter_type'],
-            container, compose_dir, project,
-            wg_profile=_manual_wg_profile,
-        )
-    except Exception:
-        set_setting('benchmark_running', '0')
-        set_setting('benchmark_mode', '')
-        set_setting('benchmark_current_server', '')
-        set_setting('benchmark_stop_requested', '0')
-        raise
-    finally:
-        scheduler_lock.release()
+    ok, err = switch_server(
+        row['name'], row['filter_type'],
+        container, compose_dir, project,
+        wg_profile=_manual_wg_profile,
+    )
     _invalidate_vpn_snapshot()
     to_label = f"{FILTER_VARS[row['filter_type']]}={row['name']}"
     with get_db() as db:
@@ -1485,128 +1471,116 @@ def manual_switch(server_id):
             (from_label, to_label, 'manual', int(ok)),
         ).lastrowid
     if ok:
-        flash_t('flash_switched', 'success', to=row['name'])
+        from .manual_switch import update_status
+        update_status('reconnecting')
 
-        # In the background: wait for VPN, get new IPs, recreate dependents, then notify.
-        app = current_app._get_current_object()
+        # Continue in the same background worker while holding its lock.
+        vpn_ok, elapsed = wait_for_vpn(
+            proxy_host, proxy_port,
+            timeout=wait_secs,
+            proxy_user=proxy_user,
+            proxy_password=proxy_pass,
+        )
+        gluetun_running = False
+        try:
+            import docker
+            gluetun_running = (
+                docker.from_env().containers.get(container).status == 'running'
+            )
+        except Exception as exc:
+            logger.warning('Manual switch: cannot inspect %s status: %s', container, exc)
 
-        def _bg_restart():
-            with app.app_context():
-                vpn_ok, elapsed = wait_for_vpn(
-                    proxy_host, proxy_port,
-                    timeout=wait_secs,
-                    proxy_user=proxy_user,
-                    proxy_password=proxy_pass,
-                )
-                gluetun_running = False
-                try:
-                    import docker
-                    gluetun_running = (
-                        docker.from_env().containers.get(container).status == 'running'
-                    )
-                except Exception as exc:
-                    logger.warning('Manual switch: cannot inspect %s status: %s', container, exc)
+        restarted = []
+        network_updated = []
+        if gluetun_running:
+            # The VPN may still be settling, but the namespace exists.
+            # Reattach dependents so they do not stay bound to the old
+            # Gluetun container ID after a successful recreate.
+            restarted, network_updated = restart_network_dependents(
+                container, compose_dir, project,
+                pull_set=pull_network_set,
+                explicit_list=pre_switch_deps,
+            )
+        else:
+            logger.warning(
+                'Manual switch: %s is not running after %.0fs — '
+                'skipping network-dependent recreate',
+                container, elapsed,
+            )
+        post_restarted, post_updated = _restart_post_switch(
+            compose_dir, project, already_restarted=set(restarted),
+        )
+        if post_restarted:
+            logger.info(
+                'Manual switch: configured post-switch containers restarted: %s',
+                ', '.join(post_restarted),
+            )
+        pf_result = apply_current_provider_port_forwards(
+            container, reason='manual_switch',
+        )
+        if not pf_result.get('skipped_reason'):
+            logger.info(
+                'Manual switch port forwards: provider %s, applied %s/%s',
+                pf_result.get('provider') or to_provider or from_provider or '?',
+                pf_result.get('applied', 0), pf_result.get('rules', 0),
+            )
+        if vpn_ok:
+            logger.info(
+                'Manual switch: VPN up in %.0fs — recreated %d network dependent(s): %s',
+                elapsed, len(restarted), ', '.join(restarted) or 'none',
+            )
+            to_ipv4, to_ipv6 = get_public_ips(
+                proxy_host, proxy_port, proxy_user, proxy_pass,
+            )
+        else:
+            logger.warning(
+                'Manual switch: VPN not ready after %.0fs — '
+                'recreated %d network dependent(s) anyway: %s',
+                elapsed, len(restarted), ', '.join(restarted) or 'none',
+            )
+            to_ipv4, to_ipv6 = None, None
 
-                restarted = []
-                network_updated = []
-                if gluetun_running:
-                    # The VPN may still be settling, but the namespace exists.
-                    # Reattach dependents so they do not stay bound to the old
-                    # Gluetun container ID after a successful recreate.
-                    restarted, network_updated = restart_network_dependents(
-                        container, compose_dir, project,
-                        pull_set=pull_network_set,
-                        explicit_list=pre_switch_deps,
-                    )
-                else:
-                    logger.warning(
-                        'Manual switch: %s is not running after %.0fs — '
-                        'skipping network-dependent recreate',
-                        container, elapsed,
-                    )
-                post_restarted, post_updated = _restart_post_switch(
-                    compose_dir, project, already_restarted=set(restarted),
-                )
-                if post_restarted:
-                    logger.info(
-                        'Manual switch: configured post-switch containers restarted: %s',
-                        ', '.join(post_restarted),
-                    )
-                pf_result = apply_current_provider_port_forwards(
-                    container, reason='manual_switch',
-                )
-                if not pf_result.get('skipped_reason'):
-                    logger.info(
-                        'Manual switch port forwards: provider %s, applied %s/%s',
-                        pf_result.get('provider') or to_provider or from_provider or '?',
-                        pf_result.get('applied', 0), pf_result.get('rules', 0),
-                    )
-                if vpn_ok:
-                    logger.info(
-                        'Manual switch: VPN up in %.0fs — recreated %d network dependent(s): %s',
-                        elapsed, len(restarted), ', '.join(restarted) or 'none',
-                    )
-                    to_ipv4, to_ipv6 = get_public_ips(
-                        proxy_host, proxy_port, proxy_user, proxy_pass,
-                    )
-                else:
-                    logger.warning(
-                        'Manual switch: VPN not ready after %.0fs — '
-                        'recreated %d network dependent(s) anyway: %s',
-                        elapsed, len(restarted), ', '.join(restarted) or 'none',
-                    )
-                    to_ipv4, to_ipv6 = None, None
+        missing_dependents = set(pre_switch_deps) - set(restarted)
+        if not vpn_ok or not gluetun_running or missing_dependents:
+            with get_db() as db:
+                db.execute('UPDATE switches SET success=0 WHERE id=?', (switch_id,))
+            raise RuntimeError('VPN or dependent reconnection incomplete')
 
-                # Update the switch row with IPs and connection time now that we have them
-                with get_db() as db:
-                    db.execute(
-                        'UPDATE switches SET connect_secs=?, to_ipv4=?, to_ipv6=? WHERE id=?',
-                        (elapsed if vpn_ok else None, to_ipv4, to_ipv6, switch_id),
-                    )
+        # Update the switch row with IPs and connection time now that we have them
+        with get_db() as db:
+            db.execute(
+                'UPDATE switches SET connect_secs=?, to_ipv4=?, to_ipv6=? WHERE id=?',
+                (elapsed if vpn_ok else None, to_ipv4, to_ipv6, switch_id),
+            )
 
-                if get_setting('notif_manual_switch', '0') == '1':
-                    from .notify import send_switch_notification
-                    send_switch_notification(
-                        from_server=from_label,
-                        to_server=to_label,
-                        from_mbps=None,
-                        to_mbps=None,
-                        connect_secs=elapsed if vpn_ok else None,
-                        to_ipv4=to_ipv4,
-                        to_ipv6=to_ipv6,
-                        reason='manual',
-                        discord_url=get_setting('discord_webhook_url') or None,
-                        apprise_urls=get_setting('apprise_urls') or None,
-                        lang=lang,
-                        companion_url=get_setting('companion_url') or None,
-                        from_ipv4=from_ipv4,
-                        from_ipv6=from_ipv6,
-                        mention=get_setting('notify_mention', '').strip() or None,
-                        mention_level=get_setting('notify_mention_level', 'critical'),
-                        alert_type='manual_switch',
-                        recreated_containers=restarted or None,
-                        updated_images=(pull_updated_images + network_updated + post_updated) or None,
-                    )
+        if get_setting('notif_manual_switch', '0') == '1':
+            from .notify import send_switch_notification
+            send_switch_notification(
+                from_server=from_label,
+                to_server=to_label,
+                from_mbps=None,
+                to_mbps=None,
+                connect_secs=elapsed if vpn_ok else None,
+                to_ipv4=to_ipv4,
+                to_ipv6=to_ipv6,
+                reason='manual',
+                discord_url=get_setting('discord_webhook_url') or None,
+                apprise_urls=get_setting('apprise_urls') or None,
+                lang=lang,
+                companion_url=get_setting('companion_url') or None,
+                from_ipv4=from_ipv4,
+                from_ipv6=from_ipv6,
+                mention=get_setting('notify_mention', '').strip() or None,
+                mention_level=get_setting('notify_mention_level', 'critical'),
+                alert_type='manual_switch',
+                recreated_containers=restarted or None,
+                updated_images=(pull_updated_images + network_updated + post_updated) or None,
+            )
 
-        def _bg_restart_guarded():
-            try:
-                _bg_restart()
-            finally:
-                set_setting('benchmark_running', '0')
-                set_setting('benchmark_mode', '')
-                set_setting('benchmark_current_server', '')
-                set_setting('benchmark_stop_requested', '0')
-
-        threading.Thread(
-            target=_bg_restart_guarded, daemon=True, name='manual-switch-net'
-        ).start()
     else:
-        set_setting('benchmark_running', '0')
-        set_setting('benchmark_mode', '')
-        set_setting('benchmark_current_server', '')
-        set_setting('benchmark_stop_requested', '0')
-        flash_t('flash_switch_failed', 'danger', err=err)
-    return redirect(url_for('main.servers'))
+        # Detailed Docker errors remain in private application logs.
+        logger.error('Manual switch failed: %s', err)
+        raise RuntimeError('Switch failed')
 
 
 @bp.route('/servers/test/<int:server_id>', methods=['POST'])
@@ -3837,7 +3811,8 @@ def api_pool_rotate(pool_id: int):
     if not scheduler_lock.acquire(blocking=True, timeout=180):
         return jsonify({'ok': False, 'error': 'Benchmark in progress'}), 409
     try:
-        if get_setting('benchmark_running', '0') == '1':
+        from .manual_switch import pending
+        if pending() or get_setting('benchmark_running', '0') == '1':
             return jsonify({'ok': False, 'error': 'Benchmark in progress'}), 409
         result = do_pool_rotation(pool_id, current_app._get_current_object(), manual=True)
     except Exception as exc:
