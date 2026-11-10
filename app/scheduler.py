@@ -1,11 +1,14 @@
 import logging
 import threading
 import time
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.calendarinterval import CalendarIntervalTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+
+from .manual_switch import pending as manual_switch_pending, generation as manual_switch_generation
 
 logger = logging.getLogger(__name__)
 _scheduler: BackgroundScheduler | None = None
@@ -17,6 +20,16 @@ _observation_watchdog_state: str | None = None
 # Set via request_stop() from the REST API; cleared at the start of every
 # benchmark cycle so stale signals don't bleed into the next run.
 _stop_event = threading.Event()
+
+
+@contextmanager
+def _automatic_slot():
+    """Discard jobs queued before/during manual intent, even if they wake later."""
+    generation = manual_switch_generation()
+    blocked = manual_switch_pending()
+    with _lock:
+        yield not (blocked or manual_switch_pending() or
+                   generation != manual_switch_generation())
 
 
 def _configured_benchmark_trigger():
@@ -597,7 +610,7 @@ def _test_one_server_sidecar(
             settle = max(0, int(_sgs('sidecar_disconnect_wait_seconds', '180') or '180'))
         except ValueError:
             settle = 180
-        if _stop_event.is_set():
+        if _stop_event.is_set() or manual_switch_pending():
             settle = 0   # user asked to stop — don't idle-wait after the last test
         if settle:
             logger.info(
@@ -754,7 +767,8 @@ def _test_server_with_retry(
     wg_profile: 'dict | None' = None,
 ) -> dict | None:
     """
-    Wraps _test_one_server with retry logic and a hard wall-clock timeout.
+    Wraps _test_one_server with retries and a deadline for accepting results.
+    A running worker must finish before releasing production VPN ownership.
     Returns result dict on success, None on final failure (error already recorded).
     """
     last_err = 'Unknown error'
@@ -780,22 +794,23 @@ def _test_server_with_retry(
                     result = future.result(timeout=min(_STOP_POLL, remaining))
                     break   # completed successfully
                 except FuturesTimeout:
-                    if _stop_event.is_set():
+                    if _stop_event.is_set() or manual_switch_pending():
                         logger.info(
-                            '  %s: stop requested mid-test — abandoning thread',
+                            '  %s: stop requested — waiting for production test cleanup',
                             server_name,
                         )
-                        ex.shutdown(wait=False, cancel_futures=True)
+                        ex.shutdown(wait=True, cancel_futures=True)
                         return None
                     # Not timed out globally yet — keep waiting
             ex.shutdown(wait=False)   # don't block — thread is done
             return result
         except FuturesTimeout:
             last_err = f'Timed out after {timeout_secs}s'
-            logger.warning('  %s timed out (%ds) — abandoning thread', server_name, timeout_secs)
-            # shutdown(wait=False) lets us move on immediately; the daemon thread
-            # will eventually be reaped without blocking the benchmark cycle.
-            ex.shutdown(wait=False, cancel_futures=True)
+            logger.warning('  %s timed out (%ds) — waiting for production test cleanup', server_name, timeout_secs)
+            # Python cannot cancel an already running thread. It may still
+            # change production Gluetun, so retain ownership until it exits.
+            # A pending manual request has its own visible queue timeout.
+            ex.shutdown(wait=True, cancel_futures=True)
             break   # timeout = don't retry
         except Exception as exc:
             last_err = str(exc)
@@ -831,7 +846,7 @@ def _test_server_sidecar_with_retry(
 ) -> dict | None:
     last_err = 'Unknown error'
     for attempt in range(max_retries + 1):
-        if _stop_event.is_set():
+        if _stop_event.is_set() or manual_switch_pending():
             logger.info('  %s: stop requested before sidecar test', server_name)
             return None
         try:
@@ -966,6 +981,9 @@ def run_benchmark(app):
             )
             return
 
+    if manual_switch_pending():
+        return
+
     if (
         get_setting('benchmark_running', '0') == '1'
         and get_setting('benchmark_mode', '') == 'observation'
@@ -974,7 +992,9 @@ def run_benchmark(app):
         _progress_log('progress_observation_paused_scheduled')
         _stop_event.set()
 
-    with _lock:
+    with _automatic_slot() as allowed:
+        if not allowed:
+            return
         # The scheduled job is the classic decision cycle: it may pause
         # configured containers and auto-switch to the best server. Continuous
         # observation is only background collection and resumes later via its
@@ -998,12 +1018,14 @@ def run_observation_now(app):
         logger.info('Continuous observation not started — scheduler lock busy')
         return
     try:
+        if manual_switch_pending():
+            return
         cycle_no = 0
         while get_setting('continuous_observation', '0') == '1':
             cycle_no += 1
             logger.info('Continuous observation immediate loop: cycle #%d', cycle_no)
             tested = _do_benchmark(app, observation=True) or 0
-            if _stop_event.is_set():
+            if _stop_event.is_set() or manual_switch_pending():
                 logger.info('Continuous observation immediate loop stopped by user request')
                 break
             if tested <= 0:
@@ -1023,7 +1045,9 @@ def run_benchmark_now(app, trigger: str | None = None):
     ``trigger`` records where the request came from (``'api'``, ``'import'``);
     ``None`` is the dashboard/settings button.
     """
-    with _lock:
+    with _automatic_slot() as allowed:
+        if not allowed:
+            return
         _do_benchmark(app, skip_quick_check=True, trigger=trigger)
 
 
@@ -1678,7 +1702,7 @@ def _do_benchmark(
             pull_sidecar_image(sidecar_image)
 
         for idx, row in enumerate(servers, start=1):
-            if _stop_event.is_set():
+            if _stop_event.is_set() or manual_switch_pending():
                 logger.info(
                     'Benchmark aborted by user — %d/%d server(s) tested',
                     len(results), len(servers),
@@ -1788,7 +1812,7 @@ def _do_benchmark(
                         logger.warning('Tracker check for %s failed: %s', row['name'], exc)
                 _update_consecutive_failures(row['name'], success=True, threshold=auto_exclude)
             else:
-                if _stop_event.is_set():
+                if _stop_event.is_set() or manual_switch_pending():
                     logger.info(
                         'Benchmark interrupted during %s — not counting it as a server failure',
                         row['name'],
@@ -1888,7 +1912,7 @@ def _do_benchmark(
                     ranked_scores.get(best_server_name, 0.0),
                 )
 
-        if auto_sw and decision_results:
+        if auto_sw and decision_results and not manual_switch_pending():
             current_pct      = float(get_setting('weighted_score_current_pct', '65'))
             stability_weight = float(get_setting('stability_weight', '30'))
             active_profile   = get_setting('active_profile', 'balanced')
@@ -2372,7 +2396,9 @@ def _do_benchmark(
 # ---------------------------------------------------------------------------
 
 def test_single_server(app, server_name: str, filter_type: str):
-    with _lock:
+    with _automatic_slot() as allowed:
+        if not allowed:
+            return
         _do_single_server(app, server_name, filter_type)
 
 
@@ -3102,6 +3128,8 @@ def _check_gluetun_failover(app) -> None:
             return
         _failover_last_attempt = now
         try:
+            if manual_switch_pending():
+                return
             if _run_emergency_failover(app, health_status):
                 _gluetun_unhealthy_since = None
                 _failover_failed_servers.clear()
@@ -3241,7 +3269,9 @@ def _run_event_triggered_quick_check(app):
         logger.info('Docker event QC: benchmark already running — skipping')
         return
 
-    with _lock:
+    with _automatic_slot() as allowed:
+        if not allowed:
+            return
         # Double-check inside the lock (another thread may have started a benchmark)
         if get_setting('benchmark_running', '0') == '1':
             logger.info('Docker event QC: benchmark started concurrently — skipping')
@@ -3547,6 +3577,9 @@ def _check_rotation_pools(app):
             return
 
         for row in due:
+            generation = manual_switch_generation()
+            if manual_switch_pending():
+                return
             wait_for_observation = False
             if get_setting('benchmark_running', '0') == '1':
                 if get_setting('benchmark_mode', '') == 'observation':
@@ -3578,6 +3611,8 @@ def _check_rotation_pools(app):
                 row['id'], row['name'],
             )
             try:
+                if manual_switch_pending() or generation != manual_switch_generation():
+                    continue
                 result = do_pool_rotation(row['id'], app, manual=False)
                 if result['ok']:
                     logger.info(
@@ -3817,7 +3852,9 @@ def run_quick_check_now(app):
     from .database import get_db, get_setting, set_setting
     from .gluetun import get_active_server, get_public_ips
 
-    with _lock:
+    with _automatic_slot() as allowed:
+        if not allowed:
+            return
         _stop_event.clear()   # reset any leftover stop signal
         set_setting('benchmark_stop_requested', '0')
         set_setting('benchmark_running', '1')

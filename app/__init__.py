@@ -122,6 +122,9 @@ def create_app():
     from .database import get_setting, set_setting
     import json as _json
 
+    from .manual_switch import recover_interrupted
+    recover_interrupted()
+
     _was_running = get_setting('benchmark_running', '0') == '1'
     set_setting('benchmark_running', '0')
     set_setting('benchmark_current_server', '')

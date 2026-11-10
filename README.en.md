@@ -198,3 +198,9 @@ After the first account is created, Companion automatically opens a **three-step
 ## Third-party apps
 
 - [AirDash](https://github.com/zlimteck/AirDash) — an unofficial native AirVPN dashboard for iPhone and iPad.
+
+### Priority manual server switching
+
+On **Servers**, a switch request is saved immediately, including during scheduled benchmarks and continuous observation. Companion requests test cancellation, waits for cleanup, then switches the server and reconnects applications while holding the same lock. The page shows queued, switching, reconnecting and terminal states; another click cannot replace a pending request.
+
+Already queued automatic jobs yield to manual intent. If the lock remains busy for ten minutes, the request fails visibly without forcibly unlocking the running operation. After a Companion restart, interrupted requests are reported and never replayed automatically: check the active server before retrying. Automatic operation then resumes according to existing settings.
