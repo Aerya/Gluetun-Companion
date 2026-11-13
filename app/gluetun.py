@@ -1862,10 +1862,30 @@ _CLONE_PF_ENV_OFF: dict[str, str] = {
 }
 
 
+def _is_own_container(container) -> bool:
+    """True if *container* is the one this process is itself running in.
+
+    Docker sets a container's hostname to its own short ID by default, so
+    comparing against $HOSTNAME lets us recognise ourselves. This matters
+    because our internal ephemeral-clone names (_TEST_GLUETUN_NAME,
+    _SIDECAR_NAME, ...) are plain, user-guessable strings -- someone
+    following the quick-start guide and naming their real Companion
+    container e.g. "gluetun-companion-test" would otherwise have it killed
+    by our own startup/shutdown cleanup, which matches by name alone.
+    """
+    own_id = os.environ.get('HOSTNAME', '').strip()
+    return bool(own_id) and bool(container.id) and container.id.startswith(own_id)
+
+
 def _remove_container(client, name: str, kill_first: bool = False) -> None:
     """Stop and remove a container by name, ignoring NotFound."""
     try:
         c = client.containers.get(name)
+        if _is_own_container(c):
+            logger.warning(
+                '_remove_container %s: refusing to remove our own container', name,
+            )
+            return
         if kill_first:
             try:
                 c.kill()
