@@ -57,6 +57,10 @@ Gluetun Companion est une interface Web pour piloter automatiquement vos serveur
 
 **Issues et pull requests bienvenues**, en respectant les formes : pour une [issue](https://github.com/Aerya/Gluetun-Companion/issues), merci d'indiquer la version, le fournisseur VPN, les logs pertinents et les étapes de reproduction ; pour une PR, une description claire du problème résolu et du comportement attendu.
 
+### Nettoyage des conteneurs temporaires
+
+Le nettoyage vérifie un label posé à la création des conteneurs temporaires. Une collision de nom ne supprime plus Companion ni un conteneur tiers, même avec un hostname personnalisé ou absent. Le label est interne : ne l’ajoutez pas aux services permanents. Après une mise à jour, un ancien conteneur temporaire sans label est conservé : si son nom bloque un benchmark ou le catalogue, vérifiez son rôle avant de le supprimer manuellement. Si le nom appartient à un service permanent, renommez ce service pour libérer le nom réservé.
+
 ### Sécurité TLS — octobre 2026
 
 Mise à jour des certificats et des composants TLS des images après l’incident eMudhra. Les contrôles couvrent les chaînes compromises, dont les deux cas « No CT », et une connexion HTTPS valide. Une image déjà en cours d’exécution reste inchangée : son remplacement doit être planifié après validation.

@@ -56,6 +56,10 @@ Gluetun Companion is a Web UI for automatically managing WireGuard and OpenVPN s
 
 **Issues and pull requests are welcome**, with proper form: for an [issue](https://github.com/Aerya/Gluetun-Companion/issues), please include the version, VPN provider, relevant logs and reproduction steps; for a PR, a clear description of the problem solved and the expected behaviour.
 
+### Temporary container cleanup
+
+Cleanup checks a label assigned when temporary containers are created. A name collision no longer deletes Companion or an unrelated container, even with a custom or missing hostname. This label is internal: do not add it to permanent services. After an upgrade, an old temporary container without this label is preserved: if its name blocks a benchmark or the catalogue, verify its purpose before removing it manually. If the name belongs to a permanent service, rename that service to free the reserved name.
+
 ### TLS security — October 2026
 
 Update image trust stores and TLS components following the eMudhra incident. Checks cover the compromised chains, including both No CT cases, and a valid HTTPS connection. Running images remain unchanged: schedule their replacement after validation.

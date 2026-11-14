@@ -1862,10 +1862,42 @@ _CLONE_PF_ENV_OFF: dict[str, str] = {
 }
 
 
-def _remove_container(client, name: str, kill_first: bool = False) -> None:
-    """Stop and remove a container by name, ignoring NotFound."""
+# Only containers explicitly created as temporary resources may be removed.
+_TEMPORARY_LABEL = 'io.gluetun-companion.temporary'
+
+
+def _is_own_container(container) -> bool:
+    """True if *container* is the one this process is itself running in.
+
+    Docker sets a container's hostname to its own short ID by default, so
+    comparing against $HOSTNAME lets us recognise ourselves. This matters
+    because our internal ephemeral-clone names (_TEST_GLUETUN_NAME,
+    _SIDECAR_NAME, ...) are plain, user-guessable strings -- someone
+    following the quick-start guide and naming their real Companion
+    container e.g. "gluetun-companion-test" would otherwise have it killed
+    by our own startup/shutdown cleanup, which matches by name alone.
+    """
+    own_id = os.environ.get('HOSTNAME', '').strip()
+    return bool(own_id) and bool(container.id) and container.id.startswith(own_id)
+
+
+def _remove_container(client, name: str, kill_first: bool = False) -> bool:
+    """Remove an explicitly marked temporary container; refuse name collisions."""
     try:
         c = client.containers.get(name)
+        if _is_own_container(c):
+            logger.warning(
+                '_remove_container %s: refusing to remove our own container', name,
+            )
+            return False
+        labels = c.attrs.get('Config', {}).get('Labels') or {}
+        if labels.get(_TEMPORARY_LABEL) != name:
+            logger.warning(
+                '_remove_container %s: refusing to remove an unmarked container; '
+                'inspect and rename it, or remove it manually if it is an obsolete temporary container',
+                name,
+            )
+            return False
         if kill_first:
             try:
                 c.kill()
@@ -1877,10 +1909,12 @@ def _remove_container(client, name: str, kill_first: bool = False) -> None:
             except Exception:
                 pass
         c.remove(force=True)
+        return True
     except docker.errors.NotFound:
-        pass
+        return True
     except Exception as exc:
         logger.warning('_remove_container %s: %s', name, exc)
+        return False
 
 
 def create_test_gluetun(
@@ -1950,12 +1984,14 @@ def create_test_gluetun(
         # Remove the speed sidecar first: it shares the test Gluetun network
         # namespace and can otherwise keep the WireGuard session alive while
         # the next test container is being prepared.
-        _remove_container(client, _SIDECAR_NAME, kill_first=True)
-        _remove_container(client, _TEST_GLUETUN_NAME, kill_first=True)
+        for name in (_SIDECAR_NAME, _TEST_GLUETUN_NAME):
+            if not _remove_container(client, name, kill_first=True):
+                return False, f'Temporary container name unavailable: {name}; see logs'
 
         client.containers.run(
             image=image,
             name=_TEST_GLUETUN_NAME,
+            labels={_TEMPORARY_LABEL: _TEST_GLUETUN_NAME},
             environment=env,
             cap_add=cap_add,
             sysctls=sysctls,
@@ -2035,7 +2071,8 @@ def create_speed_sidecar(
                 logger.info('Sidecar image not cached — pulling: %s', sidecar_image)
                 client.images.pull(sidecar_image)
 
-        _remove_container(client, _SIDECAR_NAME, kill_first=True)
+        if not _remove_container(client, _SIDECAR_NAME, kill_first=True):
+            return False, f'Temporary container name unavailable: {_SIDECAR_NAME}; see logs'
 
         env: dict[str, str] = {}
         if token:
@@ -2044,6 +2081,7 @@ def create_speed_sidecar(
         client.containers.run(
             image=sidecar_image,
             name=_SIDECAR_NAME,
+            labels={_TEMPORARY_LABEL: _SIDECAR_NAME},
             network_mode=f'container:{_TEST_GLUETUN_NAME}',
             cap_add=['NET_RAW'],
             environment=env,
@@ -2226,9 +2264,12 @@ def cleanup_test_containers(sidecar_image: str | None = None) -> None:
     triggers image removal.
     """
     client = docker.from_env()
+    cleaned = True
     for name in [_SIDECAR_NAME, _TEST_GLUETUN_NAME]:
-        _remove_container(client, name, kill_first=True)
-    logger.info('Test containers cleaned up')
+        if not _remove_container(client, name, kill_first=True):
+            cleaned = False
+    if cleaned:
+        logger.info('Test containers cleaned up')
 
 
 def create_catalogue_sidecar(
@@ -2253,7 +2294,8 @@ def create_catalogue_sidecar(
         logger.info('Pulling sidecar image for catalogue: %s', sidecar_image)
         client.images.pull(sidecar_image)
 
-        _remove_container(client, _CATALOGUE_SIDECAR_NAME)
+        if not _remove_container(client, _CATALOGUE_SIDECAR_NAME):
+            return False, f'Temporary container name unavailable: {_CATALOGUE_SIDECAR_NAME}; see logs'
 
         env: dict[str, str] = {}
         if token:
@@ -2284,6 +2326,7 @@ def create_catalogue_sidecar(
         client.containers.run(
             image=sidecar_image,
             name=_CATALOGUE_SIDECAR_NAME,
+            labels={_TEMPORARY_LABEL: _CATALOGUE_SIDECAR_NAME},
             network_mode='bridge',
             environment=env,
             volumes=volumes or None,
@@ -2304,8 +2347,8 @@ def create_catalogue_sidecar(
 def cleanup_catalogue_sidecar() -> None:
     """Stop and remove the catalogue sidecar container."""
     try:
-        _remove_container(docker.from_env(), _CATALOGUE_SIDECAR_NAME)
-        logger.info('Catalogue sidecar removed')
+        if _remove_container(docker.from_env(), _CATALOGUE_SIDECAR_NAME):
+            logger.info('Catalogue sidecar removed')
     except Exception as exc:
         logger.debug('cleanup_catalogue_sidecar: %s', exc)
 
