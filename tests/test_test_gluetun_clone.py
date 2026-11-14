@@ -1,4 +1,5 @@
 import unittest
+import docker
 from unittest.mock import MagicMock, patch
 
 from app.gluetun import create_test_gluetun
@@ -45,7 +46,11 @@ class TestGluetunClonePortForwardingTest(unittest.TestCase):
 
     def _run_clone(self, extra_env=None):
         client = MagicMock()
-        client.containers.get.return_value.attrs = _real_gluetun_attrs()
+        real = MagicMock()
+        real.attrs = _real_gluetun_attrs()
+        client.containers.get.side_effect = [
+            real, docker.errors.NotFound('absent'), docker.errors.NotFound('absent'),
+        ]
         with patch('app.gluetun.docker.from_env', return_value=client):
             ok, err = create_test_gluetun(
                 'gluetun', 'country', 'Netherlands', 8766, extra_env=extra_env,
@@ -87,7 +92,11 @@ class TestGluetunClonePortForwardingTest(unittest.TestCase):
 
     def test_sidecar_api_uses_fixed_container_port_and_configured_host_port(self):
         client = MagicMock()
-        client.containers.get.return_value.attrs = _real_gluetun_attrs()
+        real = MagicMock()
+        real.attrs = _real_gluetun_attrs()
+        client.containers.get.side_effect = [
+            real, docker.errors.NotFound('absent'), docker.errors.NotFound('absent'),
+        ]
         with patch('app.gluetun.docker.from_env', return_value=client):
             ok, err = create_test_gluetun('gluetun', 'country', 'Netherlands', 8767)
 

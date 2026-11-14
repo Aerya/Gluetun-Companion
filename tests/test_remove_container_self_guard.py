@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import MagicMock, patch
 
-from app.gluetun import _remove_container
+from app.gluetun import _remove_container, _TEMPORARY_LABEL
 
 
 class RemoveContainerSelfGuardTest(unittest.TestCase):
@@ -21,6 +21,9 @@ class RemoveContainerSelfGuardTest(unittest.TestCase):
         client = MagicMock()
         container = MagicMock()
         container.id = 'abcdef1234567890'
+        container.attrs = {'Config': {'Labels': {
+            _TEMPORARY_LABEL: 'gluetun-companion-test',
+        }}}
         client.containers.get.return_value = container
 
         with patch.dict(os.environ, {'HOSTNAME': 'abcdef123456'}):
@@ -34,6 +37,9 @@ class RemoveContainerSelfGuardTest(unittest.TestCase):
         client = MagicMock()
         container = MagicMock()
         container.id = 'deadbeef000000'
+        container.attrs = {'Config': {'Labels': {
+            _TEMPORARY_LABEL: 'gluetun-companion-test',
+        }}}
         client.containers.get.return_value = container
 
         with patch.dict(os.environ, {'HOSTNAME': 'abcdef123456'}):
@@ -46,6 +52,9 @@ class RemoveContainerSelfGuardTest(unittest.TestCase):
         client = MagicMock()
         container = MagicMock()
         container.id = 'deadbeef000000'
+        container.attrs = {'Config': {'Labels': {
+            _TEMPORARY_LABEL: 'gluetun-companion-test',
+        }}}
         client.containers.get.return_value = container
 
         with patch.dict(os.environ, {}, clear=False):
