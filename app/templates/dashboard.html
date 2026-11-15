@@ -208,6 +208,12 @@
             <i class="bi bi-server"></i> {{ t.dash_active_server }}
           </div>
           {{ server_flag(current_server) }}{{ server_provider_icon(current_server) | safe }} <code style="font-size:1rem;font-weight:600">{{ current_server | strip_prefix or '—' }}</code>
+          {% if active_server_name and not active_server_verified %}
+          <span class="badge bg-secondary-subtle text-secondary-emphasis ms-1" style="font-size:.65rem;vertical-align:middle"
+                title="{{ t.dash_active_server_unverified_hint }}">
+            <i class="bi bi-question-circle"></i> {{ t.dash_active_server_unverified }}
+          </span>
+          {% endif %}
           {% if current_server %}
           <span id="serverOfflineBadge" class="badge bg-warning text-dark ms-1 {{ '' if vpn_status != 'running' else 'd-none' }}"
                 style="font-size:.65rem;vertical-align:middle">

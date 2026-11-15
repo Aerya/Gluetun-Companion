@@ -240,6 +240,15 @@
   </div>
 </div>
 {% endif %}
+{% if wireguard_config_unknown %}
+<div class="alert alert-info mb-3 d-flex align-items-start gap-2" role="status">
+  <i class="bi bi-question-circle-fill mt-1"></i>
+  <div>
+    <div class="fw-semibold">{{ t.srv_wg0_config_unknown_title }}</div>
+    <div class="small">{{ t.srv_wg0_config_unknown | safe }}</div>
+  </div>
+</div>
+{% endif %}
 
 {# ── New AirVPN banner ────────────────────────────────────────────────────── #}
 {% if new_airvpn %}
