@@ -57,6 +57,8 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
+from . import docker_exec
+
 logger = logging.getLogger(__name__)
 
 # ── Tunables ────────────────────────────────────────────────────────────────
@@ -71,9 +73,9 @@ DEFAULT_HOURLY_RETENTION_DAYS = 90
 MIN_HOURLY_RETENTION_DAYS = 31        # the 30-day view needs hourly data
 DEFAULT_DAILY_RETENTION_DAYS = 730
 # Retry period once Docker refused ``exec`` (socket proxy without EXEC=1).
-# Each refused attempt leaves an unstarted exec record in dockerd until the
-# Gluetun container stops, so do not retry often.
-FORBIDDEN_RETRY_SECS = 3600
+# Retries go through :mod:`app.docker_exec`, whose probe creates no exec
+# instance, so recovery can be checked as often as that gate re-probes.
+FORBIDDEN_RETRY_SECS = int(docker_exec.DENIED_RECHECK_SECS)
 ERROR_RETRY_SECS = 30
 # Highest believable rate for a single tunnel (≈ 25 Gbit/s).  Anything above
 # comes from inconsistent counters, never from real traffic.
@@ -354,13 +356,7 @@ class DockerCounterReader:
                     self._client = docker.from_env(timeout=15)
         return self._client
 
-    @staticmethod
-    def _status_code(exc) -> int | None:
-        response = getattr(exc, 'response', None)
-        code = getattr(response, 'status_code', None)
-        if code is None:
-            code = getattr(exc, 'status_code', None)
-        return code
+    _status_code = staticmethod(docker_exec._status_code)
 
     @staticmethod
     def _exec_cat(api, container: str, iface: str) -> str:
@@ -385,7 +381,7 @@ class DockerCounterReader:
             code = self._status_code(exc)
             if code == 404:
                 return Reading('container_down', detail='not_found')
-            if code == 403:
+            if code in docker_exec.DENIED_CODES:
                 return Reading('forbidden', detail='inspect_forbidden')
             self._client = None
             return Reading('error', detail=type(exc).__name__)
@@ -415,12 +411,21 @@ class DockerCounterReader:
         base = {'provider': provider, 'protocol': protocol, 'container_id': container_id}
         # Two attempts at most: the second one only when the interface name
         # had to be discovered (VPN_INTERFACE unset and not tun0).
+        # Same per-endpoint exec gate as the rest of Companion: while exec is
+        # refused, no exec instance is created (they would pile up in dockerd).
+        gate = docker_exec.gate_for(api)
+        permission = gate.check(api)
+        if permission == docker_exec.DENIED:
+            return Reading('forbidden', detail='exec_forbidden', **base)
+        if permission == docker_exec.UNKNOWN:
+            return Reading('error', detail='exec_permission_unknown', **base)
         for _attempt in range(2):
             try:
                 text = self._exec_cat(api, container_name, iface)
             except Exception as exc:
                 code = self._status_code(exc)
-                if code == 403:
+                if code in docker_exec.DENIED_CODES:
+                    gate.mark_denied()
                     return Reading('forbidden', detail='exec_forbidden', **base)
                 if code in (404, 409):
                     return Reading('container_down', detail='not_running', **base)
@@ -887,6 +892,7 @@ class TrafficMonitor:
     def wake(self) -> None:
         """Apply new settings immediately (also retries a refused exec)."""
         self._retry_at = 0.0
+        docker_exec.reset()      # re-probe now instead of waiting for the gate
         self._wake.set()
 
     def _run(self) -> None:

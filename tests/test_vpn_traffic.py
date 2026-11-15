@@ -492,18 +492,29 @@ class ApiError(Exception):
 
 
 class DockerReaderTest(unittest.TestCase):
-    def reader(self, inspect=None, outputs=None, exec_error=None):
+    def reader(self, inspect=None, outputs=None, exec_error=None, probe_code=404):
+        """``probe_code``: answer to the exec permission probe (404 = allowed,
+        403 = socket proxy without EXEC=1)."""
         api = MagicMock()
+        api.base_url = f'tcp://fake-{id(api)}:2375'
         api.inspect_container.return_value = inspect or {
             'Id': 'abc', 'State': {'Running': True, 'StartedAt': '2026-11-15T10:00:00Z',
                                    'Health': {'Status': 'healthy'}},
             'Config': {'Env': ['VPN_SERVICE_PROVIDER=AirVPN', 'VPN_TYPE=wireguard']},
         }
         api.exec_create.return_value = {'Id': 'e1'}
-        if exec_error:
-            api.exec_start.side_effect = exec_error
-        else:
-            api.exec_start.side_effect = [(o, None) for o in (outputs or [])]
+        results = iter([(o, None) for o in (outputs or [])])
+        self.probes = 0
+
+        def exec_start(exec_id, *args, **kwargs):
+            if exec_id == '0' * 64:
+                self.probes += 1
+                raise ApiError(probe_code)
+            if exec_error:
+                raise exec_error
+            return next(results)
+
+        api.exec_start.side_effect = exec_start
         client = MagicMock(api=api)
         return DockerCounterReader(client_factory=lambda: client), api
 
@@ -552,6 +563,34 @@ class DockerReaderTest(unittest.TestCase):
         reader, _ = self.reader(exec_error=ApiError(403))
         r = reader.read('gluetun')
         self.assertEqual((r.state, r.detail), ('forbidden', 'exec_forbidden'))
+
+    def test_refused_exec_creates_no_exec_instance(self):
+        reader, api = self.reader(probe_code=403)
+        for _ in range(20):
+            r = reader.read('gluetun')
+            self.assertEqual((r.state, r.detail), ('forbidden', 'exec_forbidden'))
+        api.exec_create.assert_not_called()
+        self.assertEqual(self.probes, 1)       # cached until the gate re-checks
+
+    def test_405_refusal_from_path_filtering_proxy(self):
+        reader, api = self.reader(probe_code=405)
+        self.assertEqual(reader.read('gluetun').state, 'forbidden')
+        api.exec_create.assert_not_called()
+
+    def test_reads_again_once_exec_is_granted(self):
+        from app import docker_exec
+        reader, api = self.reader(probe_code=403,
+                                  outputs=[(PROC_NET_DEV + '7\n').encode()])
+        self.assertEqual(reader.read('gluetun').state, 'forbidden')
+        # Operator sets EXEC=1; the monitor's wake() (settings saved) or the
+        # gate's periodic re-check picks it up without restarting Companion.
+        docker_exec.reset()
+        api.exec_start.side_effect = None
+        api.exec_start.side_effect = lambda exec_id, *a, **k: (
+            (_ for _ in ()).throw(ApiError(404)) if exec_id == '0' * 64
+            else ((PROC_NET_DEV + '7\n').encode(), None))
+        self.assertEqual(reader.read('gluetun').state, 'ok')
+        self.assertEqual(api.exec_create.call_count, 1)
 
     def test_stopped_container(self):
         reader, api = self.reader(inspect={'Id': 'abc', 'State': {'Running': False}, 'Config': {}})
