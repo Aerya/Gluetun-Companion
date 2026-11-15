@@ -25,6 +25,7 @@ import docker
 import requests
 
 from .database import get_setting
+from .docker_exec import run_in_container
 from .i18n import get_t
 
 logger = logging.getLogger(__name__)
@@ -138,33 +139,48 @@ def get_container_env(container_name: str) -> dict[str, str]:
     return _container_env(container_name)
 
 
-def has_wireguard_config_file(container_name: str) -> bool:
-    """Return whether Gluetun loads a ``wg0.conf`` outside Companion's control.
+WG_CONFIG_PRESENT = 'present'
+WG_CONFIG_ABSENT = 'absent'
+WG_CONFIG_UNKNOWN = 'unknown'
+
+
+def wireguard_config_file_state(container_name: str) -> str:
+    """Return ``present``, ``absent`` or ``unknown`` for Gluetun's ``wg0.conf``.
 
     Gluetun gives this file precedence over environment variables.  In
     particular, its ``Endpoint`` conflicts with the ``SERVER_*`` selector that
-    Companion writes when switching a native provider such as ProtonVPN.  A
-    switch must therefore be rejected before writing an override or restarting
-    Gluetun.
+    Companion writes when switching a native provider such as ProtonVPN.
+
+    ``unknown`` means the check could not be completed: Docker exec refused
+    (socket proxy without ``EXEC=1``) or Docker unreachable.  It is never
+    reported as ``absent``.
     """
     try:
         container = docker.from_env().containers.get(container_name)
-        for mount in container.attrs.get('Mounts') or []:
-            destination = (mount.get('Destination') or '').rstrip('/')
-            if destination == _WIREGUARD_CONFIG_PATH:
-                return True
-
-        # ``wg0.conf`` can also live in a volume mounted at ``/gluetun``.  The
-        # direct mount check above catches the common case without exec'ing;
-        # this fallback protects volume-backed installations as well.
-        result = container.exec_run(['test', '-f', _WIREGUARD_CONFIG_PATH])
-        return getattr(result, 'exit_code', 1) == 0
     except Exception as exc:
-        # Do not turn a temporary Docker inspection issue into a false claim
-        # that the file exists. Normal switch error handling will still report
-        # an actual Docker/Compose failure below.
         logger.debug('Cannot inspect WireGuard configuration for %s: %s', container_name, exc)
-        return False
+        return WG_CONFIG_UNKNOWN
+    for mount in container.attrs.get('Mounts') or []:
+        destination = (mount.get('Destination') or '').rstrip('/')
+        if destination == _WIREGUARD_CONFIG_PATH:
+            return WG_CONFIG_PRESENT
+
+    # ``wg0.conf`` can also live in a volume mounted at ``/gluetun``.  The
+    # direct mount check above catches the common case without exec'ing;
+    # this fallback protects volume-backed installations as well.
+    outcome = run_in_container(container, ['test', '-f', _WIREGUARD_CONFIG_PATH])
+    if not outcome.ran:
+        return WG_CONFIG_UNKNOWN
+    if outcome.exit_code == 0:
+        return WG_CONFIG_PRESENT
+    if outcome.exit_code == 1:
+        return WG_CONFIG_ABSENT
+    return WG_CONFIG_UNKNOWN   # e.g. 126/127: ``test`` itself could not run
+
+
+def has_wireguard_config_file(container_name: str) -> bool:
+    """True only when ``wg0.conf`` is positively detected."""
+    return wireguard_config_file_state(container_name) == WG_CONFIG_PRESENT
 
 
 def _detect_compose_project(container_name: str) -> str:
@@ -294,17 +310,23 @@ def _latest_vpn_endpoint(logs: str) -> str | None:
     return max(matches, default=(0, ''))[1] or None
 
 
-def get_active_server(container_name: str) -> str | None:
-    """Return the server Gluetun is really connected to.
+ACTIVE_SOURCE_CATALOGUE = 'catalogue'    # endpoint matched in Gluetun's catalogue
+ACTIVE_SOURCE_CONFIGURED = 'configured'  # single SERVER_* filter value
+ACTIVE_SOURCE_OBSERVED = 'observed'      # last server observed earlier
+
+
+def get_active_server_info(container_name: str) -> dict:
+    """Return ``{'name': str | None, 'source': str | None, 'verified': bool}``.
 
     ``SERVER_NAMES`` and the other ``SERVER_*`` variables are selection
     filters.  They may contain several candidates and therefore cannot be
     presented as the active server.  Gluetun logs the selected VPN endpoint;
-    this function maps that address through its live provider catalogue.
+    this function maps that address through its live provider catalogue,
+    which requires Docker exec.  Only that match is ``verified``.
 
-    If the endpoint cannot be resolved, a single configured filter value is a
-    safe fallback.  With several candidates, the last observed real server is
-    preferred instead of displaying the whole candidate list.
+    Otherwise a single configured filter value is a safe fallback.  With
+    several candidates, the last observed real server is preferred instead of
+    displaying the whole candidate list.  Both are reported as unverified.
     """
     try:
         container = docker.from_env().containers.get(container_name)
@@ -315,23 +337,23 @@ def get_active_server(container_name: str) -> str | None:
 
         cached = _active_server_cache.get(container_id)
         if endpoint and cached and cached[0] == endpoint:
-            return cached[1]
+            return _active_info(cached[1], ACTIVE_SOURCE_CATALOGUE)
 
         env = _container_env(container_name)
         provider = (env.get('VPN_SERVICE_PROVIDER') or '').strip().lower()
         if endpoint and provider and '/' not in provider and '..' not in provider:
-            result = container.exec_run(
-                ['cat', f'/gluetun/servers/{provider}.json'], demux=False
+            outcome = run_in_container(
+                container, ['cat', f'/gluetun/servers/{provider}.json'], demux=False
             )
-            if result.exit_code == 0:
-                catalogue = json.loads(result.output.decode('utf-8', errors='replace'))
+            if outcome.ran and outcome.exit_code == 0:
+                catalogue = json.loads(outcome.output.decode('utf-8', errors='replace'))
                 for server in catalogue.get('servers', []):
                     if endpoint in (server.get('ips') or []):
                         name = (server.get('server_name') or '').strip()
                         if name:
                             _active_server_cache.clear()
                             _active_server_cache[container_id] = (endpoint, name)
-                            return name
+                            return _active_info(name, ACTIVE_SOURCE_CATALOGUE)
     except Exception as exc:
         logger.debug('get_active_server endpoint lookup failed: %s', exc)
 
@@ -343,14 +365,23 @@ def get_active_server(container_name: str) -> str | None:
         if item.strip()
     ]
     if len(candidates) == 1:
-        return candidates[0]
+        return _active_info(candidates[0], ACTIVE_SOURCE_CONFIGURED)
     try:
         observed = get_setting('last_observed_active_server', '').strip()
         if observed and (not candidates or observed in candidates):
-            return observed
+            return _active_info(observed, ACTIVE_SOURCE_OBSERVED)
     except Exception:
         pass
-    return None
+    return _active_info(None, None)
+
+
+def _active_info(name: str | None, source: str | None) -> dict:
+    return {'name': name, 'source': source, 'verified': source == ACTIVE_SOURCE_CATALOGUE}
+
+
+def get_active_server(container_name: str) -> str | None:
+    """Name of the active server, verified or not (see :func:`get_active_server_info`)."""
+    return get_active_server_info(container_name)['name']
 
 
 def _managed_env_pairs(
@@ -582,7 +613,14 @@ def switch_server(
                 'La clé privée Sidecar ne la remplace pas.',
             )
 
-    if has_wireguard_config_file(container_name):
+    wg_state = wireguard_config_file_state(container_name)
+    if wg_state == WG_CONFIG_UNKNOWN:
+        logger.warning(
+            'Cannot verify whether %s has %s (Docker exec refused or Docker '
+            'unreachable); proceeding with the switch.',
+            container_name, _WIREGUARD_CONFIG_PATH,
+        )
+    if wg_state == WG_CONFIG_PRESENT:
         logger.warning(
             'Refusing Companion-managed switch for %s: %s exists',
             container_name, _WIREGUARD_CONFIG_PATH,
