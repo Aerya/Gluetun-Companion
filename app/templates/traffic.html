@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% import '_vpn_traffic.html' as vtraffic with context %}
+{% block title %}{{ t.nav_traffic }} - Gluetun Companion{% endblock %}
+
+{% block content %}
+{{ vtraffic.traffic_styles() }}
+<style>
+  .trf-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .6rem; }
+  .trf-summary .trf-vol-total { font-size: 1.05rem; }
+  .trf-history-chart { position: relative; height: 260px; }
+  .trf-range .btn { font-size: .8rem; }
+  @media (max-width: 991.98px) { .trf-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 575.98px) {
+    .trf-history-chart { height: 220px; }
+    .trf-range { flex-wrap: wrap; }
+    .trf-range .btn { flex: 1 0 30%; }
+  }
+</style>
+
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+  <div>
+    <h4 class="fw-bold mb-1"><i class="bi bi-activity text-info"></i> {{ t.trf_page_title }}</h4>
+    <div class="text-muted" style="font-size:.85rem;max-width:62rem">{{ t.trf_page_subtitle }}</div>
+  </div>
+  <a href="{{ url_for('main.settings') }}#traffic" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-gear"></i> {{ t.trf_settings_link }}
+  </a>
+</div>
+
+<div class="mb-3">
+  {{ vtraffic.live_card(traffic_live, show_history_link=False) }}
+</div>
+
+<div id="trf-history" class="card p-3">
+  <div class="btn-group trf-range mb-3 w-100 w-md-auto" role="group" aria-label="{{ t.trf_summary_volume }}">
+    {% for key in ['live', '1h', '24h', '7d', '30d', 'months'] %}
+    <button type="button" class="btn btn-outline-info {{ 'active' if traffic_range == key }}" data-trf-range="{{ key }}">{{ t['trf_range_' ~ key] }}</button>
+    {% endfor %}
+  </div>
+
+  <div class="trf-summary mb-3">
+    <div class="trf-vol"><div class="trf-vol-label">↓ {{ t.trf_received }}</div><div class="trf-vol-total trf-rx" data-trf="sum-rx">—</div></div>
+    <div class="trf-vol"><div class="trf-vol-label">↑ {{ t.trf_sent }}</div><div class="trf-vol-total trf-tx" data-trf="sum-tx">—</div></div>
+    <div class="trf-vol"><div class="trf-vol-label">{{ t.trf_total }}</div><div class="trf-vol-total" data-trf="sum-total">—</div></div>
+    <div class="trf-vol"><div class="trf-vol-label">{{ t.trf_summary_peak }} ↓</div><div class="trf-vol-total" data-trf="sum-peak-rx">—</div></div>
+    <div class="trf-vol"><div class="trf-vol-label">{{ t.trf_summary_peak }} ↑</div><div class="trf-vol-total" data-trf="sum-peak-tx">—</div></div>
+  </div>
+  <div class="text-muted mb-2" style="font-size:.74rem" data-trf="sum-bench"></div>
+
+  <div data-trf="rate-wrap" class="mb-3">
+    <div class="fw-semibold mb-1" style="font-size:.85rem" data-trf="rate-title">{{ t.trf_chart_rate }}</div>
+    <div class="trf-history-chart"><canvas data-trf="rate-chart"></canvas></div>
+  </div>
+  <div data-trf="volume-wrap" class="mb-2">
+    <div class="fw-semibold mb-1" style="font-size:.85rem" data-trf="volume-title">{{ t.trf_chart_volume_hour }}</div>
+    <div class="trf-history-chart"><canvas data-trf="volume-chart"></canvas></div>
+  </div>
+  <div data-trf="history-empty" class="text-muted text-center py-5 d-none" style="font-size:.85rem">
+    <i class="bi bi-bar-chart"></i> {{ t.trf_no_data }}
+  </div>
+
+  <ul class="text-muted mb-0 mt-2 ps-3" style="font-size:.72rem">
+    <li data-trf="since-note"></li>
+    <li>{{ t.trf_gap_hint }}</li>
+    <li>{{ t.trf_per_container_hint }}</li>
+  </ul>
+</div>
+{% endblock %}
+
+{% block chartjs %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block scripts %}
+{{ vtraffic.traffic_config(traffic_live, traffic_units, traffic_range) }}
+{% endblock %}

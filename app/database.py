@@ -606,6 +606,11 @@ def init_db(db_path: str):
                 "('benchmark_history_repaired_v1', '1')"
             )
 
+        # Real VPN tunnel traffic: counters state + minute/hour/day/month
+        # aggregates (see vpn_traffic.py for the retention policy).
+        from .vpn_traffic import ensure_schema as _ensure_traffic_schema
+        _ensure_traffic_schema(db)
+
 
 @contextmanager
 def get_db():

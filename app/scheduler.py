@@ -3797,6 +3797,13 @@ def start_scheduler(app):
     # Docker event listener — watches Gluetun container for unexpected restarts
     start_docker_event_listener(app, app.config['GLUETUN_CONTAINER'])
 
+    # Real VPN tunnel traffic counters (read-only, independent of benchmarks).
+    try:
+        from .vpn_traffic import start_monitor
+        start_monitor(app.config['GLUETUN_CONTAINER'])
+    except Exception as exc:
+        logger.warning('VPN traffic monitor could not start: %s', exc)
+
     if not enabled:
         _scheduler.pause_job('benchmark')
         if _active_pools:

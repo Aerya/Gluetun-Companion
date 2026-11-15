@@ -75,6 +75,7 @@ Update image trust stores and TLS components following the eMudhra incident. Che
 - tracker discovery and control from qBittorrent or rTorrent;
 - provider, native Gluetun or custom port forwarding, with client synchronization;
 - management and recreation of Docker containers attached to Gluetun, including services from other Compose stacks;
+- live real VPN tunnel traffic (rates, volumes, hourly, daily and monthly history);
 - Discord/Apprise notifications, REST API, Prometheus and Grafana;
 - Unraid/DockerMan support.
 
@@ -208,3 +209,17 @@ After the first account is created, Companion automatically opens a **three-step
 On **Servers**, a switch request is saved immediately, including during scheduled benchmarks and continuous observation. Companion requests test cancellation, waits for cleanup, then switches the server and reconnects applications while holding the same lock. The page shows queued, switching, reconnecting and terminal states; another click cannot replace a pending request.
 
 Already queued automatic jobs yield to manual intent. If the lock remains busy for ten minutes, the request fails visibly without forcibly unlocking the running operation. After a Companion restart, interrupted requests are reported and never replayed automatically: check the active server before retrying. Automatic operation then resumes according to existing settings.
+
+### Real VPN traffic
+
+The dashboard's **Live VPN traffic** block and the **Traffic** page show what actually goes through the main Gluetun tunnel: download and upload rates, received and sent volumes (last hour, today, this month, all time), server, provider, protocol and interface. History covers live, 1 h, 24 h, 7 d, 30 d and months. These measurements are separate from benchmarks.
+
+**Method.** Companion reads `/proc/net/dev` inside Gluetun with `docker exec cat` (read-only, no shell, no privileges). The interface is `VPN_INTERFACE` when set, otherwise `tun0`, then `wg0`. Containers using `network_mode: service:gluetun` share this tunnel: their traffic is counted once, as a total, with no per-container breakdown. Only network counters are read, never the content of communications.
+
+**Reliability.** A reconnection, a server change or a Gluetun restart resets the interface counters: Companion detects it, with no spike and no negative rate. Volumes are persisted and survive Companion restarts. No history is invented before activation. After a collection gap, the missing volume is spread evenly over the period, without an instantaneous rate. Companion's own probes through the Gluetun HTTP proxy are counted too.
+
+**`docker-socket-proxy`.** Reading requires `EXEC: 1`. Without it, monitoring shows "Measurement unavailable", retries every hour and never publishes misleading values. `EXEC=1` also allows running commands in other containers: enable it only if you accept this trade-off. With the Docker socket mounted directly (Unraid, Synology), nothing needs to be configured.
+
+**Settings** (**Settings → VPN traffic**): enable/disable, collection interval (3 to 60 s, 5 s by default), hourly (90 d by default) and daily (730 d by default; 0 = unlimited) retention, units, and a confirmed statistics reset that does not affect the VPN. Monthly totals are always kept.
+
+**Prometheus.** `/metrics` exposes `gluetun_companion_vpn_traffic_received_bytes_total` and `gluetun_companion_vpn_traffic_sent_bytes_total` (counters), the current rates `..._receive_bytes_per_second` and `..._transmit_bytes_per_second`, `gluetun_companion_vpn_tunnel_up` and `gluetun_companion_vpn_traffic_monitoring_available{status}`. The bundled Grafana dashboard includes a "Real VPN traffic" section. The REST API offers `GET /api/v1/traffic` (plus `?range=24h`, `7d`, `30d`, `months`…).

@@ -14,6 +14,11 @@ services:
       VOLUMES: 1
       POST: 1
       DELETE: 1
+      # Optionnel : mesure du trafic VPN réel (lecture de /proc/net/dev dans
+      # Gluetun via docker exec). EXEC=1 autorise aussi l'exécution de commandes
+      # dans les autres conteneurs : ne l'activez que si ce compromis vous convient.
+      # Sans lui, la page Trafic affiche « Mesure indisponible ».
+      # EXEC: 1
     networks:
       - companion-net
 

@@ -386,6 +386,9 @@
     'port_forwarding': [
       (wiki_url ~ ('/Fonctionnement#inventaire-des-ports-forward%C3%A9s-vpn' if lang == 'fr' else '/How-it-works#vpn-forwarded-port-inventory'), 'Ports forwardés' if lang == 'fr' else 'Forwarded ports')
     ],
+    'traffic': [
+      (wiki_url ~ ('/Fonctionnement#trafic-vpn-r%C3%A9el' if lang == 'fr' else '/How-it-works#real-vpn-traffic'), t.trf_page_title)
+    ],
     'maintenance': [
       (wiki_url ~ ('/Fonctionnement#endpoint-prometheus-metrics' if lang == 'fr' else '/How-it-works#prometheus-metrics-endpoint'), 'Prometheus /metrics'),
       (wiki_url ~ ('/Fonctionnement#rest-api' if lang == 'fr' else '/How-it-works#rest-api'), t.set_api_title),
@@ -449,6 +452,11 @@
     <li class="nav-item" role="presentation">
       <button class="nav-link" id="tab-port-forwarding" data-bs-toggle="tab" data-bs-target="#settings-port-forwarding" type="button" role="tab">
         <i class="bi bi-diagram-3 me-1"></i>Port Forwarding
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-traffic" data-bs-toggle="tab" data-bs-target="#settings-traffic" type="button" role="tab">
+        <i class="bi bi-activity me-1"></i>{{ t.set_tab_traffic }}
       </button>
     </li>
     <li class="nav-item" role="presentation">
@@ -618,6 +626,22 @@
             'Companion applique les règles de port forwarding par fournisseur VPN et peut synchroniser qBittorrent ou exécuter une commande on_port_change.' if lang == 'fr' else
             'Companion applies VPN-provider port forwarding rules and can synchronize qBittorrent or run an on_port_change command.',
             wiki_links.port_forwarding) }}
+        </aside>
+      </div>
+    </div>
+    <div class="tab-pane fade" id="settings-traffic" role="tabpanel" aria-labelledby="tab-traffic">
+      <div class="settings-pane-layout">
+        <div id="settings-traffic-grid" class="settings-pane-main"></div>
+        <aside class="settings-pane-aside">
+          <div class="settings-help-card">
+            <h6><i class="bi bi-activity me-1"></i>{{ t.set_tab_traffic }}</h6>
+            {%- set _ts = traffic_status.status if traffic_status else 'unavailable' %}
+            <div class="metric"><span>{{ t.set_traffic_current_status }}</span><strong>{{ t['trf_status_' ~ _ts] }}</strong></div>
+            <div class="metric"><span>{{ t.trf_interface }}</span><strong>{{ (traffic_status.iface if traffic_status else '') or '—' }}</strong></div>
+            <div class="metric"><span>{{ t.set_traffic_interval }}</span><strong>{{ cfg.traffic_monitor_interval }} s</strong></div>
+            <div class="metric"><span>{{ t.set_traffic_hourly_retention }}</span><strong>{{ cfg.traffic_hourly_retention_days }} {{ t.cmn_days }}</strong></div>
+          </div>
+          {{ readme_card(t.set_side_readme, t.set_side_readme_traffic_full, wiki_links.traffic) }}
         </aside>
       </div>
     </div>
@@ -3145,6 +3169,10 @@ function arrangeSettingsTabs() {
   ].forEach(el => move(pane('settings-port-forwarding-grid'), el));
 
   [
+    byId('card-vpn-traffic'),
+  ].forEach(el => move(pane('settings-traffic-grid'), el));
+
+  [
     cardWithAction('catalogue'),
     cardWithAction('db_retention'),
     cardWithAction('save_api_token'),
@@ -3235,6 +3263,86 @@ if (document.readyState === 'loading') {
 
 </div>{# end settings-board #}
 
+<div id="card-vpn-traffic" class="card p-4 mb-4">
+  <h6 class="fw-bold mb-1 text-info">
+    <i class="bi bi-activity"></i> {{ t.set_traffic_title }}
+  </h6>
+  <p class="text-muted mb-3" style="font-size:.85rem">{{ t.set_traffic_subtitle }}</p>
+  {% if traffic_status and traffic_status.status == 'unavailable' and traffic_status.reason == 'exec_forbidden' %}
+  <div class="alert alert-warning py-2 px-3" style="font-size:.82rem">
+    <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ t.trf_reason_exec_forbidden }}
+  </div>
+  {% endif %}
+  <form method="post">
+    <input type="hidden" name="action" value="vpn_traffic">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <div class="form-check form-switch mb-1">
+      <input class="form-check-input" type="checkbox" role="switch" id="traffic_monitor_enabled"
+             name="traffic_monitor_enabled" value="1" {{ 'checked' if cfg.traffic_monitor_enabled == '1' }}>
+      <label class="form-check-label fw-semibold" for="traffic_monitor_enabled">{{ t.set_traffic_enabled }}</label>
+    </div>
+    <div class="form-text text-muted mb-2">{{ t.set_traffic_enabled_hint }}</div>
+    <div class="form-text text-muted mb-3"><i class="bi bi-shield-exclamation me-1"></i>{{ t.set_traffic_socket_proxy_hint }}</div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-md-6">
+        <label class="form-label" for="traffic_monitor_interval">{{ t.set_traffic_interval }}</label>
+        <div class="input-group" style="max-width:200px">
+          <input type="number" class="form-control" id="traffic_monitor_interval" name="traffic_monitor_interval"
+                 value="{{ cfg.traffic_monitor_interval }}" min="3" max="60" step="1">
+          <span class="input-group-text text-muted">s</span>
+        </div>
+        <div class="form-text text-muted">{{ t.set_traffic_interval_hint }}</div>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label" for="traffic_hourly_retention_days">{{ t.set_traffic_hourly_retention }}</label>
+        <div class="input-group" style="max-width:200px">
+          <input type="number" class="form-control" id="traffic_hourly_retention_days" name="traffic_hourly_retention_days"
+                 value="{{ cfg.traffic_hourly_retention_days }}" min="31" max="3650" step="1">
+          <span class="input-group-text text-muted">{{ t.cmn_days }}</span>
+        </div>
+        <div class="form-text text-muted">{{ t.set_traffic_hourly_retention_hint }}</div>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label" for="traffic_daily_retention_days">{{ t.set_traffic_daily_retention }}</label>
+        <div class="input-group" style="max-width:200px">
+          <input type="number" class="form-control" id="traffic_daily_retention_days" name="traffic_daily_retention_days"
+                 value="{{ cfg.traffic_daily_retention_days }}" min="0" max="36500" step="1">
+          <span class="input-group-text text-muted">{{ t.cmn_days }}</span>
+        </div>
+        <div class="form-text text-muted">{{ t.set_traffic_daily_retention_hint }}</div>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label" for="traffic_rate_unit">{{ t.set_traffic_rate_unit }}</label>
+        <select class="form-select mb-2" id="traffic_rate_unit" name="traffic_rate_unit" style="max-width:220px">
+          <option value="mbps" {{ 'selected' if cfg.traffic_rate_unit == 'mbps' }}>Mbps</option>
+          <option value="mbytes" {{ 'selected' if cfg.traffic_rate_unit == 'mbytes' }}>{{ 'Mo/s' if lang == 'fr' else 'MB/s' }}</option>
+        </select>
+        <label class="form-label" for="traffic_volume_unit">{{ t.set_traffic_volume_unit }}</label>
+        <select class="form-select" id="traffic_volume_unit" name="traffic_volume_unit" style="max-width:220px">
+          <option value="si" {{ 'selected' if cfg.traffic_volume_unit == 'si' }}>{{ t.set_traffic_unit_si }}</option>
+          <option value="iec" {{ 'selected' if cfg.traffic_volume_unit == 'iec' }}>{{ t.set_traffic_unit_iec }}</option>
+        </select>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-info fw-semibold text-dark btn-sm">
+      <i class="bi bi-save"></i> {{ t.cmn_save }}
+    </button>
+  </form>
+
+  <hr class="my-4">
+  <h6 class="fw-bold mb-1 text-danger"><i class="bi bi-arrow-counterclockwise"></i> {{ t.set_traffic_reset_title }}</h6>
+  <p class="text-muted mb-2" style="font-size:.82rem">{{ t.set_traffic_reset_hint }}</p>
+  <form method="post" id="form-traffic-reset" data-confirm="{{ t.set_traffic_reset_confirm }}">
+    <input type="hidden" name="action" value="vpn_traffic_reset">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="confirm_reset" value="">
+    <button type="submit" class="btn btn-outline-danger btn-sm">
+      <i class="bi bi-trash3"></i> {{ t.set_traffic_reset_btn }}
+    </button>
+  </form>
+</div>
+
 <div id="card-grafana" class="card p-4">
     <h6 class="fw-bold mb-1">
       <i class="bi bi-bar-chart-line"></i> {{ t.set_grafana_title }}
@@ -3308,6 +3416,19 @@ if (document.readyState === 'loading') {
       .find(el => el.dataset.bsTarget === target);
     if (tab) bootstrap.Tab.getOrCreateInstance(tab).show();
   }
+
+  document.addEventListener('submit', event => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || form.id !== 'form-traffic-reset') return;
+    const confirmInput = form.querySelector('input[name="confirm_reset"]');
+    if (!window.confirm(form.dataset.confirm || 'Reset?')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (confirmInput) confirmInput.value = '';
+      return;
+    }
+    if (confirmInput) confirmInput.value = 'RESET';
+  }, true);
 
   document.addEventListener('submit', async event => {
     const form = event.target;

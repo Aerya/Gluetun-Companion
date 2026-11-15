@@ -106,6 +106,29 @@ def status():
 
 
 # ---------------------------------------------------------------------------
+# GET /api/v1/traffic
+# ---------------------------------------------------------------------------
+
+@api_bp.route('/traffic')
+@_api_auth
+def traffic():
+    """Real VPN tunnel traffic (rates in bytes/s, volumes in bytes).
+
+    ``?range=live|1h|24h|7d|30d|months`` adds the matching history series.
+    """
+    from .vpn_traffic import get_monitor
+    monitor = get_monitor(current_app.config['GLUETUN_CONTAINER'])
+    live = monitor.live(since=float('inf'))
+    live.pop('samples', None)
+    range_key = request.args.get('range')
+    if range_key:
+        if range_key not in ('live', '1h', '24h', '7d', '30d', 'months'):
+            return jsonify({'error': 'invalid range'}), 400
+        live['history'] = monitor.history(range_key)
+    return jsonify(live)
+
+
+# ---------------------------------------------------------------------------
 # GET /api/v1/servers
 # ---------------------------------------------------------------------------
 

@@ -1,5 +1,6 @@
 ﻿{% extends 'base.html' %}
 {% import '_server_map.html' as smap with context %}
+{% import '_vpn_traffic.html' as vtraffic with context %}
 {% block title %}{{ t.nav_dashboard }} - Gluetun Companion{% endblock %}
 
 {% block content %}
@@ -381,6 +382,16 @@
 </div>
 
 {# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• #}
+{# ROW 1b — Real VPN tunnel traffic (live counters, not benchmark results) ── #}
+{% if traffic_live %}
+{{ vtraffic.traffic_styles() }}
+<div class="row g-3 mb-3">
+  <div class="col-12">
+    {{ vtraffic.live_card(traffic_live) }}
+  </div>
+</div>
+{% endif %}
+
 {% if continuous_observation == '1' or dashboard_map_points or recent_pool_switches %}
 <div class="row g-3 mb-3">
   <div class="col-12 col-lg-4">
@@ -900,6 +911,7 @@
 {% endblock %}
 {% block scripts %}
 {{ smap.server_map_assets() }}
+{% if traffic_live %}{{ vtraffic.traffic_config(traffic_live, traffic_units) }}{% endif %}
 {% set _bench_method = 'sidecar' if sidecar_mode == '1' else 'proxy' %}
 <script>
 const _msgRunning  = '{{ t.dash_running }}';
