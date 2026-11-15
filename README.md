@@ -223,12 +223,15 @@ Le bloc **Trafic VPN en direct** du tableau de bord et la page **Trafic** affich
 
 **Autorisations Docker.** La lecture passe par `docker exec`. Avec le socket monté directement (Unraid, Synology), rien n’est à configurer. Avec `docker-socket-proxy`, l’exec est refusé par défaut et la page affiche « Mesure indisponible » sans valeur trompeuse. Deux options :
 
-- **Recommandé : un proxy dédié limité à Gluetun**, déclaré avec `TRAFFIC_DOCKER_HOST=tcp://traffic-proxy:2375` dans Companion. Il n’autorise que l’inspection de Gluetun et l’exec dans Gluetun, rien d’autre. Le proxy principal reste inchangé. Remplacez `gluetun` par la valeur de `GLUETUN_CONTAINER` :
+- **Proxy dédié** (`wollomatic/socket-proxy`), déclaré avec `TRAFFIC_DOCKER_HOST=tcp://traffic-proxy:2375` dans Companion. Il n’accepte que Companion (`-allowfrom`) et n’autorise que l’inspection de Gluetun, l’exec dans Gluetun (ciblé par son nom) et le démarrage d’un exec. Le proxy principal garde `EXEC=0`. Remplacez `gluetun` par la valeur de `GLUETUN_CONTAINER` :
 
 ```yaml
   traffic-proxy:
     image: wollomatic/socket-proxy:1
     restart: unless-stopped
+    # L'image tourne en 65534 : ajoutez le GID du groupe docker de l'hôte
+    # (getent group docker | cut -d: -f3), sinon le socket est illisible.
+    user: "65534:998"
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -241,9 +244,13 @@ Le bloc **Trafic VPN en direct** du tableau de bord et la page **Trafic** affich
       - '-allowPOST=/v1\..{1,2}/(containers/gluetun/exec|exec/[0-9a-f]{64}/start)'
 ```
 
-- **`EXEC: 1` sur le proxy principal**, plus simple mais plus large : Companion pourrait alors exécuter des commandes dans n’importe quel conteneur.
+- **`EXEC: 1` sur le proxy principal** : plus simple, mais tous les clients de ce proxy peuvent alors démarrer des commandes dans n’importe quel conteneur.
 
-Pour situer ce risque : avec `CONTAINERS=1` et `POST=1`, déjà nécessaires aux benchmarks et à la recréation des conteneurs, `docker-socket-proxy` autorise la création de conteneurs avec n’importe quelle configuration, ce qui équivaut déjà à un accès root sur l’hôte. `EXEC=1` ajoute un accès plus direct sans relever ce plafond ; le proxy dédié évite toute autorisation supplémentaire sur le proxy principal. Dans les deux cas, la commande exécutée est fixe (`cat /proc/net/dev …`) et seul Gluetun est ciblé, par son nom.
+**Ce que le proxy dédié protège, et ce qu’il ne protège pas.** Testé avec Companion, il refuse l’exec dans les autres conteneurs (y compris via `..`, `%2F`, `//` ou un identifiant), la création, l’arrêt et la liste des conteneurs, ainsi que toute requête d’un autre conteneur. En revanche :
+- toute commande peut être lancée dans Gluetun, pas seulement `cat` ;
+- un exec créé ailleurs peut être démarré si son identifiant est connu. Or `docker-socket-proxy` avec `CONTAINERS=1` et `POST=1` autorise la *création* d’un exec dans n’importe quel conteneur : en combinant les deux proxys, Companion peut donc exécuter une commande ailleurs que dans Gluetun.
+
+Le proxy dédié n’ajoute donc aucune autorisation pour les *autres* clients du proxy principal, mais ne confine pas Companion lui-même. Ce n’est pas un recul : `CONTAINERS=1` et `POST=1`, déjà requis par les benchmarks et la recréation des conteneurs, permettent de créer un conteneur avec n’importe quelle configuration, ce qui équivaut déjà à un accès root sur l’hôte.
 
 **Réglages** (**Paramètres → Trafic VPN**) : activation, fréquence de collecte (3 à 60 s, 5 s par défaut), conservation du détail horaire (90 j par défaut) et journalier (730 j par défaut ; 0 = illimité), unités, et réinitialisation confirmée des statistiques, sans effet sur le VPN. Les totaux mensuels sont toujours conservés.
 

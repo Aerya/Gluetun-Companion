@@ -15,7 +15,7 @@ services:
       POST: 1
       DELETE: 1
       # Mesure du trafic VPN réel (docker exec cat /proc/net/dev dans Gluetun) :
-      # préférez un proxy dédié limité à Gluetun via TRAFFIC_DOCKER_HOST (voir
+      # préférez un proxy dédié réservé à Companion via TRAFFIC_DOCKER_HOST (voir
       # README). EXEC=1 ici fonctionne aussi mais autorise l'exec dans tous les
       # conteneurs. Sans l'un ou l'autre, la page Trafic affiche « Mesure indisponible ».
       # EXEC: 1
