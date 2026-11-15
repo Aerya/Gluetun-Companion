@@ -36,7 +36,7 @@ _PROBE_EXEC_ID = '0' * 64
 # 401/403: docker-socket-proxy and most proxies. 405: proxies that refuse
 # unlisted method/path pairs that way. Docker itself never answers these
 # codes for ``POST /exec/{id}/start``.
-_DENIED_CODES = frozenset({401, 403, 405})
+DENIED_CODES = frozenset({401, 403, 405})
 DENIED_RECHECK_SECS = 300.0      # cheap probe, creates nothing
 ALLOWED_RECHECK_SECS = 3600.0    # a revoked permission is also caught by real 403s
 UNKNOWN_RECHECK_SECS = 30.0      # Docker/proxy unreachable: retry soon
@@ -117,7 +117,7 @@ class ExecGate:
             code = _status_code(exc)
             if code == 404:
                 return ALLOWED     # reached Docker: exec endpoints are open
-            if code in _DENIED_CODES:
+            if code in DENIED_CODES:
                 return DENIED
             logger.debug('Docker exec probe inconclusive: %s', exc)
             return UNKNOWN
@@ -182,7 +182,7 @@ def run_in_container(container, cmd: list[str], **kwargs) -> ExecOutcome:
     try:
         result = container.exec_run(cmd, **kwargs)
     except Exception as exc:
-        if _status_code(exc) in _DENIED_CODES:
+        if _status_code(exc) in DENIED_CODES:
             # Permission revoked since the last probe: at most one abandoned
             # exec, then no new one until a probe says allowed again.
             gate.mark_denied()
