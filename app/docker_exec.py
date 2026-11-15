@@ -13,6 +13,9 @@ answers 403; when the request reaches Docker, it answers 404 ("no such exec
 instance").  Exec instances are only created once that probe says allowed.
 A denied state is re-probed periodically, so granting ``EXEC=1`` later is
 picked up automatically, without restarting Companion.
+
+Permissions belong to a Docker endpoint (the main socket proxy and an
+optional dedicated proxy can differ), so one gate is kept per API base URL.
 """
 
 from __future__ import annotations
@@ -30,9 +33,17 @@ UNKNOWN = 'unknown'
 
 # 64 hex characters: matches proxy allowlists for exec IDs, never a real exec.
 _PROBE_EXEC_ID = '0' * 64
+# 401/403: docker-socket-proxy and most proxies. 405: proxies that refuse
+# unlisted method/path pairs that way. Docker itself never answers these
+# codes for ``POST /exec/{id}/start``.
+_DENIED_CODES = frozenset({401, 403, 405})
 DENIED_RECHECK_SECS = 300.0      # cheap probe, creates nothing
 ALLOWED_RECHECK_SECS = 3600.0    # a revoked permission is also caught by real 403s
 UNKNOWN_RECHECK_SECS = 30.0      # Docker/proxy unreachable: retry soon
+
+
+def _now() -> float:
+    return time.monotonic()
 
 
 def _status_code(exc: Exception) -> int | None:
@@ -44,9 +55,13 @@ def _status_code(exc: Exception) -> int | None:
 
 
 class ExecGate:
-    """Process-wide knowledge of whether ``docker exec`` can be started."""
+    """Whether ``docker exec`` can be started on one Docker endpoint.
 
-    def __init__(self, clock=time.monotonic):
+    ``check`` holds the lock while probing, so concurrent callers wait for a
+    single probe instead of each sending one.
+    """
+
+    def __init__(self, clock=None):
         self._clock = clock
         self._lock = threading.Lock()
         self._state = UNKNOWN
@@ -70,7 +85,7 @@ class ExecGate:
             logger.info('Docker exec is now allowed: exact checks resume.')
             self._logged_denied = False
         self._state = state
-        self._checked_at = self._clock()
+        self._checked_at = self._time()
 
     def mark_denied(self) -> None:
         with self._lock:
@@ -81,7 +96,10 @@ class ExecGate:
             return True
         ttl = {ALLOWED: ALLOWED_RECHECK_SECS, DENIED: DENIED_RECHECK_SECS}.get(
             self._state, UNKNOWN_RECHECK_SECS)
-        return self._clock() - self._checked_at >= ttl
+        return self._time() - self._checked_at >= ttl
+
+    def _time(self) -> float:
+        return (self._clock or _now)()
 
     def check(self, api) -> str:
         """Return ALLOWED, DENIED or UNKNOWN, probing only when the cache expired."""
@@ -99,7 +117,7 @@ class ExecGate:
             code = _status_code(exc)
             if code == 404:
                 return ALLOWED     # reached Docker: exec endpoints are open
-            if code in (401, 403):
+            if code in _DENIED_CODES:
                 return DENIED
             logger.debug('Docker exec probe inconclusive: %s', exc)
             return UNKNOWN
@@ -112,7 +130,24 @@ class ExecGate:
             self._logged_denied = False
 
 
-gate = ExecGate()
+_gates: dict[str, ExecGate] = {}
+_gates_lock = threading.Lock()
+
+
+def gate_for(api) -> ExecGate:
+    """The gate of the Docker endpoint behind a low-level ``APIClient``."""
+    key = str(getattr(api, 'base_url', '') or '')
+    with _gates_lock:
+        gate = _gates.get(key)
+        if gate is None:
+            gate = _gates[key] = ExecGate()
+        return gate
+
+
+def reset() -> None:
+    """Forget every endpoint's state (tests)."""
+    with _gates_lock:
+        _gates.clear()
 
 
 @dataclass
@@ -133,11 +168,12 @@ class ExecOutcome:
 
 
 def run_in_container(container, cmd: list[str], **kwargs) -> ExecOutcome:
-    """``container.exec_run`` guarded by :data:`gate`.
+    """``container.exec_run`` guarded by its endpoint's :class:`ExecGate`.
 
     Never creates an exec instance while exec is known to be refused.
     """
     api = container.client.api
+    gate = gate_for(api)
     state = gate.check(api)
     if state == DENIED:
         return ExecOutcome('denied')
@@ -146,7 +182,7 @@ def run_in_container(container, cmd: list[str], **kwargs) -> ExecOutcome:
     try:
         result = container.exec_run(cmd, **kwargs)
     except Exception as exc:
-        if _status_code(exc) in (401, 403):
+        if _status_code(exc) in _DENIED_CODES:
             # Permission revoked since the last probe: at most one abandoned
             # exec, then no new one until a probe says allowed again.
             gate.mark_denied()

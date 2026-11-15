@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import docker
 
 from app import docker_exec
-from app.docker_exec import ALLOWED, DENIED, UNKNOWN, ExecGate, run_in_container
+from app.docker_exec import ALLOWED, DENIED, UNKNOWN, run_in_container
 from app.gluetun import (
     WG_CONFIG_ABSENT, WG_CONFIG_PRESENT, WG_CONFIG_UNKNOWN,
     _active_server_cache, get_active_server, get_active_server_info,
@@ -46,6 +46,7 @@ class FakeDocker:
         self.started = 0
         self.probes = 0
         self.api = MagicMock()
+        self.api.base_url = 'http+docker://fake'
         self.api.exec_start.side_effect = self._exec_start
         self.container = MagicMock()
         self.container.client.api = self.api
@@ -70,9 +71,9 @@ class FakeDocker:
 class GateTestCase(unittest.TestCase):
     def setUp(self):
         self.clock = FakeClock()
-        self._gate = patch.object(docker_exec, 'gate', ExecGate(clock=self.clock))
-        self._gate.start()
-        self.addCleanup(self._gate.stop)
+        p = patch.object(docker_exec, '_now', self.clock)
+        p.start()
+        self.addCleanup(p.stop)
 
     def advance(self, secs):
         self.clock.t += secs
@@ -100,7 +101,7 @@ class ExecGateTest(GateTestCase):
         self.assertTrue(outcome.ran)
         self.assertEqual(outcome.exit_code, 0)
         self.assertEqual((fake.created, fake.started), (1, 1))
-        self.assertEqual(docker_exec.gate.state, ALLOWED)
+        self.assertEqual(docker_exec.gate_for(fake.api).state, ALLOWED)
 
     def test_revoked_permission_leaves_at_most_one_abandoned_exec(self):
         fake = FakeDocker(exec_allowed=True)
@@ -109,12 +110,12 @@ class ExecGateTest(GateTestCase):
         for _ in range(50):
             self.assertEqual(run_in_container(fake.container, ['true']).status, 'denied')
         self.assertEqual(fake.created, 2)   # the successful one + one refused
-        self.assertEqual(docker_exec.gate.state, DENIED)
+        self.assertEqual(docker_exec.gate_for(fake.api).state, DENIED)
 
     def test_unreachable_docker_is_unknown_and_retried_soon(self):
-        api = MagicMock()
+        api = MagicMock(base_url='tcp://socket-proxy:2375')
         api.exec_start.side_effect = docker.errors.DockerException('connection refused')
-        gate = docker_exec.gate
+        gate = docker_exec.gate_for(api)
         self.assertEqual(gate.check(api), UNKNOWN)
         self.assertEqual(gate.check(api), UNKNOWN)
         self.assertEqual(api.exec_start.call_count, 1)
@@ -124,9 +125,41 @@ class ExecGateTest(GateTestCase):
 
     def test_probe_targets_an_impossible_exec_id(self):
         fake = FakeDocker(exec_allowed=True)
-        docker_exec.gate.check(fake.api)
+        docker_exec.gate_for(fake.api).check(fake.api)
         (exec_id,), _ = fake.api.exec_start.call_args
         self.assertRegex(exec_id, r'^0{64}$')
+
+
+    def test_405_refusal_is_denied(self):
+        api = MagicMock(base_url='tcp://other-proxy:2375')
+        api.exec_start.side_effect = api_error(405)
+        self.assertEqual(docker_exec.gate_for(api).check(api), DENIED)
+
+    def test_endpoints_keep_separate_permissions(self):
+        main = FakeDocker(exec_allowed=False)
+        main.api.base_url = 'tcp://socket-proxy:2375'
+        dedicated = FakeDocker(exec_allowed=True)
+        dedicated.api.base_url = 'tcp://traffic-proxy:2375'
+        self.assertEqual(run_in_container(main.container, ['true']).status, 'denied')
+        self.assertTrue(run_in_container(dedicated.container, ['true']).ran)
+        self.assertEqual(run_in_container(main.container, ['true']).status, 'denied')
+        self.assertEqual((main.created, dedicated.created), (0, 1))
+
+    def test_concurrent_callers_share_one_probe(self):
+        import threading
+        fake = FakeDocker(exec_allowed=False)
+        barrier = threading.Barrier(8)
+
+        def call():
+            barrier.wait()
+            run_in_container(fake.container, ['true'])
+
+        threads = [threading.Thread(target=call) for _ in range(8)]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+        self.assertEqual((fake.probes, fake.created), (1, 0))
 
 
 class WireguardConfigStateTest(GateTestCase):
