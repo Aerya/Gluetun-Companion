@@ -38,9 +38,9 @@ class FakeReader:
         return self.last
 
 
-def ok(rx, tx):
+def ok(rx, tx, health='healthy'):
     return Reading('ok', identity='c1|start1|tun0|5', rx=rx, tx=tx, iface='tun0',
-                   provider='AirVPN', protocol='wireguard', container_id='c1')
+                   provider='AirVPN', protocol='wireguard', container_id='c1', health=health)
 
 
 class TrafficRoutesTest(unittest.TestCase):
@@ -141,6 +141,14 @@ class TrafficRoutesTest(unittest.TestCase):
         self.assertRegex(body, r'\ngluetun_companion_vpn_tunnel_up 1\n')
         self.assertIn('gluetun_companion_vpn_traffic_receive_bytes_per_second 10000', body)
         self.assertIn('interface="tun0"', body)
+        self.assertRegex(body, r'\ngluetun_companion_vpn_tunnel_healthy 1\n')
+
+    def test_metrics_separate_interface_from_health(self):
+        self.feed(ok(1_000, 100, health='unhealthy'), ok(2_000, 200, health='unhealthy'))
+        body = self.client.get('/metrics').get_data(as_text=True)
+        self.assertRegex(body, r'\ngluetun_companion_vpn_tunnel_up 1\n')
+        self.assertRegex(body, r'\ngluetun_companion_vpn_tunnel_healthy 0\n')
+        self.assertRegex(body, r'monitoring_available\{status="unhealthy"\} 1')
 
     def test_metrics_when_exec_is_forbidden(self):
         self.feed(Reading('forbidden', detail='exec_forbidden'))

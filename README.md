@@ -219,8 +219,32 @@ Le bloc **Trafic VPN en direct** du tableau de bord et la page **Trafic** affich
 
 **Fiabilité.** Une reconnexion, un changement de serveur ou un redémarrage de Gluetun remet les compteurs de l’interface à zéro : Companion le détecte, sans pic ni débit négatif. Les volumes sont persistés et survivent aux redémarrages de Companion. Aucun historique n’est inventé avant l’activation. Après une interruption de la collecte, le volume manquant est réparti uniformément sur la période, sans débit instantané. Les sondes de Companion qui passent par le proxy HTTP de Gluetun sont elles aussi comptées.
 
-**`docker-socket-proxy`.** La lecture nécessite `EXEC: 1`. Sans cette autorisation, la mesure affiche « Mesure indisponible », retente toutes les heures et ne publie aucune valeur trompeuse. `EXEC=1` permet aussi d’exécuter des commandes dans les autres conteneurs : activez-le uniquement si ce compromis vous convient. Avec le socket Docker monté directement (Unraid, Synology), aucun réglage n’est nécessaire.
+**État du tunnel.** La présence de `tun0`/`wg0` ne prouve pas que le VPN fonctionne. « Tunnel connecté » n’est donc affiché que si le healthcheck Docker de Gluetun, qui teste une connexion à travers le tunnel, est `healthy`. Sinon : « Interface présente, VPN en échec » (`unhealthy`) ou « Interface présente » (healthcheck absent ou en cours). Les compteurs restent mesurés dans tous les cas. Prometheus distingue `gluetun_companion_vpn_tunnel_up` (interface présente) de `gluetun_companion_vpn_tunnel_healthy` (healthcheck).
+
+**Autorisations Docker.** La lecture passe par `docker exec`. Avec le socket monté directement (Unraid, Synology), rien n’est à configurer. Avec `docker-socket-proxy`, l’exec est refusé par défaut et la page affiche « Mesure indisponible » sans valeur trompeuse. Deux options :
+
+- **Recommandé : un proxy dédié limité à Gluetun**, déclaré avec `TRAFFIC_DOCKER_HOST=tcp://traffic-proxy:2375` dans Companion. Il n’autorise que l’inspection de Gluetun et l’exec dans Gluetun, rien d’autre. Le proxy principal reste inchangé. Remplacez `gluetun` par la valeur de `GLUETUN_CONTAINER` :
+
+```yaml
+  traffic-proxy:
+    image: wollomatic/socket-proxy:1
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - '-listenip=0.0.0.0'
+      - '-allowfrom=gluetun-companion'
+      - '-allowGET=((/v1\..{1,2})?/version|/v1\..{1,2}/containers/gluetun/json)'
+      - '-allowPOST=/v1\..{1,2}/(containers/gluetun/exec|exec/[0-9a-f]{64}/start)'
+```
+
+- **`EXEC: 1` sur le proxy principal**, plus simple mais plus large : Companion pourrait alors exécuter des commandes dans n’importe quel conteneur.
+
+Pour situer ce risque : avec `CONTAINERS=1` et `POST=1`, déjà nécessaires aux benchmarks et à la recréation des conteneurs, `docker-socket-proxy` autorise la création de conteneurs avec n’importe quelle configuration, ce qui équivaut déjà à un accès root sur l’hôte. `EXEC=1` ajoute un accès plus direct sans relever ce plafond ; le proxy dédié évite toute autorisation supplémentaire sur le proxy principal. Dans les deux cas, la commande exécutée est fixe (`cat /proc/net/dev …`) et seul Gluetun est ciblé, par son nom.
 
 **Réglages** (**Paramètres → Trafic VPN**) : activation, fréquence de collecte (3 à 60 s, 5 s par défaut), conservation du détail horaire (90 j par défaut) et journalier (730 j par défaut ; 0 = illimité), unités, et réinitialisation confirmée des statistiques, sans effet sur le VPN. Les totaux mensuels sont toujours conservés.
 
-**Prometheus.** `/metrics` expose `gluetun_companion_vpn_traffic_received_bytes_total` et `gluetun_companion_vpn_traffic_sent_bytes_total` (compteurs), les débits courants `..._receive_bytes_per_second` et `..._transmit_bytes_per_second`, `gluetun_companion_vpn_tunnel_up` et `gluetun_companion_vpn_traffic_monitoring_available{status}`. Le dashboard Grafana fourni comprend une section « Trafic VPN réel ». L’API REST propose `GET /api/v1/traffic` (et `?range=24h`, `7d`, `30d`, `months`…).
+**Prometheus.** `/metrics` expose `gluetun_companion_vpn_traffic_received_bytes_total` et `gluetun_companion_vpn_traffic_sent_bytes_total` (compteurs), les débits courants `..._receive_bytes_per_second` et `..._transmit_bytes_per_second`, `gluetun_companion_vpn_tunnel_up`, `gluetun_companion_vpn_tunnel_healthy` et `gluetun_companion_vpn_traffic_monitoring_available{status}`. Le dashboard Grafana fourni comprend une section « Trafic VPN réel ». L’API REST propose `GET /api/v1/traffic` (et `?range=24h`, `7d`, `30d`, `months`…).

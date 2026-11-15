@@ -218,8 +218,32 @@ The dashboard's **Live VPN traffic** block and the **Traffic** page show what ac
 
 **Reliability.** A reconnection, a server change or a Gluetun restart resets the interface counters: Companion detects it, with no spike and no negative rate. Volumes are persisted and survive Companion restarts. No history is invented before activation. After a collection gap, the missing volume is spread evenly over the period, without an instantaneous rate. Companion's own probes through the Gluetun HTTP proxy are counted too.
 
-**`docker-socket-proxy`.** Reading requires `EXEC: 1`. Without it, monitoring shows "Measurement unavailable", retries every hour and never publishes misleading values. `EXEC=1` also allows running commands in other containers: enable it only if you accept this trade-off. With the Docker socket mounted directly (Unraid, Synology), nothing needs to be configured.
+**Tunnel state.** The presence of `tun0`/`wg0` does not prove the VPN works. "Tunnel connected" is therefore shown only when Gluetun's Docker healthcheck, which tests a connection through the tunnel, is `healthy`. Otherwise: "Interface up, VPN failing" (`unhealthy`) or "Interface up" (no healthcheck, or still starting). Counters are measured in every case. Prometheus separates `gluetun_companion_vpn_tunnel_up` (interface present) from `gluetun_companion_vpn_tunnel_healthy` (healthcheck).
+
+**Docker permissions.** Reading goes through `docker exec`. With the Docker socket mounted directly (Unraid, Synology), nothing needs to be configured. With `docker-socket-proxy`, exec is refused by default and the page shows "Measurement unavailable" without misleading values. Two options:
+
+- **Recommended: a dedicated proxy restricted to Gluetun**, set with `TRAFFIC_DOCKER_HOST=tcp://traffic-proxy:2375` in Companion. It only allows inspecting Gluetun and exec into Gluetun, nothing else. The main proxy is unchanged. Replace `gluetun` with your `GLUETUN_CONTAINER` value:
+
+```yaml
+  traffic-proxy:
+    image: wollomatic/socket-proxy:1
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - '-listenip=0.0.0.0'
+      - '-allowfrom=gluetun-companion'
+      - '-allowGET=((/v1\..{1,2})?/version|/v1\..{1,2}/containers/gluetun/json)'
+      - '-allowPOST=/v1\..{1,2}/(containers/gluetun/exec|exec/[0-9a-f]{64}/start)'
+```
+
+- **`EXEC: 1` on the main proxy**, simpler but broader: Companion could then run commands in any container.
+
+For context: with `CONTAINERS=1` and `POST=1`, already required for benchmarks and container recreation, `docker-socket-proxy` allows creating containers with any configuration, which already amounts to root access on the host. `EXEC=1` adds a more direct path without raising that ceiling; the dedicated proxy avoids any extra permission on the main proxy. Either way, the command is fixed (`cat /proc/net/dev …`) and only Gluetun is targeted, by name.
 
 **Settings** (**Settings → VPN traffic**): enable/disable, collection interval (3 to 60 s, 5 s by default), hourly (90 d by default) and daily (730 d by default; 0 = unlimited) retention, units, and a confirmed statistics reset that does not affect the VPN. Monthly totals are always kept.
 
-**Prometheus.** `/metrics` exposes `gluetun_companion_vpn_traffic_received_bytes_total` and `gluetun_companion_vpn_traffic_sent_bytes_total` (counters), the current rates `..._receive_bytes_per_second` and `..._transmit_bytes_per_second`, `gluetun_companion_vpn_tunnel_up` and `gluetun_companion_vpn_traffic_monitoring_available{status}`. The bundled Grafana dashboard includes a "Real VPN traffic" section. The REST API offers `GET /api/v1/traffic` (plus `?range=24h`, `7d`, `30d`, `months`…).
+**Prometheus.** `/metrics` exposes `gluetun_companion_vpn_traffic_received_bytes_total` and `gluetun_companion_vpn_traffic_sent_bytes_total` (counters), the current rates `..._receive_bytes_per_second` and `..._transmit_bytes_per_second`, `gluetun_companion_vpn_tunnel_up`, `gluetun_companion_vpn_tunnel_healthy` and `gluetun_companion_vpn_traffic_monitoring_available{status}`. The bundled Grafana dashboard includes a "Real VPN traffic" section. The REST API offers `GET /api/v1/traffic` (plus `?range=24h`, `7d`, `30d`, `months`…).

@@ -84,10 +84,13 @@
   }
 
   const STATUS_CLASS = {
-    connected: 'bg-success', tunnel_down: 'bg-warning text-dark',
+    connected: 'bg-success', unhealthy: 'bg-danger', unverified: 'bg-info text-dark',
+    tunnel_down: 'bg-warning text-dark',
     container_down: 'bg-danger', unavailable: 'bg-secondary',
     disabled: 'bg-secondary', starting: 'bg-info text-dark',
   };
+
+  const MEASURING = ['connected', 'unhealthy', 'unverified'];
 
   function reasonText(d) {
     if (d.status === 'connected') return '';
@@ -242,7 +245,8 @@
       const b = (tot.all.bench_rx || 0) + (tot.all.bench_tx || 0);
       bench.textContent = b > 0 ? '(' + tr('trf_bench_note', { v: fmtBytes(b) }) + ')' : '';
     }
-    root.classList.toggle('trf-dim', d.status !== 'connected');
+    // Rates stay bright while counters are sampled, even if the VPN is unhealthy.
+    root.classList.toggle('trf-dim', !MEASURING.includes(d.status));
   }
 
   function initLive(root) {
@@ -281,18 +285,38 @@
       chart.update('none');
     }
 
+    let inflight = false, lastInterval = null, hourLoadedAt = 0;
+    const HOUR_REFRESH_MS = 30000;   // minute buckets: no need to redraw faster
+
+    function getJson(url) {
+      // A redirect to the login page or a 5xx must be a failure, not "no data".
+      return fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' })
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+    }
+
     function poll() {
+      if (inflight) return;
+      inflight = true;
       const url = CONF.liveUrl + (lastTs ? ('?since=' + lastTs) : '');
-      fetch(url, { headers: { Accept: 'application/json' } })
-        .then(r => r.ok ? r.json() : null)
+      getJson(url)
         .then(d => {
-          if (!d) return;
+          lastInterval = d.interval;
           renderLive(root, d);
           pushSamples(d.samples || []);
           drawLive();
-          schedule(d.interval);
+          if (mode === '1h' && Date.now() - hourLoadedAt >= HOUR_REFRESH_MS) loadHour();
         })
-        .catch(() => schedule());
+        .catch(() => markOffline())
+        // Whatever happened, the next refresh is always scheduled.
+        .finally(() => { inflight = false; schedule(lastInterval); });
+    }
+
+    function markOffline() {
+      const badge = root.querySelector('[data-trf="status"]');
+      if (badge) { badge.className = 'badge bg-secondary'; badge.textContent = tr('trf_status_unavailable'); }
+      const reason = root.querySelector('[data-trf="reason"]');
+      if (reason) { reason.textContent = tr('trf_reason_ui_offline'); reason.classList.remove('d-none'); }
+      root.classList.add('trf-dim');
     }
 
     function schedule(interval) {
@@ -300,6 +324,20 @@
       // UI refresh every 3–5 s, never faster than the collection itself.
       const secs = Math.max(3, Math.min(5, interval || 5));
       timer = setTimeout(() => { if (!document.hidden) poll(); else schedule(interval); }, secs * 1000);
+    }
+
+    function loadHour() {
+      hourLoadedAt = Date.now();
+      getJson(CONF.historyUrl + '?range=1h').then(h => {
+        if (mode !== '1h') return;
+        if (chart) { charts.delete(chart); chart.destroy(); chart = null; }
+        if (minuteChart) { charts.delete(minuteChart); minuteChart.destroy(); minuteChart = null; }
+        const pts = (h.rate && h.rate.points) || [];
+        const hasData = pts.some(p => p.rx_rate != null);
+        if (empty) empty.classList.toggle('d-none', hasData);
+        canvas.parentElement.classList.toggle('d-none', !hasData);
+        if (hasData) minuteChart = rateChart(canvas, pts, clockFmt);
+      }).catch(() => { hourLoadedAt = 0; });   // retried on the next poll
     }
 
     root.querySelectorAll('[data-trf-mode]').forEach(btn => {
@@ -312,16 +350,7 @@
           drawLive();
           return;
         }
-        fetch(CONF.historyUrl + '?range=1h').then(r => r.json()).then(h => {
-          if (mode !== '1h') return;
-          if (chart) { charts.delete(chart); chart.destroy(); chart = null; }
-          if (minuteChart) { charts.delete(minuteChart); minuteChart.destroy(); }
-          const pts = (h.rate && h.rate.points) || [];
-          const hasData = pts.some(p => p.rx != null);
-          if (empty) empty.classList.toggle('d-none', hasData);
-          canvas.parentElement.classList.toggle('d-none', !hasData);
-          if (hasData) minuteChart = rateChart(canvas, pts, clockFmt);
-        });
+        loadHour();
       });
     });
 
@@ -361,13 +390,16 @@
       rateCh = volCh = null;
     }
 
+    let current = null;
     function load(range) {
+      current = range;
       clearTimeout(liveTimer);
       root.querySelectorAll('[data-trf-range]').forEach(b => b.classList.toggle('active', b.dataset.trfRange === range));
       try { history.replaceState(null, '', '?range=' + range); } catch (_) {}
-      fetch(CONF.historyUrl + '?range=' + range, { headers: { Accept: 'application/json' } })
-        .then(r => r.json())
+      fetch(CONF.historyUrl + '?range=' + range, { headers: { Accept: 'application/json' }, cache: 'no-store' })
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(h => {
+          if (current !== range) return;   // a newer range was selected meanwhile
           UNITS = h.units || UNITS;
           destroy();
           const s = h.summary || {};
@@ -405,9 +437,12 @@
             setText(root, '[data-trf="volume-title"]', tr(title));
             volCh = volumeChart(volCanvas, volPts.map(p => labelFor(p.t, width, range)), volPts);
           }
-          if (range === 'live') liveTimer = setTimeout(() => load('live'), 5000);
         })
-        .catch(() => { if (empty) empty.classList.remove('d-none'); });
+        .catch(() => { if (empty && !rateCh && !volCh) empty.classList.remove('d-none'); })
+        .finally(() => {
+          // Keep refreshing the live range even after a failed request.
+          if (current === range && range === 'live') liveTimer = setTimeout(() => load('live'), 5000);
+        });
     }
 
     root.querySelectorAll('[data-trf-range]').forEach(btn => btn.addEventListener('click', () => load(btn.dataset.trfRange)));

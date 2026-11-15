@@ -61,6 +61,10 @@
     'trf_reason_not_found': t.trf_reason_not_found, 'trf_reason_not_running': t.trf_reason_not_running,
     'trf_reason_no_vpn_interface': t.trf_reason_no_vpn_interface, 'trf_reason_empty_output': t.trf_reason_empty_output,
     'trf_reason_invalid_vpn_interface': t.trf_reason_invalid_vpn_interface, 'trf_reason_stale': t.trf_reason_stale,
+    'trf_status_unhealthy': t.trf_status_unhealthy, 'trf_status_unverified': t.trf_status_unverified,
+    'trf_reason_gluetun_unhealthy': t.trf_reason_gluetun_unhealthy, 'trf_reason_health_starting': t.trf_reason_health_starting,
+    'trf_reason_no_healthcheck': t.trf_reason_no_healthcheck, 'trf_reason_container_changed': t.trf_reason_container_changed,
+    'trf_reason_ui_offline': t.trf_reason_ui_offline,
     'trf_reason_generic': t.trf_reason_generic, 'trf_disabled_hint': t.trf_disabled_hint,
     'trf_waiting_samples': t.trf_waiting_samples,
     'trf_chart_rate': t.trf_chart_rate, 'trf_chart_rate_avg': t.trf_chart_rate_avg,
@@ -74,11 +78,11 @@
 
 {% macro status_badge(live) %}
 {%- set _st = live.status if live else 'unavailable' -%}
-<span data-trf="status" class="badge {{ {'connected': 'bg-success', 'tunnel_down': 'bg-warning text-dark', 'container_down': 'bg-danger', 'starting': 'bg-info text-dark'}.get(_st, 'bg-secondary') }}">{{ t['trf_status_' ~ _st] }}</span>
+<span data-trf="status" class="badge {{ {'connected': 'bg-success', 'unhealthy': 'bg-danger', 'unverified': 'bg-info text-dark', 'tunnel_down': 'bg-warning text-dark', 'container_down': 'bg-danger', 'starting': 'bg-info text-dark'}.get(_st, 'bg-secondary') }}">{{ t['trf_status_' ~ _st] }}</span>
 {%- endmacro %}
 
 {% macro live_card(live, show_history_link=True) %}
-<div id="trf-live" class="card trf-card p-3 h-100 {{ 'trf-dim' if not live or live.status != 'connected' }}">
+<div id="trf-live" class="card trf-card p-3 h-100 {{ 'trf-dim' if not live or live.status not in ('connected', 'unhealthy', 'unverified') }}">
   <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
     <div class="d-flex flex-wrap align-items-center gap-2">
       <span class="text-muted" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">

@@ -3368,8 +3368,13 @@ def metrics():
                 '1 if Companion can currently read the tunnel counters of the production Gluetun',
                 'gauge', [({'status': tr['status']}, tr['available'])])
         _metric('gluetun_companion_vpn_tunnel_up',
-                '1 if the VPN interface of the production Gluetun is present and sampled',
+                '1 if the VPN interface of the production Gluetun is present and sampled '
+                '(does not prove the VPN works, see gluetun_companion_vpn_tunnel_healthy)',
                 'gauge', [({}, tr['tunnel_up'])])
+        _metric('gluetun_companion_vpn_tunnel_healthy',
+                "Gluetun's Docker healthcheck through the tunnel: 1 healthy, 0 unhealthy "
+                '(absent when Gluetun has no healthcheck or it is still starting)',
+                'gauge', [] if tr['healthy'] is None else [({}, tr['healthy'])])
         _info = {'interface': tr['iface'] or '', 'protocol': tr['protocol'] or '',
                  'provider': tr['provider'] or ''}
         _metric('gluetun_companion_vpn_traffic_received_bytes_total',

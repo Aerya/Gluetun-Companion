@@ -1595,7 +1595,7 @@
     {
       "id": 63,
       "type": "stat",
-      "title": "Tunnel VPN",
+      "title": "VPN (healthcheck Gluetun)",
       "gridPos": {
         "h": 4,
         "w": 4,
@@ -1619,12 +1619,22 @@
               "type": "value",
               "options": {
                 "0": {
-                  "text": "Absent",
+                  "text": "En échec",
                   "color": "red"
                 },
                 "1": {
-                  "text": "Actif",
+                  "text": "Sain",
                   "color": "green"
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "Inconnu",
+                  "color": "text"
                 }
               }
             }
@@ -1641,19 +1651,21 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "noValue": "Inconnu"
         }
       },
       "targets": [
         {
-          "expr": "gluetun_companion_vpn_tunnel_up",
+          "expr": "gluetun_companion_vpn_tunnel_healthy",
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           }
         }
-      ]
+      ],
+      "description": "Healthcheck Docker de Gluetun, qui teste une connexion à travers le tunnel. La seule présence de l'interface (gluetun_companion_vpn_tunnel_up) ne prouve pas que le VPN fonctionne. Aucune donnée : healthcheck absent ou en cours."
     },
     {
       "id": 64,

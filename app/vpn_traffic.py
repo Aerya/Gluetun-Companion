@@ -50,6 +50,7 @@ Reliability rules
 from __future__ import annotations
 
 import logging
+import os
 import re
 import threading
 import time
@@ -327,6 +328,7 @@ class Reading:
     protocol: str = ''
     container_id: str = ''
     detail: str = ''
+    health: str = ''           # Docker healthcheck: healthy | unhealthy | starting | '' (none)
 
 
 class DockerCounterReader:
@@ -343,7 +345,13 @@ class DockerCounterReader:
                 self._client = self._client_factory()
             else:
                 import docker
-                self._client = docker.from_env(timeout=15)
+                # TRAFFIC_DOCKER_HOST: optional dedicated socket proxy that only
+                # allows inspecting and exec-ing into Gluetun (least privilege).
+                dedicated = os.environ.get('TRAFFIC_DOCKER_HOST', '').strip()
+                if dedicated:
+                    self._client = docker.DockerClient(base_url=dedicated, timeout=15)
+                else:
+                    self._client = docker.from_env(timeout=15)
         return self._client
 
     @staticmethod
@@ -355,10 +363,13 @@ class DockerCounterReader:
         return code
 
     @staticmethod
-    def _exec_cat(api, container_id: str, iface: str) -> str:
-        """``cat`` the counters inside Gluetun: no shell, nothing written."""
+    def _exec_cat(api, container: str, iface: str) -> str:
+        """``cat`` the counters inside Gluetun: no shell, nothing written.
+
+        ``container`` is the container *name*, so a path-filtering proxy can
+        restrict exec to Gluetun alone (``/containers/<name>/exec``)."""
         exec_id = api.exec_create(
-            container_id,
+            container,
             ['cat', '/proc/net/dev', f'/sys/class/net/{iface}/ifindex'],
             stdout=True, stderr=False, tty=False, privileged=False,
         )['Id']
@@ -406,7 +417,7 @@ class DockerCounterReader:
         # had to be discovered (VPN_INTERFACE unset and not tun0).
         for _attempt in range(2):
             try:
-                text = self._exec_cat(api, container_id, iface)
+                text = self._exec_cat(api, container_name, iface)
             except Exception as exc:
                 code = self._status_code(exc)
                 if code == 403:
@@ -427,15 +438,28 @@ class DockerCounterReader:
                 detail='no_vpn_interface' if counters else 'empty_output', **base,
             )
 
+        # exec targeted the name: make sure it still designates the container
+        # inspected above (a recreation in between would mix two tunnels).
+        try:
+            after = api.inspect_container(container_name)
+        except Exception as exc:
+            return Reading('error', detail=type(exc).__name__, **base)
+        after_state = after.get('State') or {}
+        if (after.get('Id') != container_id
+                or after_state.get('StartedAt') != state.get('StartedAt')):
+            return Reading('error', detail='container_changed', **base)
+
         last = text.strip().splitlines()[-1].strip() if text.strip() else ''
         ifindex = last if last.isdigit() else '?'
         rx, tx = counters[found]
         identity = '|'.join((
             container_id, str(state.get('StartedAt') or ''), found, ifindex,
         ))
+        health = str(((after_state.get('Health') or {}).get('Status')) or '').lower()
         return Reading(
             'ok', identity=identity, rx=rx, tx=tx, iface=found,
             provider=provider, protocol=protocol, container_id=container_id,
+            health=health,
         )
 
 
@@ -443,6 +467,25 @@ class DockerCounterReader:
 
 class _Conflict(Exception):
     """Another writer advanced the persisted counter state."""
+
+
+# States in which the tunnel interface exists and its counters are sampled.
+MEASURING_STATES = ('connected', 'unhealthy', 'unverified')
+
+
+def health_state(health: str) -> tuple[str, str]:
+    """Map Gluetun's Docker health to a tunnel state.
+
+    The interface alone (tun0/wg0) does not prove the VPN works: Gluetun's
+    built-in healthcheck dials through the tunnel, so only ``healthy`` is
+    reported as connected.  Counters are still recorded in every case."""
+    if health == 'healthy':
+        return 'connected', ''
+    if health == 'unhealthy':
+        return 'unhealthy', 'gluetun_unhealthy'
+    if health == 'starting':
+        return 'unverified', 'health_starting'
+    return 'unverified', 'no_healthcheck'
 
 
 @dataclass
@@ -738,8 +781,7 @@ class TrafficMonitor:
             self._record(delta, bench)
             self._prev = sample
             self._pending_since_flush = True
-            st.state = 'connected'
-            st.reason = ''
+            st.state, st.reason = health_state(reading.health)
             st.last_event = delta.event
             st.last_sample_at = now
             st.rx_rate = delta.rx_rate
@@ -875,9 +917,9 @@ class TrafficMonitor:
             rx_rate, tx_rate = st.rx_rate, st.tx_rate
             fresh = st.last_sample_at is not None and now - st.last_sample_at <= interval * 3 + 2
             reason = st.reason
-            if state == 'connected' and not fresh:
+            if state in MEASURING_STATES and not fresh:
                 state, reason = 'unavailable', 'stale'
-            if state != 'connected':
+            if state not in MEASURING_STATES:
                 rx_rate = tx_rate = None
             samples = [
                 [round(ts, 3), rx, tx] for ts, rx, tx in self._buffer
@@ -1040,6 +1082,12 @@ class TrafficMonitor:
             live = self.live()
             out['rate'] = {'width': None, 'points': [
                 {'t': ts, 'rx_rate': rx, 'tx_rate': tx} for ts, rx, tx in live['samples']]}
+            # Rate samples carry no volume: the summary comes from the minute
+            # buckets covering the same window (the chart has no volume panel).
+            window_start = int(now - LIVE_BUFFER_SECS) // 60 * 60
+            data = minute_rows(window_start)
+            out['window'] = {'start': window_start, 'end': now}
+            out['summary_points'] = series(aligned(window_start, now, 60), data, 60, False)
         elif range_key == '1h':
             data = minute_rows(int(now - 3600) // 60 * 60)
             out['rate'] = {'width': 60, 'points': series(aligned(now - 3540, now, 60), data, 60, True)}
@@ -1080,9 +1128,9 @@ class TrafficMonitor:
 
         summary = {'rx': 0, 'tx': 0, 'peak_rx': None, 'peak_tx': None,
                    'bench_rx': 0, 'bench_tx': 0}
-        src = out['volume'] or out['rate']
+        src = out.pop('summary_points', None) or (out['volume'] or out['rate'] or {}).get('points')
         if src:
-            for p in src['points']:
+            for p in src:
                 summary['rx'] += p.get('rx') or 0
                 summary['tx'] += p.get('tx') or 0
                 summary['bench_rx'] += p.get('bench_rx') or 0
@@ -1100,8 +1148,11 @@ class TrafficMonitor:
         return {
             'enabled': live['enabled'],
             'status': live['status'],
-            'available': 1 if live['status'] in ('connected', 'tunnel_down', 'container_down') else 0,
-            'tunnel_up': 1 if live['status'] == 'connected' else 0,
+            'available': 1 if live['status'] in MEASURING_STATES + ('tunnel_down', 'container_down') else 0,
+            # Interface present and sampled (not a proof that the VPN works).
+            'tunnel_up': 1 if live['status'] in MEASURING_STATES else 0,
+            # Gluetun healthcheck through the tunnel: None when unknown.
+            'healthy': {'connected': 1, 'unhealthy': 0}.get(live['status']),
             'rx_total': live['totals']['all']['rx'],
             'tx_total': live['totals']['all']['tx'],
             'rx_rate': live['rx_rate'],

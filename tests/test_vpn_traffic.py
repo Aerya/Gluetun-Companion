@@ -51,9 +51,10 @@ class FakeReader:
         return self.last
 
 
-def ok(rx, tx, identity='c1|start1|tun0|5'):
+def ok(rx, tx, identity='c1|start1|tun0|5', health='healthy'):
     return Reading('ok', identity=identity, rx=rx, tx=tx, iface='tun0',
-                   provider='airvpn', protocol='wireguard', container_id='c1')
+                   provider='airvpn', protocol='wireguard', container_id='c1',
+                   health=health)
 
 
 class DbTestCase(unittest.TestCase):
@@ -438,6 +439,50 @@ class HistoryTest(DbTestCase):
             mon.history('bogus')
 
 
+class HealthTest(DbTestCase):
+    """The VPN interface alone is not proof that the VPN works."""
+
+    def test_states_follow_gluetun_healthcheck(self):
+        for health, state, reason in (
+            ('healthy', 'connected', ''),
+            ('unhealthy', 'unhealthy', 'gluetun_unhealthy'),
+            ('starting', 'unverified', 'health_starting'),
+            ('', 'unverified', 'no_healthcheck'),
+        ):
+            with self.subTest(health=health):
+                reader = FakeReader()
+                mon = self.monitor(reader)
+                self.feed(mon, reader, [ok(1_000, 100, health=health),
+                                        ok(51_000, 5_100, health=health)])
+                live = mon.live()
+                self.assertEqual((live['status'], live['reason']), (state, reason))
+                # Counters are measured whatever the health: rates stay visible.
+                self.assertAlmostEqual(live['rx_rate'], 10_000)
+                snap = mon.prometheus_snapshot()
+                self.assertEqual(snap['tunnel_up'], 1)
+                self.assertEqual(snap['available'], 1)
+                self.assertEqual(snap['healthy'], {'connected': 1, 'unhealthy': 0}.get(state))
+
+    def test_unhealthy_then_recovered_counts_continuously(self):
+        reader = FakeReader()
+        mon = self.monitor(reader)
+        self.feed(mon, reader, [ok(0, 0), ok(5_000, 500, health='unhealthy'), ok(9_000, 900)])
+        self.assertEqual(mon.live()['status'], 'connected')
+        self.assertEqual(mon.live()['totals']['all']['rx'], 9_000)
+
+
+class LiveHistorySummaryTest(DbTestCase):
+    def test_live_range_summary_counts_volumes(self):
+        reader = FakeReader()
+        mon = self.monitor(reader)
+        self.feed(mon, reader, [ok(0, 0), ok(60_000, 6_000), ok(90_000, 9_000)])
+        h = mon.history('live')
+        self.assertEqual((h['summary']['rx'], h['summary']['tx']), (90_000, 9_000))
+        self.assertEqual(h['summary']['total'], 99_000)
+        self.assertGreater(h['summary']['peak_rx'], 0)
+        self.assertNotIn('summary_points', h)
+
+
 # ── Docker reader ───────────────────────────────────────────────────────────
 
 class ApiError(Exception):
@@ -450,7 +495,8 @@ class DockerReaderTest(unittest.TestCase):
     def reader(self, inspect=None, outputs=None, exec_error=None):
         api = MagicMock()
         api.inspect_container.return_value = inspect or {
-            'Id': 'abc', 'State': {'Running': True, 'StartedAt': '2026-11-15T10:00:00Z'},
+            'Id': 'abc', 'State': {'Running': True, 'StartedAt': '2026-11-15T10:00:00Z',
+                                   'Health': {'Status': 'healthy'}},
             'Config': {'Env': ['VPN_SERVICE_PROVIDER=AirVPN', 'VPN_TYPE=wireguard']},
         }
         api.exec_create.return_value = {'Id': 'e1'}
@@ -471,6 +517,28 @@ class DockerReaderTest(unittest.TestCase):
         cmd = api.exec_create.call_args[0][1]
         self.assertEqual(cmd[0], 'cat')                 # no shell
         self.assertEqual(api.exec_create.call_args[1]['privileged'], False)
+        # exec targets the container *name*, so a path-filtering proxy can
+        # allow /containers/gluetun/exec and nothing else.
+        self.assertEqual(api.exec_create.call_args[0][0], 'gluetun')
+        self.assertEqual(r.health, 'healthy')
+
+    def test_container_recreated_during_read_is_discarded(self):
+        reader, api = self.reader(outputs=[(PROC_NET_DEV + '7\n').encode()])
+        first = {'Id': 'abc', 'State': {'Running': True, 'StartedAt': 'a'}, 'Config': {}}
+        second = {'Id': 'def', 'State': {'Running': True, 'StartedAt': 'b'}, 'Config': {}}
+        api.inspect_container.side_effect = [first, second]
+        r = reader.read('gluetun')
+        self.assertEqual((r.state, r.detail), ('error', 'container_changed'))
+
+    def test_dedicated_traffic_docker_host(self):
+        import docker
+        from unittest.mock import patch
+        with patch.dict(os.environ, {'TRAFFIC_DOCKER_HOST': 'tcp://traffic-proxy:2375'}), \
+             patch.object(docker, 'DockerClient') as dedicated, \
+             patch.object(docker, 'from_env') as default:
+            DockerCounterReader()._get_client()
+        dedicated.assert_called_once_with(base_url='tcp://traffic-proxy:2375', timeout=15)
+        default.assert_not_called()
 
     def test_discovers_wg0_in_the_same_tick(self):
         text = PROC_NET_DEV.replace('tun0', 'wg0')
