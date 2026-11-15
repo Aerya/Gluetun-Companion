@@ -1,0 +1,149 @@
+{# Real VPN tunnel traffic — shared partial (dashboard block + /traffic page).
+   Values are rendered by assets/vpn-traffic.js from /api/vpn-traffic/*.  #}
+
+{% macro traffic_styles() %}
+<style>
+  .trf-card { border-color: rgba(45,212,191,.32); }
+  .trf-kind {
+    font-size: .64rem; letter-spacing: .04em; text-transform: uppercase;
+    border: 1px solid rgba(45,212,191,.45); color: #2dd4bf; border-radius: 999px;
+    padding: .05rem .45rem; white-space: nowrap;
+  }
+  .trf-rates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+  .trf-rate {
+    border: 1px solid var(--bs-border-color); border-radius: .55rem;
+    padding: .6rem .75rem; background: rgba(139,148,158,.055); min-width: 0;
+  }
+  .trf-rate-label { font-size: .7rem; text-transform: uppercase; color: var(--bs-secondary-color); letter-spacing: .04em; }
+  .trf-rate-value { font-size: 1.65rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .trf-rate-unit { font-size: .8rem; font-weight: 600; color: var(--bs-secondary-color); margin-left: .2rem; }
+  .trf-rx { color: #2dd4bf; }
+  .trf-tx { color: #fbbf24; }
+  [data-bs-theme="light"] .trf-rx { color: #0f8f80; }
+  [data-bs-theme="light"] .trf-tx { color: #a16207; }
+  .trf-volumes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem; }
+  .trf-vol {
+    border: 1px solid var(--bs-border-color); border-radius: .45rem; padding: .4rem .55rem;
+    min-width: 0; font-variant-numeric: tabular-nums;
+  }
+  .trf-vol-label { font-size: .66rem; text-transform: uppercase; color: var(--bs-secondary-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trf-vol-total { font-weight: 700; font-size: .92rem; }
+  .trf-vol-split { font-size: .72rem; color: var(--bs-secondary-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trf-meta { display: flex; flex-wrap: wrap; gap: .35rem .9rem; font-size: .76rem; color: var(--bs-secondary-color); }
+  .trf-meta strong { color: var(--bs-body-color); font-weight: 600; }
+  .trf-chart { position: relative; height: 190px; }
+  .trf-dim .trf-rate-value { opacity: .45; }
+  .trf-segment .btn { font-size: .74rem; padding: .12rem .55rem; }
+  @media (max-width: 991.98px) { .trf-volumes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 575.98px) {
+    .trf-rate-value { font-size: 1.35rem; }
+    .trf-chart { height: 170px; }
+  }
+</style>
+{% endmacro %}
+
+{% macro traffic_config(live, units, range_key=None) %}
+<script type="application/json" id="trf-config">{{ {
+  'lang': lang,
+  'units': units,
+  'range': range_key,
+  'liveUrl': url_for('main.api_vpn_traffic_live'),
+  'historyUrl': url_for('main.api_vpn_traffic_history'),
+  'initial': live,
+  't': {
+    'trf_download': t.trf_download, 'trf_upload': t.trf_upload,
+    'trf_received': t.trf_received, 'trf_sent': t.trf_sent,
+    'trf_since': t.trf_since, 'trf_real_note': t.trf_real_note, 'trf_bench_note': t.trf_bench_note,
+    'trf_status_connected': t.trf_status_connected, 'trf_status_tunnel_down': t.trf_status_tunnel_down,
+    'trf_status_container_down': t.trf_status_container_down, 'trf_status_unavailable': t.trf_status_unavailable,
+    'trf_status_disabled': t.trf_status_disabled, 'trf_status_starting': t.trf_status_starting,
+    'trf_reason_exec_forbidden': t.trf_reason_exec_forbidden, 'trf_reason_inspect_forbidden': t.trf_reason_inspect_forbidden,
+    'trf_reason_not_found': t.trf_reason_not_found, 'trf_reason_not_running': t.trf_reason_not_running,
+    'trf_reason_no_vpn_interface': t.trf_reason_no_vpn_interface, 'trf_reason_empty_output': t.trf_reason_empty_output,
+    'trf_reason_invalid_vpn_interface': t.trf_reason_invalid_vpn_interface, 'trf_reason_stale': t.trf_reason_stale,
+    'trf_status_unhealthy': t.trf_status_unhealthy, 'trf_status_unverified': t.trf_status_unverified,
+    'trf_reason_gluetun_unhealthy': t.trf_reason_gluetun_unhealthy, 'trf_reason_health_starting': t.trf_reason_health_starting,
+    'trf_reason_no_healthcheck': t.trf_reason_no_healthcheck, 'trf_reason_container_changed': t.trf_reason_container_changed,
+    'trf_reason_ui_offline': t.trf_reason_ui_offline,
+    'trf_reason_generic': t.trf_reason_generic, 'trf_disabled_hint': t.trf_disabled_hint,
+    'trf_waiting_samples': t.trf_waiting_samples,
+    'trf_chart_rate': t.trf_chart_rate, 'trf_chart_rate_avg': t.trf_chart_rate_avg,
+    'trf_chart_volume_5m': t.trf_chart_volume_5m, 'trf_chart_volume_hour': t.trf_chart_volume_hour,
+    'trf_chart_volume_day': t.trf_chart_volume_day, 'trf_chart_volume_month': t.trf_chart_volume_month,
+    'trf_no_data_before': t.trf_no_data_before,
+  },
+} | tojson }}</script>
+<script src="{{ url_for('static', filename='vpn-traffic.js') }}" defer></script>
+{% endmacro %}
+
+{% macro status_badge(live) %}
+{%- set _st = live.status if live else 'unavailable' -%}
+<span data-trf="status" class="badge {{ {'connected': 'bg-success', 'unhealthy': 'bg-danger', 'unverified': 'bg-info text-dark', 'tunnel_down': 'bg-warning text-dark', 'container_down': 'bg-danger', 'starting': 'bg-info text-dark'}.get(_st, 'bg-secondary') }}">{{ t['trf_status_' ~ _st] }}</span>
+{%- endmacro %}
+
+{% macro live_card(live, show_history_link=True) %}
+<div id="trf-live" class="card trf-card p-3 h-100 {{ 'trf-dim' if not live or live.status not in ('connected', 'unhealthy', 'unverified') }}">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <span class="text-muted" style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em">
+        <i class="bi bi-activity"></i> {{ t.trf_live_title }}
+      </span>
+      <span class="trf-kind" title="{{ t.trf_not_benchmark_hint }}" data-bs-toggle="tooltip">{{ t.trf_not_benchmark }}</span>
+      {{ status_badge(live) }}
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <div class="btn-group btn-group-sm trf-segment" role="group">
+        <button type="button" class="btn btn-outline-secondary active" data-trf-mode="live">{{ t.trf_range_live }}</button>
+        <button type="button" class="btn btn-outline-secondary" data-trf-mode="1h">{{ t.trf_range_1h }}</button>
+      </div>
+      {% if show_history_link %}
+      <a href="{{ url_for('main.traffic') }}" class="btn btn-sm btn-outline-info py-0 px-2" style="font-size:.76rem">
+        <i class="bi bi-graph-up"></i> <span class="d-none d-sm-inline">{{ t.trf_history_link }}</span>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div data-trf="reason" class="alert alert-secondary py-1 px-2 mb-2 {{ 'd-none' if live and live.status == 'connected' }}" style="font-size:.78rem"></div>
+
+  <div class="row g-3">
+    <div class="col-12 col-lg-5">
+      <div class="trf-rates mb-2">
+        <div class="trf-rate">
+          <div class="trf-rate-label"><i class="bi bi-arrow-down"></i> {{ t.trf_download }}</div>
+          <div><span class="trf-rate-value trf-rx" data-trf="rx-rate">—</span><span class="trf-rate-unit" data-trf="rx-unit"></span></div>
+        </div>
+        <div class="trf-rate">
+          <div class="trf-rate-label"><i class="bi bi-arrow-up"></i> {{ t.trf_upload }}</div>
+          <div><span class="trf-rate-value trf-tx" data-trf="tx-rate">—</span><span class="trf-rate-unit" data-trf="tx-unit"></span></div>
+        </div>
+      </div>
+      <div class="trf-volumes mb-2">
+        {% for key, label in [('hour', t.trf_last_hour), ('today', t.trf_today), ('month', t.trf_this_month), ('all', t.trf_all_time)] %}
+        <div class="trf-vol">
+          <div class="trf-vol-label">{{ label }}</div>
+          <div class="trf-vol-total" data-trf="{{ key }}-total">—</div>
+          <div class="trf-vol-split">↓ <span data-trf="{{ key }}-rx">—</span> · ↑ <span data-trf="{{ key }}-tx">—</span></div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="trf-meta mb-1">
+        <span>{{ t.trf_server }} <strong data-trf="server">—</strong></span>
+        <span>{{ t.trf_provider }} <strong data-trf="provider">—</strong></span>
+        <span>{{ t.trf_protocol }} <strong data-trf="protocol">—</strong></span>
+        <span>{{ t.trf_interface }} <strong data-trf="iface">—</strong></span>
+      </div>
+      <div style="font-size:.7rem;color:var(--bs-secondary-color)">
+        <span data-trf="since"></span> <span data-trf="bench"></span>
+      </div>
+    </div>
+    <div class="col-12 col-lg-7">
+      <div class="trf-chart"><canvas data-trf="chart" aria-label="{{ t.trf_chart_rate }}"></canvas></div>
+      <div data-trf="chart-empty" class="text-muted text-center py-5 d-none" style="font-size:.82rem">
+        <i class="bi bi-hourglass-split"></i> {{ t.trf_waiting_samples }}
+      </div>
+      <div data-trf="note" class="mt-1" style="font-size:.68rem;color:var(--bs-secondary-color)"></div>
+    </div>
+  </div>
+</div>
+{% endmacro %}

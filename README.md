@@ -76,6 +76,7 @@ Mise à jour des certificats et des composants TLS des images après l’inciden
 - découverte et contrôle des trackers BitTorrent depuis qBittorrent ou rTorrent ;
 - port forwarding fournisseur, natif Gluetun ou custom, avec synchronisation client ;
 - gestion et recréation des containers Docker liés à Gluetun, y compris dans d’autres stacks Compose ;
+- trafic réel du tunnel VPN en direct (débits, volumes, historique horaire, journalier et mensuel) ;
 - notifications Discord/Apprise, API REST, Prometheus et Grafana ;
 - support Unraid/DockerMan.
 
@@ -211,3 +212,48 @@ Lors de la création du premier compte, Companion ouvre automatiquement un **gui
 Depuis **Serveurs**, une demande de changement est enregistrée immédiatement, même pendant un benchmark planifié ou une observation continue. Companion demande l’arrêt du test, attend son nettoyage, puis change le serveur et reconnecte les applications sous le même verrou. Le suivi sur la page indique l’attente, la bascule, la reconnexion ou l’échec ; un second clic ne remplace pas la demande en cours.
 
 Les tâches automatiques déjà en attente cèdent la priorité. Si le verrou reste occupé pendant dix minutes, la demande échoue explicitement sans forcer son déverrouillage. Après un redémarrage de Companion, une demande interrompue est signalée et n’est pas rejouée automatiquement : vérifiez le serveur actif avant de réessayer. Le fonctionnement automatique reprend ensuite selon les réglages existants.
+
+### Trafic VPN réel
+
+Le bloc **Trafic VPN en direct** du tableau de bord et la page **Trafic** affichent ce qui passe réellement dans le tunnel du Gluetun principal : débits descendant et montant, volumes reçus et envoyés (dernière heure, jour, mois, cumul), serveur, fournisseur, protocole et interface. L’historique couvre le temps réel, 1 h, 24 h, 7 j, 30 j et les mois. Ces mesures sont distinctes des benchmarks.
+
+**Méthode.** Companion lit `/proc/net/dev` dans Gluetun via `docker exec cat` (lecture seule, sans shell ni privilège). L’interface est `VPN_INTERFACE` si elle est définie, sinon `tun0`, puis `wg0`. Les conteneurs en `network_mode: service:gluetun` partagent ce tunnel : leur trafic est compté une fois, au total, sans répartition par conteneur. Seul le contenu des compteurs réseau est lu, jamais celui des communications.
+
+**Fiabilité.** Une reconnexion, un changement de serveur ou un redémarrage de Gluetun remet les compteurs de l’interface à zéro : Companion le détecte, sans pic ni débit négatif. Les volumes sont persistés et survivent aux redémarrages de Companion. Aucun historique n’est inventé avant l’activation. Après une interruption de la collecte, le volume manquant est réparti uniformément sur la période, sans débit instantané. Les sondes de Companion qui passent par le proxy HTTP de Gluetun sont elles aussi comptées.
+
+**État du tunnel.** La présence de `tun0`/`wg0` ne prouve pas que le VPN fonctionne. « Tunnel connecté » n’est donc affiché que si le healthcheck Docker de Gluetun, qui teste une connexion à travers le tunnel, est `healthy`. Sinon : « Interface présente, VPN en échec » (`unhealthy`) ou « Interface présente » (healthcheck absent ou en cours). Les compteurs restent mesurés dans tous les cas. Prometheus distingue `gluetun_companion_vpn_tunnel_up` (interface présente) de `gluetun_companion_vpn_tunnel_healthy` (healthcheck).
+
+**Autorisations Docker.** La lecture passe par `docker exec`. Avec le socket monté directement (Unraid, Synology), rien n’est à configurer. Avec `docker-socket-proxy`, l’exec est refusé par défaut et la page affiche « Mesure indisponible » sans valeur trompeuse. Tant que le refus dure, Companion ne crée aucun exec ; il revérifie toutes les 5 minutes et immédiatement à l’enregistrement des réglages, sans redémarrage. Deux options :
+
+- **Proxy dédié** (`wollomatic/socket-proxy`), déclaré avec `TRAFFIC_DOCKER_HOST=tcp://traffic-proxy:2375` dans Companion. Il n’accepte que Companion (`-allowfrom`) et n’autorise que l’inspection de Gluetun, l’exec dans Gluetun (ciblé par son nom) et le démarrage d’un exec. Le proxy principal garde `EXEC=0`. Remplacez `gluetun` par la valeur de `GLUETUN_CONTAINER` :
+
+```yaml
+  traffic-proxy:
+    image: wollomatic/socket-proxy:1
+    restart: unless-stopped
+    # L'image tourne en 65534 : ajoutez le GID du groupe docker de l'hôte
+    # (getent group docker | cut -d: -f3), sinon le socket est illisible.
+    user: "65534:998"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - '-listenip=0.0.0.0'
+      - '-allowfrom=gluetun-companion'
+      - '-allowGET=((/v1\..{1,2})?/version|/v1\..{1,2}/containers/gluetun/json)'
+      - '-allowPOST=/v1\..{1,2}/(containers/gluetun/exec|exec/[0-9a-f]{64}/start)'
+```
+
+- **`EXEC: 1` sur le proxy principal** : plus simple, mais tous les clients de ce proxy peuvent alors démarrer des commandes dans n’importe quel conteneur. **Si Companion est le seul client de ce proxy, c’est l’option à privilégier** : le risque est comparable à celui du proxy dédié (voir ci-dessous), avec un conteneur de moins. Elle permet aussi de nommer exactement le serveur actif et de vérifier `wg0.conf`.
+
+**Ce que le proxy dédié protège, et ce qu’il ne protège pas.** Testé avec Companion, il refuse l’exec dans les autres conteneurs (y compris via `..`, `%2F`, `//` ou un identifiant), la création, l’arrêt et la liste des conteneurs, ainsi que toute requête d’un autre conteneur. En revanche :
+- toute commande peut être lancée dans Gluetun, pas seulement `cat` ;
+- un exec créé ailleurs peut être démarré si son identifiant est connu. Or `docker-socket-proxy` avec `CONTAINERS=1` et `POST=1` autorise la *création* d’un exec dans n’importe quel conteneur : en combinant les deux proxys, Companion peut donc exécuter une commande ailleurs que dans Gluetun.
+
+Le proxy dédié n’ajoute donc aucune autorisation pour les *autres* clients du proxy principal, mais ne confine pas Companion lui-même. Ce n’est pas un recul : `CONTAINERS=1` et `POST=1`, déjà requis par les benchmarks et la recréation des conteneurs, permettent de créer un conteneur avec n’importe quelle configuration, ce qui équivaut déjà à un accès root sur l’hôte.
+
+**Réglages** (**Paramètres → Trafic VPN**) : activation, fréquence de collecte (3 à 60 s, 5 s par défaut), conservation du détail horaire (90 j par défaut) et journalier (730 j par défaut ; 0 = illimité), unités, et réinitialisation confirmée des statistiques, sans effet sur le VPN. Les totaux mensuels sont toujours conservés.
+
+**Prometheus.** `/metrics` expose `gluetun_companion_vpn_traffic_received_bytes_total` et `gluetun_companion_vpn_traffic_sent_bytes_total` (compteurs), les débits courants `..._receive_bytes_per_second` et `..._transmit_bytes_per_second`, `gluetun_companion_vpn_tunnel_up`, `gluetun_companion_vpn_tunnel_healthy` et `gluetun_companion_vpn_traffic_monitoring_available{status}`. Le dashboard Grafana fourni comprend une section « Trafic VPN réel ». L’API REST propose `GET /api/v1/traffic` (et `?range=24h`, `7d`, `30d`, `months`…).

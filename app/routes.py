@@ -732,8 +732,17 @@ def dashboard():
     except (TypeError, ValueError):
         _dash_airvpn_max_users = 0
 
+    try:
+        from .vpn_traffic import get_monitor
+        traffic_live = get_monitor(container).live()
+    except Exception as _exc:
+        logger.debug('VPN traffic snapshot unavailable: %s', _exc)
+        traffic_live = None
+
     return render_template(
         'dashboard.html',
+        traffic_live=traffic_live,
+        traffic_units=_traffic_units(),
         vpn_status=vpn_status,
         public_ip=public_ip,
         current_server=current_server,
@@ -2518,6 +2527,37 @@ def settings():
             except ValueError as exc:
                 flash(str(exc), 'danger')
 
+        elif action == 'vpn_traffic':
+            from .vpn_traffic import (
+                MIN_INTERVAL_SECS, MAX_INTERVAL_SECS, MIN_HOURLY_RETENTION_DAYS,
+                SETTING_DEFAULTS as _TRAFFIC_DEFAULTS, get_monitor,
+            )
+            set_setting('traffic_monitor_enabled', '1' if request.form.get('traffic_monitor_enabled') else '0')
+            for _key, _lo, _hi in (
+                ('traffic_monitor_interval', MIN_INTERVAL_SECS, MAX_INTERVAL_SECS),
+                ('traffic_hourly_retention_days', MIN_HOURLY_RETENTION_DAYS, 3650),
+                ('traffic_daily_retention_days', 0, 36500),
+            ):
+                try:
+                    _v = int(request.form.get(_key, _TRAFFIC_DEFAULTS[_key]) or _TRAFFIC_DEFAULTS[_key])
+                    set_setting(_key, str(max(_lo, min(_v, _hi))))
+                except ValueError:
+                    set_setting(_key, _TRAFFIC_DEFAULTS[_key])
+            _rate_unit = request.form.get('traffic_rate_unit', 'mbps')
+            set_setting('traffic_rate_unit', _rate_unit if _rate_unit in ('mbps', 'mbytes') else 'mbps')
+            _vol_unit = request.form.get('traffic_volume_unit', 'si')
+            set_setting('traffic_volume_unit', _vol_unit if _vol_unit in ('si', 'iec') else 'si')
+            get_monitor(current_app.config['GLUETUN_CONTAINER']).wake()
+            flash_t('flash_traffic_saved', 'success')
+
+        elif action == 'vpn_traffic_reset':
+            from .vpn_traffic import get_monitor
+            if request.form.get('confirm_reset') == 'RESET':
+                get_monitor(current_app.config['GLUETUN_CONTAINER']).reset()
+                flash_t('flash_traffic_reset', 'success')
+            else:
+                flash_t('flash_traffic_reset_unconfirmed', 'warning')
+
         elif action == 'save_wg_rotation':
             _mode = request.form.get('wg_rotation_mode', 'none')
             if _mode in ('none', 'free', 'conditional'):
@@ -2567,6 +2607,12 @@ def settings():
         'speedtest_warmup':      get_setting('speedtest_warmup', '1'),
         'speedtest_streams':     get_setting('speedtest_streams', '4'),
         'db_retention_days':     get_setting('db_retention_days', '30'),
+        'traffic_monitor_enabled':       get_setting('traffic_monitor_enabled', '1'),
+        'traffic_monitor_interval':      get_setting('traffic_monitor_interval', '5'),
+        'traffic_hourly_retention_days': get_setting('traffic_hourly_retention_days', '90'),
+        'traffic_daily_retention_days':  get_setting('traffic_daily_retention_days', '730'),
+        'traffic_rate_unit':             get_setting('traffic_rate_unit', 'mbps'),
+        'traffic_volume_unit':           get_setting('traffic_volume_unit', 'si'),
         'discord_webhook_url':      get_setting('discord_webhook_url', ''),
         'apprise_urls':             get_setting('apprise_urls', ''),
         'airvpn_new_server_notif':  get_setting('airvpn_new_server_notif', '0'),
@@ -2731,6 +2777,7 @@ def settings():
     return render_template(
         'settings.html',
         cfg=cfg,
+        traffic_status=_settings_traffic_status(),
         bench_est=bench_est_settings,
         benchmark_estimated_count=benchmark_estimated_count_settings,
         settings_sidebar=settings_sidebar,
@@ -2928,6 +2975,69 @@ def api_airvpn_servers():
 # ---------------------------------------------------------------------------
 # JSON API
 # ---------------------------------------------------------------------------
+
+# ── Real VPN tunnel traffic ─────────────────────────────────────────────────
+
+def _settings_traffic_status() -> dict | None:
+    try:
+        from .vpn_traffic import get_monitor
+        return get_monitor(current_app.config['GLUETUN_CONTAINER']).live(since=float('inf'))
+    except Exception as exc:
+        logger.debug('VPN traffic status unavailable for settings: %s', exc)
+        return None
+
+
+def _traffic_units() -> dict:
+    return {
+        'rate': get_setting('traffic_rate_unit', 'mbps'),
+        'volume': get_setting('traffic_volume_unit', 'si'),
+    }
+
+
+@bp.route('/traffic')
+@login_required
+def traffic():
+    from .vpn_traffic import get_monitor
+    monitor = get_monitor(current_app.config['GLUETUN_CONTAINER'])
+    range_key = request.args.get('range', '24h')
+    if range_key not in _TRAFFIC_RANGES:
+        range_key = '24h'
+    return render_template(
+        'traffic.html',
+        traffic_live=monitor.live(),
+        traffic_range=range_key,
+        traffic_units=_traffic_units(),
+    )
+
+
+_TRAFFIC_RANGES = ('live', '1h', '24h', '7d', '30d', 'months')
+
+
+@bp.route('/api/vpn-traffic/live')
+@login_required
+def api_vpn_traffic_live():
+    from .vpn_traffic import get_monitor
+    since = request.args.get('since', type=float)
+    data = get_monitor(current_app.config['GLUETUN_CONTAINER']).live(since=since)
+    data['units'] = _traffic_units()
+    response = jsonify(data)
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@bp.route('/api/vpn-traffic/history')
+@login_required
+def api_vpn_traffic_history():
+    from .vpn_traffic import get_monitor
+    range_key = request.args.get('range', '24h')
+    if range_key not in _TRAFFIC_RANGES:
+        return jsonify({'error': 'invalid range', 'ranges': list(_TRAFFIC_RANGES)}), 400
+    data = get_monitor(current_app.config['GLUETUN_CONTAINER']).history(range_key)
+    data['units'] = _traffic_units()
+    response = jsonify(data)
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
 
 @bp.route('/healthz')
 def healthz():
@@ -3249,6 +3359,56 @@ def metrics():
                 'Unix timestamp of the most recent VPN server switch',
                 'gauge',
                 [({}, int(sw['last_ts']))])
+
+    # ── Real VPN tunnel traffic (not benchmark results) ────────────────────
+    try:
+        from .vpn_traffic import get_monitor
+        tr = get_monitor(current_app.config['GLUETUN_CONTAINER']).prometheus_snapshot()
+    except Exception as exc:
+        logger.debug('metrics: VPN traffic snapshot failed: %s', exc)
+        tr = None
+    if tr is not None:
+        _metric('gluetun_companion_vpn_traffic_monitoring_enabled',
+                '1 if real VPN tunnel traffic monitoring is enabled in Companion',
+                'gauge', [({}, 1 if tr['enabled'] else 0)])
+        _metric('gluetun_companion_vpn_traffic_monitoring_available',
+                '1 if Companion can currently read the tunnel counters of the production Gluetun',
+                'gauge', [({'status': tr['status']}, tr['available'])])
+        _metric('gluetun_companion_vpn_tunnel_up',
+                '1 if the VPN interface of the production Gluetun is present and sampled '
+                '(does not prove the VPN works, see gluetun_companion_vpn_tunnel_healthy)',
+                'gauge', [({}, tr['tunnel_up'])])
+        _metric('gluetun_companion_vpn_tunnel_healthy',
+                "Gluetun's Docker healthcheck through the tunnel: 1 healthy, 0 unhealthy "
+                '(absent when Gluetun has no healthcheck or it is still starting)',
+                'gauge', [] if tr['healthy'] is None else [({}, tr['healthy'])])
+        _info = {'interface': tr['iface'] or '', 'protocol': tr['protocol'] or '',
+                 'provider': tr['provider'] or ''}
+        _metric('gluetun_companion_vpn_traffic_received_bytes_total',
+                'Bytes received through the VPN tunnel since monitoring was activated or reset '
+                '(persisted across Companion and Gluetun restarts)',
+                'counter', [({}, tr['rx_total'])])
+        _metric('gluetun_companion_vpn_traffic_sent_bytes_total',
+                'Bytes sent through the VPN tunnel since monitoring was activated or reset '
+                '(persisted across Companion and Gluetun restarts)',
+                'counter', [({}, tr['tx_total'])])
+        _metric('gluetun_companion_vpn_traffic_receive_bytes_per_second',
+                'Current download rate measured on the VPN tunnel (absent when not measurable)',
+                'gauge', [({}, None if tr['rx_rate'] is None else round(tr['rx_rate'], 1))])
+        _metric('gluetun_companion_vpn_traffic_transmit_bytes_per_second',
+                'Current upload rate measured on the VPN tunnel (absent when not measurable)',
+                'gauge', [({}, None if tr['tx_rate'] is None else round(tr['tx_rate'], 1))])
+        _metric('gluetun_companion_vpn_traffic_info',
+                'VPN tunnel being monitored (interface, protocol and provider labels)',
+                'gauge', [(_info, 1)] if tr['iface'] else [])
+        if tr['last_sample_at']:
+            _metric('gluetun_companion_vpn_traffic_last_sample_timestamp_seconds',
+                    'Unix timestamp of the last successful tunnel counter sample',
+                    'gauge', [({}, int(tr['last_sample_at']))])
+        if tr['since']:
+            _metric('gluetun_companion_vpn_traffic_since_timestamp_seconds',
+                    'Unix timestamp from which tunnel traffic has been counted',
+                    'gauge', [({}, int(tr['since']))])
 
     return Response(
         '\n'.join(lines) + '\n',
