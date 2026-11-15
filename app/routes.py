@@ -32,9 +32,9 @@ from .profiles import PROFILES, score_servers as _score_servers, score_servers_d
 from .caching import cache
 from .gluetun import (
     FILTER_VARS, FILTER_LABELS,
-    get_current_filters, get_active_server, format_filters,
+    get_current_filters, get_active_server, get_active_server_info, format_filters,
     get_public_ip, get_public_ips, probe_status, switch_server,
-    has_wireguard_config_file,
+    wireguard_config_file_state, WG_CONFIG_PRESENT, WG_CONFIG_UNKNOWN,
     apply_dns_filtering,
     wait_for_vpn, restart_network_dependents,
     list_docker_containers,
@@ -343,10 +343,13 @@ def _vpn_snapshot() -> dict:
     vpn_status, public_ip = probe_status(
         cfg['GLUETUN_HOST'], cfg['GLUETUN_PROXY_PORT'], px_user, px_pass,
     )
+    active = get_active_server_info(container)
     return {
         'vpn_status':     vpn_status,
         'public_ip':      public_ip,
-        'current_server': get_active_server(container) or format_filters(get_current_filters(container)),
+        'current_server': active['name'] or format_filters(get_current_filters(container)),
+        'current_server_source':   active['source'],
+        'current_server_verified': active['verified'],
     }
 
 
@@ -593,8 +596,10 @@ def dashboard():
 
     vpn_status, public_ip = probe_status(proxy_host, proxy_port, px_user, px_pass)
     current_filters    = get_current_filters(container)
-    active_server_name = get_active_server(container) or ''
+    active_info        = get_active_server_info(container)
+    active_server_name = active_info['name'] or ''
     current_server     = active_server_name or format_filters(current_filters)
+    active_server_verified = active_info['verified']
     benchmark_running = get_setting('benchmark_running', '0') == '1'
 
     _ALLOWED_LIMITS = {10, 20, 50}
@@ -733,6 +738,7 @@ def dashboard():
         public_ip=public_ip,
         current_server=current_server,
         active_server_name=active_server_name,
+        active_server_verified=active_server_verified,
         active_profile=active_profile,
         active_server_stats=active_server_stats,
         active_stability=dashboard_stability.get(active_server_name, {}),
@@ -1172,7 +1178,7 @@ def servers():
     except Exception:
         pass
     _catalogue_allowed_providers = sorted(_configured_providers)
-    _has_wireguard_config_file = has_wireguard_config_file(
+    _wg_config_state = wireguard_config_file_state(
         current_app.config['GLUETUN_CONTAINER']
     )
 
@@ -1211,7 +1217,8 @@ def servers():
         wg_providers=WG_PROVIDERS,
         excluded_country_options=_excluded_country_options,
         excluded_countries=_excluded_countries,
-        has_wireguard_config_file=_has_wireguard_config_file,
+        has_wireguard_config_file=_wg_config_state == WG_CONFIG_PRESENT,
+        wireguard_config_unknown=_wg_config_state == WG_CONFIG_UNKNOWN,
     )
 
 
@@ -4078,6 +4085,7 @@ def api_status():
         'vpn_status':             snapshot['vpn_status'],
         'public_ip':              snapshot['public_ip'],
         'current_server':         snapshot['current_server'],
+        'current_server_verified': snapshot.get('current_server_verified', False),
         'benchmark_running':       progress['running'],
         'benchmark_stop_requested':get_setting('benchmark_stop_requested', '0') == '1',
         'current_server_testing':  get_setting('benchmark_current_server', ''),

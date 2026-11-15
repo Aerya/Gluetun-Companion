@@ -52,7 +52,7 @@ def _api_auth(f):
 @_api_auth
 def status():
     """Current VPN status, active server, benchmark state, next scheduled run."""
-    from .gluetun import get_active_server, get_current_filters, format_filters, get_vpn_status
+    from .gluetun import get_active_server_info, get_current_filters, format_filters, get_vpn_status
     from .scheduler import get_next_run
     from .dns_path import get_dns_path
 
@@ -71,7 +71,8 @@ def status():
         get_setting('ui_lang', 'fr'),
     )
 
-    active_server = get_active_server(current_app.config['GLUETUN_CONTAINER'])
+    active_info = get_active_server_info(current_app.config['GLUETUN_CONTAINER'])
+    active_server = active_info['name']
 
     try:
         benchmark_log = json.loads(get_setting('benchmark_log_lines', '[]') or '[]')
@@ -93,6 +94,10 @@ def status():
         'auto_benchmark':       get_setting('auto_benchmark',       '1') == '1',
         'auto_switch':          get_setting('auto_switch',          '1') == '1',
         'active_server':        active_server,
+        # 'catalogue' = matched through Gluetun's server list (verified);
+        # 'configured' / 'observed' = fallback, not verified; None = unknown.
+        'active_server_source': active_info['source'],
+        'active_server_verified': active_info['verified'],
         'active_filter':        format_filters(filters) if filters else None,
         'vpn_connected':        vpn_status == 'running',
         'next_benchmark_at':    next_run.isoformat() if next_run else None,
