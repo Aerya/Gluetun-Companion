@@ -223,7 +223,7 @@ Le bloc **Trafic VPN en direct** du tableau de bord et la page **Trafic** affich
 
 **État du tunnel.** La présence de `tun0`/`wg0` ne prouve pas que le VPN fonctionne. « Tunnel connecté » n’est donc affiché que si le healthcheck Docker de Gluetun, qui teste une connexion à travers le tunnel, est `healthy`. Sinon : « Interface présente, VPN en échec » (`unhealthy`) ou « Interface présente » (healthcheck absent ou en cours). Les compteurs restent mesurés dans tous les cas. Prometheus distingue `gluetun_companion_vpn_tunnel_up` (interface présente) de `gluetun_companion_vpn_tunnel_healthy` (healthcheck).
 
-**Autorisations Docker.** La lecture passe par `docker exec`. Avec le socket monté directement (Unraid, Synology), rien n’est à configurer. Avec `docker-socket-proxy`, l’exec est refusé par défaut et la page affiche « Mesure indisponible » sans valeur trompeuse. Deux options :
+**Autorisations Docker.** La lecture passe par `docker exec`. Avec le socket monté directement (Unraid, Synology), rien n’est à configurer. Avec `docker-socket-proxy`, l’exec est refusé par défaut et la page affiche « Mesure indisponible » sans valeur trompeuse. Tant que le refus dure, Companion ne crée aucun exec ; il revérifie toutes les 5 minutes et immédiatement à l’enregistrement des réglages, sans redémarrage. Deux options :
 
 - **Proxy dédié** (`wollomatic/socket-proxy`), déclaré avec `TRAFFIC_DOCKER_HOST=tcp://traffic-proxy:2375` dans Companion. Il n’accepte que Companion (`-allowfrom`) et n’autorise que l’inspection de Gluetun, l’exec dans Gluetun (ciblé par son nom) et le démarrage d’un exec. Le proxy principal garde `EXEC=0`. Remplacez `gluetun` par la valeur de `GLUETUN_CONTAINER` :
 
@@ -246,7 +246,7 @@ Le bloc **Trafic VPN en direct** du tableau de bord et la page **Trafic** affich
       - '-allowPOST=/v1\..{1,2}/(containers/gluetun/exec|exec/[0-9a-f]{64}/start)'
 ```
 
-- **`EXEC: 1` sur le proxy principal** : plus simple, mais tous les clients de ce proxy peuvent alors démarrer des commandes dans n’importe quel conteneur.
+- **`EXEC: 1` sur le proxy principal** : plus simple, mais tous les clients de ce proxy peuvent alors démarrer des commandes dans n’importe quel conteneur. **Si Companion est le seul client de ce proxy, c’est l’option à privilégier** : le risque est comparable à celui du proxy dédié (voir ci-dessous), avec un conteneur de moins. Elle permet aussi de nommer exactement le serveur actif et de vérifier `wg0.conf`.
 
 **Ce que le proxy dédié protège, et ce qu’il ne protège pas.** Testé avec Companion, il refuse l’exec dans les autres conteneurs (y compris via `..`, `%2F`, `//` ou un identifiant), la création, l’arrêt et la liste des conteneurs, ainsi que toute requête d’un autre conteneur. En revanche :
 - toute commande peut être lancée dans Gluetun, pas seulement `cat` ;
