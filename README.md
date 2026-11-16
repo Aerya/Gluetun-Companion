@@ -207,6 +207,10 @@ Lors de la création du premier compte, Companion ouvre automatiquement un **gui
 
 - [AirDash](https://github.com/zlimteck/AirDash) — tableau de bord AirVPN natif et non officiel pour iPhone et iPad.
 
+### Observation continue et serveurs admissibles
+
+**Observation continue :** le réveil automatique applique les mêmes exclusions de pays, de types de serveurs et les mêmes seuils AirVPN que le cycle de test. Sans serveur admissible à tester, aucun conteneur catalogue n’est créé. L’observation reprend automatiquement lorsque les filtres ou les données AirVPN permettent à nouveau un test.
+
 ### Changement manuel prioritaire
 
 Depuis **Serveurs**, une demande de changement est enregistrée immédiatement, même pendant un benchmark planifié ou une observation continue. Companion demande l’arrêt du test, attend son nettoyage, puis change le serveur et reconnecte les applications sous le même verrou. Le suivi sur la page indique l’attente, la bascule, la reconnexion ou l’échec ; un second clic ne remplace pas la demande en cours.
