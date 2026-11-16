@@ -206,6 +206,10 @@ After the first account is created, Companion automatically opens a **three-step
 
 - [AirDash](https://github.com/zlimteck/AirDash) — an unofficial native AirVPN dashboard for iPhone and iPad.
 
+### Continuous observation and eligible servers
+
+**Continuous observation:** automatic wake-up applies the same country exclusions, server-type filters and AirVPN thresholds as the test cycle. When no eligible server needs testing, no catalogue container is created. Observation resumes automatically when filters or AirVPN data allow testing again.
+
 ### Priority manual server switching
 
 On **Servers**, a switch request is saved immediately, including during scheduled benchmarks and continuous observation. Companion requests test cancellation, waits for cleanup, then switches the server and reconnects applications while holding the same lock. The page shows queued, switching, reconnecting and terminal states; another click cannot replace a pending request.

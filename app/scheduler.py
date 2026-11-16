@@ -1051,6 +1051,99 @@ def run_benchmark_now(app, trigger: str | None = None):
         _do_benchmark(app, skip_quick_check=True, trigger=trigger)
 
 
+def _filter_benchmark_candidates(servers: list) -> list:
+    """Use identical eligibility rules for the watchdog and actual cycles."""
+    import json as _json
+    from .database import get_db, get_setting
+
+    # Global country exclusions apply only to automatic choices. Manual
+    # tests and switches remain available from the server page.
+    from .server_eligibility import parse_excluded_countries, excluded_server_names
+    _excluded_countries = parse_excluded_countries(
+        get_setting('excluded_countries', '[]')
+    )
+    if _excluded_countries:
+        with get_db() as db:
+            _country_excluded_names = excluded_server_names(db, _excluded_countries)
+        _before_country_filter = len(servers)
+        servers = [s for s in servers if s['name'] not in _country_excluded_names]
+        logger.info(
+            'Country exclusion filter %s: keeping %d/%d server(s)',
+            sorted(_excluded_countries), len(servers), _before_country_filter,
+        )
+
+    # ── Pre-filter 0: exclude orphan servers when WireGuard profiles exist ─
+    # If ANY vpn_profiles exist the user has set up WireGuard multi-provider.
+    # Servers without vpn_profile_id cannot be benchmarked correctly in that
+    # context (they would run with whatever credentials are already in Gluetun).
+    _any_profiles = any(s['vpn_profile_id'] is not None for s in servers)
+    if _any_profiles:
+        _before_orphan = len(servers)
+        servers = [s for s in servers if s['vpn_profile_id'] is not None]
+        _excluded = _before_orphan - len(servers)
+        if _excluded:
+            logger.info(
+                'Orphan pre-filter: excluded %d server(s) with no VPN profile assigned',
+                _excluded,
+            )
+
+    # ── Pre-filter 1: include only selected filter types ─────────────────
+    # Setting: bench_include_types — JSON list of types, e.g. ["name","country"]
+    # Empty list (default) = include all types (no filtering).
+    try:
+        _include_types = set(_json.loads(get_setting('bench_include_types', '[]')))
+    except Exception:
+        _include_types = set()
+    if _include_types:
+        _before = len(servers)
+        servers = [s for s in servers if s['filter_type'] in _include_types]
+        logger.info(
+            'Bench type filter: keeping types %s → %d/%d server(s)',
+            sorted(_include_types), len(servers), _before,
+        )
+
+    # ── Pre-filter 2: AirVPN load/users threshold (name-type only) ───────
+    # Settings: airvpn_bench_max_load (0=disabled), airvpn_bench_max_users (0=disabled)
+    # Uses airvpn_snapshot table (updated every 5 min from AirVPN API).
+    # Servers without snapshot data are always kept.
+    _max_load  = int(get_setting('airvpn_bench_max_load',  '0') or '0')
+    _max_users = int(get_setting('airvpn_bench_max_users', '0') or '0')
+    if _max_load > 0 or _max_users > 0:
+        _name_servers = [s for s in servers if s['filter_type'] == 'name']
+        if _name_servers:
+            with get_db() as db:
+                _snap_rows = db.execute(
+                    'SELECT name, load, users FROM airvpn_snapshot'
+                ).fetchall()
+            _snap_map = {r['name']: r for r in _snap_rows}
+            _kept, _skipped = [], []
+            for s in servers:
+                if s['filter_type'] != 'name':
+                    _kept.append(s)
+                    continue
+                _snap = _snap_map.get(s['name'])
+                if _snap is None:
+                    # No AirVPN data → always keep (may be a non-AirVPN name server)
+                    _kept.append(s)
+                    continue
+                if _max_load > 0 and _snap['load'] is not None and _snap['load'] > _max_load:
+                    _skipped.append(f"{s['name']}(load={_snap['load']}%)")
+                    continue
+                if _max_users > 0 and _snap['users'] is not None and _snap['users'] > _max_users:
+                    _skipped.append(f"{s['name']}(users={_snap['users']})")
+                    continue
+                _kept.append(s)
+            if _skipped:
+                logger.info(
+                    'AirVPN pre-filter: skipped %d server(s) exceeding thresholds '
+                    '(max_load=%d%%, max_users=%d): %s',
+                    len(_skipped), _max_load, _max_users, ', '.join(_skipped),
+                )
+            servers = _kept
+
+    return servers
+
+
 def _observation_candidate_servers() -> list:
     """Return servers eligible for observation before pyramid quotas are applied."""
     from .database import get_db
@@ -1066,10 +1159,7 @@ def _observation_candidate_servers() -> list:
             'ORDER BY s.name'
         ).fetchall()
 
-    any_profiles = any(s['vpn_profile_id'] is not None for s in servers)
-    if any_profiles:
-        servers = [s for s in servers if s['vpn_profile_id'] is not None]
-    return servers
+    return _filter_benchmark_candidates(servers)
 
 
 def _has_observation_work_left() -> bool:
@@ -1252,6 +1342,11 @@ def _do_benchmark(
         stop_containers, start_stopped_containers,
         list_network_dependents, list_network_dependents_for_recreate,
     )
+
+    # Recheck before catalogue downloads or any benchmark state changes.
+    if observation and not _has_observation_work_left():
+        logger.info('Continuous observation waiting: no eligible server needs testing')
+        return 0
 
     _stop_event.clear()   # reset any leftover stop signal from a previous run
     set_setting('benchmark_stop_requested', '0')
@@ -1495,90 +1590,7 @@ def _do_benchmark(
             _progress_log('progress_no_active_server')
             return 0
 
-        # Global country exclusions apply only to automatic choices. Manual
-        # tests and switches remain available from the server page.
-        from .server_eligibility import parse_excluded_countries, excluded_server_names
-        _excluded_countries = parse_excluded_countries(
-            get_setting('excluded_countries', '[]')
-        )
-        if _excluded_countries:
-            with get_db() as db:
-                _country_excluded_names = excluded_server_names(db, _excluded_countries)
-            _before_country_filter = len(servers)
-            servers = [s for s in servers if s['name'] not in _country_excluded_names]
-            logger.info(
-                'Country exclusion filter %s: keeping %d/%d server(s)',
-                sorted(_excluded_countries), len(servers), _before_country_filter,
-            )
-
-        # ── Pre-filter 0: exclude orphan servers when WireGuard profiles exist ─
-        # If ANY vpn_profiles exist the user has set up WireGuard multi-provider.
-        # Servers without vpn_profile_id cannot be benchmarked correctly in that
-        # context (they would run with whatever credentials are already in Gluetun).
-        _any_profiles = any(s['vpn_profile_id'] is not None for s in servers)
-        if _any_profiles:
-            _before_orphan = len(servers)
-            servers = [s for s in servers if s['vpn_profile_id'] is not None]
-            _excluded = _before_orphan - len(servers)
-            if _excluded:
-                logger.info(
-                    'Orphan pre-filter: excluded %d server(s) with no VPN profile assigned',
-                    _excluded,
-                )
-
-        # ── Pre-filter 1: include only selected filter types ─────────────────
-        # Setting: bench_include_types — JSON list of types, e.g. ["name","country"]
-        # Empty list (default) = include all types (no filtering).
-        try:
-            _include_types = set(_json.loads(get_setting('bench_include_types', '[]')))
-        except Exception:
-            _include_types = set()
-        if _include_types:
-            _before = len(servers)
-            servers = [s for s in servers if s['filter_type'] in _include_types]
-            logger.info(
-                'Bench type filter: keeping types %s → %d/%d server(s)',
-                sorted(_include_types), len(servers), _before,
-            )
-
-        # ── Pre-filter 2: AirVPN load/users threshold (name-type only) ───────
-        # Settings: airvpn_bench_max_load (0=disabled), airvpn_bench_max_users (0=disabled)
-        # Uses airvpn_snapshot table (updated every 5 min from AirVPN API).
-        # Servers without snapshot data are always kept.
-        _max_load  = int(get_setting('airvpn_bench_max_load',  '0') or '0')
-        _max_users = int(get_setting('airvpn_bench_max_users', '0') or '0')
-        if _max_load > 0 or _max_users > 0:
-            _name_servers = [s for s in servers if s['filter_type'] == 'name']
-            if _name_servers:
-                with get_db() as db:
-                    _snap_rows = db.execute(
-                        'SELECT name, load, users FROM airvpn_snapshot'
-                    ).fetchall()
-                _snap_map = {r['name']: r for r in _snap_rows}
-                _kept, _skipped = [], []
-                for s in servers:
-                    if s['filter_type'] != 'name':
-                        _kept.append(s)
-                        continue
-                    _snap = _snap_map.get(s['name'])
-                    if _snap is None:
-                        # No AirVPN data → always keep (may be a non-AirVPN name server)
-                        _kept.append(s)
-                        continue
-                    if _max_load > 0 and _snap['load'] is not None and _snap['load'] > _max_load:
-                        _skipped.append(f"{s['name']}(load={_snap['load']}%)")
-                        continue
-                    if _max_users > 0 and _snap['users'] is not None and _snap['users'] > _max_users:
-                        _skipped.append(f"{s['name']}(users={_snap['users']})")
-                        continue
-                    _kept.append(s)
-                if _skipped:
-                    logger.info(
-                        'AirVPN pre-filter: skipped %d server(s) exceeding thresholds '
-                        '(max_load=%d%%, max_users=%d): %s',
-                        len(_skipped), _max_load, _max_users, ', '.join(_skipped),
-                    )
-                servers = _kept
+        servers = _filter_benchmark_candidates(servers)
 
         servers = _apply_benchmark_scope(servers, observation=observation)
 
