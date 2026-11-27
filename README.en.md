@@ -77,6 +77,7 @@ Update image trust stores and TLS components following the eMudhra incident. Che
 - management and recreation of Docker containers attached to Gluetun, including services from other Compose stacks;
 - live real VPN tunnel traffic (rates, volumes, hourly, daily and monthly history);
 - Discord/Apprise notifications, REST API, Prometheus and Grafana;
+  Server changes detected after an external Gluetun recreation or a reconnect are also notified when “Automatic or external switch” is enabled. The message distinguishes these events from Companion switches; the first observation and switches already recorded do not generate an additional notification.
 - Unraid/DockerMan support.
 
 ## Compatibility

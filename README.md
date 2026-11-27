@@ -78,6 +78,7 @@ Mise à jour des certificats et des composants TLS des images après l’inciden
 - gestion et recréation des containers Docker liés à Gluetun, y compris dans d’autres stacks Compose ;
 - trafic réel du tunnel VPN en direct (débits, volumes, historique horaire, journalier et mensuel) ;
 - notifications Discord/Apprise, API REST, Prometheus et Grafana ;
+  Les changements de serveur détectés après une recréation externe de Gluetun ou une reconnexion sont également notifiés si « Bascule automatique ou externe » est activé. Le message distingue ces événements des bascules Companion ; la première observation et les bascules déjà enregistrées ne produisent pas de notification supplémentaire.
 - support Unraid/DockerMan.
 
 ## Compatibilité

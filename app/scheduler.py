@@ -3157,7 +3157,7 @@ def _check_active_server_history(app) -> None:
 
         # During a benchmark the production tunnel may move through candidates.
         # Reconcile only its final state once the cycle has finished.
-        if get_setting('benchmark_running', '0') == '1':
+        if get_setting('benchmark_running', '0') == '1' or manual_switch_pending():
             return
         container_name = app.config['GLUETUN_CONTAINER']
         active = get_active_server(container_name)
@@ -3187,12 +3187,18 @@ def _check_active_server_history(app) -> None:
         # Reuse that row instead of creating a duplicate when its target matches.
         with get_db() as db:
             recent = db.execute(
-                '''SELECT to_server FROM switches
+                '''SELECT to_server, reason FROM switches
                    WHERE success = 1
                      AND switched_at >= datetime('now', '-10 minutes')
-                   ORDER BY id DESC LIMIT 20'''
+                   ORDER BY id DESC LIMIT 1'''
             ).fetchall()
-        already_recorded = any(_bare(row['to_server']) == active for row in recent)
+        # Only the latest Companion switch can account for this observation.
+        # An earlier visit to the same server must not hide a real return.
+        already_recorded = any(
+            _bare(row['to_server']) == active
+            and row['reason'] not in ('external_recreate', 'vpn_reconnect')
+            for row in recent
+        )
         if not already_recorded:
             try:
                 ipv4, ipv6 = get_public_ips(
@@ -3210,6 +3216,20 @@ def _check_active_server_history(app) -> None:
             logger.info(
                 'Observed real VPN server change: %s -> %s (%s)', previous, active, reason
             )
+            if get_setting('notif_auto_switch', '1') == '1':
+                from .notify import send_switch_notification
+                send_switch_notification(
+                    from_server=previous, to_server=active,
+                    from_mbps=None, to_mbps=None, connect_secs=None,
+                    to_ipv4=ipv4, to_ipv6=ipv6, reason=reason,
+                    discord_url=get_setting('discord_webhook_url') or None,
+                    apprise_urls=get_setting('apprise_urls') or None,
+                    lang=get_setting('ui_lang', 'fr'),
+                    companion_url=get_setting('companion_url') or None,
+                    mention=get_setting('notify_mention', '').strip() or None,
+                    mention_level=get_setting('notify_mention_level', 'critical'),
+                    alert_type='auto_switch',
+                )
         set_setting('last_observed_active_server', active)
         set_setting('last_observed_gluetun_id', container_id)
 

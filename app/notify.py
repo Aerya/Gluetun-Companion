@@ -275,6 +275,11 @@ def send_switch_notification(
             'notif_failover_apprise_title', 'VPN outage — Gluetun Companion'
         )
 
+    if reason in ('external_recreate', 'vpn_reconnect'):
+        title = t[f'notif_{reason}_title']
+        t['notif_title'] = title
+        t['notif_apprise_title'] = title
+
     if discord_url:
         try:
             payload = _switch_discord_payload(
